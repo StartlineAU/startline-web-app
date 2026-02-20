@@ -1,10 +1,10 @@
-import { Calendar, Clock, MapPin, Users, DollarSign, Image } from "lucide-react";
-import { FitnessEvent, EVENT_TYPE_LABELS } from "@/types";
-import { formatEventDate, formatTime, getEventTypeColor } from "@/lib/utils";
+import { Calendar, MapPin, Users, ExternalLink, Image, Award } from "lucide-react";
+import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
+import { formatMediumDate, formatTime } from "@/lib/utils";
 
 interface EventCardProps {
   event: FitnessEvent;
-  variant?: "default" | "compact" | "featured";
+  variant?: "default" | "compact" | "list";
 }
 
 export default function EventCard({
@@ -12,108 +12,105 @@ export default function EventCard({
   variant = "default",
 }: EventCardProps) {
   const typeLabel = EVENT_TYPE_LABELS[event.type];
+  const stateLabel = STATE_LABELS[event.state];
+
+  const formatBadge = event.format === "team" ? "Team" : event.format === "both" ? "Individual & Team" : "Individual";
 
   if (variant === "compact") {
     return (
-      <article className="bg-white rounded-xl shadow-sm border border-light-dark overflow-hidden hover:shadow-md transition-shadow duration-300 group">
+      <article className="bg-dark rounded-lg border border-dark-light overflow-hidden hover:border-dark-lighter transition-colors group">
         {/* Image Placeholder */}
-        <div className="relative aspect-video image-placeholder overflow-hidden">
+        <div className="relative aspect-[16/9] image-placeholder overflow-hidden">
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <Image className="w-8 h-8 text-muted mx-auto mb-1" />
-              <p className="text-muted text-xs">Event Photo</p>
-            </div>
+            <Image className="w-8 h-8 text-dark-lighter" />
           </div>
-          {/* Type Badge */}
-          <span className="absolute top-2 left-2 text-xs font-medium bg-primary text-dark px-2 py-1 rounded-full">
+          <span className="absolute top-2 left-2 text-xs font-semibold bg-primary text-dark px-2 py-1 rounded">
             {typeLabel}
           </span>
+          {event.isOfficial && (
+            <span className="absolute top-2 right-2 text-xs font-medium bg-dark/80 text-primary px-2 py-1 rounded flex items-center gap-1">
+              <Award className="w-3 h-3" />
+              Official
+            </span>
+          )}
         </div>
 
-        {/* Content */}
         <div className="p-3">
-          <h3 className="font-semibold text-dark text-sm line-clamp-1 group-hover:text-primary transition-colors">
+          <h3 className="font-semibold text-white text-sm line-clamp-1 group-hover:text-primary transition-colors">
             {event.title}
           </h3>
           <div className="flex items-center gap-2 mt-2 text-xs text-muted">
-            <Calendar className="w-3 h-3" />
-            <span>{formatEventDate(event.date).split(",")[1]?.trim()}</span>
+            <Calendar className="w-3 h-3 text-primary" />
+            <span>{formatMediumDate(event.date)}</span>
+            <span className="text-dark-lighter">·</span>
+            <span>{stateLabel}</span>
           </div>
         </div>
       </article>
     );
   }
 
-  if (variant === "featured") {
+  if (variant === "list") {
     return (
-      <article className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 group">
-        <div className="md:flex">
-          {/* Image Placeholder */}
-          <div className="relative md:w-2/5 aspect-video md:aspect-auto image-placeholder overflow-hidden">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <Image className="w-12 h-12 text-muted mx-auto mb-2" />
-                <p className="text-muted text-sm">Featured Image</p>
-                <p className="text-muted-dark text-xs">600 x 400</p>
-              </div>
+      <article className="bg-dark rounded-lg border border-dark-light p-4 hover:border-dark-lighter transition-colors group">
+        <div className="flex gap-4">
+          {/* Date Block */}
+          <div className="flex-shrink-0 w-16 text-center">
+            <div className="bg-dark-light rounded-lg py-2 px-3">
+              <p className="text-xs text-muted uppercase">
+                {new Date(event.date).toLocaleDateString("en-AU", { month: "short" })}
+              </p>
+              <p className="text-2xl font-bold text-white">
+                {new Date(event.date).getDate()}
+              </p>
             </div>
-            {/* Popularity Badge */}
-            {event.popularity >= 90 && (
-              <span className="absolute top-4 right-4 bg-primary text-dark text-xs font-semibold px-3 py-1 rounded-full">
-                Trending
-              </span>
-            )}
           </div>
 
           {/* Content */}
-          <div className="p-6 md:w-3/5 flex flex-col justify-between">
-            <div>
-              {/* Type Badge */}
-              <span className="inline-block text-xs font-medium bg-primary/10 text-dark px-3 py-1 rounded-full mb-3">
-                {typeLabel}
-              </span>
-
-              <h3 className="text-xl font-bold text-dark mb-2 group-hover:text-primary transition-colors">
-                {event.title}
-              </h3>
-
-              <p className="text-muted text-sm mb-4 line-clamp-2">
-                {event.description}
-              </p>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted">
-                  <Calendar className="w-4 h-4 text-primary" />
-                  <span>{formatEventDate(event.date)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <span>
-                    {formatTime(event.time)}
-                    {event.endTime && ` - ${formatTime(event.endTime)}`}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold bg-primary text-dark px-2 py-0.5 rounded">
+                    {typeLabel}
                   </span>
+                  {event.isOfficial && (
+                    <span className="text-xs font-medium text-primary flex items-center gap-1">
+                      <Award className="w-3 h-3" />
+                      Official
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted">
-                  <MapPin className="w-4 h-4 text-primary" />
-                  <span>{event.location}</span>
-                </div>
+                <h3 className="font-semibold text-white group-hover:text-primary transition-colors">
+                  {event.title}
+                </h3>
+                <p className="text-sm text-muted line-clamp-1 mt-1">
+                  {event.description}
+                </p>
               </div>
+              <a
+                href={event.registrationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                Register
+                <ExternalLink className="w-4 h-4" />
+              </a>
             </div>
 
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-light-dark">
-              <div className="flex items-center gap-4">
-                <span className="text-lg font-bold text-primary">
-                  {event.price}
-                </span>
-                {event.spotsLeft !== undefined && (
-                  <span className="text-xs text-muted">
-                    {event.spotsLeft} spots left
-                  </span>
-                )}
-              </div>
-              <button className="bg-primary text-dark px-4 py-2 rounded-lg font-medium hover:bg-primary-light transition-colors">
-                Learn More
-              </button>
+            <div className="flex items-center gap-4 mt-3 text-sm text-muted">
+              <span className="flex items-center gap-1">
+                <MapPin className="w-4 h-4 text-primary" />
+                {event.city}, {stateLabel}
+              </span>
+              <span className="flex items-center gap-1">
+                <Users className="w-4 h-4 text-primary" />
+                {formatBadge}
+              </span>
+              {event.distance && (
+                <span className="text-muted-dark">{event.distance}</span>
+              )}
             </div>
           </div>
         </div>
@@ -121,33 +118,35 @@ export default function EventCard({
     );
   }
 
-  // Default variant
+  // Default card variant
   return (
-    <article className="bg-white rounded-xl shadow-sm border border-light-dark overflow-hidden hover:shadow-lg transition-all duration-300 group animate-fade-in">
+    <article className="bg-dark rounded-lg border border-dark-light overflow-hidden hover:border-dark-lighter transition-all duration-300 group">
       {/* Image Placeholder */}
       <div className="relative aspect-[16/10] image-placeholder overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+        <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <Image className="w-10 h-10 text-muted mx-auto mb-2" />
-            <p className="text-muted text-sm">Event Photo</p>
-            <p className="text-muted-dark text-xs">400 x 250</p>
+            <Image className="w-10 h-10 text-dark-lighter mx-auto mb-2" />
+            <p className="text-dark-lighter text-xs">Event Image</p>
           </div>
         </div>
 
         {/* Type Badge */}
-        <span className="absolute top-3 left-3 text-xs font-medium bg-primary text-dark px-3 py-1 rounded-full shadow-sm">
+        <span className="absolute top-3 left-3 text-xs font-semibold bg-primary text-dark px-3 py-1 rounded">
           {typeLabel}
         </span>
 
-        {/* Price Badge */}
-        <span className="absolute top-3 right-3 text-sm font-bold bg-white/90 backdrop-blur-sm text-dark px-3 py-1 rounded-full shadow-sm">
-          {event.price}
-        </span>
+        {/* Official Badge */}
+        {event.isOfficial && (
+          <span className="absolute top-3 right-3 text-xs font-medium bg-dark/80 backdrop-blur-sm text-primary px-2 py-1 rounded flex items-center gap-1">
+            <Award className="w-3 h-3" />
+            Official
+          </span>
+        )}
       </div>
 
       {/* Content */}
       <div className="p-4">
-        <h3 className="font-semibold text-dark text-lg mb-2 group-hover:text-primary transition-colors line-clamp-1">
+        <h3 className="font-semibold text-white text-lg mb-2 group-hover:text-primary transition-colors line-clamp-1">
           {event.title}
         </h3>
 
@@ -158,33 +157,36 @@ export default function EventCard({
         <div className="space-y-2 mb-4">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-            <span className="truncate">{formatEventDate(event.date)}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <Clock className="w-4 h-4 text-primary flex-shrink-0" />
-            <span>
-              {formatTime(event.time)}
-              {event.endTime && ` - ${formatTime(event.endTime)}`}
-            </span>
+            <span>{formatMediumDate(event.date)}</span>
+            <span className="text-dark-lighter">·</span>
+            <span>{formatTime(event.time)}</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted">
             <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-            <span className="truncate">{event.location}</span>
+            <span className="truncate">{event.city}, {stateLabel}</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <Users className="w-4 h-4 text-primary flex-shrink-0" />
+            <span>{formatBadge}</span>
+            {event.distance && (
+              <>
+                <span className="text-dark-lighter">·</span>
+                <span>{event.distance}</span>
+              </>
+            )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-4 border-t border-light-dark">
-          {event.spotsLeft !== undefined && (
-            <div className="flex items-center gap-1 text-xs text-muted">
-              <Users className="w-3 h-3" />
-              <span>{event.spotsLeft} spots left</span>
-            </div>
-          )}
-          <button className="ml-auto bg-dark text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary hover:text-dark transition-colors duration-200">
-            View Details
-          </button>
-        </div>
+        <a
+          href={event.registrationUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 w-full bg-dark-light text-white py-2.5 rounded font-medium hover:bg-primary hover:text-dark transition-colors duration-200"
+        >
+          Register
+          <ExternalLink className="w-4 h-4" />
+        </a>
       </div>
     </article>
   );

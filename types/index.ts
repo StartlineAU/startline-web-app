@@ -1,12 +1,28 @@
 export type EventType = 
+  | "hyrox"
+  | "crossfit"
   | "running"
-  | "yoga"
-  | "cycling"
-  | "hiit"
-  | "swimming"
-  | "group-fitness"
-  | "outdoor"
-  | "sports";
+  | "hybrid";
+
+export type AustralianState = 
+  | "nsw"
+  | "vic"
+  | "qld"
+  | "wa"
+  | "sa"
+  | "tas"
+  | "act"
+  | "nt";
+
+export type CompetitionFormat = 
+  | "individual"
+  | "team"
+  | "both";
+
+export type ExperienceLevel =
+  | "open"
+  | "beginner"
+  | "elite";
 
 export interface FitnessEvent {
   id: string;
@@ -16,48 +32,82 @@ export interface FitnessEvent {
   time: string;
   endTime?: string;
   location: string;
-  area: string;
+  city: string;
+  state: AustralianState;
   type: EventType;
+  format: CompetitionFormat;
+  level: ExperienceLevel;
   image: string;
-  popularity: number;
-  price: string;
+  registrationUrl: string;
   organizer?: string;
-  capacity?: number;
-  spotsLeft?: number;
+  distance?: string;
+  isOfficial?: boolean;
 }
 
 export interface FilterState {
   types: EventType[];
-  area: string;
-  dateFrom: string | null;
-  dateTo: string | null;
+  states: AustralianState[];
+  format: CompetitionFormat | null;
+  dateRange: "this-month" | "next-3" | "all";
   searchQuery: string;
 }
 
 export interface EventTypeOption {
   value: EventType;
   label: string;
-  icon?: string;
+  shortLabel: string;
 }
 
 export const EVENT_TYPE_OPTIONS: EventTypeOption[] = [
-  { value: "running", label: "Running / Marathons" },
-  { value: "yoga", label: "Yoga / Pilates" },
-  { value: "cycling", label: "Cycling" },
-  { value: "hiit", label: "HIIT / CrossFit" },
-  { value: "swimming", label: "Swimming" },
-  { value: "group-fitness", label: "Group Fitness Classes" },
-  { value: "outdoor", label: "Outdoor Adventures" },
-  { value: "sports", label: "Sports Leagues" },
+  { value: "hyrox", label: "HYROX", shortLabel: "HYROX" },
+  { value: "crossfit", label: "CrossFit Competitions", shortLabel: "CrossFit" },
+  { value: "running", label: "Running (5K–Marathon)", shortLabel: "Running" },
+  { value: "hybrid", label: "Hybrid / Functional", shortLabel: "Hybrid" },
 ];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  hyrox: "HYROX",
+  crossfit: "CrossFit",
   running: "Running",
-  yoga: "Yoga",
-  cycling: "Cycling",
-  hiit: "HIIT",
-  swimming: "Swimming",
-  "group-fitness": "Group Fitness",
-  outdoor: "Outdoor",
-  sports: "Sports",
+  hybrid: "Hybrid",
 };
+
+export interface StateOption {
+  value: AustralianState;
+  label: string;
+  shortLabel: string;
+}
+
+export const STATE_OPTIONS: StateOption[] = [
+  { value: "nsw", label: "New South Wales", shortLabel: "NSW" },
+  { value: "vic", label: "Victoria", shortLabel: "VIC" },
+  { value: "qld", label: "Queensland", shortLabel: "QLD" },
+  { value: "wa", label: "Western Australia", shortLabel: "WA" },
+  { value: "sa", label: "South Australia", shortLabel: "SA" },
+  { value: "tas", label: "Tasmania", shortLabel: "TAS" },
+  { value: "act", label: "Australian Capital Territory", shortLabel: "ACT" },
+  { value: "nt", label: "Northern Territory", shortLabel: "NT" },
+];
+
+export const STATE_LABELS: Record<AustralianState, string> = {
+  nsw: "NSW",
+  vic: "VIC",
+  qld: "QLD",
+  wa: "WA",
+  sa: "SA",
+  tas: "TAS",
+  act: "ACT",
+  nt: "NT",
+};
+
+export const FORMAT_OPTIONS = [
+  { value: "individual", label: "Individual" },
+  { value: "team", label: "Team / Pairs" },
+  { value: "both", label: "Individual & Team" },
+] as const;
+
+export const DATE_RANGE_OPTIONS = [
+  { value: "this-month", label: "This Month" },
+  { value: "next-3", label: "Next 3 Months" },
+  { value: "all", label: "All Upcoming" },
+] as const;

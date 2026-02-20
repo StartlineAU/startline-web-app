@@ -1,14 +1,19 @@
-import { format, parseISO, isWithinInterval, isAfter, isBefore, startOfDay } from "date-fns";
-import { FitnessEvent, FilterState, EventType } from "@/types";
+import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
+import { FitnessEvent, FilterState, AustralianState } from "@/types";
 
 export function formatEventDate(dateString: string): string {
   const date = parseISO(dateString);
-  return format(date, "EEEE, MMMM d, yyyy");
+  return format(date, "EEEE, d MMMM yyyy");
 }
 
 export function formatShortDate(dateString: string): string {
   const date = parseISO(dateString);
-  return format(date, "MMM d");
+  return format(date, "d MMM");
+}
+
+export function formatMediumDate(dateString: string): string {
+  const date = parseISO(dateString);
+  return format(date, "d MMM yyyy");
 }
 
 export function formatTime(timeString: string): string {
@@ -23,34 +28,45 @@ export function filterEvents(
   events: FitnessEvent[],
   filters: FilterState
 ): FitnessEvent[] {
+  const today = startOfDay(new Date());
+  
   return events.filter((event) => {
+    const eventDate = startOfDay(parseISO(event.date));
+    
+    // Only show upcoming events
+    if (isBefore(eventDate, today)) {
+      return false;
+    }
+
     // Filter by event types
     if (filters.types.length > 0 && !filters.types.includes(event.type)) {
       return false;
     }
 
-    // Filter by area
-    if (
-      filters.area &&
-      !event.area.toLowerCase().includes(filters.area.toLowerCase()) &&
-      !event.location.toLowerCase().includes(filters.area.toLowerCase())
-    ) {
+    // Filter by states
+    if (filters.states.length > 0 && !filters.states.includes(event.state)) {
       return false;
     }
 
-    // Filter by date range
-    const eventDate = startOfDay(parseISO(event.date));
-    
-    if (filters.dateFrom) {
-      const fromDate = startOfDay(parseISO(filters.dateFrom));
-      if (isBefore(eventDate, fromDate)) {
+    // Filter by format
+    if (filters.format) {
+      if (filters.format === "individual" && event.format === "team") {
+        return false;
+      }
+      if (filters.format === "team" && event.format === "individual") {
         return false;
       }
     }
 
-    if (filters.dateTo) {
-      const toDate = startOfDay(parseISO(filters.dateTo));
-      if (isAfter(eventDate, toDate)) {
+    // Filter by date range
+    if (filters.dateRange === "this-month") {
+      const endOfThisMonth = endOfMonth(today);
+      if (isAfter(eventDate, endOfThisMonth)) {
+        return false;
+      }
+    } else if (filters.dateRange === "next-3") {
+      const threeMonthsFromNow = addMonths(today, 3);
+      if (isAfter(eventDate, threeMonthsFromNow)) {
         return false;
       }
     }
@@ -59,10 +75,11 @@ export function filterEvents(
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       const matchesTitle = event.title.toLowerCase().includes(query);
-      const matchesDescription = event.description.toLowerCase().includes(query);
       const matchesLocation = event.location.toLowerCase().includes(query);
+      const matchesCity = event.city.toLowerCase().includes(query);
+      const matchesOrganizer = event.organizer?.toLowerCase().includes(query);
       
-      if (!matchesTitle && !matchesDescription && !matchesLocation) {
+      if (!matchesTitle && !matchesLocation && !matchesCity && !matchesOrganizer) {
         return false;
       }
     }
@@ -79,14 +96,6 @@ export function sortEventsByDate(events: FitnessEvent[]): FitnessEvent[] {
   });
 }
 
-export function sortEventsByPopularity(events: FitnessEvent[]): FitnessEvent[] {
-  return [...events].sort((a, b) => b.popularity - a.popularity);
-}
-
-export function getPopularEvents(events: FitnessEvent[], limit: number = 6): FitnessEvent[] {
-  return sortEventsByPopularity(events).slice(0, limit);
-}
-
 export function getUpcomingEvents(events: FitnessEvent[], limit: number = 10): FitnessEvent[] {
   const today = startOfDay(new Date());
   const upcoming = events.filter((event) => {
@@ -96,23 +105,56 @@ export function getUpcomingEvents(events: FitnessEvent[], limit: number = 10): F
   return sortEventsByDate(upcoming).slice(0, limit);
 }
 
-export function getUniqueAreas(events: FitnessEvent[]): string[] {
-  const areas = events.map((event) => event.area);
-  return [...new Set(areas)].sort();
+export function getEventsByState(events: FitnessEvent[]): Record<AustralianState, number> {
+  const counts: Record<AustralianState, number> = {
+    nsw: 0,
+    vic: 0,
+    qld: 0,
+    wa: 0,
+    sa: 0,
+    tas: 0,
+    act: 0,
+    nt: 0,
+  };
+  
+  const today = startOfDay(new Date());
+  
+  events.forEach((event) => {
+    const eventDate = parseISO(event.date);
+    if (isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd")) {
+      counts[event.state]++;
+    }
+  });
+  
+  return counts;
 }
 
-export function getEventTypeColor(type: EventType): string {
-  const colors: Record<EventType, string> = {
-    running: "bg-orange-500",
-    yoga: "bg-purple-500",
-    cycling: "bg-blue-500",
-    hiit: "bg-red-500",
-    swimming: "bg-cyan-500",
-    "group-fitness": "bg-pink-500",
-    outdoor: "bg-green-500",
-    sports: "bg-yellow-500",
+export function getEventsByType(events: FitnessEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {
+    hyrox: 0,
+    crossfit: 0,
+    running: 0,
+    hybrid: 0,
   };
-  return colors[type] || "bg-primary";
+  
+  const today = startOfDay(new Date());
+  
+  events.forEach((event) => {
+    const eventDate = parseISO(event.date);
+    if (isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd")) {
+      counts[event.type]++;
+    }
+  });
+  
+  return counts;
+}
+
+export function getTotalUpcomingEvents(events: FitnessEvent[]): number {
+  const today = startOfDay(new Date());
+  return events.filter((event) => {
+    const eventDate = parseISO(event.date);
+    return isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
+  }).length;
 }
 
 export function cn(...classes: (string | undefined | null | false)[]): string {

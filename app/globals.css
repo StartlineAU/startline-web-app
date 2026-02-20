@@ -5,6 +5,8 @@
 :root {
   --color-primary: #A6E22E;
   --color-dark: #1F1F1F;
+  --color-darker: #141414;
+  --color-dark-light: #2A2A2A;
   --color-light: #F5F7FA;
   --color-muted: #8A8F98;
 }
@@ -22,18 +24,18 @@ body {
 }
 
 body {
-  color: var(--color-dark);
-  background: var(--color-light);
+  color: var(--color-light);
+  background: var(--color-darker);
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - dark theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-light);
+  background: var(--color-dark);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -42,7 +44,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-dark);
+  background: var(--color-primary);
 }
 
 /* Smooth scrolling */
@@ -56,16 +58,16 @@ html {
   outline-offset: 2px;
 }
 
-/* Image placeholder styling */
+/* Image placeholder styling - dark theme */
 .image-placeholder {
-  background: linear-gradient(135deg, #E8EBF0 0%, #D1D5DB 100%);
+  background: linear-gradient(135deg, #2A2A2A 0%, #1F1F1F 100%);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 /* Custom checkbox styling */
-.custom-checkbox {
+input[type="checkbox"] {
   accent-color: var(--color-primary);
 }
 
@@ -108,4 +110,10 @@ html {
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* Selection color */
+::selection {
+  background-color: var(--color-primary);
+  color: var(--color-dark);
 }

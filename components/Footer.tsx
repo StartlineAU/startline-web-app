@@ -1,129 +1,58 @@
 import Link from "next/link";
-import { Calendar, Mail, MapPin, Phone } from "lucide-react";
+import { Flag } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="bg-dark text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="bg-dark-darker border-t border-dark-light">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Brand */}
-          <div className="col-span-1 md:col-span-2">
-            <Link href="/" className="flex items-center space-x-2 mb-4">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-dark" />
+          <div className="flex items-center gap-6">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
+                <Flag className="w-4 h-4 text-dark" />
               </div>
-              <span className="text-xl font-bold">StartingLine</span>
+              <span className="text-lg font-bold text-white">StartingLine</span>
             </Link>
-            <p className="text-muted max-w-md">
-              Discover fitness events near you. From yoga to marathons, find the
-              perfect activity to keep you moving and motivated.
-            </p>
+            <span className="hidden md:inline text-muted text-sm">
+              Australia&apos;s Competitive Fitness Calendar
+            </span>
           </div>
 
-          {/* Quick Links */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link
-                  href="/"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Browse Events
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Popular Now
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Near Me
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Event Types */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4">Event Types</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Running
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Yoga
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  Cycling
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/events"
-                  className="text-muted hover:text-primary transition-colors"
-                >
-                  HIIT & CrossFit
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Bottom Bar */}
-        <div className="border-t border-dark-light mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-muted text-sm">
-            © {new Date().getFullYear()} StartingLine. All rights reserved.
-          </p>
-          <div className="flex space-x-6 mt-4 md:mt-0">
+          {/* Links */}
+          <div className="flex items-center gap-6">
             <Link
-              href="#"
-              className="text-muted hover:text-primary text-sm transition-colors"
+              href="/events"
+              className="text-sm text-muted hover:text-primary transition-colors"
             >
-              Privacy Policy
+              All Competitions
             </Link>
             <Link
-              href="#"
-              className="text-muted hover:text-primary text-sm transition-colors"
+              href="/submit"
+              className="text-sm text-muted hover:text-primary transition-colors"
             >
-              Terms of Service
+              Submit Event
             </Link>
             <Link
-              href="#"
-              className="text-muted hover:text-primary text-sm transition-colors"
+              href="/about"
+              className="text-sm text-muted hover:text-primary transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              href="/contact"
+              className="text-sm text-muted hover:text-primary transition-colors"
             >
               Contact
             </Link>
           </div>
+        </div>
+
+        {/* Copyright */}
+        <div className="mt-8 pt-6 border-t border-dark-light text-center md:text-left">
+          <p className="text-sm text-muted-dark">
+            © {new Date().getFullYear()} StartingLine. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>
