@@ -1,15 +1,25 @@
-# StartingLine - Fitness Events Calendar
+# StartingLine
 
-A modern fitness events calendar website where users can discover and explore fitness events in their area.
+Australia's competitive fitness event discovery platform.
+
+## Overview
+
+StartingLine helps performance-driven fitness individuals discover competitive events across Australia. Find HYROX, CrossFit competitions, running races, and hybrid fitness events in one place.
 
 ## Features
 
-- **Event Discovery**: Browse fitness events with detailed information including date, time, location, and pricing
-- **Smart Filtering**: Filter events by type (Running, Yoga, Cycling, HIIT, Swimming, etc.), location, and date
-- **Popular Now**: See trending events based on popularity
-- **Calendar View**: Select specific dates to find events
-- **Location Search**: Search for events in specific cities or areas
-- **Responsive Design**: Fully responsive across mobile, tablet, and desktop devices
+- **Event Discovery**: Browse upcoming competitions sorted by date
+- **Smart Filtering**: Filter by event type, state, date range, and format (individual/team)
+- **Australia-Wide Coverage**: Events across NSW, VIC, QLD, WA, SA, TAS, ACT, NT
+- **Direct Registration**: Links directly to official event registration pages
+- **Dark Theme**: Clean, athletic design optimized for serious competitors
+
+## Event Types
+
+- **HYROX** - The World Series of Fitness Racing
+- **CrossFit** - CrossFit competitions and throwdowns
+- **Running** - 5K to marathon distance races
+- **Hybrid** - Functional fitness and obstacle course events
 
 ## Tech Stack
 
@@ -17,106 +27,67 @@ A modern fitness events calendar website where users can discover and explore fi
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
 - **Icons**: Lucide React
-- **Date Handling**: date-fns
-
-## Color Scheme
-
-| Color       | Hex       | Usage                            |
-|-------------|-----------|----------------------------------|
-| Lime Green  | `#A6E22E` | Primary accent, CTAs, highlights |
-| Dark Gray   | `#1F1F1F` | Backgrounds, text                |
-| Light Gray  | `#F5F7FA` | Page background, cards           |
-| Medium Gray | `#8A8F98` | Secondary text, borders          |
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-
-### Installation
-
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Run the development server:
-   ```bash
-   npm run dev
-   ```
-
-3. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-### Build for Production
-
 ```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
 npm run build
-npm start
 ```
+
+Open [http://localhost:3000](http://localhost:3000) to view the site.
 
 ## Project Structure
 
 ```
 startingline/
 ├── app/
-│   ├── layout.tsx          # Root layout with Header/Footer
-│   ├── page.tsx            # Home page
-│   ├── globals.css         # Global styles + CSS variables
+│   ├── layout.tsx       # Root layout
+│   ├── page.tsx         # Home page
 │   └── events/
-│       └── page.tsx        # Events listing with filters
+│       └── page.tsx     # Events listing
 ├── components/
-│   ├── Header.tsx          # Navigation bar
-│   ├── Footer.tsx          # Site footer
-│   ├── Hero.tsx            # Hero section with search
-│   ├── CalendarPicker.tsx  # Date selection widget
-│   ├── FilterSidebar.tsx   # Event type + location filters
-│   ├── EventCard.tsx       # Individual event display
-│   ├── EventList.tsx       # Grid of event cards
-│   └── PopularNow.tsx      # Trending events section
+│   ├── Header.tsx       # Navigation
+│   ├── Footer.tsx       # Footer
+│   ├── Hero.tsx         # Hero section
+│   ├── FilterSidebar.tsx # Filters
+│   ├── EventCard.tsx    # Event cards
+│   └── EventList.tsx    # Event grid/list
 ├── data/
-│   └── events.json         # Sample fitness events data
+│   └── events.json      # Event data
 ├── types/
-│   └── index.ts            # TypeScript interfaces
-├── lib/
-│   └── utils.ts            # Helper functions
-└── public/
-    └── images/             # Image assets (placeholder)
+│   └── index.ts         # TypeScript types
+└── lib/
+    └── utils.ts         # Helper functions
 ```
 
-## Event Types
+## Adding Events
 
-- Running / Marathons
-- Yoga / Pilates
-- Cycling
-- HIIT / CrossFit
-- Swimming
-- Group Fitness Classes
-- Outdoor Adventures
-- Sports Leagues
-
-## Adding Your Own Events
-
-Edit `data/events.json` to add or modify events. Each event should follow this structure:
+Edit `data/events.json` to add competitions:
 
 ```json
 {
   "id": "unique-id",
-  "title": "Event Title",
-  "description": "Event description...",
-  "date": "2026-02-15",
+  "title": "Event Name",
+  "description": "Event description",
+  "date": "2026-03-15",
   "time": "07:00",
-  "endTime": "08:30",
-  "location": "Venue Name, City",
-  "area": "City Name",
-  "type": "yoga",
+  "location": "Venue, City",
+  "city": "Sydney",
+  "state": "nsw",
+  "type": "hyrox",
+  "format": "both",
+  "level": "open",
   "image": "/images/event.jpg",
-  "popularity": 95,
-  "price": "Free",
+  "registrationUrl": "https://...",
   "organizer": "Organizer Name",
-  "capacity": 50,
-  "spotsLeft": 12
+  "isOfficial": true
 }
 ```
 
