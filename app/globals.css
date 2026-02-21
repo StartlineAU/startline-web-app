@@ -3,12 +3,42 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #A6E22E;
-  --color-dark: #1F1F1F;
-  --color-darker: #141414;
-  --color-dark-light: #2A2A2A;
-  --color-light: #F5F7FA;
-  --color-muted: #8A8F98;
+  --color-primary: 166 226 46;
+  --color-primary-light: 184 240 64;
+  --color-primary-dark: 139 196 32;
+
+  /* Light theme tokens */
+  --color-dark: 248 250 252;
+  --color-darker: 241 245 249;
+  --color-dark-light: 203 213 225;
+  --color-dark-lighter: 226 232 240;
+  --color-light: 15 23 42;
+  --color-light-dark: 30 41 59;
+  --color-muted: 100 116 139;
+  --color-muted-light: 148 163 184;
+  --color-muted-dark: 71 85 105;
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark theme tokens */
+  --color-dark: 31 31 31;
+  --color-darker: 20 20 20;
+  --color-dark-light: 42 42 42;
+  --color-dark-lighter: 53 53 53;
+  --color-light: 245 247 250;
+  --color-light-dark: 232 235 240;
+  --color-muted: 138 143 152;
+  --color-muted-light: 160 165 174;
+  --color-muted-dark: 110 115 123;
+  color-scheme: dark;
+}
+
+/* Disable transitions for one tick during theme toggle */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }
 
 * {
@@ -24,8 +54,9 @@ body {
 }
 
 body {
-  color: var(--color-light);
-  background: var(--color-darker);
+  color: rgb(var(--color-light));
+  background: rgb(var(--color-darker));
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Custom scrollbar - dark theme */
@@ -35,16 +66,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-dark);
+  background: rgb(var(--color-dark));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-muted);
+  background: rgb(var(--color-muted));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary);
+  background: rgb(var(--color-primary));
 }
 
 /* Smooth scrolling */
@@ -54,25 +85,67 @@ html {
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid rgb(var(--color-primary));
   outline-offset: 2px;
 }
 
 /* Image placeholder styling - dark theme */
 .image-placeholder {
-  background: linear-gradient(135deg, #2A2A2A 0%, #1F1F1F 100%);
+  background: linear-gradient(
+    135deg,
+    rgb(var(--color-dark-light)) 0%,
+    rgb(var(--color-dark)) 100%
+  );
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Custom checkbox styling */
-input[type="checkbox"] {
-  accent-color: var(--color-primary);
+/* Custom checkbox/radio styling */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: rgb(var(--color-primary));
 }
 
 /* Animation utilities */
 @layer utilities {
+  /* Theme token utility overrides */
+  .bg-dark {
+    background-color: rgb(var(--color-dark));
+  }
+
+  .bg-dark-darker {
+    background-color: rgb(var(--color-darker));
+  }
+
+  .bg-dark-light {
+    background-color: rgb(var(--color-dark-light));
+  }
+
+  .border-dark-light {
+    border-color: rgb(var(--color-dark-light));
+  }
+
+  .border-dark-lighter {
+    border-color: rgb(var(--color-dark-lighter));
+  }
+
+  .text-light {
+    color: rgb(var(--color-light));
+  }
+
+  .text-dark {
+    color: rgb(var(--color-dark));
+  }
+
+  .text-muted {
+    color: rgb(var(--color-muted));
+  }
+
+  .text-muted-dark {
+    color: rgb(var(--color-muted-dark));
+  }
+
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in-out;
   }
@@ -114,6 +187,6 @@ input[type="checkbox"] {
 
 /* Selection color */
 ::selection {
-  background-color: var(--color-primary);
-  color: var(--color-dark);
+  background-color: rgb(var(--color-primary));
+  color: rgb(var(--color-dark));
 }

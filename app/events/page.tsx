@@ -84,7 +84,7 @@ function EventsContent() {
             <div className="w-10 h-10 bg-primary rounded flex items-center justify-center">
               <Calendar className="w-5 h-5 text-dark" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Competitions</h1>
+            <h1 className="text-2xl font-bold text-light">Competitions</h1>
           </div>
           <p className="text-muted">
             Find your next HYROX, CrossFit, running or hybrid event
@@ -100,12 +100,12 @@ function EventsContent() {
                 onChange={(e) =>
                   setFilters({ ...filters, searchQuery: e.target.value })
                 }
-                className="w-full px-4 py-2.5 bg-dark-light border border-dark-lighter rounded text-white placeholder-muted focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full px-4 py-2.5 bg-dark-light border border-dark-lighter rounded text-light placeholder-muted focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               />
               {filters.searchQuery && (
                 <button
                   onClick={() => setFilters({ ...filters, searchQuery: "" })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-light"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -120,7 +120,7 @@ function EventsContent() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => setShowMobileFilters(true)}
-            className="flex items-center gap-2 bg-dark-light px-4 py-2 rounded font-medium text-white"
+            className="flex items-center gap-2 bg-dark-light px-4 py-2 rounded font-medium text-light"
           >
             <SlidersHorizontal className="w-5 h-5" />
             Filters
@@ -161,12 +161,12 @@ function EventsContent() {
           />
           <div className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-dark-darker overflow-y-auto">
             <div className="sticky top-0 bg-dark-darker p-4 border-b border-dark-light flex items-center justify-between">
-              <h2 className="font-semibold text-white">Filters</h2>
+              <h2 className="font-semibold text-light">Filters</h2>
               <button
                 onClick={() => setShowMobileFilters(false)}
                 className="p-2 hover:bg-dark-light rounded transition-colors"
               >
-                <X className="w-5 h-5 text-white" />
+                <X className="w-5 h-5 text-light" />
               </button>
             </div>
             <div className="p-4">
@@ -210,7 +210,7 @@ function EventsContent() {
                   className={`p-2 rounded ${
                     viewMode === "grid"
                       ? "bg-dark-light text-primary"
-                      : "text-muted hover:text-white"
+                      : "text-muted hover:text-light"
                   }`}
                 >
                   <LayoutGrid className="w-4 h-4" />
@@ -220,7 +220,7 @@ function EventsContent() {
                   className={`p-2 rounded ${
                     viewMode === "list"
                       ? "bg-dark-light text-primary"
-                      : "text-muted hover:text-white"
+                      : "text-muted hover:text-light"
                   }`}
                 >
                   <List className="w-4 h-4" />

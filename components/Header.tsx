@@ -1,11 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Menu, X, Flag } from "lucide-react";
+import Image from "next/image";
+import { useEffect, useState } from "react";
+import { Menu, X, Sun, Moon } from "lucide-react";
+
+type Theme = "light" | "dark";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme | null>(null);
+
+  const applyTheme = (nextTheme: Theme) => {
+    const root = document.documentElement;
+    root.classList.add("theme-switching");
+    root.classList.toggle("dark", nextTheme === "dark");
+    root.style.colorScheme = nextTheme;
+    localStorage.setItem("theme", nextTheme);
+    setTheme(nextTheme);
+    window.setTimeout(() => {
+      root.classList.remove("theme-switching");
+    }, 0);
+  };
+  const toggleTheme = () => {
+    if (!theme) {
+      return;
+    }
+
+    applyTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  useEffect(() => {
+    const rootTheme: Theme = document.documentElement.classList.contains("dark")
+      ? "dark"
+      : "light";
+    setTheme(rootTheme);
+
+    const storedTheme = localStorage.getItem("theme");
+    if (storedTheme === "light" || storedTheme === "dark") {
+      if (storedTheme !== rootTheme) {
+        applyTheme(storedTheme);
+      }
+      return;
+    }
+
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const preferredTheme: Theme = prefersDark ? "dark" : "light";
+
+    if (preferredTheme !== rootTheme) {
+      applyTheme(preferredTheme);
+      return;
+    }
+
+    localStorage.setItem("theme", preferredTheme);
+  }, []);
 
   return (
     <header className="bg-dark-darker border-b border-dark-light sticky top-0 z-50">
@@ -14,9 +62,22 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-              <Flag className="w-4 h-4 text-dark" />
+              <Image
+                src="/images/startline-logo-dark-background_removed.png"
+                alt="StartLine logo"
+                width={32}
+                height={32}
+                className="hidden dark:block w-8 h-8"
+              />
+              <Image
+                src="/images/startline-logo-light-background_removed.png"
+                alt="StartLine logo"
+                width={32}
+                height={32}
+                className="block dark:hidden w-8 h-8"
+              />
             </div>
-            <span className="text-xl font-bold text-white">StartingLine</span>
+            <span className="text-xl font-bold text-light">StartingLine</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -51,6 +112,24 @@ export default function Header() {
             >
               Find Competitions
             </Link>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center justify-center bg-dark-light border border-dark-lighter p-2 rounded text-light hover:border-primary transition-colors"
+              aria-label={
+                theme
+                  ? `Switch to ${theme === "dark" ? "light" : "dark"} theme`
+                  : "Toggle theme"
+              }
+            >
+              {theme === "dark" ? (
+                <Sun className="w-4 h-4" />
+              ) : theme === "light" ? (
+                <Moon className="w-4 h-4" />
+              ) : (
+                <span className="w-4 h-4" aria-hidden="true" />
+              )}
+            </button>
           </nav>
 
           {/* Mobile menu button */}
@@ -60,9 +139,9 @@ export default function Header() {
             aria-label="Toggle menu"
           >
             {isMenuOpen ? (
-              <X className="w-6 h-6 text-white" />
+              <X className="w-6 h-6 text-light" />
             ) : (
-              <Menu className="w-6 h-6 text-white" />
+              <Menu className="w-6 h-6 text-light" />
             )}
           </button>
         </div>
@@ -71,6 +150,24 @@ export default function Header() {
         {isMenuOpen && (
           <nav className="md:hidden py-4 border-t border-dark-light animate-fade-in">
             <div className="flex flex-col space-y-3">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="flex items-center justify-center w-full px-4 py-2 rounded bg-dark-light text-light hover:border-primary border border-dark-lighter transition-colors"
+                aria-label={
+                  theme
+                    ? `Switch to ${theme === "dark" ? "light" : "dark"} theme`
+                    : "Toggle theme"
+                }
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-4 h-4" />
+                ) : theme === "light" ? (
+                  <Moon className="w-4 h-4" />
+                ) : (
+                  <span className="w-4 h-4" aria-hidden="true" />
+                )}
+              </button>
               <Link
                 href="/events"
                 className="text-muted hover:text-primary transition-colors duration-200 py-2 font-medium"

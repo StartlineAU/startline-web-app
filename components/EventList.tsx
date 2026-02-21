@@ -58,7 +58,7 @@ export default function EventList({
         <div className="w-16 h-16 bg-dark-light rounded-full flex items-center justify-center mx-auto mb-4">
           <SearchX className="w-8 h-8 text-muted" />
         </div>
-        <h3 className="text-lg font-semibold text-white mb-2">
+        <h3 className="text-lg font-semibold text-light mb-2">
           No Competitions Found
         </h3>
         <p className="text-muted max-w-md mx-auto">
@@ -76,7 +76,7 @@ export default function EventList({
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-primary" />
           <p className="text-muted">
-            <span className="font-semibold text-white">{events.length}</span>{" "}
+            <span className="font-semibold text-light">{events.length}</span>{" "}
             {events.length === 1 ? "competition" : "competitions"} found
           </p>
         </div>

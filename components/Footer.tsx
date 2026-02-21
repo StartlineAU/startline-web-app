@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Flag } from "lucide-react";
+import Image from "next/image";
 
 export default function Footer() {
   return (
@@ -10,9 +10,22 @@ export default function Footer() {
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-                <Flag className="w-4 h-4 text-dark" />
+                <Image
+                  src="/images/startline-logo-dark-background_removed.png"
+                  alt="StartLine logo"
+                  width={32}
+                  height={32}
+                  className="hidden dark:block w-8 h-8"
+                />
+                <Image
+                  src="/images/startline-logo-light-background_removed.png"
+                  alt="StartLine logo"
+                  width={32}
+                  height={32}
+                  className="block dark:hidden w-8 h-8"
+                />
               </div>
-              <span className="text-lg font-bold text-white">StartingLine</span>
+              <span className="text-lg font-bold text-light">StartingLine</span>
             </Link>
             <span className="hidden md:inline text-muted text-sm">
               Australia&apos;s Competitive Fitness Calendar

@@ -37,7 +37,7 @@ export default function EventCard({
         </div>
 
         <div className="p-3">
-          <h3 className="font-semibold text-white text-sm line-clamp-1 group-hover:text-primary transition-colors">
+          <h3 className="font-semibold text-light text-sm line-clamp-1 group-hover:text-primary transition-colors">
             {event.title}
           </h3>
           <div className="flex items-center gap-2 mt-2 text-xs text-muted">
@@ -61,7 +61,7 @@ export default function EventCard({
               <p className="text-xs text-muted uppercase">
                 {month}
               </p>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-2xl font-bold text-light">
                 {day}
               </p>
             </div>
@@ -82,7 +82,7 @@ export default function EventCard({
                     </span>
                   )}
                 </div>
-                <h3 className="font-semibold text-white group-hover:text-primary transition-colors">
+                <h3 className="font-semibold text-light group-hover:text-primary transition-colors">
                   {event.title}
                 </h3>
                 <p className="text-sm text-muted line-clamp-1 mt-1">
@@ -147,7 +147,7 @@ export default function EventCard({
 
       {/* Content */}
       <div className="p-4">
-        <h3 className="font-semibold text-white text-lg mb-2 group-hover:text-primary transition-colors line-clamp-1">
+        <h3 className="font-semibold text-light text-lg mb-2 group-hover:text-primary transition-colors line-clamp-1">
           {event.title}
         </h3>
 
@@ -183,7 +183,7 @@ export default function EventCard({
           href={event.registrationUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full bg-dark-light text-white py-2.5 rounded font-medium hover:bg-primary hover:text-dark transition-colors duration-200"
+          className="flex items-center justify-center gap-2 w-full bg-dark-light text-light py-2.5 rounded font-medium hover:bg-primary hover:text-dark transition-colors duration-200"
         >
           Register
           <ExternalLink className="w-4 h-4" />

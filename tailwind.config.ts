@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -10,24 +11,24 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#A6E22E",
-          light: "#B8F040",
-          dark: "#8BC420",
+          DEFAULT: "rgb(var(--color-primary) / <alpha-value>)",
+          light: "rgb(var(--color-primary-light) / <alpha-value>)",
+          dark: "rgb(var(--color-primary-dark) / <alpha-value>)",
         },
         dark: {
-          DEFAULT: "#1F1F1F",
-          darker: "#141414",
-          light: "#2A2A2A",
-          lighter: "#353535",
+          DEFAULT: "rgb(var(--color-dark) / <alpha-value>)",
+          darker: "rgb(var(--color-darker) / <alpha-value>)",
+          light: "rgb(var(--color-dark-light) / <alpha-value>)",
+          lighter: "rgb(var(--color-dark-lighter) / <alpha-value>)",
         },
         light: {
-          DEFAULT: "#F5F7FA",
-          dark: "#E8EBF0",
+          DEFAULT: "rgb(var(--color-light) / <alpha-value>)",
+          dark: "rgb(var(--color-light-dark) / <alpha-value>)",
         },
         muted: {
-          DEFAULT: "#8A8F98",
-          light: "#A0A5AE",
-          dark: "#6E737B",
+          DEFAULT: "rgb(var(--color-muted) / <alpha-value>)",
+          light: "rgb(var(--color-muted-light) / <alpha-value>)",
+          dark: "rgb(var(--color-muted-dark) / <alpha-value>)",
         },
       },
       fontFamily: {

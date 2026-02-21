@@ -73,7 +73,7 @@ export default function FilterSidebar({
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <Filter className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold text-white">Filters</h2>
+          <h2 className="font-semibold text-light">Filters</h2>
         </div>
         {hasActiveFilters && (
           <button
@@ -88,7 +88,7 @@ export default function FilterSidebar({
 
       {/* Date Range */}
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-white mb-3">When</h3>
+        <h3 className="text-sm font-medium text-light mb-3">When</h3>
         <div className="flex flex-wrap gap-2">
           {DATE_RANGE_OPTIONS.map((option) => (
             <button
@@ -97,7 +97,7 @@ export default function FilterSidebar({
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                 filters.dateRange === option.value
                   ? "bg-primary text-dark"
-                  : "bg-dark-light text-muted hover:text-white"
+                  : "bg-dark-light text-muted hover:text-light"
               }`}
             >
               {option.label}
@@ -108,7 +108,7 @@ export default function FilterSidebar({
 
       {/* Event Types */}
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-white mb-3">Event Type</h3>
+        <h3 className="text-sm font-medium text-light mb-3">Event Type</h3>
         <div className="space-y-2">
           {EVENT_TYPE_OPTIONS.map((option) => (
             <label
@@ -122,7 +122,7 @@ export default function FilterSidebar({
                   onChange={() => handleTypeToggle(option.value)}
                   className="w-4 h-4 rounded border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
                 />
-                <span className="text-sm text-muted group-hover:text-white transition-colors">
+                <span className="text-sm text-muted group-hover:text-light transition-colors">
                   {option.label}
                 </span>
               </div>
@@ -138,7 +138,7 @@ export default function FilterSidebar({
 
       {/* States */}
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-white mb-3">State</h3>
+        <h3 className="text-sm font-medium text-light mb-3">State</h3>
         <div className="grid grid-cols-2 gap-2">
           {STATE_OPTIONS.map((option) => (
             <button
@@ -147,7 +147,7 @@ export default function FilterSidebar({
               className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center justify-between ${
                 filters.states.includes(option.value)
                   ? "bg-primary text-dark"
-                  : "bg-dark-light text-muted hover:text-white"
+                  : "bg-dark-light text-muted hover:text-light"
               }`}
             >
               <span>{option.shortLabel}</span>
@@ -169,7 +169,7 @@ export default function FilterSidebar({
 
       {/* Format */}
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-white mb-3">Format</h3>
+        <h3 className="text-sm font-medium text-light mb-3">Format</h3>
         <div className="space-y-2">
           <label className="flex items-center gap-3 cursor-pointer group">
             <input
@@ -179,7 +179,7 @@ export default function FilterSidebar({
               onChange={() => handleFormatChange(null)}
               className="w-4 h-4 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
             />
-            <span className="text-sm text-muted group-hover:text-white transition-colors">
+            <span className="text-sm text-muted group-hover:text-light transition-colors">
               All Formats
             </span>
           </label>
@@ -195,7 +195,7 @@ export default function FilterSidebar({
                 onChange={() => handleFormatChange(option.value)}
                 className="w-4 h-4 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
               />
-              <span className="text-sm text-muted group-hover:text-white transition-colors">
+              <span className="text-sm text-muted group-hover:text-light transition-colors">
                 {option.label}
               </span>
             </label>
@@ -216,7 +216,7 @@ export default function FilterSidebar({
                 {EVENT_TYPE_OPTIONS.find((o) => o.value === type)?.shortLabel}
                 <button
                   onClick={() => handleTypeToggle(type)}
-                  className="hover:text-white"
+                  className="hover:text-light"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -230,7 +230,7 @@ export default function FilterSidebar({
                 {STATE_OPTIONS.find((o) => o.value === state)?.shortLabel}
                 <button
                   onClick={() => handleStateToggle(state)}
-                  className="hover:text-white"
+                  className="hover:text-light"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -241,7 +241,7 @@ export default function FilterSidebar({
                 {FORMAT_OPTIONS.find((o) => o.value === filters.format)?.label}
                 <button
                   onClick={() => handleFormatChange(null)}
-                  className="hover:text-white"
+                  className="hover:text-light"
                 >
                   <X className="w-3 h-3" />
                 </button>
