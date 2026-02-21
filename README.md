@@ -1,10 +1,10 @@
-# StartingLine
+# StartLine
 
 Australia's competitive fitness event discovery platform.
 
 ## Overview
 
-StartingLine helps performance-driven fitness individuals discover competitive events across Australia. Find HYROX, CrossFit competitions, running races, and hybrid fitness events in one place.
+StartLine helps performance-driven fitness individuals discover competitive events across Australia. Find HYROX, CrossFit competitions, running races, and hybrid fitness events in one place.
 
 ## Features
 
@@ -12,7 +12,7 @@ StartingLine helps performance-driven fitness individuals discover competitive e
 - **Smart Filtering**: Filter by event type, state, date range, and format (individual/team)
 - **Australia-Wide Coverage**: Events across NSW, VIC, QLD, WA, SA, TAS, ACT, NT
 - **Direct Registration**: Links directly to official event registration pages
-- **Dark Theme**: Clean, athletic design optimized for serious competitors
+- **Dark Theme**: Clean, athletic design optimised for serious competitors
 
 ## Event Types
 
@@ -94,3 +94,4 @@ Edit `data/events.json` to add competitions:
 ## License
 
 MIT
+
