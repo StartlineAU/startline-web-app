@@ -77,7 +77,7 @@ export function filterEvents(
       const matchesTitle = event.title.toLowerCase().includes(query);
       const matchesLocation = event.location.toLowerCase().includes(query);
       const matchesCity = event.city.toLowerCase().includes(query);
-      const matchesOrganizer = event.organizer?.toLowerCase().includes(query);
+      const matchesOrganizer = event.organizer?.toLowerCase()?.includes(query) ?? false;
       
       if (!matchesTitle && !matchesLocation && !matchesCity && !matchesOrganizer) {
         return false;

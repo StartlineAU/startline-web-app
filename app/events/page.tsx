@@ -9,6 +9,17 @@ import { FitnessEvent, FilterState, EventType, AustralianState } from "@/types";
 import { filterEvents, sortEventsByDate, getEventsByType, getEventsByState } from "@/lib/utils";
 import { Calendar, X, SlidersHorizontal, LayoutGrid, List } from "lucide-react";
 
+const DEFAULT_FILTERS: Pick<FilterState, "format" | "dateRange" | "searchQuery"> & {
+  types: EventType[];
+  states: AustralianState[];
+} = {
+  types: [],
+  states: [],
+  format: null,
+  dateRange: "all",
+  searchQuery: "",
+};
+
 function EventsContent() {
   const searchParams = useSearchParams();
 
@@ -18,9 +29,9 @@ function EventsContent() {
     return {
       types: typeParam ? [typeParam as EventType] : [],
       states: stateParam ? [stateParam as AustralianState] : [],
-      format: null,
-      dateRange: "all",
-      searchQuery: "",
+      format: DEFAULT_FILTERS.format,
+      dateRange: DEFAULT_FILTERS.dateRange,
+      searchQuery: DEFAULT_FILTERS.searchQuery,
     };
   });
 
@@ -46,13 +57,11 @@ function EventsContent() {
     const typeParam = searchParams.get("type");
     const stateParam = searchParams.get("state");
 
-    if (typeParam || stateParam) {
-      setFilters((prev) => ({
-        ...prev,
-        types: typeParam ? [typeParam as EventType] : prev.types,
-        states: stateParam ? [stateParam as AustralianState] : prev.states,
-      }));
-    }
+    setFilters((prev) => ({
+      ...prev,
+      types: typeParam ? [typeParam as EventType] : DEFAULT_FILTERS.types,
+      states: stateParam ? [stateParam as AustralianState] : DEFAULT_FILTERS.states,
+    }));
   }, [searchParams]);
 
   const handleFilterChange = (newFilters: FilterState) => {

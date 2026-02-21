@@ -1,6 +1,6 @@
 import { Calendar, MapPin, Users, ExternalLink, Image, Award } from "lucide-react";
 import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
-import { formatMediumDate, formatTime } from "@/lib/utils";
+import { formatMediumDate, formatShortDate, formatTime } from "@/lib/utils";
 
 interface EventCardProps {
   event: FitnessEvent;
@@ -13,6 +13,7 @@ export default function EventCard({
 }: EventCardProps) {
   const typeLabel = EVENT_TYPE_LABELS[event.type];
   const stateLabel = STATE_LABELS[event.state];
+  const [day, month] = formatShortDate(event.date).split(" ");
 
   const formatBadge = event.format === "team" ? "Team" : event.format === "both" ? "Individual & Team" : "Individual";
 
@@ -58,10 +59,10 @@ export default function EventCard({
           <div className="flex-shrink-0 w-16 text-center">
             <div className="bg-dark-light rounded-lg py-2 px-3">
               <p className="text-xs text-muted uppercase">
-                {new Date(event.date).toLocaleDateString("en-AU", { month: "short" })}
+                {month}
               </p>
               <p className="text-2xl font-bold text-white">
-                {new Date(event.date).getDate()}
+                {day}
               </p>
             </div>
           </div>
