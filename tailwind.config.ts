@@ -32,7 +32,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        sans: ["var(--font-chakra-petch)", "var(--font-inter)", "system-ui", "sans-serif"],
+        title: ["var(--font-chakra-petch)", "var(--font-inter)", "system-ui", "sans-serif"],
       },
     },
   },
