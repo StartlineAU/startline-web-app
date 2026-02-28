@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init"
   },
   "dependencies": {
+    "@prisma/client": "^5.0.0",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.469.0",
     "next": "^15.1.0",
@@ -16,6 +19,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "prisma": "^5.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
