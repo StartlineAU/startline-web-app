@@ -8,24 +8,22 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Brand */}
           <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-                <Image
-                  src="/images/startline-logo-dark-background_removed.png"
-                  alt="StartLine logo"
-                  width={32}
-                  height={32}
-                  className="hidden dark:block w-8 h-8"
-                />
-                <Image
-                  src="/images/startline-logo-light-background_removed.png"
-                  alt="StartLine logo"
-                  width={32}
-                  height={32}
-                  className="block dark:hidden w-8 h-8"
-                />
-              </div>
-              <span className="text-lg font-bold text-light">StartingLine</span>
+            <Link href="/" className="flex items-center gap-3">
+              <Image
+                src="/images/logo.png"
+                alt="StartLine logo mark"
+                width={526}
+                height={156}
+                className="h-8 w-auto object-contain shrink-0"
+                unoptimized
+              />
+              <Image
+                src="/images/startline-title-white.png"
+                alt="StartLine"
+                width={120}
+                height={24}
+                className="h-5 w-auto"
+              />
             </Link>
             <span className="hidden md:inline text-muted text-sm">
               Australia&apos;s Competitive Fitness Calendar
@@ -64,7 +62,7 @@ export default function Footer() {
         {/* Copyright */}
         <div className="mt-8 pt-6 border-t border-dark-light text-center md:text-left">
           <p className="text-sm text-muted-dark">
-            © {new Date().getFullYear()} StartingLine. All rights reserved.
+            © {new Date().getFullYear()} StartLine. All rights reserved.
           </p>
         </div>
       </div>
