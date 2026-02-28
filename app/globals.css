@@ -3,29 +3,10 @@
 @tailwind utilities;
 
 :root {
-  /* Light mode primary - darker for better contrast */
-  --color-primary: 95 129 20;
-  --color-primary-light: 112 150 24;
-  --color-primary-dark: 74 101 15;
-
-  /* Light theme tokens */
-  --color-dark: 232 236 240;
-  --color-darker: 222 227 233;
-  --color-dark-light: 203 213 225;
-  --color-dark-lighter: 226 232 240;
-  --color-light: 15 23 42;
-  --color-light-dark: 30 41 59;
-  --color-muted: 100 116 139;
-  --color-muted-light: 148 163 184;
-  --color-muted-dark: 71 85 105;
-  color-scheme: light;
-}
-
-.dark {
-  /* Dark mode primary - bright lime */
-  --color-primary: 166 226 46;
-  --color-primary-light: 184 240 64;
-  --color-primary-dark: 139 196 32;
+  /* Dark mode primary - matching logo green (#B3E153) */
+  --color-primary: 179 225 83;
+  --color-primary-light: 194 236 119;
+  --color-primary-dark: 164 214 47;
 
   /* Dark theme tokens */
   --color-dark: 31 31 31;
@@ -38,13 +19,6 @@
   --color-muted-light: 160 165 174;
   --color-muted-dark: 110 115 123;
   color-scheme: dark;
-}
-
-/* Disable transitions for one tick during theme toggle */
-.theme-switching *,
-.theme-switching *::before,
-.theme-switching *::after {
-  transition: none !important;
 }
 
 * {
