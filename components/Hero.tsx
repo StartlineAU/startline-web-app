@@ -35,7 +35,7 @@ export default function Hero() {
 
           {/* Headline */}
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-normal text-light mb-4 leading-tight tracking-tight">
-            Where&apos;s Your Next<br />
+            Where is your next<br />
             <span className="text-primary">Start Line</span>?
           </h1>
 
