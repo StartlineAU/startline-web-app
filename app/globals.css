@@ -3,13 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: 166 226 46;
-  --color-primary-light: 184 240 64;
-  --color-primary-dark: 139 196 32;
+  /* Light mode primary - darker for better contrast */
+  --color-primary: 95 129 20;
+  --color-primary-light: 112 150 24;
+  --color-primary-dark: 74 101 15;
 
   /* Light theme tokens */
-  --color-dark: 248 250 252;
-  --color-darker: 241 245 249;
+  --color-dark: 232 236 240;
+  --color-darker: 222 227 233;
   --color-dark-light: 203 213 225;
   --color-dark-lighter: 226 232 240;
   --color-light: 15 23 42;
@@ -21,6 +22,11 @@
 }
 
 .dark {
+  /* Dark mode primary - bright lime */
+  --color-primary: 166 226 46;
+  --color-primary-light: 184 240 64;
+  --color-primary-dark: 139 196 32;
+
   /* Dark theme tokens */
   --color-dark: 31 31 31;
   --color-darker: 20 20 20;

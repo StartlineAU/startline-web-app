@@ -34,8 +34,8 @@ export default function Hero() {
           </div>
 
           {/* Headline */}
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-light mb-4 leading-tight tracking-tight">
-            Where&apos;s Your Next{" "}
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-normal text-light mb-4 leading-tight tracking-tight">
+            Where&apos;s Your Next<br />
             <span className="text-primary">Start Line</span>?
           </h1>
 
