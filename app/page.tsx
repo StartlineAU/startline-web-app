@@ -27,7 +27,7 @@ export default function Home() {
                 <Calendar className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-light">
                   Upcoming Competitions
                 </h2>
                 <p className="text-sm text-muted">Sorted by date</p>
@@ -51,7 +51,7 @@ export default function Home() {
           <div className="mt-6 text-center sm:hidden">
             <Link
               href="/events"
-              className="inline-flex items-center gap-2 bg-dark-light text-white px-6 py-3 rounded font-medium hover:bg-primary hover:text-dark transition-colors"
+              className="inline-flex items-center gap-2 bg-dark-light text-light px-6 py-3 rounded font-medium hover:bg-primary hover:text-dark transition-colors"
             >
               View All Competitions
               <ArrowRight className="w-5 h-5" />
@@ -68,7 +68,7 @@ export default function Home() {
               <Trophy className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-light">
                 Browse by Event Type
               </h2>
               <p className="text-sm text-muted">
@@ -84,7 +84,7 @@ export default function Home() {
                 href={`/events?type=${type.value}`}
                 className="bg-dark-darker border border-dark-light rounded-lg p-5 hover:border-primary transition-colors group"
               >
-                <h3 className="font-semibold text-white group-hover:text-primary transition-colors">
+                <h3 className="font-semibold text-light group-hover:text-primary transition-colors">
                   {type.shortLabel}
                 </h3>
                 <p className="text-sm text-muted mt-1">
@@ -104,7 +104,7 @@ export default function Home() {
               <MapPin className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Browse by State</h2>
+              <h2 className="text-xl font-bold text-light">Browse by State</h2>
               <p className="text-sm text-muted">Events across Australia</p>
             </div>
           </div>
@@ -118,7 +118,7 @@ export default function Home() {
                   eventsByState[state.value] === 0 ? "opacity-50" : ""
                 }`}
               >
-                <p className="font-semibold text-white group-hover:text-primary transition-colors">
+                <p className="font-semibold text-light group-hover:text-primary transition-colors">
                   {state.shortLabel}
                 </p>
                 <p className="text-xs text-muted mt-1">
@@ -138,7 +138,7 @@ export default function Home() {
               <span className="flex items-center gap-2">
                 <Flag className="w-4 h-4 text-primary" />
                 <span>
-                  <span className="font-semibold text-white">{totalEvents}</span>{" "}
+                  <span className="font-semibold text-light">{totalEvents}</span>{" "}
                   competitions listed
                 </span>
               </span>

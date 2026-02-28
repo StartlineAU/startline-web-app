@@ -34,7 +34,7 @@ export default function Hero() {
           </div>
 
           {/* Headline */}
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 leading-tight tracking-tight">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-light mb-4 leading-tight tracking-tight">
             Where&apos;s Your Next{" "}
             <span className="text-primary">Start Line</span>?
           </h1>
@@ -50,7 +50,7 @@ export default function Hero() {
               <button
                 key={option.value}
                 onClick={() => handleQuickFilter(option.value)}
-                className="px-4 py-2 bg-dark-light border border-dark-lighter rounded text-sm font-medium text-white hover:border-primary hover:text-primary transition-colors"
+                className="px-4 py-2 bg-dark-light border border-dark-lighter rounded text-sm font-medium text-light hover:border-primary hover:text-primary transition-colors"
               >
                 {option.shortLabel}
               </button>
@@ -64,7 +64,7 @@ export default function Hero() {
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value as AustralianState | "")}
-                className="w-full appearance-none bg-dark-light border border-dark-lighter rounded px-4 py-3 pr-10 text-white focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer"
+                className="w-full appearance-none bg-dark-light border border-dark-lighter rounded px-4 py-3 pr-10 text-light focus:border-primary focus:ring-1 focus:ring-primary transition-colors cursor-pointer"
               >
                 <option value="">All States</option>
                 {STATE_OPTIONS.map((state) => (

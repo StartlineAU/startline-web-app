@@ -10,8 +10,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "StartingLine - Find Fitness Events Near You",
+  title: "StartLine",
   description: "Discover local fitness events, classes, and activities in your area. From yoga to running, find the perfect workout for you.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -20,8 +25,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var storedTheme=localStorage.getItem("theme");var isDark=storedTheme?storedTheme==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",isDark);document.documentElement.style.colorScheme=isDark?"dark":"light";}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className={`${inter.variable} bg-dark-darker text-light font-sans antialiased transition-colors duration-200`}>
         <Header />
         <main className="min-h-screen">{children}</main>
         <Footer />
