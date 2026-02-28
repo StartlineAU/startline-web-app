@@ -1,8 +1,5 @@
 <img width="1020" height="156" alt="logo-title" src="https://github.com/user-attachments/assets/3bfd211a-4c61-48c5-aa9e-634c52b81ccf" />
 
-
-Australia's competitive fitness event discovery platform.
-
 ## Overview
 
 StartLine helps performance-driven fitness individuals discover competitive events across Australia. Find HYROX, CrossFit competitions, running races, and hybrid fitness events in one place.
@@ -95,5 +92,6 @@ Edit `data/events.json` to add competitions:
 ## License
 
 MIT
+
 
 
