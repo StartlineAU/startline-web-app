@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Chakra_Petch } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -16,8 +14,8 @@ const chakraPetch = Chakra_Petch({
 });
 
 export const metadata: Metadata = {
-  title: "StartLine",
-  description: "Discover local fitness events, classes, and activities in your area. From yoga to running, find the perfect workout for you.",
+  title: "StartLine — Find Your Next Race",
+  description: "Discover HYROX, CrossFit, running and hybrid fitness events across Australia. Join the waitlist.",
   icons: {
     icon: [
       { url: "/images/logo.svg", type: "image/svg+xml" },
@@ -37,10 +35,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.variable} ${chakraPetch.variable} bg-dark-darker text-light font-sans font-normal antialiased transition-colors duration-200`}>
-        <Header />
-        <main className="min-h-screen">{children}</main>
-        <Footer />
+      <body className={`${inter.variable} ${chakraPetch.variable} bg-dark-darker text-light font-sans font-normal antialiased`}>
+        {children}
       </body>
     </html>
   );
