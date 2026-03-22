@@ -35,27 +35,39 @@ export async function POST(req: NextRequest) {
       html: `
         <!DOCTYPE html>
         <html>
-          <body style="margin:0;padding:0;background:#141414;font-family:'Inter',system-ui,sans-serif;color:#F5F7FA;">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap');
+            </style>
+          </head>
+          <body style="margin:0;padding:0;background:#141414;font-family:'Chakra Petch',system-ui,sans-serif;color:#F5F7FA;">
             <table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 24px;">
               <tr>
                 <td align="center">
                   <table width="100%" style="max-width:560px;">
                     <tr>
                       <td style="padding-bottom:40px;">
-                        <p style="margin:0;font-size:28px;font-weight:700;color:#B3E153;letter-spacing:-0.5px;">STARTLINE</p>
+                        <img
+                          src="https://startlineau.com/images/logo-title.svg"
+                          alt="StartLine"
+                          width="280"
+                          style="display:block;border:0;height:auto;"
+                        />
                       </td>
                     </tr>
                     <tr>
                       <td>
-                        <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#F5F7FA;">You're on the list.</h1>
-                        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#8A8F98;">
+                        <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#F5F7FA;font-family:'Chakra Petch',system-ui,sans-serif;">You're on the list.</h1>
+                        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#8A8F98;font-family:'Chakra Petch',system-ui,sans-serif;">
                           Thanks for joining the StartLine waitlist. We're building the best way to discover HYROX, CrossFit, running and hybrid fitness events across Australia.
                         </p>
-                        <p style="margin:0 0 40px;font-size:16px;line-height:1.6;color:#8A8F98;">
+                        <p style="margin:0 0 40px;font-size:16px;line-height:1.6;color:#8A8F98;font-family:'Chakra Petch',system-ui,sans-serif;">
                           We'll let you know the moment we launch. In the meantime, get ready to find your next start line.
                         </p>
                         <hr style="border:none;border-top:1px solid #2A2A2A;margin:0 0 32px;" />
-                        <p style="margin:0;font-size:13px;color:#6E737B;">
+                        <p style="margin:0;font-size:13px;color:#6E737B;font-family:'Chakra Petch',system-ui,sans-serif;">
                           You're receiving this because you signed up at startlineau.com
                         </p>
                       </td>
