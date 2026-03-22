@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&amp;family=Inter:wght@100..900&amp;family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary-dim": "#beee00",
+              "outline-variant": "#484847",
+              "surface-dim": "#0e0e0e",
+              "on-primary-fixed": "#3a4a00",
+              "surface-container-low": "#131313",
+              "tertiary-dim": "#edd13a",
+              "on-surface-variant": "#adaaaa",
+              "on-tertiary-fixed-variant": "#685900",
+              "on-background": "#ffffff",
+              "primary-container": "#cafd00",
+              "error-container": "#b92902",
+              "tertiary-fixed-dim": "#edd13a",
+              "secondary-dim": "#d6d4d3",
+              "error-dim": "#d53d18",
+              "on-secondary-fixed-variant": "#5c5b5b",
+              "tertiary-fixed": "#fce047",
+              "tertiary-container": "#fce047",
+              "on-secondary": "#525151",
+              "error": "#ff7351",
+              "primary": "#f3ffca",
+              "surface-tint": "#f3ffca",
+              "on-secondary-fixed": "#403f3f",
+              "on-tertiary-fixed": "#483d00",
+              "primary-fixed": "#cafd00",
+              "secondary-fixed": "#e5e2e1",
+              "inverse-surface": "#fcf9f8",
+              "surface-container-highest": "#262626",
+              "outline": "#767575",
+              "on-error": "#450900",
+              "on-error-container": "#ffd2c8",
+              "on-secondary-container": "#d2d0cf",
+              "surface-bright": "#2c2c2c",
+              "surface-container-lowest": "#000000",
+              "on-tertiary-container": "#5d5000",
+              "surface-container": "#1a1919",
+              "secondary": "#e5e2e1",
+              "on-surface": "#ffffff",
+              "secondary-container": "#474746",
+              "surface-variant": "#262626",
+              "inverse-primary": "#516700",
+              "on-primary-container": "#4a5e00",
+              "primary-fixed-dim": "#beee00",
+              "on-tertiary": "#665800",
+              "on-primary-fixed-variant": "#526900",
+              "surface-container-high": "#201f1f",
+              "surface": "#0e0e0e",
+              "secondary-fixed-dim": "#d6d4d3",
+              "tertiary": "#ffeea5",
+              "background": "#0e0e0e",
+              "inverse-on-surface": "#565555",
+              "on-primary": "#516700"
+            },
+            fontFamily: {
+              "headline": ["Chakra Petch", "sans-serif"],
+              "body": ["Inter", "sans-serif"],
+              "label": ["Chakra Petch", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0e0e0e;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+        }
+        .hud-border-left {
+            border-left: 3px solid #cafd00;
+        }
+        .machined-button-shadow {
+            box-shadow: 2px 2px 0px 0px #cafd00;
+        }
+    </style>
+</head>
+<body class="bg-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Bar -->
+<nav class="bg-zinc-950 dark:bg-[#0e0e0e] sticky top-0 z-50 border-b-0 bg-[#131313]">
+<div class="flex justify-between items-center w-full px-6 py-4 max-w-[1440px] mx-auto">
+<div class="text-2xl font-black text-[#CCFF00] italic font-headline tracking-tighter">
+                STARTLINE
+            </div>
+<div class="hidden md:flex gap-8 items-center">
+<a class="text-[#CCFF00] border-b-2 border-[#CCFF00] pb-1 font-headline uppercase tracking-tighter transition-all" href="#">EVENTS</a>
+<a class="text-zinc-500 font-medium font-headline uppercase tracking-tighter hover:text-[#CCFF00] hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all" href="#">TRAINING</a>
+<a class="text-zinc-500 font-medium font-headline uppercase tracking-tighter hover:text-[#CCFF00] hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all" href="#">COMMUNITY</a>
+<a class="text-zinc-500 font-medium font-headline uppercase tracking-tighter hover:text-[#CCFF00] hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all" href="#">LEADERBOARD</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface p-2 hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined">search</span>
+</button>
+<button class="bg-primary-container text-on-primary font-headline font-bold uppercase tracking-widest px-6 py-2 active:scale-95 duration-100 hover:bg-primary-dim transition-all">
+                    SIGN IN
+                </button>
+</div>
+</div>
+</nav>
+<main class="max-w-[1440px] mx-auto px-6 py-12 flex flex-col md:flex-row gap-12">
+<!-- Sidebar Filters -->
+<aside class="w-full md:w-72 flex flex-col gap-10">
+<div class="flex flex-col gap-6">
+<h2 class="font-headline text-xl font-bold tracking-tight uppercase flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container">filter_list</span>
+                    Parameters
+                </h2>
+<!-- Filter Section: Event Type -->
+<div class="space-y-4">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Event Type</span>
+<div class="flex flex-col gap-2">
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="w-4 h-4 rounded-none border-outline-variant bg-surface-container-highest text-primary-container focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+<span class="font-headline text-sm uppercase tracking-tighter group-hover:text-primary-container transition-colors">Marathon</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="w-4 h-4 rounded-none border-outline-variant bg-surface-container-highest text-primary-container focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+<span class="font-headline text-sm uppercase tracking-tighter group-hover:text-primary-container transition-colors">Triathlon</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="w-4 h-4 rounded-none border-outline-variant bg-surface-container-highest text-primary-container focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+<span class="font-headline text-sm uppercase tracking-tighter group-hover:text-primary-container transition-colors">Cycling</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="w-4 h-4 rounded-none border-outline-variant bg-surface-container-highest text-primary-container focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+<span class="font-headline text-sm uppercase tracking-tighter group-hover:text-primary-container transition-colors">Trail Running</span>
+</label>
+</div>
+</div>
+<!-- Filter Section: Distance -->
+<div class="space-y-4">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Distance (KM)</span>
+<div class="grid grid-cols-2 gap-2">
+<button class="bg-surface-container-highest py-2 px-3 font-headline text-xs uppercase tracking-tighter hover:bg-outline-variant transition-colors text-left border-l-2 border-transparent hover:border-primary-container">5K - 10K</button>
+<button class="bg-surface-container-highest py-2 px-3 font-headline text-xs uppercase tracking-tighter hover:bg-outline-variant transition-colors text-left border-l-2 border-primary-container text-primary-container">21K - 42K</button>
+<button class="bg-surface-container-highest py-2 px-3 font-headline text-xs uppercase tracking-tighter hover:bg-outline-variant transition-colors text-left border-l-2 border-transparent">70.3 +</button>
+<button class="bg-surface-container-highest py-2 px-3 font-headline text-xs uppercase tracking-tighter hover:bg-outline-variant transition-colors text-left border-l-2 border-transparent">Custom</button>
+</div>
+</div>
+<!-- Filter Section: Location -->
+<div class="space-y-4">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Regional Sector</span>
+<div class="relative">
+<input class="w-full bg-surface-container-low border-0 border-b-2 border-outline-variant focus:border-primary-container focus:ring-0 font-headline text-sm p-2 uppercase tracking-tighter placeholder:text-zinc-700" placeholder="ENTER CITY..." type="text"/>
+</div>
+</div>
+<!-- Filter Section: Price -->
+<div class="space-y-4">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Entry Fee</span>
+<input class="w-full h-1 bg-surface-container-highest appearance-none cursor-pointer accent-primary-container" type="range"/>
+<div class="flex justify-between font-headline text-[10px] text-on-surface-variant">
+<span>$0</span>
+<span>$500+</span>
+</div>
+</div>
+<button class="mt-4 w-full bg-surface-container-highest text-on-surface font-headline font-bold uppercase tracking-widest py-3 hover:bg-surface-container-high transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">restart_alt</span>
+                    Reset Config
+                </button>
+</div>
+</aside>
+<!-- Main Content: Event Grid -->
+<section class="flex-1 space-y-12">
+<header class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div class="space-y-2">
+<h1 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter uppercase">Active Events</h1>
+<p class="text-on-surface-variant font-body text-sm max-w-lg">Real-time listing of high-performance competitive events. Register to secure your position at the start line.</p>
+</div>
+<div class="flex items-center gap-3 font-headline text-[10px] uppercase tracking-widest text-on-surface-variant">
+<span>Sorted by:</span>
+<button class="text-primary-container flex items-center gap-1 font-bold">Date Ascending <span class="material-symbols-outlined text-sm">expand_more</span></button>
+</div>
+</header>
+<!-- Event Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-px bg-surface-container-lowest">
+<!-- Event Card 1 -->
+<article class="bg-surface-container p-8 flex flex-col justify-between group hover:bg-surface-container-high transition-colors duration-300">
+<div class="space-y-6">
+<div class="flex justify-between items-start">
+<div class="space-y-1">
+<span class="font-headline text-[10px] uppercase tracking-widest text-primary-container font-bold px-2 py-0.5 border border-primary-container">Confirmed</span>
+<h3 class="font-headline text-2xl font-bold uppercase tracking-tighter pt-2">Iron Circuit Invitational</h3>
+</div>
+<div class="bg-surface-container-highest px-4 py-2 text-center flex flex-col items-center">
+<span class="font-headline text-xs font-bold leading-none">OCT</span>
+<span class="font-headline text-xl font-black">24</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-x-6 gap-y-2 text-on-surface-variant text-sm font-headline uppercase tracking-tighter">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">location_on</span>
+                                Austin, TX
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">timer</span>
+                                06:00 AM
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">directions_run</span>
+                                Triathlon
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed border-l-2 border-outline-variant/30 pl-4">
+                            Premium endurance challenge through the central hill country. Features a 1.2 mile swim, 56 mile bike course, and 13.1 mile high-elevation run.
+                        </p>
+</div>
+<div class="mt-8 pt-8 border-t border-outline-variant/10 flex justify-between items-center">
+<span class="font-headline text-lg font-black text-on-surface">$145.00</span>
+<button class="bg-primary-container text-on-primary font-headline font-bold uppercase tracking-widest px-6 py-3 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-x-0 active:translate-y-0 transition-all">
+                            View Details
+                        </button>
+</div>
+</article>
+<!-- Event Card 2 -->
+<article class="bg-surface-container p-8 flex flex-col justify-between group hover:bg-surface-container-high transition-colors duration-300">
+<div class="space-y-6">
+<div class="flex justify-between items-start">
+<div class="space-y-1">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-tertiary-fixed font-bold px-2 py-0.5 bg-tertiary-fixed">Selling Fast</span>
+<h3 class="font-headline text-2xl font-bold uppercase tracking-tighter pt-2">Midnight Velocity 10K</h3>
+</div>
+<div class="bg-surface-container-highest px-4 py-2 text-center flex flex-col items-center">
+<span class="font-headline text-xs font-bold leading-none">NOV</span>
+<span class="font-headline text-xl font-black">02</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-x-6 gap-y-2 text-on-surface-variant text-sm font-headline uppercase tracking-tighter">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">location_on</span>
+                                Miami, FL
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">timer</span>
+                                11:30 PM
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">directions_run</span>
+                                Street Race
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed border-l-2 border-outline-variant/30 pl-4">
+                            High-speed city center race under the neon grid. Flat course designed for personal records and elite performance benchmarking.
+                        </p>
+</div>
+<div class="mt-8 pt-8 border-t border-outline-variant/10 flex justify-between items-center">
+<span class="font-headline text-lg font-black text-on-surface">$45.00</span>
+<button class="bg-primary-container text-on-primary font-headline font-bold uppercase tracking-widest px-6 py-3 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-x-0 active:translate-y-0 transition-all">
+                            View Details
+                        </button>
+</div>
+</article>
+<!-- Event Card 3 -->
+<article class="bg-surface-container p-8 flex flex-col justify-between group hover:bg-surface-container-high transition-colors duration-300">
+<div class="space-y-6">
+<div class="flex justify-between items-start">
+<div class="space-y-1">
+<span class="font-headline text-[10px] uppercase tracking-widest text-on-surface-variant font-bold px-2 py-0.5 border border-outline-variant">Registration Closed</span>
+<h3 class="font-headline text-2xl font-bold uppercase tracking-tighter pt-2">Vertex Trail Ultra</h3>
+</div>
+<div class="bg-surface-container-highest px-4 py-2 text-center flex flex-col items-center">
+<span class="font-headline text-xs font-bold leading-none">DEC</span>
+<span class="font-headline text-xl font-black">15</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-x-6 gap-y-2 text-on-surface-variant text-sm font-headline uppercase tracking-tighter">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">location_on</span>
+                                Boulder, CO
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">timer</span>
+                                04:00 AM
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">terrain</span>
+                                Trail Ultra
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed border-l-2 border-outline-variant/30 pl-4">
+                            Brutal alpine terrain testing psychological and physical limits. 50KM of technical trails with 8,000ft of vertical gain.
+                        </p>
+</div>
+<div class="mt-8 pt-8 border-t border-outline-variant/10 flex justify-between items-center">
+<span class="font-headline text-lg font-black text-on-surface">$190.00</span>
+<button class="bg-surface-container-highest text-on-surface-variant font-headline font-bold uppercase tracking-widest px-6 py-3 cursor-not-allowed">
+                            Full Capacity
+                        </button>
+</div>
+</article>
+<!-- Event Card 4 -->
+<article class="bg-surface-container p-8 flex flex-col justify-between group hover:bg-surface-container-high transition-colors duration-300">
+<div class="space-y-6">
+<div class="flex justify-between items-start">
+<div class="space-y-1">
+<span class="font-headline text-[10px] uppercase tracking-widest text-primary-container font-bold px-2 py-0.5 border border-primary-container">Confirmed</span>
+<h3 class="font-headline text-2xl font-bold uppercase tracking-tighter pt-2">Aero-Dynamic Criterium</h3>
+</div>
+<div class="bg-surface-container-highest px-4 py-2 text-center flex flex-col items-center">
+<span class="font-headline text-xs font-bold leading-none">JAN</span>
+<span class="font-headline text-xl font-black">08</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-x-6 gap-y-2 text-on-surface-variant text-sm font-headline uppercase tracking-tighter">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">location_on</span>
+                                Phoenix, AZ
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">timer</span>
+                                08:00 AM
+                            </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-container text-base">pedal_bike</span>
+                                Cycling
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed border-l-2 border-outline-variant/30 pl-4">
+                            High-intensity closed circuit road cycling. 45 minutes of mechanical precision and tactical maneuvering in the desert heat.
+                        </p>
+</div>
+<div class="mt-8 pt-8 border-t border-outline-variant/10 flex justify-between items-center">
+<span class="font-headline text-lg font-black text-on-surface">$85.00</span>
+<button class="bg-primary-container text-on-primary font-headline font-bold uppercase tracking-widest px-6 py-3 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-x-0 active:translate-y-0 transition-all">
+                            View Details
+                        </button>
+</div>
+</article>
+</div>
+<!-- Pagination -->
+<div class="flex justify-center items-center gap-2 py-8">
+<button class="w-10 h-10 flex items-center justify-center bg-surface-container-highest hover:bg-outline-variant transition-colors">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center bg-primary-container text-on-primary font-headline font-bold">1</button>
+<button class="w-10 h-10 flex items-center justify-center bg-surface-container-highest hover:bg-outline-variant transition-colors font-headline font-bold">2</button>
+<button class="w-10 h-10 flex items-center justify-center bg-surface-container-highest hover:bg-outline-variant transition-colors font-headline font-bold">3</button>
+<span class="px-2 text-on-surface-variant font-headline">...</span>
+<button class="w-10 h-10 flex items-center justify-center bg-surface-container-highest hover:bg-outline-variant transition-colors font-headline font-bold">12</button>
+<button class="w-10 h-10 flex items-center justify-center bg-surface-container-highest hover:bg-outline-variant transition-colors">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</section>
+</main>
+<!-- Map & Promo Section (Bento Style) -->
+<section class="bg-surface-container-low py-20">
+<div class="max-w-[1440px] mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-1">
+<div class="md:col-span-2 bg-surface-container-highest h-80 relative overflow-hidden group">
+<div class="absolute inset-0 grayscale opacity-40 hover:opacity-60 transition-opacity duration-700 bg-[url('https://images.unsplash.com/photo-1526772662000-3f88f10405ff?q=80&amp;w=2000')] bg-cover bg-center" data-alt="Dark moody top-down map of a city street layout"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-12 flex flex-col justify-end">
+<span class="font-headline text-xs font-bold text-primary-container uppercase tracking-widest mb-2">Real-time Location Services</span>
+<h2 class="font-headline text-3xl font-black uppercase italic tracking-tighter mb-4">Explore Events Near You</h2>
+<button class="w-fit border border-primary-container text-primary-container font-headline font-bold uppercase tracking-widest px-6 py-2 hover:bg-primary-container hover:text-on-primary transition-all">Launch Radar</button>
+</div>
+</div>
+<div class="bg-primary-container p-12 flex flex-col justify-between items-start">
+<div class="space-y-4">
+<span class="material-symbols-outlined text-4xl text-on-primary">monitoring</span>
+<h2 class="font-headline text-3xl font-black uppercase italic tracking-tighter text-on-primary leading-none">Sync Your Metrics</h2>
+</div>
+<p class="text-on-primary-container font-bold text-sm">Connect your hardware to automate registration and ranking tracking across all STARTLINE events.</p>
+<button class="text-on-primary border-b-2 border-on-primary font-headline font-bold uppercase tracking-widest text-sm py-1">Integrate System</button>
+</div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-[#000000] dark:bg-[#000000] border-t border-zinc-800/20">
+<div class="w-full px-8 py-12 flex flex-col md:flex-row justify-between items-center gap-4 max-w-[1440px] mx-auto">
+<div class="text-lg font-bold text-zinc-100 font-headline italic tracking-tighter">STARTLINE</div>
+<div class="flex gap-8">
+<a class="font-headline text-[10px] uppercase tracking-widest text-zinc-600 hover:text-zinc-100 transition-colors" href="#">SYSTEM STATUS</a>
+<a class="font-headline text-[10px] uppercase tracking-widest text-zinc-600 hover:text-zinc-100 transition-colors" href="#">PRIVACY</a>
+<a class="font-headline text-[10px] uppercase tracking-widest text-zinc-600 hover:text-zinc-100 transition-colors" href="#">TERMS</a>
+<a class="font-headline text-[10px] uppercase tracking-widest text-zinc-600 hover:text-zinc-100 transition-colors" href="#">API</a>
+</div>
+<div class="font-headline text-[10px] uppercase tracking-widest text-zinc-600">
+                © 2024 STARTLINE. KINETIC PRECISION.
+            </div>
+</div>
+</footer>
+</body></html>

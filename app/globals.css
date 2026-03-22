@@ -170,3 +170,52 @@ input[type="radio"] {
   background-color: rgb(var(--color-primary));
   color: rgb(var(--color-dark));
 }
+
+/* Stitchai / HUD utilities */
+.bg-machined {
+  background-image: linear-gradient(
+    135deg,
+    rgb(var(--color-primary-light)) 0%,
+    rgb(var(--color-primary)) 100%
+  );
+}
+
+.machined-button-shadow {
+  box-shadow: 2px 2px 0px 0px rgb(var(--color-primary));
+}
+
+/* HUD corner brackets */
+.hud-corner-tl {
+  border-left: 1px solid rgb(var(--color-primary) / 0.4);
+  border-top: 1px solid rgb(var(--color-primary) / 0.4);
+}
+
+.hud-corner-tr {
+  border-right: 1px solid rgb(var(--color-primary) / 0.4);
+  border-top: 1px solid rgb(var(--color-primary) / 0.4);
+}
+
+.hud-corner-bl {
+  border-left: 1px solid rgb(var(--color-primary) / 0.4);
+  border-bottom: 1px solid rgb(var(--color-primary) / 0.4);
+}
+
+.hud-corner-br {
+  border-right: 1px solid rgb(var(--color-primary) / 0.4);
+  border-bottom: 1px solid rgb(var(--color-primary) / 0.4);
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
