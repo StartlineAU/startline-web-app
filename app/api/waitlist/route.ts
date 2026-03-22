@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await getResend().emails.send({
+    const result = await getResend().emails.send({
       from: "StartLine <waitlist@startlineau.com>",
       to: email,
       subject: "You're on the StartLine waitlist!",
@@ -82,9 +82,13 @@ export async function POST(req: NextRequest) {
         </html>
       `,
     });
+    if (result.error) {
+      console.error("Resend error:", result.error);
+    } else {
+      console.log("Email sent successfully, id:", result.data?.id);
+    }
   } catch (emailError) {
-    console.error("Email error:", emailError);
-    // Don't fail the request — email is best-effort
+    console.error("Email send failed:", emailError);
   }
 
   return NextResponse.json({ success: true });
