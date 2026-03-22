@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResend() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) throw new Error("Missing RESEND_API_KEY environment variable.");
+  return new Resend(key);
+}
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
@@ -24,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: "StartLine <waitlist@startline.com.au>",
       to: email,
       subject: "You're on the StartLine waitlist!",
