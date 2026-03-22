@@ -1,6 +1,6 @@
 "use client";
 
-import { X, ChevronDown, ChevronUp, Filter } from "lucide-react";
+import { X, SlidersHorizontal } from "lucide-react";
 import {
   EventType,
   AustralianState,
@@ -68,188 +68,205 @@ export default function FilterSidebar({
     filters.searchQuery;
 
   return (
-    <aside className="bg-dark rounded-lg border border-dark-light p-5">
+    <aside className="bg-dark">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="border-l-4 border-primary px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Filter className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold text-light">Filters</h2>
+          <SlidersHorizontal className="w-4 h-4 text-primary" />
+          <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-light">
+            Parameters
+          </h2>
         </div>
         {hasActiveFilters && (
           <button
             onClick={handleClearFilters}
-            className="text-sm text-muted hover:text-primary transition-colors flex items-center gap-1"
+            className="font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors flex items-center gap-1"
           >
-            <X className="w-4 h-4" />
-            Clear
+            <X className="w-3 h-3" />
+            Reset
           </button>
         )}
       </div>
 
-      {/* Date Range */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-light mb-3">When</h3>
-        <div className="flex flex-wrap gap-2">
-          {DATE_RANGE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleDateRangeChange(option.value)}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                filters.dateRange === option.value
-                  ? "bg-primary text-dark"
-                  : "bg-dark-light text-muted hover:text-light"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+      <div className="p-5 space-y-6">
+        {/* Date Range */}
+        <div>
+          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            Time Window
+          </h3>
+          <div className="flex flex-col gap-1">
+            {DATE_RANGE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleDateRangeChange(option.value)}
+                className={`text-left font-headline text-[10px] uppercase tracking-widest px-3 py-2 transition-colors ${
+                  filters.dateRange === option.value
+                    ? "bg-primary text-dark border-l-2 border-primary"
+                    : "text-muted hover:text-light hover:bg-dark-light border-l-2 border-transparent"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Event Types */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-light mb-3">Event Type</h3>
-        <div className="space-y-2">
-          {EVENT_TYPE_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className="flex items-center justify-between cursor-pointer group"
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={filters.types.includes(option.value)}
-                  onChange={() => handleTypeToggle(option.value)}
-                  className="w-4 h-4 rounded border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
-                />
-                <span className="text-sm text-muted group-hover:text-light transition-colors">
-                  {option.label}
-                </span>
-              </div>
-              {eventCounts?.byType && (
-                <span className="text-xs text-muted-dark">
-                  {eventCounts.byType[option.value] || 0}
-                </span>
-              )}
-            </label>
-          ))}
-        </div>
-      </div>
+        <div className="h-px bg-dark-lighter" />
 
-      {/* States */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-light mb-3">State</h3>
-        <div className="grid grid-cols-2 gap-2">
-          {STATE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleStateToggle(option.value)}
-              className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center justify-between ${
-                filters.states.includes(option.value)
-                  ? "bg-primary text-dark"
-                  : "bg-dark-light text-muted hover:text-light"
-              }`}
-            >
-              <span>{option.shortLabel}</span>
-              {eventCounts?.byState && (
-                <span
-                  className={`text-xs ${
-                    filters.states.includes(option.value)
-                      ? "text-dark/70"
-                      : "text-muted-dark"
+        {/* Event Types */}
+        <div>
+          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            Event Type
+          </h3>
+          <div className="space-y-1">
+            {EVENT_TYPE_OPTIONS.map((option) => {
+              const isActive = filters.types.includes(option.value);
+              return (
+                <label
+                  key={option.value}
+                  className={`flex items-center justify-between cursor-pointer px-3 py-2 transition-colors ${
+                    isActive
+                      ? "bg-primary/10 border-l-2 border-primary"
+                      : "hover:bg-dark-light border-l-2 border-transparent"
                   }`}
                 >
-                  {eventCounts.byState[option.value] || 0}
-                </span>
-              )}
-            </button>
-          ))}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => handleTypeToggle(option.value)}
+                      className="w-3.5 h-3.5 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
+                    />
+                    <span
+                      className={`font-headline text-[10px] uppercase tracking-widest transition-colors ${
+                        isActive ? "text-primary" : "text-muted"
+                      }`}
+                    >
+                      {option.label}
+                    </span>
+                  </div>
+                  {eventCounts?.byType && (
+                    <span
+                      className={`font-headline text-[10px] ${
+                        isActive ? "text-primary" : "text-muted-dark"
+                      }`}
+                    >
+                      {eventCounts.byType[option.value] || 0}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* Format */}
-      <div className="mb-6">
-        <h3 className="text-sm font-medium text-light mb-3">Format</h3>
-        <div className="space-y-2">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <input
-              type="radio"
-              name="format"
-              checked={filters.format === null}
-              onChange={() => handleFormatChange(null)}
-              className="w-4 h-4 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
-            />
-            <span className="text-sm text-muted group-hover:text-light transition-colors">
-              All Formats
-            </span>
-          </label>
-          {FORMAT_OPTIONS.map((option) => (
+        <div className="h-px bg-dark-lighter" />
+
+        {/* States */}
+        <div>
+          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            Regional Sector
+          </h3>
+          <div className="grid grid-cols-2 gap-0.5 bg-dark-darker">
+            {STATE_OPTIONS.map((option) => {
+              const isActive = filters.states.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => handleStateToggle(option.value)}
+                  className={`flex items-center justify-between px-3 py-2 font-headline text-[10px] uppercase tracking-widest transition-colors ${
+                    isActive
+                      ? "bg-primary text-dark"
+                      : "bg-dark text-muted hover:text-light hover:bg-dark-light"
+                  }`}
+                >
+                  <span>{option.shortLabel}</span>
+                  {eventCounts?.byState && (
+                    <span
+                      className={`text-[9px] ${
+                        isActive ? "text-dark/70" : "text-muted-dark"
+                      }`}
+                    >
+                      {eventCounts.byState[option.value] || 0}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="h-px bg-dark-lighter" />
+
+        {/* Format */}
+        <div>
+          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            Competition Format
+          </h3>
+          <div className="space-y-1">
             <label
-              key={option.value}
-              className="flex items-center gap-3 cursor-pointer group"
+              className={`flex items-center gap-3 cursor-pointer px-3 py-2 transition-colors ${
+                filters.format === null
+                  ? "border-l-2 border-primary"
+                  : "border-l-2 border-transparent hover:bg-dark-light"
+              }`}
             >
               <input
                 type="radio"
                 name="format"
-                checked={filters.format === option.value}
-                onChange={() => handleFormatChange(option.value)}
-                className="w-4 h-4 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
+                checked={filters.format === null}
+                onChange={() => handleFormatChange(null)}
+                className="w-3.5 h-3.5 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
               />
-              <span className="text-sm text-muted group-hover:text-light transition-colors">
-                {option.label}
+              <span
+                className={`font-headline text-[10px] uppercase tracking-widest ${
+                  filters.format === null ? "text-primary" : "text-muted"
+                }`}
+              >
+                All Formats
               </span>
             </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Active Filters Summary */}
-      {hasActiveFilters && (
-        <div className="pt-4 border-t border-dark-light">
-          <p className="text-xs text-muted mb-2">Active Filters:</p>
-          <div className="flex flex-wrap gap-2">
-            {filters.types.map((type) => (
-              <span
-                key={type}
-                className="inline-flex items-center gap-1 text-xs bg-primary/20 text-primary px-2 py-1 rounded"
+            {FORMAT_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={`flex items-center gap-3 cursor-pointer px-3 py-2 transition-colors ${
+                  filters.format === option.value
+                    ? "border-l-2 border-primary"
+                    : "border-l-2 border-transparent hover:bg-dark-light"
+                }`}
               >
-                {EVENT_TYPE_OPTIONS.find((o) => o.value === type)?.shortLabel}
-                <button
-                  onClick={() => handleTypeToggle(type)}
-                  className="hover:text-light"
+                <input
+                  type="radio"
+                  name="format"
+                  checked={filters.format === option.value}
+                  onChange={() => handleFormatChange(option.value)}
+                  className="w-3.5 h-3.5 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
+                />
+                <span
+                  className={`font-headline text-[10px] uppercase tracking-widest ${
+                    filters.format === option.value ? "text-primary" : "text-muted"
+                  }`}
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
+                  {option.label}
+                </span>
+              </label>
             ))}
-            {filters.states.map((state) => (
-              <span
-                key={state}
-                className="inline-flex items-center gap-1 text-xs bg-primary/20 text-primary px-2 py-1 rounded"
-              >
-                {STATE_OPTIONS.find((o) => o.value === state)?.shortLabel}
-                <button
-                  onClick={() => handleStateToggle(state)}
-                  className="hover:text-light"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-            {filters.format && (
-              <span className="inline-flex items-center gap-1 text-xs bg-primary/20 text-primary px-2 py-1 rounded">
-                {FORMAT_OPTIONS.find((o) => o.value === filters.format)?.label}
-                <button
-                  onClick={() => handleFormatChange(null)}
-                  className="hover:text-light"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
           </div>
         </div>
-      )}
+
+        {/* Reset Config button */}
+        {hasActiveFilters && (
+          <>
+            <div className="h-px bg-dark-lighter" />
+            <button
+              onClick={handleClearFilters}
+              className="w-full font-headline text-[10px] uppercase tracking-widest text-muted border border-dark-lighter py-3 hover:border-primary hover:text-primary transition-colors"
+            >
+              Reset Config
+            </button>
+          </>
+        )}
+      </div>
     </aside>
   );
 }
