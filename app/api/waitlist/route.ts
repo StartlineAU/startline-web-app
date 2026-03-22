@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await getResend().emails.send({
-      from: "StartLine <waitlist@startline.com.au>",
+      from: "StartLine <waitlist@startlineau.com>",
       to: email,
       subject: "You're on the StartLine waitlist!",
       html: `
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
                         </p>
                         <hr style="border:none;border-top:1px solid #2A2A2A;margin:0 0 32px;" />
                         <p style="margin:0;font-size:13px;color:#6E737B;">
-                          You're receiving this because you signed up at startline.com.au
+                          You're receiving this because you signed up at startlineau.com
                         </p>
                       </td>
                     </tr>
