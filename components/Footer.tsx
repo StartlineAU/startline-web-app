@@ -18,7 +18,7 @@ export default function Footer() {
                 className="h-8 w-auto"
               />
             </Link>
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted leading-relaxed">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-relaxed">
               Australia&apos;s Competitive<br />Fitness Calendar
             </p>
           </div>
@@ -27,7 +27,7 @@ export default function Footer() {
           <div className="flex flex-wrap gap-10 sm:gap-16">
             {/* Events */}
             <div>
-              <h4 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-4">
+              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
                 Events
               </h4>
               <div className="space-y-2">
@@ -41,7 +41,7 @@ export default function Footer() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="block font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -51,7 +51,7 @@ export default function Footer() {
 
             {/* Platform */}
             <div>
-              <h4 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-4">
+              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
                 Platform
               </h4>
               <div className="space-y-2">
@@ -63,7 +63,7 @@ export default function Footer() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="block font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
                   >
                     {link.label}
                   </Link>
@@ -73,14 +73,14 @@ export default function Footer() {
 
             {/* Social */}
             <div>
-              <h4 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-4">
+              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
                 Follow
               </h4>
               <a
                 href="https://www.instagram.com/startlineau/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                className="font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
               >
                 Instagram
               </a>
@@ -89,12 +89,12 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-dark-lighter pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="font-headline text-[10px] uppercase tracking-widest text-muted">
+          <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
             © {new Date().getFullYear()} StartLine. All Rights Reserved.
           </p>
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block animate-pulse-dot" />
-            <span className="font-headline text-[10px] uppercase tracking-widest text-muted">
+            <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
               System Active
             </span>
           </div>

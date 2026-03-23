@@ -12,7 +12,7 @@ import {
   getEventsByType,
   getEventsByState,
 } from "@/lib/utils";
-import { X, SlidersHorizontal } from "lucide-react";
+import { X, SlidersHorizontal, Search } from "lucide-react";
 
 const EVENTS_PER_PAGE = 12;
 
@@ -39,6 +39,7 @@ function EventsContent() {
 
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [whereQuery, setWhereQuery] = useState("");
 
   const events = eventsData.events as FitnessEvent[];
 
@@ -55,8 +56,19 @@ function EventsContent() {
     return sortEventsByDate(filtered);
   }, [events, filters]);
 
-  const totalPages = Math.ceil(filteredEvents.length / EVENTS_PER_PAGE);
-  const paginatedEvents = filteredEvents.slice(
+  const displayEvents = useMemo(() => {
+    if (!whereQuery.trim()) return filteredEvents;
+    const q = whereQuery.toLowerCase();
+    return filteredEvents.filter(
+      (e) =>
+        e.city.toLowerCase().includes(q) ||
+        e.state.toLowerCase().includes(q) ||
+        e.location.toLowerCase().includes(q)
+    );
+  }, [filteredEvents, whereQuery]);
+
+  const totalPages = Math.ceil(displayEvents.length / EVENTS_PER_PAGE);
+  const paginatedEvents = displayEvents.slice(
     (currentPage - 1) * EVENTS_PER_PAGE,
     currentPage * EVENTS_PER_PAGE
   );
@@ -91,42 +103,73 @@ function EventsContent() {
     <div className="bg-dark-darker min-h-screen pt-16">
       {/* ── Page Header ── */}
       <div className="bg-dark border-b border-dark-lighter">
-        <div className="max-w-[1440px] mx-auto px-6 py-10">
-          <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-2">
-            StartLine / Events
-          </p>
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-              <h1 className="font-headline text-5xl font-black italic tracking-tighter text-light leading-none">
-                Active Events
-              </h1>
-              <p className="font-headline text-[10px] uppercase tracking-widest text-muted mt-2">
-                {filteredEvents.length} results
-                {hasActiveFilters && " — filtered"}
-              </p>
+        <div className="max-w-[1440px] mx-auto px-6 py-8">
+          <h1 className="font-headline text-5xl font-black italic tracking-tighter text-light leading-none mb-6">
+            Events
+          </h1>
+
+          {/* ── Seek-style search bar ── */}
+          <div className="flex items-stretch border border-dark-lighter bg-dark-light">
+            {/* WHAT */}
+            <div className="flex-1 px-5 py-3 border-r border-dark-lighter min-w-0">
+              <label className="font-headline text-xs font-medium uppercase tracking-widest text-muted block mb-1">
+                What
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Event name, type or keyword"
+                  value={filters.searchQuery}
+                  onChange={(e) =>
+                    setFilters({ ...filters, searchQuery: e.target.value })
+                  }
+                  className="w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/50 border-0 focus:ring-0 focus:outline-none"
+                />
+                {filters.searchQuery && (
+                  <button
+                    onClick={() => setFilters({ ...filters, searchQuery: "" })}
+                    className="text-muted hover:text-light flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Search bar */}
-            <div className="relative w-full sm:w-80">
-              <input
-                type="text"
-                placeholder="Search events..."
-                value={filters.searchQuery}
-                onChange={(e) =>
-                  setFilters({ ...filters, searchQuery: e.target.value })
-                }
-                className="w-full bg-dark-light border border-dark-lighter text-light font-headline text-[10px] uppercase tracking-wider placeholder-muted px-4 py-3 focus:border-primary focus:ring-0 focus:outline-none transition-colors"
-              />
-              {filters.searchQuery && (
-                <button
-                  onClick={() => setFilters({ ...filters, searchQuery: "" })}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-light"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+            {/* WHERE */}
+            <div className="flex-1 px-5 py-3 border-r border-dark-lighter min-w-0">
+              <label className="font-headline text-xs font-medium uppercase tracking-widest text-muted block mb-1">
+                Where
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="State, city, or suburb"
+                  value={whereQuery}
+                  onChange={(e) => setWhereQuery(e.target.value)}
+                  className="w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/50 border-0 focus:ring-0 focus:outline-none"
+                />
+                {whereQuery && (
+                  <button
+                    onClick={() => setWhereQuery("")}
+                    className="text-muted hover:text-light flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* SEARCH button */}
+            <button className="flex items-center gap-2 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0">
+              <Search className="w-4 h-4" />
+              Search
+            </button>
           </div>
+
+          <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mt-3">
+            {displayEvents.length} results{(hasActiveFilters || whereQuery) && " — filtered"}
+          </p>
         </div>
       </div>
 
@@ -135,7 +178,7 @@ function EventsContent() {
         <div className="max-w-[1440px] mx-auto px-6 py-3 flex items-center justify-between">
           <button
             onClick={() => setShowMobileFilters(true)}
-            className="flex items-center gap-2 border border-dark-lighter px-4 py-2 font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary hover:border-primary transition-colors"
+            className="flex items-center gap-2 border border-dark-lighter px-4 py-2 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary hover:border-primary transition-colors"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
             Parameters
@@ -145,8 +188,8 @@ function EventsContent() {
               </span>
             )}
           </button>
-          <span className="font-headline text-[10px] uppercase tracking-widest text-muted">
-            {filteredEvents.length} Events
+          <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
+            {displayEvents.length} Events
           </span>
         </div>
       </div>
@@ -230,7 +273,7 @@ function EventsContent() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="mt-0.5 bg-dark px-6 py-4 flex items-center justify-between">
-                <span className="font-headline text-[10px] uppercase tracking-widest text-muted">
+                <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
                   Page {currentPage} of {totalPages}
                 </span>
                 <div className="flex items-center gap-0.5 bg-dark-darker">

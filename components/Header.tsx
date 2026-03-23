@@ -11,7 +11,7 @@ const navItems = [
   { href: "/events?type=hyrox", label: "HYROX" },
   { href: "/events?type=crossfit", label: "CROSSFIT" },
   { href: "/events?type=running", label: "RUNNING" },
-  { href: "/events", label: "HYBRID", type: "hybrid" },
+  { href: "/events?type=hybrid", label: "HYBRID" },
 ];
 
 export default function Header() {
