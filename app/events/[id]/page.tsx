@@ -5,6 +5,35 @@ import eventsData from "@/data/events.json";
 import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatEventDate, formatTime, formatMediumDate, formatShortDate } from "@/lib/utils";
 
+const TYPE_IMAGES: Record<string, string[]> = {
+  hyrox: [
+    "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1920&q=80",
+    "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=1920&q=80",
+    "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1920&q=80",
+  ],
+  crossfit: [
+    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920&q=80",
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1920&q=80",
+    "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=1920&q=80",
+  ],
+  running: [
+    "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1920&q=80",
+    "https://images.unsplash.com/photo-1502904550040-7534597429ae?w=1920&q=80",
+    "https://images.unsplash.com/photo-1544717305-2782549b5136?w=1920&q=80",
+  ],
+  hybrid: [
+    "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=1920&q=80",
+    "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=1920&q=80",
+    "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1920&q=80",
+  ],
+};
+
+function getBannerImage(type: string, id: string): string {
+  const pool = TYPE_IMAGES[type] ?? TYPE_IMAGES.running;
+  const idx = id.charCodeAt(id.length - 1) % pool.length;
+  return pool[idx];
+}
+
 interface EventDetailPageProps {
   params: Promise<{ id: string }>;
 }
@@ -31,6 +60,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
   const stateLabel = STATE_LABELS[event.state];
   const status = getStatusLabel(event);
   const [day, month] = formatShortDate(event.date).split(" ");
+  const bannerUrl = getBannerImage(event.type, event.id);
 
   const relatedEvents = events
     .filter((e) => e.id !== event.id && e.type === event.type)
@@ -44,72 +74,74 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
       : "Individual";
 
   return (
-    <div className="min-h-screen bg-dark-darker pt-16">
+    <div className="min-h-screen bg-dark-darker">
       {/* ── HERO ── */}
-      <section className="relative h-[600px] overflow-hidden">
-        {/* Background image placeholder with brightness */}
-        <div className="absolute inset-0 image-placeholder brightness-50" />
-        {/* Gradient overlay */}
+      <section className="relative min-h-[480px] flex items-start overflow-hidden">
+        {/* Background image */}
+        <img
+          src={bannerUrl}
+          alt={event.title}
+          className="absolute inset-0 w-full h-full object-cover brightness-50"
+        />
+        {/* Gradient overlays */}
         <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/90 via-dark-darker/60 to-transparent" />
 
-        {/* Content */}
-        <div className="absolute inset-0 flex flex-col justify-end">
-          <div className="max-w-[1440px] mx-auto px-6 pb-12 w-full">
-            {/* Back link */}
-            <Link
-              href="/events"
-              className="inline-flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors mb-6 group"
+        {/* Content — same top offset as homepage hero */}
+        <div className="relative z-10 w-full max-w-[1440px] mx-auto px-6 pt-48 pb-24">
+          {/* Back link */}
+          <Link
+            href="/events"
+            className="inline-flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors mb-8 group"
+          >
+            <ArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" />
+            All Events
+          </Link>
+
+          {/* Status badge + type */}
+          <div className="flex items-center gap-3 mb-4">
+            <span
+              className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 ${status.style}`}
             >
-              <ArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" />
-              All Events
-            </Link>
-
-            {/* Status badge + type */}
-            <div className="flex items-center gap-3 mb-4">
-              <span
-                className={`font-headline text-[10px] uppercase tracking-widest px-3 py-1.5 ${status.style}`}
-              >
-                {status.label}
+              {status.label}
+            </span>
+            <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
+              {typeLabel}
+            </span>
+            {event.isOfficial && (
+              <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary border border-primary/40 px-2 py-1">
+                Official
               </span>
-              <span className="font-headline text-[10px] uppercase tracking-widest text-muted">
-                {typeLabel}
-              </span>
-              {event.isOfficial && (
-                <span className="font-headline text-[10px] uppercase tracking-widest text-primary border border-primary/40 px-2 py-1">
-                  Official
-                </span>
-              )}
-            </div>
-
-            {/* Title */}
-            <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none mb-4 max-w-4xl">
-              {event.title}
-            </h1>
-
-            {/* Location + date */}
-            <div className="flex flex-wrap items-center gap-6 mb-8">
-              <span className="flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-muted">
-                <MapPin className="w-3.5 h-3.5 text-primary" />
-                {event.location}, {stateLabel}
-              </span>
-              <span className="flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-muted">
-                <Calendar className="w-3.5 h-3.5 text-primary" />
-                {formatEventDate(event.date)}
-              </span>
-            </div>
-
-            {/* CTA */}
-            <a
-              href={event.registrationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
-            >
-              Register Now
-              <ExternalLink className="w-4 h-4" />
-            </a>
+            )}
           </div>
+
+          {/* Title */}
+          <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none mb-4 max-w-4xl">
+            {event.title}
+          </h1>
+
+          {/* Location + date */}
+          <div className="flex flex-wrap items-center gap-6 mb-8">
+            <span className="flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted">
+              <MapPin className="w-3.5 h-3.5 text-primary" />
+              {event.location}, {stateLabel}
+            </span>
+            <span className="flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted">
+              <Calendar className="w-3.5 h-3.5 text-primary" />
+              {formatEventDate(event.date)}
+            </span>
+          </div>
+
+          {/* CTA */}
+          <a
+            href={event.registrationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
+          >
+            Register Now
+            <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
       </section>
 
@@ -118,7 +150,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-0.5 bg-dark-darker">
           {/* Date tile */}
           <div className="bg-dark p-6">
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
               Schedule_Log
             </p>
             <p className="font-headline text-4xl font-black text-primary leading-none mb-1">
@@ -127,7 +159,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
             <p className="font-headline text-sm font-bold uppercase tracking-wider text-light">
               {month}
             </p>
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mt-2">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mt-2">
               {formatTime(event.time)}
               {event.endTime && ` — ${formatTime(event.endTime)}`}
             </p>
@@ -135,7 +167,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 
           {/* Format / Distance tile */}
           <div className="bg-dark p-6">
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
               Race_Config
             </p>
             <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-2 leading-tight">
@@ -148,7 +180,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
             )}
             <div className="mt-3 flex items-center gap-2">
               <Users className="w-3.5 h-3.5 text-primary" />
-              <span className="font-headline text-[10px] uppercase tracking-widest text-muted">
+              <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
                 {event.level === "elite" ? "Elite" : event.level === "beginner" ? "Beginner" : "Open"}
               </span>
             </div>
@@ -156,13 +188,13 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 
           {/* Location tile (col-span-2) */}
           <div className="col-span-2 bg-dark p-6 border-l-4 border-primary">
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
               Location_Data
             </p>
             <h3 className="font-headline text-2xl font-black italic tracking-tighter text-light mb-2 leading-tight">
               {event.location}
             </h3>
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-4">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
               {event.city}, {stateLabel}
             </p>
             <div className="flex items-center gap-2">
@@ -180,15 +212,15 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 
           {/* Description tile (col-span-2 lg:col-span-3) */}
           <div className="col-span-2 lg:col-span-3 bg-dark p-6">
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
               Event_Overview
             </p>
-            <p className="text-muted leading-relaxed mb-4">{event.description}</p>
+            <p className="text-sm font-medium text-muted leading-relaxed mb-4">{event.description}</p>
             <div className="flex flex-wrap gap-2">
-              <span className="font-headline text-[10px] uppercase tracking-widest text-dark bg-primary px-3 py-1">
+              <span className="font-headline text-xs font-medium uppercase tracking-widest text-dark bg-primary px-3 py-1">
                 {typeLabel}
               </span>
-              <span className="font-headline text-[10px] uppercase tracking-widest text-muted border border-dark-lighter px-3 py-1">
+              <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted border border-dark-lighter px-3 py-1">
                 {formatLabel}
               </span>
               {event.isOfficial && (
@@ -202,11 +234,11 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
           {/* Organizer / Register tile */}
           <div className="col-span-2 lg:col-span-1 bg-dark border-l-4 border-primary p-6 flex flex-col justify-between">
             <div>
-              <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
-                Registration
-              </p>
-              {event.organizer && (
-                <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-4">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
+              Registration
+            </p>
+            {event.organizer && (
+              <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
                   By {event.organizer}
                 </p>
               )}
@@ -231,7 +263,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
             <div className="bg-dark px-6 py-8">
               <div className="flex items-end justify-between mb-8">
                 <div>
-                  <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-2">
+                  <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-2">
                     More Like This
                   </p>
                   <h2 className="font-headline text-3xl font-black italic tracking-tighter text-light">
@@ -240,7 +272,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 </div>
                 <Link
                   href={`/events?type=${event.type}`}
-                  className="hidden sm:flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors group"
+                  className="hidden sm:flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors group"
                 >
                   <span>All {typeLabel}</span>
                   <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
@@ -267,12 +299,12 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                               {related.title}
                             </h3>
                             <div className="bg-dark-lighter px-3 py-1 text-center ml-3 flex-shrink-0">
-                              <p className="font-headline text-[9px] uppercase tracking-widest text-muted leading-none">{relMonth}</p>
+                              <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-none">{relMonth}</p>
                               <p className="font-headline text-lg font-black text-light leading-none">{relDay}</p>
                             </div>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="flex items-center gap-1 font-headline text-[10px] uppercase tracking-widest text-muted">
+                            <span className="flex items-center gap-1 font-headline text-xs font-medium uppercase tracking-widest text-muted">
                               <MapPin className="w-3 h-3 text-primary" />
                               {related.city}, {STATE_LABELS[related.state]}
                             </span>
@@ -297,7 +329,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         <div className="border-t border-dark-lighter pt-8 flex items-center justify-between">
           <Link
             href="/events"
-            className="inline-flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors group"
+            className="inline-flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors group"
           >
             <ArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" />
             Back to All Events

@@ -80,7 +80,7 @@ export default function FilterSidebar({
         {hasActiveFilters && (
           <button
             onClick={handleClearFilters}
-            className="font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors flex items-center gap-1"
+            className="font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors flex items-center gap-1"
           >
             <X className="w-3 h-3" />
             Reset
@@ -91,7 +91,7 @@ export default function FilterSidebar({
       <div className="p-5 space-y-6">
         {/* Date Range */}
         <div>
-          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+          <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
             Time Window
           </h3>
           <div className="flex flex-col gap-1">
@@ -99,7 +99,7 @@ export default function FilterSidebar({
               <button
                 key={option.value}
                 onClick={() => handleDateRangeChange(option.value)}
-                className={`text-left font-headline text-[10px] uppercase tracking-widest px-3 py-2 transition-colors ${
+                className={`text-left font-headline text-xs font-medium uppercase tracking-widest px-3 py-2 transition-colors ${
                   filters.dateRange === option.value
                     ? "bg-primary text-dark border-l-2 border-primary"
                     : "text-muted hover:text-light hover:bg-dark-light border-l-2 border-transparent"
@@ -115,7 +115,7 @@ export default function FilterSidebar({
 
         {/* Event Types */}
         <div>
-          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+          <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
             Event Type
           </h3>
           <div className="space-y-1">
@@ -138,7 +138,7 @@ export default function FilterSidebar({
                       className="w-3.5 h-3.5 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
                     />
                     <span
-                      className={`font-headline text-[10px] uppercase tracking-widest transition-colors ${
+                      className={`font-headline text-xs font-medium uppercase tracking-widest transition-colors ${
                         isActive ? "text-primary" : "text-muted"
                       }`}
                     >
@@ -147,7 +147,7 @@ export default function FilterSidebar({
                   </div>
                   {eventCounts?.byType && (
                     <span
-                      className={`font-headline text-[10px] ${
+                      className={`font-headline text-xs font-medium ${
                         isActive ? "text-primary" : "text-muted-dark"
                       }`}
                     >
@@ -164,7 +164,7 @@ export default function FilterSidebar({
 
         {/* States */}
         <div>
-          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+          <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
             Regional Sector
           </h3>
           <div className="grid grid-cols-2 gap-0.5 bg-dark-darker">
@@ -174,7 +174,7 @@ export default function FilterSidebar({
                 <button
                   key={option.value}
                   onClick={() => handleStateToggle(option.value)}
-                  className={`flex items-center justify-between px-3 py-2 font-headline text-[10px] uppercase tracking-widest transition-colors ${
+                  className={`flex items-center justify-between px-3 py-2 font-headline text-xs font-medium uppercase tracking-widest transition-colors ${
                     isActive
                       ? "bg-primary text-dark"
                       : "bg-dark text-muted hover:text-light hover:bg-dark-light"
@@ -183,7 +183,7 @@ export default function FilterSidebar({
                   <span>{option.shortLabel}</span>
                   {eventCounts?.byState && (
                     <span
-                      className={`text-[9px] ${
+                      className={`text-xs font-medium ${
                         isActive ? "text-dark/70" : "text-muted-dark"
                       }`}
                     >
@@ -200,7 +200,7 @@ export default function FilterSidebar({
 
         {/* Format */}
         <div>
-          <h3 className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">
+          <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
             Competition Format
           </h3>
           <div className="space-y-1">
@@ -219,7 +219,7 @@ export default function FilterSidebar({
                 className="w-3.5 h-3.5 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
               />
               <span
-                className={`font-headline text-[10px] uppercase tracking-widest ${
+                className={`font-headline text-xs font-medium uppercase tracking-widest ${
                   filters.format === null ? "text-primary" : "text-muted"
                 }`}
               >
@@ -243,7 +243,7 @@ export default function FilterSidebar({
                   className="w-3.5 h-3.5 border-dark-lighter bg-dark-light text-primary focus:ring-primary focus:ring-offset-0"
                 />
                 <span
-                  className={`font-headline text-[10px] uppercase tracking-widest ${
+                  className={`font-headline text-xs font-medium uppercase tracking-widest ${
                     filters.format === option.value ? "text-primary" : "text-muted"
                   }`}
                 >
@@ -260,7 +260,7 @@ export default function FilterSidebar({
             <div className="h-px bg-dark-lighter" />
             <button
               onClick={handleClearFilters}
-              className="w-full font-headline text-[10px] uppercase tracking-widest text-muted border border-dark-lighter py-3 hover:border-primary hover:text-primary transition-colors"
+              className="w-full font-headline text-xs font-medium uppercase tracking-widest text-muted border border-dark-lighter py-3 hover:border-primary hover:text-primary transition-colors"
             >
               Reset Config
             </button>
