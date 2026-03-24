@@ -5,6 +5,34 @@ import { FitnessEvent } from "@/types";
 import { formatMediumDate } from "@/lib/utils";
 import HeroCarousel from "@/components/HeroCarousel";
 
+const TYPE_IMAGES: Record<string, string[]> = {
+  hyrox: [
+    "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=800&q=70",
+    "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=800&q=70",
+    "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=800&q=70",
+  ],
+  crossfit: [
+    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=70",
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=70",
+    "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=800&q=70",
+  ],
+  running: [
+    "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=800&q=70",
+    "https://images.unsplash.com/photo-1502904550040-7534597429ae?w=800&q=70",
+    "https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=70",
+  ],
+  hybrid: [
+    "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=800&q=70",
+    "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=800&q=70",
+    "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=800&q=70",
+  ],
+};
+
+function getBannerImage(type: string, id: string): string {
+  const pool = TYPE_IMAGES[type] ?? TYPE_IMAGES.running;
+  return pool[id.charCodeAt(id.length - 1) % pool.length];
+}
+
 const events = eventsData.events as FitnessEvent[];
 const trendingEvents = events.slice(0, 3);
 
@@ -96,32 +124,29 @@ export default function Home() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5 bg-dark-darker">
           {trendingEvents.map((event) => (
             <Link key={event.id} href={`/events/${event.id}`} className="group">
-              <article className="relative aspect-[4/5] bg-dark overflow-hidden">
-                {/* Image placeholder with gradient */}
-                <div className="absolute inset-0 image-placeholder grayscale group-hover:grayscale-0 transition-all duration-500" />
-                <div
-                  className="absolute inset-0 opacity-60 group-hover:opacity-40 transition-opacity duration-500"
-                  style={{
-                    background:
-                      "radial-gradient(ellipse 80% 60% at 50% 30%, rgba(179,225,83,0.08) 0%, transparent 60%)",
-                  }}
+              <article className="relative aspect-[4/5] bg-dark overflow-hidden ring-1 ring-transparent group-hover:ring-primary transition-all duration-200">
+                {/* Real image — grayscale until hover */}
+                <img
+                  src={getBannerImage(event.type, event.id)}
+                  alt={event.title}
+                  className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 brightness-50 group-hover:brightness-60 transition-all duration-500"
                 />
                 {/* Bottom gradient */}
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark/60 to-transparent" />
 
                 {/* Type badge */}
                 <div className="absolute top-4 left-4">
-                  <span className="font-headline text-[10px] uppercase tracking-widest text-dark bg-primary px-2 py-1">
+                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-dark bg-primary px-2 py-1">
                     {event.type.toUpperCase()}
                   </span>
                 </div>
 
                 {/* Content */}
                 <div className="absolute bottom-0 left-0 right-0 p-6">
-                  <p className="font-headline text-[10px] uppercase tracking-widest text-primary mb-2">
+                  <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-2">
                     {formatMediumDate(event.date)}
                   </p>
-                  <h3 className="font-headline text-2xl font-black italic tracking-tighter text-light mb-1 leading-tight">
+                  <h3 className="font-headline text-2xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors duration-200 mb-1 leading-tight">
                     {event.title}
                   </h3>
                   <div className="flex items-center justify-between mt-3">
