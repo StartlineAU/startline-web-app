@@ -7,18 +7,15 @@ import { useState } from "react";
 import { Menu, X, Search } from "lucide-react";
 
 const navItems = [
-  { href: "/events", label: "EVENTS", active: true },
-  { href: "/events?type=hyrox", label: "HYROX" },
-  { href: "/events?type=crossfit", label: "CROSSFIT" },
-  { href: "/events?type=running", label: "RUNNING" },
-  { href: "/events?type=hybrid", label: "HYBRID" },
+  { href: "/", label: "HOME" },
+  { href: "/events", label: "EVENTS" },
+  { href: "/about", label: "ABOUT" },
+  { href: "/contact", label: "CONTACT" },
 ];
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
-  const isEventsPage = pathname?.startsWith("/events");
-
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-light border-b border-dark-lighter">
       <div className="flex justify-between items-center w-full px-6 py-4 max-w-[1440px] mx-auto">
@@ -36,7 +33,10 @@ export default function Header() {
         {/* Desktop Navigation */}
         <div className="hidden md:flex gap-8 items-center">
           {navItems.map((item) => {
-            const isActive = isEventsPage && (item.active || pathname === item.href);
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname?.startsWith(item.href);
             return (
               <Link
                 key={item.label}
