@@ -4,6 +4,9 @@ import eventsData from "@/data/events.json";
 import { FitnessEvent } from "@/types";
 import { formatMediumDate } from "@/lib/utils";
 import HeroCarousel from "@/components/HeroCarousel";
+import { fetchAllEvents } from "@/lib/supabase";
+
+export const revalidate = 60;
 
 const TYPE_IMAGES: Record<string, string[]> = {
   hyrox: [
@@ -33,41 +36,45 @@ function getBannerImage(type: string, id: string): string {
   return pool[id.charCodeAt(id.length - 1) % pool.length];
 }
 
-const events = eventsData.events as FitnessEvent[];
-const trendingEvents = events.slice(0, 3);
+export default async function Home() {
+  const liveEvents = await fetchAllEvents();
+  const events: FitnessEvent[] = liveEvents.length > 0
+    ? liveEvents
+    : (eventsData.events as FitnessEvent[]);
 
-const categories = [
-  {
-    label: "HYROX",
-    description: "The World Series of Fitness Racing",
-    type: "hyrox",
-    count: events.filter((e) => e.type === "hyrox").length,
-    large: true,
-  },
-  {
-    label: "RUNNING",
-    description: "5K to Ultramarathon",
-    type: "running",
-    count: events.filter((e) => e.type === "running").length,
-    large: false,
-  },
-  {
-    label: "CROSSFIT",
-    description: "Functional Fitness Competitions",
-    type: "crossfit",
-    count: events.filter((e) => e.type === "crossfit").length,
-    large: false,
-  },
-  {
-    label: "HYBRID",
-    description: "Multi-Discipline Events",
-    type: "hybrid",
-    count: events.filter((e) => e.type === "hybrid").length,
-    large: false,
-  },
-];
+  const trendingEvents = events.slice(0, 3);
 
-export default function Home() {
+  const categories = [
+    {
+      label: "HYROX",
+      description: "The World Series of Fitness Racing",
+      type: "hyrox",
+      count: events.filter((e) => e.type === "hyrox").length,
+      large: true,
+    },
+    {
+      label: "RUNNING",
+      description: "5K to Ultramarathon",
+      type: "running",
+      count: events.filter((e) => e.type === "running").length,
+      large: false,
+    },
+    {
+      label: "CROSSFIT",
+      description: "Functional Fitness Competitions",
+      type: "crossfit",
+      count: events.filter((e) => e.type === "crossfit").length,
+      large: false,
+    },
+    {
+      label: "HYBRID",
+      description: "Multi-Discipline Events",
+      type: "hybrid",
+      count: events.filter((e) => e.type === "hybrid").length,
+      large: false,
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-dark-darker">
       {/* ── HERO ── */}

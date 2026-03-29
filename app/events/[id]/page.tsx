@@ -4,6 +4,9 @@ import { ArrowLeft, MapPin, Clock, Users, Calendar, ExternalLink, ArrowRight } f
 import eventsData from "@/data/events.json";
 import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatEventDate, formatTime, formatMediumDate, formatShortDate } from "@/lib/utils";
+import { fetchAllEvents } from "@/lib/supabase";
+
+export const dynamic = "force-dynamic";
 
 const TYPE_IMAGES: Record<string, string[]> = {
   hyrox: [
@@ -51,7 +54,10 @@ function getStatusLabel(event: FitnessEvent): { label: string; style: string } {
 
 export default async function EventDetailPage({ params }: EventDetailPageProps) {
   const { id } = await params;
-  const events = eventsData.events as FitnessEvent[];
+  const liveEvents = await fetchAllEvents();
+  const events: FitnessEvent[] = liveEvents.length > 0
+    ? liveEvents
+    : (eventsData.events as FitnessEvent[]);
   const event = events.find((e) => e.id === id);
 
   if (!event) notFound();
@@ -350,6 +356,9 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 }
 
 export async function generateStaticParams() {
-  const events = eventsData.events as FitnessEvent[];
+  const liveEvents = await fetchAllEvents();
+  const events: FitnessEvent[] = liveEvents.length > 0
+    ? liveEvents
+    : (eventsData.events as FitnessEvent[]);
   return events.map((event) => ({ id: event.id }));
 }
