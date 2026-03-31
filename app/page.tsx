@@ -4,6 +4,7 @@ import eventsData from "@/data/events.json";
 import { FitnessEvent } from "@/types";
 import { formatMediumDate } from "@/lib/utils";
 import HeroCarousel from "@/components/HeroCarousel";
+import HeroSearch from "@/components/HeroSearch";
 import { fetchAllEvents } from "@/lib/supabase";
 
 export const revalidate = 60;
@@ -78,33 +79,28 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-dark-darker">
       {/* ── HERO ── */}
-      <section className="relative min-h-[480px] flex items-start overflow-hidden">
+      <section className="relative min-h-[560px] flex items-end overflow-hidden">
         <HeroCarousel />
 
-        <div className="relative z-10 w-full max-w-[1440px] mx-auto px-6 pt-48 pb-24">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
-            {/* Left: headline + description */}
-            <div className="max-w-2xl">
-              <h1 className="font-headline text-6xl sm:text-7xl lg:text-8xl font-black italic leading-none tracking-tighter mb-6">
-                Find Your{" "}
-                <span className="text-primary block">Start Line.</span>
-              </h1>
-              <p className="text-muted text-lg max-w-xl leading-relaxed">
-                Australia&apos;s competitive fitness calendar. HYROX, CrossFit,
-                running and hybrid events — all in one place.
-              </p>
-            </div>
+        <div className="relative z-10 w-full max-w-[1440px] mx-auto px-6 pt-48 pb-16">
+          {/* Eyebrow */}
+          <p className="font-headline text-xs font-black uppercase tracking-widest text-primary mb-4">
+            Australia&apos;s Fitness Event Calendar
+          </p>
 
-            {/* Right: CTA button — aligned to top of headline */}
-            <div className="flex-shrink-0 pt-14">
-              <Link
-                href="/events"
-                className="inline-block bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
-              >
-                Find Events Now
-              </Link>
-            </div>
-          </div>
+          {/* Headline */}
+          <h1 className="font-headline text-6xl sm:text-7xl lg:text-8xl font-black italic leading-none tracking-tighter mb-4">
+            Find Your{" "}
+            <span className="text-primary">Start Line.</span>
+          </h1>
+
+          {/* Sub-headline */}
+          <p className="font-headline text-base font-medium text-muted max-w-2xl leading-relaxed mb-0">
+            HYROX, CrossFit, running and hybrid events — search, filter, and register in seconds.
+          </p>
+
+          {/* Search bar */}
+          <HeroSearch />
         </div>
       </section>
 

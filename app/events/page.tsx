@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   Search, ChevronDown, MapPin, Clock, Users, Calendar,
   ExternalLink, ArrowRight, X,
@@ -125,7 +127,9 @@ function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────
-export default function EventsPage() {
+import { Suspense } from "react";
+
+function EventsPageInner() {
   const allEvents = useMemo(() => eventsData.events as FitnessEvent[], []);
   const [liveEvents, setLiveEvents] = useState<FitnessEvent[]>(allEvents);
 
@@ -136,8 +140,9 @@ export default function EventsPage() {
       .catch(() => {});
   }, []);
 
-  const [whatQuery, setWhatQuery] = useState("");
-  const [whereQuery, setWhereQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [whatQuery, setWhatQuery] = useState(searchParams.get("what") ?? "");
+  const [whereQuery, setWhereQuery] = useState(searchParams.get("where") ?? "");
   const [typeFilter, setTypeFilter] = useState<EventType | "">("");
   const [stateFilter, setStateFilter] = useState<AustralianState | "">("");
   const [formatFilter, setFormatFilter] = useState<CompetitionFormat | "">("");
@@ -213,7 +218,7 @@ export default function EventsPage() {
       {/* ── Sticky search + filter bar ── */}
       <div className="sticky top-0 z-40 bg-dark border-b border-dark-lighter flex-shrink-0 pt-16">
         {/* Row 1: What / Where / Search */}
-        <div className="w-full px-4 pt-6 pb-3 flex items-stretch border-b border-dark-lighter gap-0.5 bg-dark-darker">
+        <div className="max-w-[1440px] mx-auto px-6 pt-6 pb-3 flex items-stretch border-b border-dark-lighter gap-0.5 bg-dark-darker">
           <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
             <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
               Event
@@ -261,7 +266,7 @@ export default function EventsPage() {
         </div>
 
         {/* Row 2: Filter chips */}
-        <div className="w-full px-4 pt-3 pb-6 flex items-center gap-2.5 flex-wrap">
+        <div className="max-w-[1440px] mx-auto px-6 pt-3 pb-6 flex items-center gap-2.5 flex-wrap">
           <FilterChip
             label="Discipline"
             value={typeFilter}
@@ -306,7 +311,7 @@ export default function EventsPage() {
       </div>
 
       {/* ── Two-panel content area ── */}
-      <div className="flex flex-1 overflow-hidden w-full">
+      <div className="flex flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
 
         {/* LEFT: event list */}
         <div className="w-[500px] flex-shrink-0 overflow-y-auto border-r border-dark-lighter bg-dark-darker">
@@ -419,9 +424,11 @@ export default function EventsPage() {
 
                 {/* Title + location overlay */}
                 <div className="absolute bottom-0 left-0 right-0 p-6">
-                  <h2 className="font-headline text-4xl font-black italic tracking-tighter text-light leading-none mb-3">
-                    {selectedEvent.title}
-                  </h2>
+                  <Link href={`/events/${selectedEvent.id}`} className="group">
+                    <h2 className="font-headline text-4xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors duration-150 leading-none mb-3 inline-block">
+                      {selectedEvent.title}
+                    </h2>
+                  </Link>
                   <div className="flex flex-wrap items-center gap-4">
                     <span className="flex items-center gap-1.5 font-headline text-sm font-medium uppercase tracking-widest text-muted">
                       <MapPin className="w-4 h-4 text-primary" />
@@ -558,5 +565,13 @@ export default function EventsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EventsPage() {
+  return (
+    <Suspense>
+      <EventsPageInner />
+    </Suspense>
   );
 }
