@@ -87,7 +87,7 @@ function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }
     <div ref={ref} className="relative">
       <button
         onClick={isOpen ? onClose : onOpen}
-        className={`flex items-center gap-2 px-4 py-2 font-headline text-sm font-medium uppercase tracking-widest border transition-colors duration-100 ${
+        className={`flex items-center gap-2 px-4 py-2 font-headline text-sm font-medium uppercase tracking-widest border transition-colors duration-100 rounded-full ${
           active
             ? "border-primary text-primary bg-primary/5"
             : "border-dark-lighter text-muted bg-dark hover:border-primary/50 hover:text-light"
@@ -106,7 +106,7 @@ function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-dark border border-dark-lighter min-w-[200px] shadow-xl">
+        <div className="absolute top-full left-0 mt-1 z-50 bg-dark border border-dark-lighter min-w-[200px] shadow-xl rounded-xl overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -216,57 +216,57 @@ function EventsPageInner() {
     <div className="bg-dark-darker flex flex-col" style={{ height: "100dvh" }}>
 
       {/* ── Sticky search + filter bar ── */}
-      <div className="sticky top-0 z-40 bg-dark border-b border-dark-lighter flex-shrink-0 pt-16">
+      <div className="sticky top-0 z-40 bg-dark-darker border-b border-dark-lighter flex-shrink-0 pt-16">
         {/* Row 1: What / Where / Search */}
-        <div className="max-w-[1440px] mx-auto px-6 pt-6 pb-3 flex items-stretch border-b border-dark-lighter gap-0.5 bg-dark-darker">
-          <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
-            <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
-              Event
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Event name, type or keyword"
-                value={whatQuery}
-                onChange={(e) => setWhatQuery(e.target.value)}
-                className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
-              />
-              {whatQuery && (
-                <button onClick={() => setWhatQuery("")} className="text-muted hover:text-light flex-shrink-0">
-                  <X className="w-5 h-5" />
-                </button>
-              )}
+        <div className="max-w-[1440px] mx-auto px-6 pt-5 pb-4">
+          <div className="flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
+            <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
+              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
+                Event
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Event name, type or keyword"
+                  value={whatQuery}
+                  onChange={(e) => setWhatQuery(e.target.value)}
+                  className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+                />
+                {whatQuery && (
+                  <button onClick={() => setWhatQuery("")} className="text-muted hover:text-light flex-shrink-0">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-
-          <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
-            <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
-              Where
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="State, city, or suburb"
-                value={whereQuery}
-                onChange={(e) => setWhereQuery(e.target.value)}
-                className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
-              />
-              {whereQuery && (
-                <button onClick={() => setWhereQuery("")} className="text-muted hover:text-light flex-shrink-0">
-                  <X className="w-5 h-5" />
-                </button>
-              )}
+            <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
+              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
+                Where
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="State, city, or suburb"
+                  value={whereQuery}
+                  onChange={(e) => setWhereQuery(e.target.value)}
+                  className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+                />
+                {whereQuery && (
+                  <button onClick={() => setWhereQuery("")} className="text-muted hover:text-light flex-shrink-0">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
             </div>
+            <button className="flex items-center gap-2 bg-machined text-dark font-headline text-base font-bold uppercase tracking-widest px-10 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0">
+              <Search className="w-5 h-5" />
+              Search
+            </button>
           </div>
-
-          <button className="flex items-center gap-2 bg-machined text-dark font-headline text-base font-bold uppercase tracking-widest px-10 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0">
-            <Search className="w-5 h-5" />
-            Search
-          </button>
         </div>
 
         {/* Row 2: Filter chips */}
-        <div className="max-w-[1440px] mx-auto px-6 pt-3 pb-6 flex items-center gap-2.5 flex-wrap">
+        <div className="max-w-[1440px] mx-auto px-6 pb-4 flex items-center gap-2.5 flex-wrap">
           <FilterChip
             label="Discipline"
             value={typeFilter}
@@ -303,8 +303,7 @@ function EventsPageInner() {
             onClose={() => setOpenDropdown(null)}
             onChange={(v) => { setDateFilter((v || "all") as FilterState["dateRange"]); setSelectedId(null); }}
           />
-
-          <span className="ml-auto font-headline text-base font-medium uppercase tracking-widest text-muted">
+          <span className="ml-auto font-headline text-sm font-medium uppercase tracking-widest text-muted">
             {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -313,8 +312,8 @@ function EventsPageInner() {
       {/* ── Two-panel content area ── */}
       <div className="flex flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
 
-        {/* LEFT: event list */}
-        <div className="w-[500px] flex-shrink-0 overflow-y-auto border-r border-dark-lighter bg-dark-darker">
+        {/* LEFT: event list — card-based */}
+        <div className="w-[420px] flex-shrink-0 overflow-y-auto bg-dark-darker border-r border-dark-lighter">
           {displayEvents.length === 0 ? (
             <div className="p-10 text-center">
               <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">No Results</p>
@@ -325,61 +324,64 @@ function EventsPageInner() {
                   setTypeFilter(""); setStateFilter(""); setFormatFilter(""); setDateFilter("all");
                   setSelectedId(null);
                 }}
-                className="font-headline text-sm font-medium uppercase tracking-widest border border-primary text-primary px-5 py-2.5 hover:bg-primary hover:text-dark transition-colors"
+                className="font-headline text-sm font-medium uppercase tracking-widest border border-primary text-primary px-5 py-2.5 hover:bg-primary hover:text-dark transition-colors rounded-full"
               >
                 Clear Filters
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-0.5 bg-dark-darker">
+            <div className="p-4 flex flex-col gap-3">
               {displayEvents.map((event) => {
                 const isSelected = event.id === selectedId;
                 const [eDay, eMonth] = formatShortDate(event.date).split(" ");
+                const img = getBannerImage(event.type, event.id);
                 return (
                   <button
                     key={event.id}
                     onClick={() => setSelectedId(event.id)}
-                    className={`w-full text-left p-6 transition-colors duration-100 border-l-4 ${
+                    className={`w-full text-left rounded-2xl overflow-hidden transition-all duration-150 ${
                       isSelected
-                        ? "bg-dark-light border-primary"
-                        : "bg-dark border-transparent hover:bg-dark-light hover:border-primary/40"
+                        ? "ring-2 ring-primary"
+                        : "ring-1 ring-dark-lighter hover:ring-primary/50"
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <span className="font-headline text-sm font-medium uppercase tracking-widest text-dark bg-primary px-2.5 py-1">
-                        {EVENT_TYPE_LABELS[event.type]}
-                      </span>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <span className="font-headline text-sm font-medium uppercase tracking-widest text-muted">
-                          {eMonth}
+                    {/* Thumbnail */}
+                    <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/6" }}>
+                      <img
+                        src={img}
+                        alt={event.title}
+                        className={`w-full h-full object-cover transition-all duration-500 brightness-50 ${isSelected ? "grayscale-0" : "grayscale"}`}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/30 to-transparent" />
+                      <div className="absolute top-3 left-3">
+                        <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-dark bg-primary px-2 py-0.5 rounded-full">
+                          {EVENT_TYPE_LABELS[event.type]}
                         </span>
-                        <span className="font-headline text-2xl font-black text-light leading-none block">
-                          {eDay}
+                      </div>
+                      <div className="absolute top-3 right-3">
+                        <span className="font-headline text-xs font-medium text-light bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                          {eDay} {eMonth}
                         </span>
                       </div>
                     </div>
-
-                    <h3 className={`font-headline text-lg font-black italic tracking-tighter leading-tight mb-3 ${
-                      isSelected ? "text-primary" : "text-light"
-                    }`}>
-                      {event.title}
-                    </h3>
-
-                    <div className="flex items-center gap-3 font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                        {event.city}, {STATE_LABELS[event.state]}
-                      </span>
-                      <span className="text-dark-lighter">·</span>
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                        {formatTime(event.time)}
-                      </span>
+                    {/* Card body */}
+                    <div className="bg-dark px-4 pt-3 pb-4">
+                      <h3 className={`font-headline text-base font-black italic tracking-tighter leading-tight mb-2 ${
+                        isSelected ? "text-primary" : "text-light"
+                      }`}>
+                        {event.title}
+                      </h3>
+                      <div className="flex items-center gap-3 font-headline text-xs text-muted uppercase tracking-widest">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+                          {event.city}, {STATE_LABELS[event.state]}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-primary flex-shrink-0" />
+                          {formatTime(event.time)}
+                        </span>
+                      </div>
                     </div>
-
-                    <p className="text-sm text-muted leading-relaxed line-clamp-2">
-                      {event.description}
-                    </p>
                   </button>
                 );
               })}
@@ -387,7 +389,7 @@ function EventsPageInner() {
           )}
         </div>
 
-        {/* RIGHT: event detail */}
+        {/* RIGHT: event detail — flowing cards */}
         <div className="flex-1 overflow-y-auto bg-dark-darker">
           {!selectedEvent ? (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-center p-12">
@@ -397,168 +399,145 @@ function EventsPageInner() {
               </p>
             </div>
           ) : (
-            <div>
+            <div className="p-4 flex flex-col gap-0">
+
               {/* ── Hero banner ── */}
-              <div className="relative h-80 overflow-hidden flex-shrink-0">
+              <div className="relative rounded-3xl overflow-hidden" style={{ aspectRatio: "16/7" }}>
                 <img
                   src={bannerUrl}
                   alt={selectedEvent.title}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-transparent" />
-
-                {/* Status + type badges */}
-                <div className="absolute top-5 left-6 flex items-center gap-3 flex-wrap">
-                  <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 ${status?.style}`}>
+                <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/40 to-transparent" />
+                {/* Badges */}
+                <div className="absolute top-4 left-5 flex items-center gap-2 flex-wrap">
+                  <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full ${status?.style}`}>
                     {status?.label}
                   </span>
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
+                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
                     {EVENT_TYPE_LABELS[selectedEvent.type]}
                   </span>
                   {selectedEvent.isOfficial && (
-                    <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary border border-primary/40 px-2 py-1">
+                    <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary border border-primary/40 bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
                       Official
                     </span>
                   )}
                 </div>
-
-                {/* Title + location overlay */}
-                <div className="absolute bottom-0 left-0 right-0 p-6">
+                {/* Title */}
+                <div className="absolute bottom-0 left-0 right-0 p-5">
                   <Link href={`/events/${selectedEvent.id}`} className="group">
-                    <h2 className="font-headline text-4xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors duration-150 leading-none mb-3 inline-block">
+                    <h2 className="font-headline text-3xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-none mb-2 inline-block">
                       {selectedEvent.title}
                     </h2>
                   </Link>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <span className="flex items-center gap-1.5 font-headline text-sm font-medium uppercase tracking-widest text-muted">
-                      <MapPin className="w-4 h-4 text-primary" />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="flex items-center gap-1.5 font-headline text-xs font-medium uppercase tracking-widest text-muted">
+                      <MapPin className="w-3.5 h-3.5 text-primary" />
                       {selectedEvent.location}, {STATE_LABELS[selectedEvent.state]}
                     </span>
-                    <span className="flex items-center gap-1.5 font-headline text-sm font-medium uppercase tracking-widest text-muted">
-                      <Calendar className="w-4 h-4 text-primary" />
+                    <span className="flex items-center gap-1.5 font-headline text-xs font-medium uppercase tracking-widest text-muted">
+                      <Calendar className="w-3.5 h-3.5 text-primary" />
                       {formatEventDate(selectedEvent.date)}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* ── Bento specs grid ── */}
-              <div className="p-0.5 bg-dark-darker">
-                <div className="grid grid-cols-2 gap-0.5 bg-dark-darker">
+              {/* ── Detail content — seamless continuation ── */}
+              <div className="flex flex-col divide-y divide-dark-lighter pb-6">
 
-                  {/* Schedule tile */}
-                  <div className="bg-dark p-8">
-                    <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">
-                      Schedule
-                    </p>
+                {/* Schedule & Config */}
+                <div className="grid grid-cols-2 py-7 gap-8">
+                  <div>
+                    <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Schedule</p>
                     <p className="font-headline text-5xl font-black text-primary leading-none mb-1">{day}</p>
                     <p className="font-headline text-base font-bold uppercase tracking-wider text-light">{month}</p>
-                    <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mt-2">
+                    <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mt-2">
                       {formatTime(selectedEvent.time)}
                       {selectedEvent.endTime && ` — ${formatTime(selectedEvent.endTime)}`}
                     </p>
                   </div>
-
-                  {/* Race config tile */}
-                  <div className="bg-dark p-8">
-                    <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">
-                      Race Config
-                    </p>
+                  <div>
+                    <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Race Config</p>
                     <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-2 leading-tight">
-                      {selectedEvent.format === "team"
-                        ? "Team"
-                        : selectedEvent.format === "both"
-                        ? "Individual & Team"
-                        : "Individual"}
+                      {selectedEvent.format === "team" ? "Team" : selectedEvent.format === "both" ? "Individual & Team" : "Individual"}
                     </p>
                     {selectedEvent.distance && (
-                      <p className="font-headline text-sm uppercase tracking-widest text-primary mb-2">
-                        {selectedEvent.distance}
-                      </p>
+                      <p className="font-headline text-xs uppercase tracking-widest text-primary mb-2">{selectedEvent.distance}</p>
                     )}
                     <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-primary" />
-                      <span className="font-headline text-sm font-medium uppercase tracking-widest text-muted">
+                      <Users className="w-3.5 h-3.5 text-primary" />
+                      <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
                         {selectedEvent.level === "elite" ? "Elite" : selectedEvent.level === "beginner" ? "Beginner" : "Open"}
                       </span>
                     </div>
                   </div>
-
-                  {/* Location tile – full width */}
-                  <div className="col-span-2 bg-dark p-8 border-l-4 border-primary">
-                    <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">
-                      Location
-                    </p>
-                    <h3 className="font-headline text-2xl font-black italic tracking-tighter text-light mb-1 leading-tight">
-                      {selectedEvent.location}
-                    </h3>
-                    <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-4">
-                      {selectedEvent.city}, {STATE_LABELS[selectedEvent.state]}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <a
-                        href={`https://maps.google.com/?q=${encodeURIComponent(
-                          selectedEvent.location + ", " + selectedEvent.city + ", Australia"
-                        )}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-headline text-sm uppercase tracking-widest text-primary hover:underline"
-                      >
-                        View on Maps
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Description tile */}
-                  <div className="col-span-2 bg-dark p-8">
-                    <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">
-                      Event Overview
-                    </p>
-                    <p className="text-base font-medium text-muted leading-relaxed mb-5">
-                      {selectedEvent.description}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="font-headline text-sm font-medium uppercase tracking-widest text-dark bg-primary px-3 py-1">
-                        {EVENT_TYPE_LABELS[selectedEvent.type]}
-                      </span>
-                      <span className="font-headline text-sm font-medium uppercase tracking-widest text-muted border border-dark-lighter px-3 py-1">
-                        {selectedEvent.format === "team" ? "Team" : selectedEvent.format === "both" ? "Individual & Team" : "Individual"}
-                      </span>
-                      {selectedEvent.isOfficial && (
-                        <span className="font-headline text-sm uppercase tracking-widest text-primary border border-primary/40 px-3 py-1">
-                          Official Event
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Registration tile */}
-                  <div className="col-span-2 bg-dark border-l-4 border-primary p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                      <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-2">
-                        Registration
-                      </p>
-                      {selectedEvent.organizer && (
-                        <p className="font-headline text-base font-medium uppercase tracking-widest text-light">
-                          By {selectedEvent.organizer}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 flex-shrink-0">
-                      <a
-                        href={selectedEvent.registrationUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-base font-bold uppercase tracking-widest px-10 py-4 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
-                      >
-                        Register Now
-                        <ExternalLink className="w-5 h-5" />
-                      </a>
-                    </div>
-                  </div>
-
                 </div>
+
+                {/* Location */}
+                <div className="py-7">
+                  <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Location</p>
+                  <h3 className="font-headline text-xl font-black italic tracking-tighter text-light mb-1 leading-tight">
+                    {selectedEvent.location}
+                  </h3>
+                  <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+                    {selectedEvent.city}, {STATE_LABELS[selectedEvent.state]}
+                  </p>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(
+                      selectedEvent.location + ", " + selectedEvent.city + ", Australia"
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 font-headline text-xs uppercase tracking-widest text-primary hover:text-primary/70 transition-colors"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    View on Maps
+                  </a>
+                </div>
+
+                {/* Overview */}
+                <div className="py-7">
+                  <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Event Overview</p>
+                  <p className="text-sm font-medium text-muted leading-relaxed mb-4">
+                    {selectedEvent.description}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="font-headline text-xs font-medium uppercase tracking-widest text-dark bg-primary px-3 py-1 rounded-full">
+                      {EVENT_TYPE_LABELS[selectedEvent.type]}
+                    </span>
+                    <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted border border-dark-lighter px-3 py-1 rounded-full">
+                      {selectedEvent.format === "team" ? "Team" : selectedEvent.format === "both" ? "Individual & Team" : "Individual"}
+                    </span>
+                    {selectedEvent.isOfficial && (
+                      <span className="font-headline text-xs uppercase tracking-widest text-primary border border-primary/40 px-3 py-1 rounded-full">
+                        Official Event
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Registration */}
+                <div className="py-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-1">Registration</p>
+                    {selectedEvent.organizer && (
+                      <p className="font-headline text-base font-medium uppercase tracking-widest text-light">
+                        By {selectedEvent.organizer}
+                      </p>
+                    )}
+                  </div>
+                  <a
+                    href={selectedEvent.registrationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-3 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0"
+                  >
+                    Register Now
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+
               </div>
             </div>
           )}

@@ -62,7 +62,7 @@ export default function Header() {
           </button>
           <Link
             href="/events"
-            className="font-headline text-[14px] font-bold text-primary border border-primary/30 px-4 py-1.5 hover:bg-primary hover:text-dark-darker transition-all active:scale-95"
+            className="font-headline text-[14px] font-bold text-primary border border-primary/30 px-4 py-1.5 rounded hover:bg-primary hover:text-dark-darker transition-all active:scale-95"
           >
             SIGN IN
           </Link>
@@ -94,7 +94,7 @@ export default function Header() {
             ))}
             <Link
               href="/events"
-              className="font-headline text-sm font-bold text-primary border border-primary/30 px-4 py-3 text-center hover:bg-primary hover:text-dark-darker mt-2"
+              className="font-headline text-sm font-bold text-primary border border-primary/30 px-4 py-3 text-center hover:bg-primary hover:text-dark-darker mt-2 rounded"
               onClick={() => setIsMenuOpen(false)}
             >
               SIGN IN
