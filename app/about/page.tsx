@@ -1,215 +1,109 @@
+import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Compass, BarChart2, Users, Zap } from "lucide-react";
-
-const TEAM = [
-  {
-    name: "MARCUS T.",
-    role: "Chief of Engineering",
-    img: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80",
-  },
-  {
-    name: "ELENA C.",
-    role: "Head of Data Science",
-    img: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80",
-  },
-  {
-    name: "DAVID V.",
-    role: "Lead Product Designer",
-    img: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80",
-  },
-];
-
-const PILLARS = [
-  {
-    icon: <Compass className="w-8 h-8 text-primary" />,
-    label: "Discovery",
-    tag: "Event Aggregation",
-    body: "Finding your next challenge shouldn't be the hardest part of the race. Our discovery engine aggregates events across Australia with surgical precision, filtered by discipline, location, and date.",
-  },
-  {
-    icon: <BarChart2 className="w-8 h-8 text-primary" />,
-    label: "Performance",
-    tag: "Telemetry Analysis",
-    body: "Data is only as good as the insight it generates. We provide a heads-up display for your training, translating raw information into actionable event intelligence and competitive context.",
-  },
-  {
-    icon: <Users className="w-8 h-8 text-primary" />,
-    label: "Community",
-    tag: "Kinetic Social Mesh",
-    body: "Connecting athletes through shared intent. Our community layer isn't about social validation — it's about collective advancement, elite-level mentorship, and the competitive fire of shared goals.",
-  },
-];
+import { Zap } from "lucide-react";
 
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-dark-darker">
 
-      {/* ── HERO ── */}
-      <section className="relative min-h-[480px] flex items-start overflow-hidden">
-        <img
-          src="https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1920&q=80"
-          alt="Athletes racing"
-          className="absolute inset-0 w-full h-full object-cover brightness-40"
+      {/* ── MISSION & VISION over hero image ── */}
+      <section className="relative min-h-[min(88vh,920px)] overflow-hidden">
+        <Image
+          src="/images/about/about-hero.jpg"
+          alt="Athletes at a fitness event"
+          fill
+          priority
+          className="object-cover brightness-[0.38]"
+          sizes="100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/95 via-dark-darker/70 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-dark-darker/50" />
+        <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/95 via-dark-darker/75 to-dark-darker/35" />
+        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-dark-darker/55" />
 
-        <div className="relative z-10 w-full max-w-[1440px] mx-auto px-6 pt-48 pb-24">
-          <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">
-            01 // Origin
-          </p>
-          <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none max-w-4xl">
-            Bridging the Gap Between{" "}
-            <span className="text-primary">Discovery</span> and Performance.
+        <div className="relative z-10 max-w-[1440px] mx-auto px-6 pt-[calc(6rem+4cm)] sm:pt-[calc(7rem+4cm)] pb-20 sm:pb-28">
+          <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none -mt-[2cm] mb-10 sm:mb-12">
+            About <span className="text-primary">us</span>
           </h1>
-        </div>
-      </section>
-
-      {/* ── OUR STORY ── */}
-      <section className="max-w-[1440px] mx-auto px-6 py-24">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-          {/* Left */}
-          <div>
-            <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-6 flex items-center gap-3">
-              <span className="w-10 h-px bg-primary inline-block" />
-              01 // Origin
-            </p>
-            <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight">
-              Machined for Precision.{" "}
-              <span className="text-muted">Built for Athletes.</span>
-            </h2>
-          </div>
-
-          {/* Right */}
-          <div className="space-y-6">
-            <p className="text-muted text-lg leading-relaxed">
-              StartLine was founded with a singular, unyielding objective: to eliminate the friction
-              that exists between an athlete&apos;s potential and their execution. We saw a landscape
-              fractured by disparate platforms — data lived in one silo, events in another, and
-              community in the shadows.
-            </p>
-            <p className="text-muted text-lg leading-relaxed">
-              We engineered a unified architecture. A platform machined for precision, designed to
-              serve those who measure progress in milliseconds and heartbeats. This isn&apos;t just
-              about logging miles; it&apos;s about the kinetic energy of a community moving toward
-              excellence.
-            </p>
-
-            {/* Philosophy quote */}
-            <div className="border-l-4 border-primary bg-dark px-6 py-5 mt-8">
-              <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-2">
-                Philosophy
-              </p>
-              <p className="font-headline text-xl italic text-light leading-snug">
-                &ldquo;Complexity is the enemy of performance. We build the tools that make speed simple.&rdquo;
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── THREE PILLARS ── */}
-      <section className="bg-dark-darker py-24">
-        <div className="max-w-[1440px] mx-auto px-6">
-          <div className="flex items-end justify-between mb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
             <div>
-              <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-3">
-                02 // Core Mission
+              <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-6 flex items-center gap-3">
+                <span className="w-10 h-px bg-primary inline-block" />
+                01 // Mission & vision
               </p>
-              <h2 className="font-headline text-4xl font-black italic tracking-tighter text-light">
-                The Three Pillars
+              <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight">
+                Why we{" "}
+                <span className="text-light/60">built StartLine.</span>
               </h2>
             </div>
-            <span className="hidden md:block font-headline text-xs font-medium uppercase tracking-widest text-muted">
-              Vertical Integration // Kinetic Sync
-            </span>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
-            {PILLARS.map((pillar) => (
-              <div
-                key={pillar.label}
-                className="bg-dark p-10 group hover:bg-dark-light transition-colors duration-300"
-              >
-                <div className="mb-8">{pillar.icon}</div>
-                <h3 className="font-headline text-2xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors mb-4">
-                  {pillar.label}
+            <div className="space-y-8">
+              <div>
+                <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-primary mb-3">
+                  Mission
                 </h3>
-                <p className="text-muted leading-relaxed mb-8 text-sm">{pillar.body}</p>
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-px bg-primary inline-block" />
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
-                    {pillar.tag}
-                  </span>
-                </div>
+                <p className="text-light/90 text-lg leading-relaxed">
+                  StartLine was founded to help uncover fitness events by providing a primary platform
+                  to connect users with upcoming competitions, local events, communities, and organisers.
+                </p>
               </div>
-            ))}
+              <div>
+                <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-primary mb-3">
+                  Vision
+                </h3>
+                <p className="text-light/90 text-lg leading-relaxed">
+                  As social media develops and expands the fitness industry, so too does the gap between
+                  users and events. Our vision for Startline is to connect people through fitness.
+                </p>
+              </div>
+              <div className="border-l-4 border-primary bg-dark/90 backdrop-blur-sm px-6 py-5">
+                <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-2">
+                  Endurance & more
+                </p>
+                <p className="text-light/85 text-sm leading-relaxed">
+                  StartLine isn&apos;t limited to one kind of effort. We list endurance events across
+                  distances and formats — road, trail, turf, and longer tests — right next to comps and
+                  community sessions, so your next start line matches how you actually train.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── THE COLLECTIVE ── */}
-      <section className="max-w-[1440px] mx-auto px-6 py-24">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
-          {/* Left: intro */}
-          <div className="lg:col-span-1">
-            <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">
-              03 // The Collective
-            </p>
-            <h2 className="font-headline text-4xl font-black italic tracking-tighter text-light leading-tight mb-6">
-              Machined by Athletes, for Athletes.
-            </h2>
-            <p className="text-muted leading-relaxed mb-8 text-sm">
-              We are a lean collective of engineers, sports scientists, and endurance specialists
-              based in Melbourne, Australia. Our team operates at the intersection of high-frequency
-              data and high-intensity sport.
-            </p>
-            <Link
-              href="/contact"
-              className="flex items-center gap-3 group w-fit"
-            >
-              <span className="font-headline text-sm font-bold uppercase tracking-widest text-light group-hover:text-primary transition-colors">
-                View Open Positions
-              </span>
-              <ArrowRight className="w-4 h-4 text-primary group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-          </div>
-
-          {/* Right: team cards */}
-          <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-0.5 bg-dark-darker">
-            {TEAM.map((member) => (
-              <div
-                key={member.name}
-                className="aspect-[3/4] bg-dark relative overflow-hidden group"
-              >
-                <img
-                  src={member.img}
-                  alt={member.name}
-                  className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 opacity-60 group-hover:opacity-100 brightness-75 transition-all duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-4">
-                  <span className="font-headline text-xs font-bold text-primary block">{member.name}</span>
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">{member.role}</span>
-                </div>
-              </div>
-            ))}
-
-            {/* Join tile */}
-            <div className="aspect-[3/4] bg-dark border-2 border-dashed border-dark-lighter flex flex-col items-center justify-center gap-3 p-4">
-              <Users className="w-8 h-8 text-muted" />
-              <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted text-center">
-                Join The Mission
-              </span>
+      {/* ── WHY ATHLETES CHOOSE US ── */}
+      <section className="bg-dark py-24 border-b border-dark-lighter/50">
+        <div className="max-w-[1440px] mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+            <div>
+              <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">
+                02 // Why athletes choose us
+              </p>
+              <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight mb-8 max-w-3xl">
+                From invisible events to{" "}
+                <span className="text-muted">your next start line.</span>
+              </h2>
+              <p className="text-muted text-lg leading-relaxed max-w-3xl">
+                Too many running events, functional fitness competitions, and community-based training
+                groups go unrecognised until someone posts a finish-line photo. With a centralised fitness
+                competition platform, StartLine helps connect users to organisers — so you hear about the
+                opportunity when it matters, not only after the fact.
+              </p>
+            </div>
+            <div className="relative aspect-[4/5] w-full mx-auto lg:mx-0 border border-dark-lighter overflow-hidden bg-dark">
+              <Image
+                src="/images/about/about-mission.jpg"
+                alt="Woman practising yoga"
+                fill
+                className="object-cover object-center"
+                sizes="(max-width: 1024px) 100vw, 50vw"
+              />
             </div>
           </div>
         </div>
       </section>
 
       {/* ── CTA ── */}
-      <section className="max-w-[1440px] mx-auto px-6 pb-24">
+      <section className="max-w-[1440px] mx-auto px-6 pt-24 pb-24">
         <div className="relative bg-dark border border-dark-lighter overflow-hidden">
-          {/* HUD corners */}
           <div className="absolute top-4 left-4 w-8 h-8 hud-corner-tl" />
           <div className="absolute top-4 right-4 w-8 h-8 hud-corner-tr" />
           <div className="absolute bottom-4 left-4 w-8 h-8 hud-corner-bl" />
