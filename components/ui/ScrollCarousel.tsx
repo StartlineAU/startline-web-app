@@ -8,10 +8,14 @@ interface ScrollCarouselProps {
   title: string;
   eyebrow?: string;
   viewAllHref?: string;
+  /** Tailwind `top-*` class to vertically centre arrows on the card images.
+   *  Calculate as: (card width × image height ratio) / 2.
+   *  e.g. 260px card × 0.75 (4/3 aspect) / 2 ≈ "top-[98px]"  */
+  arrowTopClass?: string;
   children: React.ReactNode;
 }
 
-export function ScrollCarousel({ title, eyebrow, viewAllHref, children }: ScrollCarouselProps) {
+export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "top-1/2", children }: ScrollCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft,  setCanLeft]  = useState(false);
   const [canRight, setCanRight] = useState(true);
@@ -72,18 +76,18 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, children }: Scroll
         <button
           onClick={() => scroll("left")}
           aria-label="Scroll left"
-          className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-10 h-10 rounded-full bg-dark border border-dark-lighter flex items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-150 ${canLeft ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`absolute left-0 ${arrowTopClass} -translate-y-1/2 -translate-x-1/2 z-10 w-12 h-12 rounded-full bg-dark border border-dark-lighter flex items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-150 ${canLeft ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-5 h-5" />
         </button>
 
         {/* Right arrow */}
         <button
           onClick={() => scroll("right")}
           aria-label="Scroll right"
-          className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-10 h-10 rounded-full bg-dark border border-dark-lighter flex items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-150 ${canRight ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`absolute right-0 ${arrowTopClass} -translate-y-1/2 translate-x-1/2 z-10 w-12 h-12 rounded-full bg-dark border border-dark-lighter flex items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-150 ${canRight ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         >
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="w-5 h-5" />
         </button>
 
         <div

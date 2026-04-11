@@ -24,7 +24,7 @@ export default function HeroSearch() {
   return (
     <div className="w-full mt-10">
       {/* Search bar */}
-      <div className="flex items-stretch gap-0.5 bg-dark-darker">
+      <div className="flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
 
         {/* EVENT input */}
         <div className="flex-1 bg-dark px-6 py-4 border-r border-dark-lighter min-w-0">
