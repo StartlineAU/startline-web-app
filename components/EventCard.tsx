@@ -77,9 +77,9 @@ export default function EventCard({
   if (variant === "compact") {
     return (
       <Link href={`/events/${event.id}`} className="group block">
-        <article className="bg-dark border border-dark-lighter overflow-hidden hover:border-primary/40 transition-colors">
+        <article className="bg-dark border border-dark-lighter overflow-hidden rounded-xl hover:border-primary/40 transition-colors">
           <div className="relative aspect-[16/9] image-placeholder overflow-hidden grayscale group-hover:grayscale-0 transition-all duration-500">
-            <span className="absolute top-2 left-2 text-[10px] font-headline uppercase tracking-widest bg-primary text-dark px-2 py-1">
+            <span className="absolute top-2 left-2 text-[10px] font-headline uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
               {typeLabel}
             </span>
           </div>
@@ -115,7 +115,7 @@ export default function EventCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <span className="font-headline text-[10px] uppercase tracking-widest bg-primary text-dark px-2 py-0.5 inline-block mb-1">
+                  <span className="font-headline text-[10px] uppercase tracking-widest bg-primary text-dark px-2 py-0.5 inline-block mb-1 rounded-full">
                     {typeLabel}
                   </span>
                   <h3 className="font-headline font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors">
@@ -148,7 +148,7 @@ export default function EventCard({
 
   return (
     <Link href={`/events/${event.id}`} className="block group">
-    <article className="bg-dark flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200">
+    <article className="bg-dark flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200 rounded-xl overflow-hidden">
       {/* ── Banner image section ── */}
       <div className="relative h-44 overflow-hidden flex-shrink-0">
         <img
@@ -162,7 +162,7 @@ export default function EventCard({
         {/* Status badge + date — overlaid on image */}
         <div className="absolute inset-x-0 top-0 p-4 flex items-start justify-between">
           <span
-            className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1 ${status.style}`}
+            className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1 rounded-full ${status.style}`}
           >
             {status.label}
           </span>

@@ -160,3 +160,9 @@ export function getTotalUpcomingEvents(events: FitnessEvent[]): number {
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(" ");
 }
+
+/** Truncates an event title to `maxLength` chars so card layouts stay consistent. */
+export function truncateTitle(title: string, maxLength = 28): string {
+  if (title.length <= maxLength) return title;
+  return title.slice(0, maxLength).trimEnd() + "…";
+}
