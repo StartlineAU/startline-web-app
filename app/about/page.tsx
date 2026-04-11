@@ -2,22 +2,27 @@ import Image from "next/image";
 import Link from "next/link";
 import { Zap } from "lucide-react";
 
+/** Pixel size of `public/images/about/about-mission.jpg` — update if you replace the file */
+const ABOUT_MISSION = { width: 4702, height: 3608 } as const;
+
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-dark-darker">
 
-      {/* ── MISSION & VISION over hero image ── */}
-      <section className="relative min-h-[min(88vh,920px)] overflow-hidden">
-        <Image
-          src="/images/about/about-hero.jpg"
-          alt="Athletes at a fitness event"
-          fill
-          priority
-          className="object-cover brightness-[0.38]"
-          sizes="100vw"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/95 via-dark-darker/75 to-dark-darker/35" />
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-dark-darker/55" />
+      {/* ── MISSION & VISION over hero image (photo band ~half prior hero height) ── */}
+      <section className="relative bg-dark-darker overflow-hidden">
+        <div className="pointer-events-none absolute top-0 left-0 right-0 z-0 h-[min(66.792vh,698px)] min-h-[365px]">
+          <Image
+            src="/images/about/about-hero.jpg"
+            alt="Athletes at a fitness event"
+            fill
+            priority
+            className="object-cover object-center brightness-[0.38]"
+            sizes="100vw"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/95 via-dark-darker/75 to-dark-darker/35" />
+          <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-dark-darker/55" />
+        </div>
 
         <div className="relative z-10 max-w-[1440px] mx-auto px-6 pt-[calc(6rem+4cm)] sm:pt-[calc(7rem+4cm)] pb-20 sm:pb-28">
           <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none -mt-[2cm] mb-10 sm:mb-12">
@@ -70,31 +75,34 @@ export default function AboutPage() {
       </section>
 
       {/* ── WHY ATHLETES CHOOSE US ── */}
-      <section className="bg-dark py-24 border-b border-dark-lighter/50">
+      <section className="bg-dark py-[3.24rem] sm:py-[4.05rem] border-b border-dark-lighter/50">
         <div className="max-w-[1440px] mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            <div>
-              <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 lg:items-start">
+            <div className="-mt-[0.85cm] flex flex-col gap-6 sm:gap-8 lg:col-span-7">
+              <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary flex items-center gap-3">
+                <span className="hidden sm:inline-block w-10 h-px bg-primary" />
                 02 // Why athletes choose us
               </p>
-              <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight mb-8 max-w-3xl">
+              <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight max-w-2xl">
                 From invisible events to{" "}
-                <span className="text-muted">your next start line.</span>
+                <span className="text-primary">your next start line.</span>
               </h2>
-              <p className="text-muted text-lg leading-relaxed max-w-3xl">
+              <p className="text-muted text-lg leading-relaxed max-w-2xl">
                 Too many running events, functional fitness competitions, and community-based training
                 groups go unrecognised until someone posts a finish-line photo. With a centralised fitness
                 competition platform, StartLine helps connect users to organisers — so you hear about the
                 opportunity when it matters, not only after the fact.
               </p>
             </div>
-            <div className="relative aspect-[4/5] w-full mx-auto lg:mx-0 border border-dark-lighter overflow-hidden bg-dark">
+            <div className="flex w-full justify-center lg:col-span-5 lg:justify-end">
               <Image
                 src="/images/about/about-mission.jpg"
-                alt="Woman practising yoga"
-                fill
-                className="object-cover object-center"
-                sizes="(max-width: 1024px) 100vw, 50vw"
+                alt="Wheelchair athletes racing on a city course"
+                width={ABOUT_MISSION.width}
+                height={ABOUT_MISSION.height}
+                className="h-auto w-full max-w-xl"
+                sizes="(max-width: 1024px) 100vw, 36rem"
+                quality={100}
               />
             </div>
           </div>
