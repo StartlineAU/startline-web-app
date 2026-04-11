@@ -12,6 +12,7 @@ import { formatTime, formatShortDate } from "@/lib/utils";
 import { fetchAllEvents } from "@/lib/supabase";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { SectionNav } from "@/components/ui/SectionNav";
+import { HeroImageCarousel } from "@/components/ui/HeroImageCarousel";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 function AvailPill({ label, available }: { label: string; available?: boolean }) {
   if (available === undefined) return null;
   return (
-    <div className={`flex items-center gap-2 px-4 py-2.5 border ${available ? "border-primary/40 bg-primary/5" : "border-dark-lighter bg-dark-lighter/30"}`}>
+    <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${available ? "border-primary/40 bg-primary/5" : "border-dark-lighter bg-dark-lighter/30"}`}>
       {available
         ? <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
         : <XCircle className="w-4 h-4 text-muted flex-shrink-0" />}
@@ -104,6 +105,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
   const status     = getStatusLabel(event);
   const [day, month] = formatShortDate(event.date).split(" ");
   const bannerUrl  = getBannerImage(event.type, event.id);
+  const heroImages = TYPE_IMAGES[event.type] ?? TYPE_IMAGES.running;
   const mapsUrl    = `https://maps.google.com/?q=${encodeURIComponent(
     (event.streetAddress ? event.streetAddress + ", " : "") + event.location + ", " + event.city + ", Australia"
   )}`;
@@ -138,8 +140,8 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
     <div className="min-h-screen bg-dark-darker">
 
       {/* ── HERO ── */}
-      <section className="relative h-[680px] w-full overflow-hidden">
-        <img src={bannerUrl} alt={event.title} className="absolute inset-0 w-full h-full object-cover brightness-50" />
+      <section className="relative h-[680px] w-full overflow-hidden group/hero">
+        <HeroImageCarousel images={heroImages} alt={event.title} />
         <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 pb-12">
           <div className="max-w-[1440px] mx-auto px-8">
@@ -149,10 +151,10 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 All Events
               </Link>
               <div className="flex items-center gap-3 mb-4 flex-wrap">
-                <span className={`font-headline text-xs font-bold uppercase tracking-widest px-3 py-1.5 ${status.style}`}>{status.label}</span>
-                <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">{typeLabel}</span>
+                <span className={`font-headline text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full ${status.style}`}>{status.label}</span>
+                <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">{typeLabel}</span>
                 {event.isOfficial && (
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary border border-primary/40 px-2 py-1">Official</span>
+                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary border border-primary/40 px-2 py-1 rounded-full">Official</span>
                 )}
               </div>
               <h1 className="font-headline text-6xl md:text-8xl font-black italic tracking-tighter leading-none mb-4 text-light">
@@ -167,7 +169,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 href={event.registrationUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-4 bg-primary hover:bg-primary/90 text-dark font-headline font-black text-xl uppercase tracking-tighter px-8 py-5 hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0"
+                className="inline-flex items-center gap-4 bg-primary hover:bg-primary/90 text-dark font-headline font-black text-xl uppercase tracking-tighter px-8 py-5 rounded-xl hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0"
               >
                 REGISTER NOW <ExternalLink className="w-6 h-6" />
               </a>
@@ -177,30 +179,30 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
       </section>
 
       {/* ── QUICK STATS BAR ── */}
-      <div className="max-w-[1440px] mx-auto px-8 py-0.5">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-0.5 bg-dark-darker">
-          <div className="bg-dark px-6 py-4 flex items-center gap-4">
+      <div className="max-w-[1440px] mx-auto px-8 py-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-dark rounded-2xl px-6 py-4 flex items-center gap-4">
             <Calendar className="w-5 h-5 text-primary flex-shrink-0" />
             <div>
               <span className="font-headline text-xs tracking-widest text-muted uppercase block mb-0.5">Date</span>
               <span className="font-headline text-lg font-black text-light">{day} <span className="text-primary">{month}</span></span>
             </div>
           </div>
-          <div className="bg-dark px-6 py-4 flex items-center gap-4">
+          <div className="bg-dark rounded-2xl px-6 py-4 flex items-center gap-4">
             <Clock className="w-5 h-5 text-primary flex-shrink-0" />
             <div>
               <span className="font-headline text-xs tracking-widest text-muted uppercase block mb-0.5">Start Time</span>
               <span className="font-headline text-lg font-black text-light">{formatTime(event.time)}</span>
             </div>
           </div>
-          <div className="bg-dark px-6 py-4 flex items-center gap-4">
+          <div className="bg-dark rounded-2xl px-6 py-4 flex items-center gap-4">
             <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
             <div>
               <span className="font-headline text-xs tracking-widest text-muted uppercase block mb-0.5">Location</span>
               <span className="font-headline text-lg font-black text-light">{event.city}, <span className="text-primary">{stateLabel}</span></span>
             </div>
           </div>
-          <div className="bg-dark px-6 py-4 flex items-center gap-4">
+          <div className="bg-dark rounded-2xl px-6 py-4 flex items-center gap-4">
             <Users className="w-5 h-5 text-primary flex-shrink-0" />
             <div>
               <span className="font-headline text-xs tracking-widest text-muted uppercase block mb-0.5">Format</span>
@@ -219,8 +221,8 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {/* ════ 01 OVERVIEW ════ */}
         <div id="section-basics">
           <CollapsibleSection sectionId="section-basics" number="01" title="Event Overview" defaultOpen={true}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
-              <div className="md:col-span-2 bg-dark p-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 bg-dark rounded-2xl p-6">
                 <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 block">About This Event</span>
                 <p className="font-headline font-medium text-base text-muted leading-relaxed">
                   {event.fullDescription ?? event.description}
@@ -233,16 +235,16 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                   </div>
                 )}
               </div>
-              <div className="bg-dark p-8 flex flex-col gap-6 border-l-4 border-primary">
+              <div className="bg-dark rounded-2xl p-6 flex flex-col gap-6 border-l-4 border-primary">
                 <div>
                   <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 block">Discipline</span>
                   <div className="flex flex-wrap gap-2">
-                    <span className="bg-primary text-dark font-headline text-xs font-bold uppercase tracking-widest px-4 py-2">{typeLabel}</span>
+                    <span className="bg-primary text-dark font-headline text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full">{typeLabel}</span>
                     {event.isOfficial && (
-                      <span className="border border-primary/40 text-primary font-headline text-xs font-bold uppercase tracking-widest px-4 py-2">Official</span>
+                      <span className="border border-primary/40 text-primary font-headline text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full">Official</span>
                     )}
                     {event.distance && (
-                      <span className="bg-dark-lighter text-light font-headline text-xs font-bold uppercase tracking-widest px-4 py-2">{event.distance}</span>
+                      <span className="bg-dark-lighter text-light font-headline text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full">{event.distance}</span>
                     )}
                   </div>
                 </div>
@@ -257,7 +259,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     href={event.registrationUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between bg-primary hover:bg-primary/90 text-dark font-headline text-sm font-black uppercase tracking-widest px-6 py-4 hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0"
+                    className="flex items-center justify-between bg-primary hover:bg-primary/90 text-dark font-headline text-sm font-black uppercase tracking-widest px-6 py-4 rounded-xl hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0"
                   >
                     Register Now <ExternalLink className="w-4 h-4" />
                   </a>
@@ -270,10 +272,10 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {/* ════ 02 DATE, TIME & LOCATION ════ */}
         <div id="section-datetime">
           <CollapsibleSection sectionId="section-datetime" number="02" title="Date, Time & Location" defaultOpen={true}>
-            <div className="flex flex-col gap-0.5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Date */}
-                <div className="bg-dark p-8">
+                <div className="bg-dark rounded-2xl p-6">
                   <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 flex items-center gap-2">
                     <Calendar className="w-3.5 h-3.5 text-primary" /> Event Date(s)
                   </span>
@@ -294,7 +296,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                   )}
                 </div>
                 {/* Times */}
-                <div className="bg-dark p-8">
+                <div className="bg-dark rounded-2xl p-6">
                   <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 flex items-center gap-2">
                     <Clock className="w-3.5 h-3.5 text-primary" /> Times
                   </span>
@@ -303,7 +305,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                   {event.cutOffTime && <InfoRow label="Cut-off Time" value={formatTime(event.cutOffTime)} />}
                 </div>
                 {/* Venue */}
-                <div className="bg-dark p-8">
+                <div className="bg-dark rounded-2xl p-6">
                   <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 flex items-center gap-2">
                     <MapPin className="w-3.5 h-3.5 text-primary" /> Venue
                   </span>
@@ -321,7 +323,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 href={event.courseMapUrl ?? mapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block h-28 w-full bg-dark border border-dark-lighter overflow-hidden relative group"
+                className="block h-28 w-full bg-dark rounded-2xl border border-dark-lighter overflow-hidden relative group"
               >
                 <div className="absolute inset-0 flex items-center justify-center gap-3">
                   <MapPin className="w-5 h-5 text-primary" />
@@ -339,15 +341,15 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {hasCategories && (
           <div id="section-categories">
             <CollapsibleSection sectionId="section-categories" number="03" title="Categories & Distances">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-0.5 bg-dark-darker">
-                <div className="bg-dark p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-dark rounded-2xl p-6">
                   <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 flex items-center gap-2">
                     <Tag className="w-3.5 h-3.5 text-primary" /> Available Categories
                   </span>
                   {event.categories && event.categories.length > 0 ? (
                     <div className="flex flex-wrap gap-2 mb-6">
                       {event.categories.map((cat) => (
-                        <span key={cat} className="font-headline text-sm font-bold uppercase tracking-widest text-dark bg-primary px-4 py-2">{cat}</span>
+                        <span key={cat} className="font-headline text-sm font-bold uppercase tracking-widest text-dark bg-primary px-4 py-2 rounded-full">{cat}</span>
                       ))}
                     </div>
                   ) : event.distance ? (
@@ -367,7 +369,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                   )}
                 </div>
                 {event.workoutDescription && (
-                  <div className="bg-dark p-8">
+                  <div className="bg-dark rounded-2xl p-6">
                     <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 flex items-center gap-2">
                       <Zap className="w-3.5 h-3.5 text-primary" /> The Workout
                     </span>
@@ -383,15 +385,15 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {hasRegistration && (
           <div id="section-registration">
             <CollapsibleSection sectionId="section-registration" number="04" title="Registration & Tickets" defaultOpen={true}>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-4">
                 {/* Ticket tiers */}
                 {event.ticketDrops && event.ticketDrops.length > 0 && (
-                  <div className={`grid gap-0.5 bg-dark-darker ${
+                  <div className={`grid gap-4 ${
                     event.ticketDrops.length === 1 ? "grid-cols-1" :
                     event.ticketDrops.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"
                   }`}>
                     {event.ticketDrops.map((drop, i) => (
-                      <div key={i} className={`bg-dark p-8 ${i === 0 ? "border-l-4 border-primary" : ""}`}>
+                      <div key={i} className={`bg-dark rounded-2xl p-6 ${i === 0 ? "border-l-4 border-primary" : ""}`}>
                         <div className="flex items-center gap-2 mb-3">
                           <Ticket className="w-4 h-4 text-primary" />
                           <span className="font-headline text-xs font-bold uppercase tracking-widest text-muted">{drop.label}</span>
@@ -404,16 +406,16 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 )}
                 {/* Close date */}
                 {event.registrationCloseDate && (
-                  <div className="bg-dark px-8 py-5 flex items-center justify-between border-l-4 border-primary">
+                  <div className="bg-dark rounded-2xl px-6 py-4 flex items-center justify-between border-l-4 border-primary">
                     <span className="font-headline text-xs tracking-widest text-muted uppercase">Registration Closes</span>
                     <span className="font-headline text-xl font-black italic text-light">{event.registrationCloseDate}</span>
                   </div>
                 )}
                 {/* Policies */}
                 {(event.transferPolicy || event.refundPolicy || event.waitlistAvailable !== undefined) && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {event.transferPolicy && (
-                      <div className="bg-dark p-8">
+                      <div className="bg-dark rounded-2xl p-6">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                           <FileText className="w-3.5 h-3.5 text-primary" /> Transfer Policy
                         </span>
@@ -421,7 +423,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                       </div>
                     )}
                     {event.refundPolicy && (
-                      <div className="bg-dark p-8">
+                      <div className="bg-dark rounded-2xl p-6">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                           <FileText className="w-3.5 h-3.5 text-primary" /> Refund Policy
                         </span>
@@ -429,9 +431,9 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                       </div>
                     )}
                     {event.waitlistAvailable !== undefined && (
-                      <div className="bg-dark p-8">
+                      <div className="bg-dark rounded-2xl p-6">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 block">Waitlist</span>
-                        <div className={`inline-flex items-center gap-2 px-4 py-2 border ${event.waitlistAvailable ? "border-primary/40 bg-primary/10" : "border-dark-lighter"}`}>
+                        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${event.waitlistAvailable ? "border-primary/40 bg-primary/10" : "border-dark-lighter"}`}>
                           {event.waitlistAvailable ? <CheckCircle className="w-4 h-4 text-primary" /> : <XCircle className="w-4 h-4 text-muted" />}
                           <span className={`font-headline text-sm font-bold uppercase tracking-widest ${event.waitlistAvailable ? "text-primary" : "text-muted"}`}>
                             {event.waitlistAvailable ? "Waitlist Available" : "No Waitlist"}
@@ -450,10 +452,10 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {hasPricing && (
           <div id="section-pricing">
             <CollapsibleSection sectionId="section-pricing" number="05" title="Cost & Pricing">
-              <div className="flex flex-col gap-0.5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0.5 bg-dark-darker">
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {event.entryFeeInclusions && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <Package className="w-3.5 h-3.5 text-primary" /> What&apos;s Included
                       </span>
@@ -461,7 +463,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.optionalExtras && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <ShoppingBag className="w-3.5 h-3.5 text-primary" /> Optional Extras
                       </span>
@@ -469,7 +471,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.groupDiscount && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <Users className="w-3.5 h-3.5 text-primary" /> Group Discount
                       </span>
@@ -478,7 +480,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                   )}
                 </div>
                 {event.charityComponent && (
-                  <div className="bg-dark border-l-4 border-primary p-8">
+                  <div className="bg-dark rounded-2xl border-l-4 border-primary p-6">
                     <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 block">Charity / Fundraising</span>
                     <p className="font-headline text-base font-medium text-light leading-relaxed">{event.charityComponent}</p>
                   </div>
@@ -492,10 +494,10 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {hasPrizes && (
           <div id="section-prizes">
             <CollapsibleSection sectionId="section-prizes" number="06" title="Prizes & Awards">
-              <div className="flex flex-col gap-0.5">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {event.prizePoolTotal && (
-                    <div className="bg-dark p-8 flex flex-col justify-between">
+                    <div className="bg-dark rounded-2xl p-6 flex flex-col justify-between">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 flex items-center gap-2">
                         <Trophy className="w-3.5 h-3.5 text-primary" /> Prize Pool
                       </span>
@@ -503,16 +505,16 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.prizeStructure && (
-                    <div className={`bg-dark p-8 ${!event.prizePoolTotal ? "md:col-span-3" : "md:col-span-2"}`}>
+                    <div className={`bg-dark rounded-2xl p-6 ${!event.prizePoolTotal ? "md:col-span-3" : "md:col-span-2"}`}>
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-4 block">Prize Structure</span>
                       <p className="font-headline text-sm font-medium text-muted leading-relaxed">{event.prizeStructure}</p>
                     </div>
                   )}
                 </div>
                 {(event.ageGroupCategories || event.ceremonyDate || event.specialAwards) && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {event.ageGroupCategories && (
-                      <div className="bg-dark p-8">
+                      <div className="bg-dark rounded-2xl p-6">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                           <Users className="w-3.5 h-3.5 text-primary" /> Age Groups
                         </span>
@@ -520,7 +522,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                       </div>
                     )}
                     {(event.ceremonyDate || event.ceremonyLocation) && (
-                      <div className="bg-dark p-8">
+                      <div className="bg-dark rounded-2xl p-6">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                           <Award className="w-3.5 h-3.5 text-primary" /> Award Ceremony
                         </span>
@@ -529,7 +531,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                       </div>
                     )}
                     {event.specialAwards && (
-                      <div className="bg-dark p-8">
+                      <div className="bg-dark rounded-2xl p-6">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 block">Special Awards</span>
                         <p className="font-headline text-sm font-medium text-muted leading-relaxed">{event.specialAwards}</p>
                       </div>
@@ -545,10 +547,10 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {hasExpo && (
           <div id="section-expo">
             <CollapsibleSection sectionId="section-expo" number="07" title="Expo & Activations">
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-4">
                 {event.hasExpo !== undefined && (
-                  <div className="bg-dark px-8 py-5 flex flex-wrap items-center gap-3">
-                    <div className={`inline-flex items-center gap-2 px-4 py-2 border ${event.hasExpo ? "border-primary/40 bg-primary/10" : "border-dark-lighter"}`}>
+                  <div className="bg-dark rounded-2xl px-6 py-4 flex flex-wrap items-center gap-3">
+                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${event.hasExpo ? "border-primary/40 bg-primary/10" : "border-dark-lighter"}`}>
                       {event.hasExpo ? <CheckCircle className="w-4 h-4 text-primary" /> : <XCircle className="w-4 h-4 text-muted" />}
                       <span className={`font-headline text-sm font-bold uppercase tracking-widest ${event.hasExpo ? "text-primary" : "text-muted"}`}>
                         {event.hasExpo ? "Expo Included" : "No Expo"}
@@ -559,9 +561,9 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     )}
                   </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0.5 bg-dark-darker">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {event.expoDetails && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <Info className="w-3.5 h-3.5 text-primary" /> Expo Details
                       </span>
@@ -569,7 +571,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.bibCollectionInfo && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <Tag className="w-3.5 h-3.5 text-primary" /> Packet Pick-up / Bib Collection
                       </span>
@@ -577,7 +579,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.athleteBriefing && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <FileText className="w-3.5 h-3.5 text-primary" /> Athlete Briefing
                       </span>
@@ -594,11 +596,11 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         {hasAdditional && (
           <div id="section-additional">
             <CollapsibleSection sectionId="section-additional" number="08" title="Additional Information">
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-4">
                 {(event.participantCap || event.minAge) && (
-                  <div className="grid grid-cols-2 gap-0.5 bg-dark-darker">
+                  <div className="grid grid-cols-2 gap-4">
                     {event.participantCap && (
-                      <div className="bg-dark px-8 py-6">
+                      <div className="bg-dark rounded-2xl px-6 py-5">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase flex items-center gap-2 mb-2">
                           <Users className="w-3.5 h-3.5 text-primary" /> Participant Cap
                         </span>
@@ -606,16 +608,16 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                       </div>
                     )}
                     {event.minAge && (
-                      <div className="bg-dark px-8 py-6">
+                      <div className="bg-dark rounded-2xl px-6 py-5">
                         <span className="font-headline text-xs tracking-widest text-muted uppercase block mb-2">Minimum Age</span>
                         <div className="font-headline text-2xl font-black text-light">{event.minAge}</div>
                       </div>
                     )}
                   </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0.5 bg-dark-darker">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {event.accessibilityInfo && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <Accessibility className="w-3.5 h-3.5 text-primary" /> Accessibility
                       </span>
@@ -623,7 +625,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.parkingInfo && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <ParkingCircle className="w-3.5 h-3.5 text-primary" /> Parking & Transport
                       </span>
@@ -631,7 +633,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {event.bagDropInfo && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <ShoppingBag className="w-3.5 h-3.5 text-primary" /> Bag Drop
                       </span>
@@ -639,7 +641,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                     </div>
                   )}
                   {(event.resultsProvider || event.resultsLink) && (
-                    <div className="bg-dark p-8">
+                    <div className="bg-dark rounded-2xl p-6">
                       <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                         <Camera className="w-3.5 h-3.5 text-primary" /> Photography & Results
                       </span>
@@ -655,7 +657,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                   )}
                 </div>
                 {event.additionalNotes && (
-                  <div className="bg-dark border-l-4 border-primary p-8">
+                  <div className="bg-dark rounded-2xl border-l-4 border-primary p-6">
                     <span className="font-headline text-xs tracking-widest text-muted uppercase mb-3 flex items-center gap-2">
                       <Info className="w-3.5 h-3.5 text-primary" /> Additional Notes
                     </span>
@@ -681,20 +683,20 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 VIEW ALL EVENTS <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-0.5 bg-dark-darker">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {relatedEvents.map((related) => {
                 const [relDay, relMonth] = formatShortDate(related.date).split(" ");
                 const relImg = getRelatedImage(related.type, related.id);
                 return (
-                  <Link key={related.id} href={`/events/${related.id}`} className="group bg-dark-darker overflow-hidden border border-dark-lighter/5 hover:border-primary/30 transition-all">
-                    <div className="relative h-56 overflow-hidden">
+                  <Link key={related.id} href={`/events/${related.id}`} className="group bg-dark rounded-2xl overflow-hidden hover:ring-2 hover:ring-primary/50 transition-all">
+                    <div className="relative h-48 overflow-hidden">
                       <img src={relImg} alt={related.title} className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" />
-                      <div className="absolute top-3 right-3 bg-dark/80 backdrop-blur-sm px-3 py-1">
+                      <div className="absolute top-3 right-3 bg-dark/80 backdrop-blur-sm px-3 py-1 rounded-full">
                         <span className="font-headline text-xs font-bold tracking-widest uppercase text-muted">{EVENT_TYPE_LABELS[related.type]}</span>
                       </div>
                     </div>
-                    <div className="bg-dark p-6">
-                      <h3 className="font-headline text-xl font-black uppercase italic leading-tight text-light group-hover:text-primary transition-colors mb-3">{related.title}</h3>
+                    <div className="p-5">
+                      <h3 className="font-headline text-lg font-black uppercase italic leading-tight text-light group-hover:text-primary transition-colors mb-3">{related.title}</h3>
                       <div className="flex justify-between items-center font-headline text-xs uppercase tracking-widest text-muted">
                         <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-primary" />{related.city}, {STATE_LABELS[related.state]}</span>
                         <span>{relDay} {relMonth}</span>
@@ -719,7 +721,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
             href={event.registrationUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-primary text-dark font-headline text-xs font-black uppercase tracking-widest px-6 py-3 hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100"
+            className="flex items-center gap-2 bg-primary text-dark font-headline text-xs font-black uppercase tracking-widest px-6 py-3 rounded-xl hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100"
           >
             Register <ExternalLink className="w-3.5 h-3.5" />
           </a>

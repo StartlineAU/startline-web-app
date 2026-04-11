@@ -2,7 +2,7 @@ import Link from "next/link";
 import { MapPin, Zap, ArrowRight, Calendar } from "lucide-react";
 import eventsData from "@/data/events.json";
 import { FitnessEvent, EVENT_TYPE_LABELS } from "@/types";
-import { formatShortDate } from "@/lib/utils";
+import { formatShortDate, truncateTitle } from "@/lib/utils";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
@@ -92,6 +92,7 @@ export default async function Home() {
           eyebrow="Trending Now"
           title="Most Popular Events"
           viewAllHref="/events"
+          arrowTopClass="top-[98px]"
         >
           {events.map((event) => {
             const [day, month] = formatShortDate(event.date).split(" ");
@@ -104,7 +105,7 @@ export default async function Home() {
                 style={{ scrollSnapAlign: "start" }}
               >
                 {/* Image */}
-                <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3">
+                <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3 rounded-3xl">
                   <img
                     src={img}
                     alt={event.title}
@@ -112,14 +113,14 @@ export default async function Home() {
                   />
                   {/* Type badge */}
                   <div className="absolute top-3 left-3">
-                    <span className="font-headline text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-2 py-1">
+                    <span className="font-headline text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
                       {EVENT_TYPE_LABELS[event.type]}
                     </span>
                   </div>
                   {/* Official badge */}
                   {event.isOfficial && (
                     <div className="absolute top-3 right-3">
-                      <span className="font-headline text-[10px] font-bold uppercase tracking-widest border border-primary/60 text-primary px-2 py-1 bg-dark/60 backdrop-blur-sm">
+                      <span className="font-headline text-[10px] font-bold uppercase tracking-widest border border-primary/60 text-primary px-2 py-1 bg-dark/60 backdrop-blur-sm rounded-full">
                         Official
                       </span>
                     </div>
@@ -129,8 +130,8 @@ export default async function Home() {
                 {/* Text below image — Airbnb style */}
                 <div className="px-0.5">
                   <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="font-headline text-sm font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight line-clamp-2 flex-1">
-                      {event.title}
+                    <h3 className="font-headline text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight flex-1">
+                      {truncateTitle(event.title)}
                     </h3>
                   </div>
                   <div className="flex items-center gap-1.5 font-headline text-xs text-muted uppercase tracking-widest mb-0.5">
@@ -160,6 +161,8 @@ export default async function Home() {
         <ScrollCarousel
           eyebrow="Browse by Discipline"
           title="Event Categories"
+          imageAspect="1/1"
+          arrowTopClass="top-[110px]"
         >
           {categories.map((cat) => (
             <Link
@@ -169,7 +172,7 @@ export default async function Home() {
               style={{ scrollSnapAlign: "start" }}
             >
               {/* Square image */}
-              <div className="relative w-full aspect-square overflow-hidden bg-dark mb-3">
+              <div className="relative w-full aspect-square overflow-hidden bg-dark mb-3 rounded-3xl">
                 <img
                   src={CATEGORY_HERO[cat.type]}
                   alt={cat.label}
@@ -207,6 +210,7 @@ export default async function Home() {
             <ScrollCarousel
               title={EVENT_TYPE_LABELS[type]}
               viewAllHref={`/events?type=${type}`}
+              arrowTopClass="top-[83px]"
             >
               {typeEvents.map((event) => {
                 const [day, month] = formatShortDate(event.date).split(" ");
@@ -218,7 +222,7 @@ export default async function Home() {
                     className="group flex-shrink-0 w-[220px] sm:w-[240px]"
                     style={{ scrollSnapAlign: "start" }}
                   >
-                    <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3">
+                    <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3 rounded-3xl">
                       <img
                         src={img}
                         alt={event.title}
@@ -226,15 +230,15 @@ export default async function Home() {
                       />
                       {event.isOfficial && (
                         <div className="absolute top-2 left-2">
-                          <span className="font-headline text-[9px] font-bold uppercase tracking-widest bg-primary text-dark px-1.5 py-0.5">
+                          <span className="font-headline text-[9px] font-bold uppercase tracking-widest bg-primary text-dark px-1.5 py-0.5 rounded-full">
                             Official
                           </span>
                         </div>
                       )}
                     </div>
                     <div className="px-0.5">
-                      <h3 className="font-headline text-sm font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight line-clamp-1 mb-1">
-                        {event.title}
+                      <h3 className="font-headline text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1">
+                        {truncateTitle(event.title, 24)}
                       </h3>
                       <div className="flex items-center justify-between font-headline text-xs text-muted uppercase tracking-widest">
                         <span className="flex items-center gap-1">
@@ -254,7 +258,7 @@ export default async function Home() {
 
       {/* ── CTA STRIP ── */}
       <section className="max-w-[1440px] mx-auto px-6 pb-20">
-        <div className="relative bg-dark border border-dark-lighter overflow-hidden">
+        <div className="relative bg-dark border border-dark-lighter overflow-hidden rounded-2xl">
           <div className="absolute top-4 left-4 w-8 h-8 hud-corner-tl" />
           <div className="absolute top-4 right-4 w-8 h-8 hud-corner-tr" />
           <div className="absolute bottom-4 left-4 w-8 h-8 hud-corner-bl" />
@@ -270,7 +274,7 @@ export default async function Home() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 href="/events"
-                className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
+                className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
               >
                 <Zap className="w-4 h-4" />
                 Browse All Events
