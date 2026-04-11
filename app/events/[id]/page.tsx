@@ -178,6 +178,9 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         </div>
       </section>
 
+      {/* ── STICKY SECTION NAV (directly under hero — stats stay below, unchanged) ── */}
+      <SectionNav visibleIds={visibleIds} />
+
       {/* ── QUICK STATS BAR ── */}
       <div className="max-w-[1440px] mx-auto px-8 py-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -211,9 +214,6 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
           </div>
         </div>
       </div>
-
-      {/* ── STICKY SECTION NAV ── */}
-      <SectionNav visibleIds={visibleIds} />
 
       {/* ── COLLAPSIBLE SECTIONS ── */}
       <div className="max-w-[1440px] mx-auto px-8 pb-16">

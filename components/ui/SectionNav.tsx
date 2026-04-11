@@ -43,21 +43,21 @@ export function SectionNav({ visibleIds }: { visibleIds: string[] }) {
   }
 
   return (
-    <div className="sticky top-16 z-30 bg-dark-darker">
+    <div className="sticky top-16 z-30 bg-dark-darker py-3">
       <div className="max-w-[1440px] mx-auto px-8">
-        <div className="bg-dark border-b border-dark-lighter overflow-x-auto">
-          <div className="flex items-stretch justify-center gap-0 min-w-max mx-auto">
+        <div className="flex justify-center">
+          <div className="bg-dark rounded-full px-2 py-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar border border-dark-lighter">
             {sections.map((section, i) => (
               <button
                 key={section.id}
                 onClick={() => handleClick(section.id)}
-                className={`flex items-center gap-2 px-5 py-3.5 border-b-2 transition-all duration-150 whitespace-nowrap group ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-150 whitespace-nowrap group ${
                   active === section.id
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted hover:text-light hover:border-dark-lighter"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted hover:text-light hover:bg-dark-lighter/40"
                 }`}
               >
-                <span className={`font-headline text-[10px] font-black tracking-widest transition-colors ${active === section.id ? "text-primary" : "text-muted/50 group-hover:text-muted"}`}>
+                <span className={`font-headline text-[10px] font-black tracking-widest transition-colors ${active === section.id ? "text-primary" : "text-muted/40 group-hover:text-muted"}`}>
                   0{i + 1}
                 </span>
                 <span className="font-headline text-xs font-bold uppercase tracking-widest">
