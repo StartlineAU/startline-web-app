@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MapPin, Zap, ArrowRight, Calendar } from "lucide-react";
+import { MapPin, Zap, ArrowRight, Calendar, Search } from "lucide-react";
 import eventsData from "@/data/events.json";
 import { FitnessEvent, EVENT_TYPE_LABELS } from "@/types";
 import { formatShortDate, truncateTitle } from "@/lib/utils";
@@ -109,7 +109,7 @@ export default async function Home() {
                   <img
                     src={img}
                     alt={event.title}
-                    className="w-full h-full object-cover grayscale group-hover:grayscale-0 brightness-75 group-hover:brightness-90 transition-all duration-500"
+                    className="w-full h-full object-cover brightness-75 group-hover:brightness-90 transition-all duration-500"
                   />
                   {/* Type badge */}
                   <div className="absolute top-3 left-3">
@@ -176,7 +176,7 @@ export default async function Home() {
                 <img
                   src={CATEGORY_HERO[cat.type]}
                   alt={cat.label}
-                  className="w-full h-full object-cover grayscale group-hover:grayscale-0 brightness-50 group-hover:brightness-75 transition-all duration-500"
+                  className="w-full h-full object-cover brightness-50 group-hover:brightness-75 transition-all duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-darker/80 to-transparent" />
                 {/* Overlaid count */}
@@ -226,7 +226,7 @@ export default async function Home() {
                       <img
                         src={img}
                         alt={event.title}
-                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 brightness-75 group-hover:brightness-90 transition-all duration-500"
+                        className="w-full h-full object-cover brightness-75 group-hover:brightness-90 transition-all duration-500"
                       />
                       {event.isOfficial && (
                         <div className="absolute top-2 left-2">
@@ -257,35 +257,35 @@ export default async function Home() {
       })}
 
       {/* ── CTA STRIP ── */}
-      <section className="max-w-[1440px] mx-auto px-6 pb-20">
-        <div className="relative bg-dark border border-dark-lighter overflow-hidden rounded-2xl">
-          <div className="absolute top-4 left-4 w-8 h-8 hud-corner-tl" />
-          <div className="absolute top-4 right-4 w-8 h-8 hud-corner-tr" />
-          <div className="absolute bottom-4 left-4 w-8 h-8 hud-corner-bl" />
-          <div className="absolute bottom-4 right-4 w-8 h-8 hud-corner-br" />
-          <div className="px-12 py-16 text-center">
-            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">Data Driven</p>
-            <h2 className="font-headline text-4xl sm:text-5xl font-black italic tracking-tighter text-light mb-4">
-              Never Miss a Race.
-            </h2>
-            <p className="text-sm font-medium text-muted max-w-lg mx-auto mb-8">
-              Australia&apos;s most comprehensive fitness event database. Updated in real-time. No event left behind.
+      <section className="bg-dark border-t border-dark-lighter">
+        <div className="max-w-[1440px] mx-auto px-6 py-16 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-10">
+          <div className="max-w-xl">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary flex items-center gap-3 mb-5">
+              <span className="w-10 h-px bg-primary inline-block" />
+              Australia&apos;s Fitness Event Calendar
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/events"
-                className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
-              >
-                <Zap className="w-4 h-4" />
-                Browse All Events
-              </Link>
-              <div className="flex items-center gap-3">
-                <span className="animate-pulse-dot w-2 h-2 rounded-full bg-primary inline-block" />
-                <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
-                  {events.length} Active Events
-                </span>
-              </div>
-            </div>
+            <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight mb-4">
+              Where is your<br />
+              <span className="text-primary">next start line?</span>
+            </h2>
+            <p className="text-muted text-sm leading-relaxed">
+              HYROX, CrossFit, running and hybrid events across Australia — all in one place.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
+            <Link
+              href="/events"
+              className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
+            >
+              <Search className="w-4 h-4" />
+              Browse Events
+            </Link>
+            <Link
+              href="/contact"
+              className="border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl hover:border-primary/50 hover:text-light transition-colors flex items-center gap-2"
+            >
+              List Your Event
+            </Link>
           </div>
         </div>
       </section>

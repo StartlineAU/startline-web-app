@@ -71,10 +71,14 @@ export function eventToRow(event: Partial<FitnessEvent>): Row {
 export async function fetchAllEvents(): Promise<FitnessEvent[]> {
   if (!supabaseUrl || !supabaseAnonKey) return [];
   try {
-    const { data, error } = await getClient()!
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 5000)
+    );
+    const query = getClient()!
       .from("events")
       .select("*")
       .order("date", { ascending: true });
+    const { data, error } = await Promise.race([query, timeout]) as Awaited<typeof query>;
     if (error || !data) return [];
     return data.map(rowToEvent);
   } catch {

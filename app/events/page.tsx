@@ -350,7 +350,7 @@ function EventsPageInner() {
                       <img
                         src={img}
                         alt={event.title}
-                        className={`w-full h-full object-cover transition-all duration-500 brightness-50 ${isSelected ? "grayscale-0" : "grayscale"}`}
+                        className={`w-full h-full object-cover transition-all duration-500 brightness-50`}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/30 to-transparent" />
                       <div className="absolute top-3 left-3">
@@ -371,15 +371,22 @@ function EventsPageInner() {
                       }`}>
                         {event.title}
                       </h3>
-                      <div className="flex items-center gap-3 font-headline text-xs text-muted uppercase tracking-widest">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
-                          {event.city}, {STATE_LABELS[event.state]}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-primary flex-shrink-0" />
-                          {formatTime(event.time)}
-                        </span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 font-headline text-xs text-muted uppercase tracking-widest">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+                            {event.city}, {STATE_LABELS[event.state]}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-primary flex-shrink-0" />
+                            {formatTime(event.time)}
+                          </span>
+                        </div>
+                        {event.ticketDrops && event.ticketDrops.length > 0 && (
+                          <span className="font-headline text-xs font-bold text-light flex-shrink-0">
+                            From {event.ticketDrops[0].price}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -527,15 +534,23 @@ function EventsPageInner() {
                       </p>
                     )}
                   </div>
-                  <a
-                    href={selectedEvent.registrationUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-3 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0"
-                  >
-                    Register Now
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <Link
+                      href={`/events/${selectedEvent.id}`}
+                      className="inline-flex items-center gap-2 border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:border-primary/50 hover:text-light transition-colors"
+                    >
+                      More Info
+                    </Link>
+                    <a
+                      href={selectedEvent.registrationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-3 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
+                    >
+                      Register Now
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
                 </div>
 
               </div>

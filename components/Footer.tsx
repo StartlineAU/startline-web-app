@@ -19,7 +19,7 @@ export default function Footer() {
               />
             </Link>
             <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-relaxed">
-              Australia&apos;s Competitive<br />Fitness Calendar
+              Australia&apos;s Fitness<br />Event Calendar
             </p>
           </div>
 
@@ -92,12 +92,6 @@ export default function Footer() {
           <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
             © {new Date().getFullYear()} StartLine. All Rights Reserved.
           </p>
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block animate-pulse-dot" />
-            <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
-              System Active
-            </span>
-          </div>
         </div>
       </div>
     </footer>

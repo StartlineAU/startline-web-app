@@ -78,7 +78,7 @@ export default function EventCard({
     return (
       <Link href={`/events/${event.id}`} className="group block">
         <article className="bg-dark border border-dark-lighter overflow-hidden rounded-xl hover:border-primary/40 transition-colors">
-          <div className="relative aspect-[16/9] image-placeholder overflow-hidden grayscale group-hover:grayscale-0 transition-all duration-500">
+          <div className="relative aspect-[16/9] image-placeholder overflow-hidden transition-all duration-500">
             <span className="absolute top-2 left-2 text-[10px] font-headline uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
               {typeLabel}
             </span>
@@ -154,7 +154,7 @@ export default function EventCard({
         <img
           src={bannerUrl}
           alt={event.title}
-          className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500 brightness-50 group-hover:brightness-60"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-500 brightness-50 group-hover:brightness-60"
         />
         {/* Gradient fade into card body */}
         <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/40 to-transparent" />
