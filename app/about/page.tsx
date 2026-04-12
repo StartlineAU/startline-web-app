@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Zap } from "lucide-react";
+import { Search } from "lucide-react";
 
 /** Pixel size of `public/images/about/about-mission.jpg` — update if you replace the file */
 const ABOUT_MISSION = { width: 4702, height: 3608 } as const;
@@ -110,39 +110,35 @@ export default function AboutPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section className="max-w-[1440px] mx-auto px-6 pt-24 pb-24">
-        <div className="relative bg-dark border border-dark-lighter overflow-hidden">
-          <div className="absolute top-4 left-4 w-8 h-8 hud-corner-tl" />
-          <div className="absolute top-4 right-4 w-8 h-8 hud-corner-tr" />
-          <div className="absolute bottom-4 left-4 w-8 h-8 hud-corner-bl" />
-          <div className="absolute bottom-4 right-4 w-8 h-8 hud-corner-br" />
-
-          <div className="px-12 py-16 text-center">
-            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
-              Ready?
+      <section className="bg-dark-darker border-t border-dark-lighter">
+        <div className="max-w-[1440px] mx-auto px-6 py-16 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-10">
+          <div className="max-w-xl">
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary flex items-center gap-3 mb-5">
+              <span className="w-10 h-px bg-primary inline-block" />
+              Australia&apos;s Fitness Event Calendar
             </p>
-            <h2 className="font-headline text-4xl sm:text-5xl font-black italic tracking-tighter text-light mb-4">
-              Ready to Redefine Your{" "}
-              <span className="text-primary">StartLine</span>?
+            <h2 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight mb-4">
+              Where is your<br />
+              <span className="text-primary">next start line?</span>
             </h2>
-            <p className="text-muted max-w-lg mx-auto mb-8 text-sm">
-              Experience the precision of Australia&apos;s most comprehensive fitness event platform.
+            <p className="text-muted text-sm leading-relaxed">
+              HYROX, CrossFit, running and hybrid events across Australia — all in one place.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/events"
-                className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
-              >
-                <Zap className="w-4 h-4" />
-                Find Events Now
-              </Link>
-              <Link
-                href="/contact"
-                className="border border-primary/30 text-light font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 hover:border-primary hover:text-primary transition-colors"
-              >
-                Get In Touch
-              </Link>
-            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
+            <Link
+              href="/events"
+              className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
+            >
+              <Search className="w-4 h-4" />
+              Browse Events
+            </Link>
+            <Link
+              href="/contact"
+              className="border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl hover:border-primary/50 hover:text-light transition-colors flex items-center gap-2"
+            >
+              List Your Event
+            </Link>
           </div>
         </div>
       </section>

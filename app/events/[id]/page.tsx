@@ -178,9 +178,6 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
         </div>
       </section>
 
-      {/* ── STICKY SECTION NAV (directly under hero — stats stay below, unchanged) ── */}
-      <SectionNav visibleIds={visibleIds} />
-
       {/* ── QUICK STATS BAR ── */}
       <div className="max-w-[1440px] mx-auto px-8 py-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -214,6 +211,9 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
           </div>
         </div>
       </div>
+
+      {/* ── STICKY SECTION NAV ── */}
+      <SectionNav visibleIds={visibleIds} />
 
       {/* ── COLLAPSIBLE SECTIONS ── */}
       <div className="max-w-[1440px] mx-auto px-8 pb-16">
@@ -690,7 +690,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 return (
                   <Link key={related.id} href={`/events/${related.id}`} className="group bg-dark rounded-2xl overflow-hidden hover:ring-2 hover:ring-primary/50 transition-all">
                     <div className="relative h-48 overflow-hidden">
-                      <img src={relImg} alt={related.title} className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" />
+                      <img src={relImg} alt={related.title} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" />
                       <div className="absolute top-3 right-3 bg-dark/80 backdrop-blur-sm px-3 py-1 rounded-full">
                         <span className="font-headline text-xs font-bold tracking-widest uppercase text-muted">{EVENT_TYPE_LABELS[related.type]}</span>
                       </div>

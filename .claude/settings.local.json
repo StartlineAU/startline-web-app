@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3000 \\\\|:3001 \")",
+      "Bash(findstr LISTENING)",
+      "Bash(taskkill:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(curl:*)",
+      "Bash(cmd:*)"
+    ]
+  }
+}
