@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MapPin, Clock, Users, Calendar, ArrowRight } from "lucide-react";
 import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatMediumDate, formatShortDate, formatTime } from "@/lib/utils";
+import SaveEventButton from "./SaveEventButton";
 
 const TYPE_IMAGES: Record<string, string[]> = {
   hyrox: [
@@ -161,11 +162,14 @@ export default function EventCard({
 
         {/* Status badge + date — overlaid on image */}
         <div className="absolute inset-x-0 top-0 p-4 flex items-start justify-between">
-          <span
-            className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1 rounded-full ${status.style}`}
-          >
-            {status.label}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1 rounded-full ${status.style}`}
+            >
+              {status.label}
+            </span>
+            <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm" />
+          </div>
           <div className="bg-dark/80 backdrop-blur-sm px-4 py-2 text-right flex-shrink-0">
             <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-none mb-1">
               {month}

@@ -1239,6 +1239,101 @@ function EventForm({
   );
 }
 
+// ── Pending approval panel ────────────────────────────────────────────────
+interface PendingEvent extends FitnessEvent {
+  status?: string;
+  organiser_sub?: string | null;
+}
+
+function PendingApprovalPanel({ password }: { password: string }) {
+  const [pending, setPending] = useState<PendingEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadPending = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/events/pending", {
+        headers: { Authorization: `Bearer ${password}` },
+      });
+      const data = await res.json();
+      setPending(Array.isArray(data) ? data : []);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, [password]);
+
+  useEffect(() => { loadPending(); }, [loadPending]);
+
+  async function handleAction(id: string, status: "approved" | "rejected") {
+    await fetch(`/api/admin/events/${id}/approve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ status }),
+    });
+    await loadPending();
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center">
+        <RefreshCw className="w-5 h-5 text-muted animate-spin" />
+      </div>
+    );
+  }
+
+  if (pending.length === 0) {
+    return (
+      <div className="p-8 text-center">
+        <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
+          No pending events
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 p-4">
+      {pending.map((event) => (
+        <div key={event.id} className="bg-dark rounded-xl p-5 border-l-4 border-yellow-400">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <span className="font-headline text-[10px] font-bold uppercase tracking-widest bg-yellow-400 text-dark px-2 py-0.5 rounded-full">
+                Pending
+              </span>
+              <h3 className="font-headline text-sm font-black italic tracking-tighter text-light mt-1">
+                {event.title}
+              </h3>
+              <p className="font-headline text-[10px] text-muted mt-0.5">
+                {event.city}, {event.state.toUpperCase()} &middot; {event.date}
+              </p>
+            </div>
+          </div>
+          <p className="text-muted text-xs mb-3 line-clamp-2">{event.description}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleAction(event.id, "approved")}
+              className="flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-2 rounded-lg hover:bg-primary/80 transition-colors"
+            >
+              <CheckCircle className="w-3 h-3" /> Approve
+            </button>
+            <button
+              onClick={() => handleAction(event.id, "rejected")}
+              className="flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-red-400 border border-red-400/50 px-3 py-2 rounded-lg hover:bg-red-400/10 transition-colors"
+            >
+              <XCircle className="w-3 h-3" /> Reject
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main admin dashboard ──────────────────────────────────────────────────
 function AdminDashboard({ password }: { password: string }) {
   const [events, setEvents] = useState<FitnessEvent[]>([]);
@@ -1251,6 +1346,7 @@ function AdminDashboard({ password }: { password: string }) {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [showPending, setShowPending] = useState(false);
 
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
@@ -1487,6 +1583,17 @@ function AdminDashboard({ password }: { password: string }) {
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setShowPending(!showPending)}
+            className={`flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest border px-4 py-2 transition-colors ${
+              showPending
+                ? "text-yellow-400 border-yellow-400/50 bg-yellow-400/10"
+                : "text-muted hover:text-light border-dark-lighter hover:border-primary/50"
+            }`}
+          >
+            <AlertCircle className="w-3.5 h-3.5" />
+            Pending
+          </button>
+          <button
             onClick={handleSeed}
             disabled={isSeeding}
             title="Seed events.json into Supabase"
@@ -1516,6 +1623,16 @@ function AdminDashboard({ password }: { password: string }) {
       <div className="flex flex-1 overflow-hidden">
         {/* LEFT: Event list */}
         <div className="w-[360px] flex-shrink-0 border-r border-dark-lighter overflow-y-auto bg-dark-darker">
+          {showPending && (
+            <div className="border-b border-dark-lighter">
+              <div className="px-5 py-3 border-b border-dark-lighter bg-yellow-400/5">
+                <span className="font-headline text-xs font-medium uppercase tracking-widest text-yellow-400">
+                  Pending Approval
+                </span>
+              </div>
+              <PendingApprovalPanel password={password} />
+            </div>
+          )}
           <div className="px-5 py-3 border-b border-dark-lighter">
             <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
               {loadingEvents ? "Loading…" : `${events.length} Event${events.length !== 1 ? "s" : ""}`}

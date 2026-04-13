@@ -11,6 +11,7 @@
     "prisma:migrate": "prisma migrate dev --name init"
   },
   "dependencies": {
+    "@auth0/nextjs-auth0": "^4.17.0",
     "@prisma/client": "^5.0.0",
     "@supabase/supabase-js": "^2.100.1",
     "date-fns": "^3.6.0",
