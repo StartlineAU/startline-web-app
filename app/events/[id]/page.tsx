@@ -13,6 +13,8 @@ import { fetchAllEvents } from "@/lib/supabase";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { SectionNav } from "@/components/ui/SectionNav";
 import { HeroImageCarousel } from "@/components/ui/HeroImageCarousel";
+import RegisterInterestButton from "@/components/RegisterInterestButton";
+import SaveEventButton from "@/components/SaveEventButton";
 
 export const dynamic = "force-dynamic";
 
@@ -165,14 +167,18 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 )}
               </h1>
               <p className="font-headline font-medium max-w-xl text-muted leading-relaxed mb-6">{event.description}</p>
-              <a
-                href={event.registrationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-4 bg-primary hover:bg-primary/90 text-dark font-headline font-black text-xl uppercase tracking-tighter px-8 py-5 rounded-xl hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0"
-              >
-                REGISTER NOW <ExternalLink className="w-6 h-6" />
-              </a>
+              <div className="flex items-center gap-4 flex-wrap">
+                <a
+                  href={event.registrationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-4 bg-primary hover:bg-primary/90 text-dark font-headline font-black text-xl uppercase tracking-tighter px-8 py-5 rounded-xl hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0"
+                >
+                  REGISTER NOW <ExternalLink className="w-6 h-6" />
+                </a>
+                <RegisterInterestButton eventId={event.id} eventTitle={event.title} />
+                <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm w-12 h-12" />
+              </div>
             </div>
           </div>
         </div>

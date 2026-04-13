@@ -10,6 +10,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("events")
       .select("*")
+      .or("status.eq.approved,status.is.null")
       .order("date", { ascending: true });
 
     if (error || !data || data.length === 0) {

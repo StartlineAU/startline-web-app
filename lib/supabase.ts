@@ -77,6 +77,7 @@ export async function fetchAllEvents(): Promise<FitnessEvent[]> {
     const query = getClient()!
       .from("events")
       .select("*")
+      .or("status.eq.approved,status.is.null")
       .order("date", { ascending: true });
     const { data, error } = await Promise.race([query, timeout]) as Awaited<typeof query>;
     if (error || !data) return [];
