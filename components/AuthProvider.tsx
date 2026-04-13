@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/auth/profile");
+      const res = await fetch("/auth/profile", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setUser(data ?? null);

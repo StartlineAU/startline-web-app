@@ -27,23 +27,27 @@ export default function ProfilePage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    const fetchOpts: RequestInit = { credentials: "include" };
     try {
       const [profileRes, savedRes, registeredRes, eventsRes] = await Promise.all([
-        fetch("/api/user/profile"),
-        fetch("/api/user/save-event"),
-        fetch("/api/user/register"),
-        fetch("/api/events"),
+        fetch("/api/user/profile", fetchOpts),
+        fetch("/api/user/save-event", fetchOpts),
+        fetch("/api/user/register", fetchOpts),
+        fetch("/api/events", fetchOpts),
       ]);
-      const [profileData, savedData, registeredData, eventsData] = await Promise.all([
-        profileRes.json(),
-        savedRes.json(),
-        registeredRes.json(),
-        eventsRes.json(),
-      ]);
-      setProfile(profileData);
-      setNameValue(profileData.full_name ?? "");
-      setSavedIds(Array.isArray(savedData) ? savedData : []);
-      setRegisteredIds(Array.isArray(registeredData) ? registeredData : []);
+      const profileData = await profileRes.json();
+      if (profileRes.ok && !profileData.error) {
+        setProfile(profileData);
+        setNameValue(profileData.full_name ?? "");
+      }
+
+      const savedData = savedRes.ok ? await savedRes.json() : null;
+      setSavedIds(Array.isArray(savedData) ? savedData.map(String) : []);
+
+      const registeredData = registeredRes.ok ? await registeredRes.json() : null;
+      setRegisteredIds(Array.isArray(registeredData) ? registeredData.map(String) : []);
+
+      const eventsData = eventsRes.ok ? await eventsRes.json() : [];
       setEvents(Array.isArray(eventsData) ? eventsData : []);
     } catch {
       // silent
@@ -61,6 +65,7 @@ export default function ProfilePage() {
     try {
       const res = await fetch("/api/user/profile", {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ full_name: nameValue }),
       });
@@ -82,8 +87,10 @@ export default function ProfilePage() {
     );
   }
 
-  const savedEvents = events.filter((e) => savedIds.includes(e.id));
-  const registeredEvents = events.filter((e) => registeredIds.includes(e.id));
+  const savedEvents = events.filter((e) => savedIds.includes(String(e.id)));
+  const registeredEvents = events.filter((e) =>
+    registeredIds.includes(String(e.id))
+  );
 
   return (
     <main className="min-h-screen bg-dark-darker">
@@ -144,13 +151,16 @@ export default function ProfilePage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Saved Events */}
           <div className="bg-dark rounded-xl p-8">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-2">
               <Heart className="w-5 h-5 text-primary" />
               <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary">
                 Saved Events
               </h2>
               <span className="ml-auto font-headline text-xs text-muted">{savedEvents.length}</span>
             </div>
+            <p className="text-muted text-xs mb-6 leading-relaxed">
+              Events you&apos;ve bookmarked with the heart icon — your personal shortlist to revisit later.
+            </p>
             {savedEvents.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted text-sm mb-3">No saved events yet.</p>
@@ -197,16 +207,19 @@ export default function ProfilePage() {
 
           {/* Registered Events */}
           <div className="bg-dark rounded-xl p-8">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-2">
               <Save className="w-5 h-5 text-primary" />
               <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary">
-                Registered Events
+                Registered interest
               </h2>
               <span className="ml-auto font-headline text-xs text-muted">{registeredEvents.length}</span>
             </div>
+            <p className="text-muted text-xs mb-6 leading-relaxed">
+              Events where you tapped &quot;Register interest&quot; — we store that in StartLine and send you a confirmation email. This is not the same as saving a bookmark.
+            </p>
             {registeredEvents.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted text-sm mb-3">No registrations yet.</p>
+                <p className="text-muted text-sm mb-3">No registered interest yet.</p>
                 <Link
                   href="/events"
                   className="font-headline text-xs font-bold uppercase tracking-widest text-primary hover:underline"

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase, rowToEvent, eventToRow } from "@/lib/supabase";
+import { supabase, rowToEvent, eventToRow, mergeCatalogWithDbRows } from "@/lib/supabase";
 import eventsData from "@/data/events.json";
 import { FitnessEvent } from "@/types";
 
@@ -13,10 +13,13 @@ export async function GET() {
       .or("status.eq.approved,status.is.null")
       .order("date", { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      return NextResponse.json(eventsData.events);
+    const fallback = eventsData.events as FitnessEvent[];
+
+    if (error || !data?.length) {
+      return NextResponse.json(fallback);
     }
-    return NextResponse.json(data.map(rowToEvent));
+
+    return NextResponse.json(mergeCatalogWithDbRows(data as Record<string, unknown>[]));
   } catch {
     return NextResponse.json(eventsData.events);
   }

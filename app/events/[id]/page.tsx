@@ -6,7 +6,6 @@ import {
   CheckCircle, XCircle, Ticket, Award, ShoppingBag,
   Camera, FileText, Accessibility, ParkingCircle,
 } from "lucide-react";
-import eventsData from "@/data/events.json";
 import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatTime, formatShortDate } from "@/lib/utils";
 import { fetchAllEvents } from "@/lib/supabase";
@@ -89,16 +88,7 @@ function AvailPill({ label, available }: { label: string; available?: boolean })
 
 export default async function EventDetailPage({ params }: EventDetailPageProps) {
   const { id } = await params;
-  const liveEvents = await fetchAllEvents();
-  const jsonEvents = eventsData.events as FitnessEvent[];
-
-  const events: FitnessEvent[] = liveEvents.length > 0
-    ? liveEvents.map((live) => {
-        const json = jsonEvents.find((j) => j.id === live.id);
-        return json ? { ...json, ...live } : live;
-      })
-    : jsonEvents;
-
+  const events = await fetchAllEvents();
   const event = events.find((e) => e.id === id);
   if (!event) notFound();
 
@@ -739,13 +729,6 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 }
 
 export async function generateStaticParams() {
-  const liveEvents = await fetchAllEvents();
-  const jsonEvents = eventsData.events as FitnessEvent[];
-  const events: FitnessEvent[] = liveEvents.length > 0
-    ? liveEvents.map((live) => {
-        const json = jsonEvents.find((j) => j.id === live.id);
-        return json ? { ...json, ...live } : live;
-      })
-    : jsonEvents;
+  const events = await fetchAllEvents();
   return events.map((event) => ({ id: event.id }));
 }

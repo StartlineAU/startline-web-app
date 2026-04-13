@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import eventsData from "@/data/events.json";
 import { FitnessEvent } from "@/types";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -68,8 +69,35 @@ export function eventToRow(event: Partial<FitnessEvent>): Row {
   return row;
 }
 
+/**
+ * Merge the static JSON catalog with Supabase rows so catalog-only events
+ * still appear once the DB has other rows (saved/profile lists need every id).
+ */
+export function mergeCatalogWithDbRows(
+  dbRows: Record<string, unknown>[]
+): FitnessEvent[] {
+  const jsonEvents = eventsData.events as FitnessEvent[];
+  const byId = new Map<string, FitnessEvent>();
+
+  for (const j of jsonEvents) {
+    byId.set(String(j.id), j);
+  }
+
+  for (const row of dbRows) {
+    const live = rowToEvent(row);
+    const id = String(live.id);
+    const json = byId.get(id);
+    byId.set(id, json ? { ...json, ...live } : live);
+  }
+
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+}
+
 export async function fetchAllEvents(): Promise<FitnessEvent[]> {
-  if (!supabaseUrl || !supabaseAnonKey) return [];
+  const fallback = eventsData.events as FitnessEvent[];
+  if (!supabaseUrl || !supabaseAnonKey) return fallback;
   try {
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("timeout")), 5000)
@@ -80,9 +108,9 @@ export async function fetchAllEvents(): Promise<FitnessEvent[]> {
       .or("status.eq.approved,status.is.null")
       .order("date", { ascending: true });
     const { data, error } = await Promise.race([query, timeout]) as Awaited<typeof query>;
-    if (error || !data) return [];
-    return data.map(rowToEvent);
+    if (error || !data?.length) return fallback;
+    return mergeCatalogWithDbRows(data as Record<string, unknown>[]);
   } catch {
-    return [];
+    return fallback;
   }
 }
