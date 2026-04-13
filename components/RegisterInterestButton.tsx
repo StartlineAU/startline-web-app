@@ -16,7 +16,7 @@ export default function RegisterInterestButton({ eventId, eventTitle }: Register
 
   useEffect(() => {
     if (!user) return;
-    fetch("/api/user/register")
+    fetch("/api/user/register", { credentials: "include" })
       .then((r) => r.json())
       .then((ids: string[]) => {
         if (Array.isArray(ids) && ids.includes(eventId)) setRegistered(true);
@@ -36,6 +36,7 @@ export default function RegisterInterestButton({ eventId, eventTitle }: Register
     try {
       const res = await fetch("/api/user/register", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: eventId, event_title: eventTitle }),
       });

@@ -16,7 +16,7 @@ export default function SaveEventButton({ eventId, className = "" }: SaveEventBu
 
   useEffect(() => {
     if (!user) return;
-    fetch("/api/user/save-event")
+    fetch("/api/user/save-event", { credentials: "include" })
       .then((r) => r.json())
       .then((ids: string[]) => {
         if (Array.isArray(ids) && ids.includes(eventId)) setSaved(true);
@@ -37,6 +37,7 @@ export default function SaveEventButton({ eventId, className = "" }: SaveEventBu
     try {
       const res = await fetch("/api/user/save-event", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_id: eventId }),
       });
