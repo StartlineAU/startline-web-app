@@ -78,7 +78,7 @@ export default async function Home() {
             Find Your <span className="text-primary">Start Line.</span>
           </h1>
           <p className="font-headline text-base font-medium text-muted max-w-2xl leading-relaxed mb-0">
-            HYROX, CrossFit, running and hybrid events — search, filter, and register in seconds.
+            Fitness event discovery made easy - search, filter and register in seconds.
           </p>
           <HeroSearch />
         </div>
