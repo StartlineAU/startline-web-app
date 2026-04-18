@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Menu, X, Search } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "HOME" },
@@ -56,17 +56,11 @@ export default function Header() {
 
         <div className="flex items-center gap-4">
           <button
-            className="text-muted hover:text-primary transition-colors p-2"
-            aria-label="Search"
+            disabled
+            className="hidden md:inline font-headline text-[14px] font-bold text-muted border border-dark-lighter px-4 py-1.5 rounded opacity-50 cursor-not-allowed"
           >
-            <Search className="w-5 h-5" />
+            SIGN IN
           </button>
-          <Link
-            href="/profile"
-            className="hidden md:inline font-headline text-[14px] font-bold text-muted border border-dark-lighter px-4 py-1.5 rounded hover:border-primary hover:text-primary transition-all"
-          >
-            MY LISTS
-          </Link>
         </div>
 
         {/* Mobile menu button */}
@@ -93,13 +87,12 @@ export default function Header() {
                 {item.label}
               </Link>
             ))}
-            <Link
-              href="/profile"
-              className="font-headline text-sm font-bold text-primary border border-primary/30 px-4 py-3 text-center hover:bg-primary hover:text-dark-darker mt-2 rounded"
-              onClick={() => setIsMenuOpen(false)}
+            <button
+              disabled
+              className="font-headline text-sm font-bold text-muted border border-dark-lighter px-4 py-3 text-center mt-2 rounded opacity-50 cursor-not-allowed"
             >
-              MY LISTS
-            </Link>
+              SIGN IN
+            </button>
           </div>
         </div>
       )}
