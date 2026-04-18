@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -9,56 +9,20 @@ import {
 } from "lucide-react";
 import eventsData from "@/data/events.json";
 import {
-  FitnessEvent, FilterState, EventType, AustralianState,
-  CompetitionFormat, EVENT_TYPE_LABELS, STATE_LABELS,
-  STATE_OPTIONS, EVENT_TYPE_OPTIONS, FORMAT_OPTIONS, DATE_RANGE_OPTIONS,
+  FitnessEvent, FilterState, EventType, AustralianState, CompetitionFormat,
+  EVENT_TYPE_LABELS, STATE_LABELS, STATE_OPTIONS, EVENT_TYPE_OPTIONS,
+  FORMAT_OPTIONS, DATE_RANGE_OPTIONS,
 } from "@/types";
 import {
   filterEvents, sortEventsByDate,
-  formatShortDate, formatTime, formatEventDate,
+  formatShortDate, formatTime, formatEventDate, formatCompetitionFormat,
 } from "@/lib/utils";
-
-// ── Image pool ───────────────────────────────────────────────────────────────
-const TYPE_IMAGES: Record<string, string[]> = {
-  hyrox: [
-    "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1200&q=80",
-    "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=1200&q=80",
-    "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1200&q=80",
-  ],
-  crossfit: [
-    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
-    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&q=80",
-    "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=1200&q=80",
-  ],
-  running: [
-    "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1200&q=80",
-    "https://images.unsplash.com/photo-1502904550040-7534597429ae?w=1200&q=80",
-    "https://images.unsplash.com/photo-1544717305-2782549b5136?w=1200&q=80",
-  ],
-  hybrid: [
-    "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=1200&q=80",
-    "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=1200&q=80",
-    "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1200&q=80",
-  ],
-};
-
-function getBannerImage(type: string, id: string): string {
-  const pool = TYPE_IMAGES[type] ?? TYPE_IMAGES.running;
-  return pool[id.charCodeAt(id.length - 1) % pool.length];
-}
-
-// ── Status helper ─────────────────────────────────────────────────────────
-function getStatus(event: FitnessEvent): { label: string; style: string } {
-  const daysUntil = Math.ceil(
-    (new Date(event.date).getTime() - Date.now()) / 86400000
-  );
-  if (daysUntil < 0) return { label: "Registration Closed", style: "border border-dark-lighter text-muted" };
-  if (daysUntil <= 14) return { label: "Selling Fast", style: "bg-primary text-dark" };
-  return { label: "Confirmed", style: "border border-primary text-primary" };
-}
+import { getEventImage } from "@/lib/images";
+import { getEventStatus } from "@/lib/event-status";
 
 // ── Filter chip ───────────────────────────────────────────────────────────
-interface ChipProps {
+
+interface FilterChipProps {
   label: string;
   value: string;
   options: { value: string; label: string }[];
@@ -68,17 +32,18 @@ interface ChipProps {
   onChange: (v: string) => void;
 }
 
-function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }: ChipProps) {
+function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }: FilterChipProps) {
   const ref = useRef<HTMLDivElement>(null);
   const active = value !== "";
 
+  // Close on outside click
   useEffect(() => {
     if (!isOpen) return;
-    function handle(e: MouseEvent) {
+    function handleOutsideClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isOpen, onClose]);
 
   const currentLabel = options.find((o) => o.value === value)?.label ?? label;
@@ -126,8 +91,27 @@ function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────
-import { Suspense } from "react";
+// ── Events page ───────────────────────────────────────────────────────────
+
+// Pre-build dropdown option arrays once (stable references for useMemo)
+const DISCIPLINE_OPTIONS = [
+  { value: "", label: "Discipline" },
+  ...EVENT_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+];
+const STATE_CHIP_OPTIONS = [
+  { value: "", label: "State" },
+  ...STATE_OPTIONS.map((o) => ({ value: o.value, label: o.shortLabel })),
+];
+const FORMAT_CHIP_OPTIONS = [
+  { value: "", label: "Format" },
+  ...FORMAT_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+];
+const DATE_CHIP_OPTIONS = [
+  { value: "", label: "All Upcoming" },
+  ...DATE_RANGE_OPTIONS
+    .filter((o) => o.value !== "all")
+    .map((o) => ({ value: o.value, label: o.label })),
+];
 
 function EventsPageInner() {
   const allEvents = useMemo(() => eventsData.events as FitnessEvent[], []);
@@ -141,26 +125,27 @@ function EventsPageInner() {
   }, []);
 
   const searchParams = useSearchParams();
-  const [whatQuery, setWhatQuery] = useState(searchParams.get("what") ?? "");
-  const [whereQuery, setWhereQuery] = useState(searchParams.get("where") ?? "");
-  const [typeFilter, setTypeFilter] = useState<EventType | "">("");
+  const [whatQuery,   setWhatQuery]   = useState(searchParams.get("what")  ?? "");
+  const [whereQuery,  setWhereQuery]  = useState(searchParams.get("where") ?? "");
+  const [typeFilter,  setTypeFilter]  = useState<EventType | "">((searchParams.get("type") as EventType) ?? "");
   const [stateFilter, setStateFilter] = useState<AustralianState | "">("");
   const [formatFilter, setFormatFilter] = useState<CompetitionFormat | "">("");
-  const [dateFilter, setDateFilter] = useState<FilterState["dateRange"]>("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dateFilter,  setDateFilter]  = useState<FilterState["dateRange"]>("all");
+  const [selectedId,  setSelectedId]  = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const filterState: FilterState = useMemo(() => ({
-    types: typeFilter ? [typeFilter as EventType] : [],
-    states: stateFilter ? [stateFilter as AustralianState] : [],
-    format: formatFilter ? (formatFilter as CompetitionFormat) : null,
-    dateRange: dateFilter,
+    types:       typeFilter   ? [typeFilter as EventType]       : [],
+    states:      stateFilter  ? [stateFilter as AustralianState] : [],
+    format:      formatFilter ? (formatFilter as CompetitionFormat) : null,
+    dateRange:   dateFilter,
     searchQuery: whatQuery,
   }), [typeFilter, stateFilter, formatFilter, dateFilter, whatQuery]);
 
   const displayEvents = useMemo(() => {
     let results = filterEvents(liveEvents, filterState);
     results = sortEventsByDate(results);
+    // Location filter is applied after the main filter since it targets a separate field
     if (whereQuery.trim()) {
       const q = whereQuery.toLowerCase();
       results = results.filter(
@@ -178,39 +163,22 @@ function EventsPageInner() {
     [liveEvents, selectedId]
   );
 
+  // Auto-select first result when filters change and nothing is selected
   useEffect(() => {
     if (!selectedId && displayEvents.length > 0) {
       setSelectedId(displayEvents[0].id);
     }
   }, [displayEvents, selectedId]);
 
-  const disciplineOptions = [
-    { value: "", label: "Discipline" },
-    ...EVENT_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-  ];
-  const stateOptions = [
-    { value: "", label: "State" },
-    ...STATE_OPTIONS.map((o) => ({ value: o.value, label: o.shortLabel })),
-  ];
-  const formatOptions = [
-    { value: "", label: "Format" },
-    ...FORMAT_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-  ];
-  const dateOptions = [
-    { value: "all", label: "All Upcoming" },
-    ...DATE_RANGE_OPTIONS.filter((o) => o.value !== "all").map((o) => ({
-      value: o.value,
-      label: o.label,
-    })),
-  ];
+  function clearFilters() {
+    setWhatQuery(""); setWhereQuery("");
+    setTypeFilter(""); setStateFilter(""); setFormatFilter(""); setDateFilter("all");
+    setSelectedId(null);
+  }
 
-  const [day, month] = selectedEvent
-    ? formatShortDate(selectedEvent.date).split(" ")
-    : ["", ""];
-  const status = selectedEvent ? getStatus(selectedEvent) : null;
-  const bannerUrl = selectedEvent
-    ? getBannerImage(selectedEvent.type, selectedEvent.id)
-    : "";
+  const [day, month] = selectedEvent ? formatShortDate(selectedEvent.date).split(" ") : ["", ""];
+  const status    = selectedEvent ? getEventStatus(selectedEvent) : null;
+  const bannerUrl = selectedEvent ? getEventImage(selectedEvent.type, selectedEvent.id, 1200, 80) : "";
 
   return (
     <div className="bg-dark-darker flex flex-col" style={{ height: "100dvh" }}>
@@ -221,9 +189,7 @@ function EventsPageInner() {
         <div className="max-w-[1440px] mx-auto px-6 pt-5 pb-4">
           <div className="flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
             <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
-              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
-                Event
-              </label>
+              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">Event</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -240,9 +206,7 @@ function EventsPageInner() {
               </div>
             </div>
             <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
-              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">
-                Where
-              </label>
+              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">Where</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -265,12 +229,12 @@ function EventsPageInner() {
           </div>
         </div>
 
-        {/* Row 2: Filter chips */}
+        {/* Row 2: Filter chips + result count */}
         <div className="max-w-[1440px] mx-auto px-6 pb-4 flex items-center gap-2.5 flex-wrap">
           <FilterChip
             label="Discipline"
             value={typeFilter}
-            options={disciplineOptions}
+            options={DISCIPLINE_OPTIONS}
             isOpen={openDropdown === "discipline"}
             onOpen={() => setOpenDropdown("discipline")}
             onClose={() => setOpenDropdown(null)}
@@ -279,7 +243,7 @@ function EventsPageInner() {
           <FilterChip
             label="State"
             value={stateFilter}
-            options={stateOptions}
+            options={STATE_CHIP_OPTIONS}
             isOpen={openDropdown === "state"}
             onOpen={() => setOpenDropdown("state")}
             onClose={() => setOpenDropdown(null)}
@@ -288,7 +252,7 @@ function EventsPageInner() {
           <FilterChip
             label="Format"
             value={formatFilter}
-            options={formatOptions}
+            options={FORMAT_CHIP_OPTIONS}
             isOpen={openDropdown === "format"}
             onOpen={() => setOpenDropdown("format")}
             onClose={() => setOpenDropdown(null)}
@@ -297,7 +261,7 @@ function EventsPageInner() {
           <FilterChip
             label="All Upcoming"
             value={dateFilter === "all" ? "" : dateFilter}
-            options={dateOptions.map((o) => ({ ...o, value: o.value === "all" ? "" : o.value }))}
+            options={DATE_CHIP_OPTIONS}
             isOpen={openDropdown === "date"}
             onOpen={() => setOpenDropdown("date")}
             onClose={() => setOpenDropdown(null)}
@@ -309,21 +273,17 @@ function EventsPageInner() {
         </div>
       </div>
 
-      {/* ── Two-panel content area ── */}
+      {/* ── Two-panel layout ── */}
       <div className="flex flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
 
-        {/* LEFT: event list — card-based */}
+        {/* LEFT: event list */}
         <div className="w-[420px] flex-shrink-0 overflow-y-auto bg-dark-darker border-r border-dark-lighter">
           {displayEvents.length === 0 ? (
             <div className="p-10 text-center">
               <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">No Results</p>
               <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-4">No events found.</p>
               <button
-                onClick={() => {
-                  setWhatQuery(""); setWhereQuery("");
-                  setTypeFilter(""); setStateFilter(""); setFormatFilter(""); setDateFilter("all");
-                  setSelectedId(null);
-                }}
+                onClick={clearFilters}
                 className="font-headline text-sm font-medium uppercase tracking-widest border border-primary text-primary px-5 py-2.5 hover:bg-primary hover:text-dark transition-colors rounded-full"
               >
                 Clear Filters
@@ -334,24 +294,17 @@ function EventsPageInner() {
               {displayEvents.map((event) => {
                 const isSelected = event.id === selectedId;
                 const [eDay, eMonth] = formatShortDate(event.date).split(" ");
-                const img = getBannerImage(event.type, event.id);
+                const img = getEventImage(event.type, event.id, 1200, 80);
                 return (
                   <button
                     key={event.id}
                     onClick={() => setSelectedId(event.id)}
                     className={`w-full text-left rounded-2xl overflow-hidden transition-all duration-150 ${
-                      isSelected
-                        ? "ring-2 ring-primary"
-                        : "ring-1 ring-dark-lighter hover:ring-primary/50"
+                      isSelected ? "ring-2 ring-primary" : "ring-1 ring-dark-lighter hover:ring-primary/50"
                     }`}
                   >
-                    {/* Thumbnail */}
                     <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/6" }}>
-                      <img
-                        src={img}
-                        alt={event.title}
-                        className={`w-full h-full object-cover transition-all duration-500 brightness-50`}
-                      />
+                      <img src={img} alt={event.title} className="w-full h-full object-cover brightness-50" />
                       <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/30 to-transparent" />
                       <div className="absolute top-3 left-3">
                         <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-dark bg-primary px-2 py-0.5 rounded-full">
@@ -364,11 +317,8 @@ function EventsPageInner() {
                         </span>
                       </div>
                     </div>
-                    {/* Card body */}
                     <div className="bg-dark px-4 pt-3 pb-4">
-                      <h3 className={`font-headline text-base font-black italic tracking-tighter leading-tight mb-2 ${
-                        isSelected ? "text-primary" : "text-light"
-                      }`}>
+                      <h3 className={`font-headline text-base font-black italic tracking-tighter leading-tight mb-2 ${isSelected ? "text-primary" : "text-light"}`}>
                         {event.title}
                       </h3>
                       <div className="flex items-center justify-between gap-3">
@@ -396,7 +346,7 @@ function EventsPageInner() {
           )}
         </div>
 
-        {/* RIGHT: event detail — flowing cards */}
+        {/* RIGHT: event detail panel */}
         <div className="flex-1 overflow-y-auto bg-dark-darker">
           {!selectedEvent ? (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-center p-12">
@@ -408,15 +358,10 @@ function EventsPageInner() {
           ) : (
             <div className="p-4 flex flex-col gap-0">
 
-              {/* ── Hero banner ── */}
+              {/* Hero banner */}
               <div className="relative rounded-3xl overflow-hidden" style={{ aspectRatio: "16/7" }}>
-                <img
-                  src={bannerUrl}
-                  alt={selectedEvent.title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
+                <img src={bannerUrl} alt={selectedEvent.title} className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/40 to-transparent" />
-                {/* Badges */}
                 <div className="absolute top-4 left-5 flex items-center gap-2 flex-wrap">
                   <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full ${status?.style}`}>
                     {status?.label}
@@ -430,7 +375,6 @@ function EventsPageInner() {
                     </span>
                   )}
                 </div>
-                {/* Title */}
                 <div className="absolute bottom-0 left-0 right-0 p-5">
                   <Link href={`/events/${selectedEvent.id}`} className="group">
                     <h2 className="font-headline text-3xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-none mb-2 inline-block">
@@ -450,10 +394,10 @@ function EventsPageInner() {
                 </div>
               </div>
 
-              {/* ── Detail content — seamless continuation ── */}
+              {/* Detail sections */}
               <div className="flex flex-col divide-y divide-dark-lighter pb-6">
 
-                {/* Schedule & Config */}
+                {/* Schedule & config */}
                 <div className="grid grid-cols-2 py-7 gap-8">
                   <div>
                     <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Schedule</p>
@@ -467,7 +411,7 @@ function EventsPageInner() {
                   <div>
                     <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Race Config</p>
                     <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-2 leading-tight">
-                      {selectedEvent.format === "team" ? "Team" : selectedEvent.format === "both" ? "Individual & Team" : "Individual"}
+                      {formatCompetitionFormat(selectedEvent.format)}
                     </p>
                     {selectedEvent.distance && (
                       <p className="font-headline text-xs uppercase tracking-widest text-primary mb-2">{selectedEvent.distance}</p>
@@ -506,15 +450,13 @@ function EventsPageInner() {
                 {/* Overview */}
                 <div className="py-7">
                   <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">Event Overview</p>
-                  <p className="text-sm font-medium text-muted leading-relaxed mb-4">
-                    {selectedEvent.description}
-                  </p>
+                  <p className="text-sm font-medium text-muted leading-relaxed mb-4">{selectedEvent.description}</p>
                   <div className="flex flex-wrap gap-2">
                     <span className="font-headline text-xs font-medium uppercase tracking-widest text-dark bg-primary px-3 py-1 rounded-full">
                       {EVENT_TYPE_LABELS[selectedEvent.type]}
                     </span>
                     <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted border border-dark-lighter px-3 py-1 rounded-full">
-                      {selectedEvent.format === "team" ? "Team" : selectedEvent.format === "both" ? "Individual & Team" : "Individual"}
+                      {formatCompetitionFormat(selectedEvent.format)}
                     </span>
                     {selectedEvent.isOfficial && (
                       <span className="font-headline text-xs uppercase tracking-widest text-primary border border-primary/40 px-3 py-1 rounded-full">

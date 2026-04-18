@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
-import { useAuth } from "@/components/AuthProvider";
+import { getSavedEventIds, toggleSavedEventId } from "@/lib/client-lists";
 
 interface SaveEventButtonProps {
   eventId: string;
@@ -10,39 +10,21 @@ interface SaveEventButtonProps {
 }
 
 export default function SaveEventButton({ eventId, className = "" }: SaveEventButtonProps) {
-  const { user } = useAuth();
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    fetch("/api/user/save-event", { credentials: "include" })
-      .then((r) => r.json())
-      .then((ids: string[]) => {
-        if (Array.isArray(ids) && ids.includes(eventId)) setSaved(true);
-      })
-      .catch(() => {});
-  }, [user, eventId]);
+    setSaved(getSavedEventIds().includes(eventId));
+  }, [eventId]);
 
-  async function toggle(e: React.MouseEvent) {
+  function toggle(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-
     setLoading(true);
     try {
-      const res = await fetch("/api/user/save-event", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_id: eventId }),
-      });
-      const data = await res.json();
-      setSaved(data.saved);
+      const nowSaved = toggleSavedEventId(eventId);
+      setSaved(nowSaved);
     } finally {
       setLoading(false);
     }
