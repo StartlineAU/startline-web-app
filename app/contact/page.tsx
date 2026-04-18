@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Mail, Send, ExternalLink, Search } from "lucide-react";
+import { MapPin, Mail, Send, ExternalLink, Search, Instagram } from "lucide-react";
 import Link from "next/link";
 
 export default function ContactPage() {
@@ -12,18 +12,57 @@ export default function ContactPage() {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Could not send your message right now.");
+      }
+
+      setSubmitted(true);
+      setForm({ name: "", email: "", subject: "", message: "" });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Could not send your message right now."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <main className="min-h-screen bg-dark-darker">
 
       {/* ── HERO ── */}
-      <section className="bg-dark border-b border-dark-lighter">
-        <div className="max-w-[1440px] mx-auto px-6 pt-48 pb-12">
+      <section className="relative bg-dark overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: "url('/images/Contact-us-page.jpg')",
+            opacity: 0.225,
+            backgroundPosition: "calc(50% - 5cm) calc(50% - 0.25cm)",
+            backgroundSize: "180% auto",
+            backgroundRepeat: "no-repeat",
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-dark-darker/30 to-dark-darker" />
+        <div
+          className="relative max-w-[1440px] mx-auto px-6 pt-48 pb-12"
+          style={{ paddingBottom: "calc(3rem + 1cm)" }}
+        >
           <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4 flex items-center gap-3">
             <span className="w-10 h-px bg-primary inline-block" />
             Get In Touch
@@ -36,7 +75,10 @@ export default function ContactPage() {
       </section>
 
       {/* ── MAIN GRID ── */}
-      <section className="max-w-[1440px] mx-auto px-6 py-12">
+      <section
+        className="max-w-[1440px] mx-auto px-6 pb-12"
+        style={{ paddingTop: "calc(3rem - 0.5cm)" }}
+      >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
           {/* ── Contact Form ── */}
@@ -127,46 +169,51 @@ export default function ContactPage() {
                 <div className="pt-2">
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-10 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
                   >
-                    Send Message
+                    {isSubmitting ? "Sending..." : "Send Message"}
                     <Send className="w-4 h-4" />
                   </button>
+                  {submitError && (
+                    <p className="mt-4 text-sm text-red-400 font-headline">{submitError}</p>
+                  )}
                 </div>
               </form>
             )}
           </div>
 
           {/* ── Right side panels ── */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="lg:col-span-5 lg:justify-self-start flex flex-col gap-6 w-full lg:w-auto">
 
             {/* Location */}
-            <div className="bg-dark rounded-xl p-8">
+            <div className="bg-dark rounded-xl p-8 w-full lg:w-[26rem]">
               <div className="flex items-start justify-between mb-6">
                 <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-primary">
                   Our Location
                 </h3>
                 <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
               </div>
-              <p className="font-headline text-lg font-black italic tracking-tighter text-light mb-1">
-                Melbourne, Australia
-              </p>
-              <p className="text-muted text-sm leading-relaxed">
-                Collins Street Precinct<br />
-                Melbourne, VIC 3000
-              </p>
-
-              <div className="mt-6 relative h-40 overflow-hidden rounded-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=70"
-                  alt="Melbourne office"
-                  className="w-full h-full object-cover brightness-75 hover:brightness-90 transition-all duration-500"
-                />
+              <div>
+                <p className="font-headline text-lg font-black italic tracking-tighter text-light mb-4">
+                  Melbourne, Australia
+                </p>
+                <div
+                  className="relative overflow-hidden rounded-xl"
+                  style={{ marginTop: "0.375cm", height: "calc(14rem + 1.5cm)" }}
+                >
+                  <img
+                    src="/images/Location-photo.jpg"
+                    alt="Melbourne aerial view"
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: "center calc(50% - 1cm)" }}
+                  />
+                </div>
               </div>
             </div>
 
             {/* Contact details */}
-            <div className="bg-dark rounded-xl p-8">
+            <div className="bg-dark rounded-xl p-8 w-full lg:w-[26rem]">
               <div className="flex items-start justify-between mb-6">
                 <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-primary">
                   Contact Details
@@ -181,7 +228,7 @@ export default function ContactPage() {
                     Email
                   </p>
                   <p className="font-headline text-sm text-light group-hover:text-primary transition-colors">
-                    support@startline.com.au
+                    admin@startlineau.com
                   </p>
                 </div>
                 <ExternalLink className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
@@ -191,47 +238,19 @@ export default function ContactPage() {
               <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-3">
                 Follow Us
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-3">
                 <a
                   href="https://www.instagram.com/startlineau/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="border border-dark-lighter px-4 py-3 rounded-xl flex items-center justify-between group hover:border-primary/50 hover:text-light transition-colors"
+                  aria-label="StartLine Instagram"
+                  className="border border-dark-lighter p-2 rounded-xl inline-flex items-center justify-center self-start group hover:border-primary/50 hover:text-light transition-colors"
                 >
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted group-hover:text-light transition-colors">
-                    Instagram
-                  </span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted group-hover:text-primary transition-colors" />
-                </a>
-                <a
-                  href="https://www.tiktok.com/@startlineau"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="border border-dark-lighter px-4 py-3 rounded-xl flex items-center justify-between group hover:border-primary/50 hover:text-light transition-colors"
-                >
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted group-hover:text-light transition-colors">
-                    TikTok
-                  </span>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted group-hover:text-primary transition-colors" />
+                  <Instagram className="w-5 h-5 text-muted group-hover:text-primary transition-colors" />
                 </a>
               </div>
             </div>
 
-            {/* Browse events CTA */}
-            <Link
-              href="/events"
-              className="bg-dark border border-dark-lighter rounded-xl p-8 group hover:border-primary/40 transition-colors block"
-            >
-              <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-2">
-                Looking for an event?
-              </p>
-              <h3 className="font-headline text-xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors mb-1">
-                Browse the calendar.
-              </h3>
-              <p className="font-headline text-xs text-muted uppercase tracking-widest">
-                HYROX · CrossFit · Running · Hybrid
-              </p>
-            </Link>
           </div>
         </div>
       </section>
