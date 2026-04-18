@@ -8,7 +8,10 @@
       "Bash(taskkill:*)",
       "Bash(cmd.exe:*)",
       "Bash(curl:*)",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "Bash(npm uninstall *)",
+      "Bash(grep -E \"\\(^[^/]*$|app/|components/|lib/|types/|data/\\)\")",
+      "Bash(npx tsc *)"
     ]
   }
 }

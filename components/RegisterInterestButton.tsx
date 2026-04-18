@@ -2,45 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { CheckCircle, Bell } from "lucide-react";
-import { useAuth } from "@/components/AuthProvider";
+import { addRegisteredInterest, getRegisteredEventIds } from "@/lib/client-lists";
 
 interface RegisterInterestButtonProps {
   eventId: string;
-  eventTitle: string;
 }
 
-export default function RegisterInterestButton({ eventId, eventTitle }: RegisterInterestButtonProps) {
-  const { user } = useAuth();
+export default function RegisterInterestButton({ eventId }: RegisterInterestButtonProps) {
   const [registered, setRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    fetch("/api/user/register", { credentials: "include" })
-      .then((r) => r.json())
-      .then((ids: string[]) => {
-        if (Array.isArray(ids) && ids.includes(eventId)) setRegistered(true);
-      })
-      .catch(() => {});
-  }, [user, eventId]);
+    setRegistered(getRegisteredEventIds().includes(eventId));
+  }, [eventId]);
 
-  async function handleRegister() {
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-
+  function handleRegister() {
     if (registered) return;
 
     setLoading(true);
     try {
-      const res = await fetch("/api/user/register", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_id: eventId, event_title: eventTitle }),
-      });
-      if (res.ok) setRegistered(true);
+      if (addRegisteredInterest(eventId)) {
+        setRegistered(true);
+      }
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { MapPin, Zap, ArrowRight, Calendar, Search } from "lucide-react";
+import { MapPin, Search, Calendar } from "lucide-react";
 import eventsData from "@/data/events.json";
 import { FitnessEvent, EVENT_TYPE_LABELS } from "@/types";
 import { formatShortDate, truncateTitle } from "@/lib/utils";
+import { getEventImage, getCategoryImage } from "@/lib/images";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
@@ -10,46 +11,20 @@ import { fetchAllEvents } from "@/lib/supabase";
 
 export const revalidate = 60;
 
-const TYPE_IMAGES: Record<string, string[]> = {
-  hyrox: [
-    "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=800&q=70",
-    "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=800&q=70",
-    "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=800&q=70",
-  ],
-  crossfit: [
-    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=70",
-    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=70",
-    "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=800&q=70",
-  ],
-  running: [
-    "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=800&q=70",
-    "https://images.unsplash.com/photo-1502904550040-7534597429ae?w=800&q=70",
-    "https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&q=70",
-  ],
-  hybrid: [
-    "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=800&q=70",
-    "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=800&q=70",
-    "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=800&q=70",
-  ],
-};
+const CATEGORIES = [
+  { type: "hyrox",    label: "HYROX",    description: "The World Series of Fitness Racing" },
+  { type: "running",  label: "Running",  description: "5K to Ultramarathon" },
+  { type: "crossfit", label: "CrossFit", description: "Functional Fitness Competitions" },
+  { type: "hybrid",   label: "Hybrid",   description: "Multi-Discipline & OCR Events" },
+] as const;
 
-const CATEGORY_HERO: Record<string, string> = {
-  hyrox:   "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=600&q=80",
-  running: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=600&q=80",
-  crossfit:"https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&q=80",
-  hybrid:  "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=600&q=80",
-};
-
-function getEventImage(type: string, id: string): string {
-  const pool = TYPE_IMAGES[type] ?? TYPE_IMAGES.running;
-  return pool[id.charCodeAt(id.length - 1) % pool.length];
-}
+const EVENT_TYPE_ORDER = ["hyrox", "running", "crossfit", "hybrid"] as const;
 
 export default async function Home() {
   const liveEvents = await fetchAllEvents();
   const jsonEvents = eventsData.events as FitnessEvent[];
 
-  // Merge so all events have full placeholder data
+  // Merge so all events have full catalog detail fields
   const events: FitnessEvent[] = liveEvents.length > 0
     ? liveEvents.map((live) => {
         const json = jsonEvents.find((j) => j.id === live.id);
@@ -57,12 +32,10 @@ export default async function Home() {
       })
     : jsonEvents;
 
-  const categories = [
-    { type: "hyrox",    label: "HYROX",    description: "The World Series of Fitness Racing" },
-    { type: "running",  label: "Running",  description: "5K to Ultramarathon" },
-    { type: "crossfit", label: "CrossFit", description: "Functional Fitness Competitions" },
-    { type: "hybrid",   label: "Hybrid",   description: "Multi-Discipline & OCR Events" },
-  ].map((c) => ({ ...c, count: events.filter((e) => e.type === c.type).length }));
+  const categories = CATEGORIES.map((c) => ({
+    ...c,
+    count: events.filter((e) => e.type === c.type).length,
+  }));
 
   return (
     <main className="min-h-screen bg-dark-darker">
@@ -78,15 +51,13 @@ export default async function Home() {
             Find Your <span className="text-primary">Start Line.</span>
           </h1>
           <p className="font-headline text-base font-medium text-muted max-w-2xl leading-relaxed mb-0">
-            Fitness event discovery made easy - search, filter and register in seconds.
+            Fitness event discovery made easy — search, filter and register in seconds.
           </p>
           <HeroSearch />
         </div>
       </section>
 
-      {/* ════════════════════════════════════════
-          MOST POPULAR EVENTS  carousel
-      ════════════════════════════════════════ */}
+      {/* ── MOST POPULAR EVENTS ── */}
       <section className="max-w-[1440px] mx-auto px-6 py-16">
         <ScrollCarousel
           eyebrow="Trending Now"
@@ -104,20 +75,17 @@ export default async function Home() {
                 className="group flex-shrink-0 w-[260px] sm:w-[280px]"
                 style={{ scrollSnapAlign: "start" }}
               >
-                {/* Image */}
                 <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3 rounded-3xl">
                   <img
                     src={img}
                     alt={event.title}
                     className="w-full h-full object-cover brightness-75 group-hover:brightness-90 transition-all duration-500"
                   />
-                  {/* Type badge */}
                   <div className="absolute top-3 left-3">
                     <span className="font-headline text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
                       {EVENT_TYPE_LABELS[event.type]}
                     </span>
                   </div>
-                  {/* Official badge */}
                   {event.isOfficial && (
                     <div className="absolute top-3 right-3">
                       <span className="font-headline text-[10px] font-bold uppercase tracking-widest border border-primary/60 text-primary px-2 py-1 bg-dark/60 backdrop-blur-sm rounded-full">
@@ -126,14 +94,10 @@ export default async function Home() {
                     </div>
                   )}
                 </div>
-
-                {/* Text below image — Airbnb style */}
                 <div className="px-0.5">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="font-headline text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight flex-1">
-                      {truncateTitle(event.title)}
-                    </h3>
-                  </div>
+                  <h3 className="font-headline text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1">
+                    {truncateTitle(event.title)}
+                  </h3>
                   <div className="flex items-center gap-1.5 font-headline text-xs text-muted uppercase tracking-widest mb-0.5">
                     <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
                     {event.city}, {event.state.toUpperCase()}
@@ -154,14 +118,11 @@ export default async function Home() {
         </ScrollCarousel>
       </section>
 
-      {/* ════════════════════════════════════════
-          CATEGORY  carousel
-      ════════════════════════════════════════ */}
+      {/* ── EVENT CATEGORIES ── */}
       <section className="max-w-[1440px] mx-auto px-6 pb-16">
         <ScrollCarousel
           eyebrow="Browse by Discipline"
           title="Event Categories"
-          imageAspect="1/1"
           arrowTopClass="top-[110px]"
         >
           {categories.map((cat) => (
@@ -171,23 +132,19 @@ export default async function Home() {
               className="group flex-shrink-0 w-[220px] sm:w-[260px]"
               style={{ scrollSnapAlign: "start" }}
             >
-              {/* Square image */}
               <div className="relative w-full aspect-square overflow-hidden bg-dark mb-3 rounded-3xl">
                 <img
-                  src={CATEGORY_HERO[cat.type]}
+                  src={getCategoryImage(cat.type)}
                   alt={cat.label}
                   className="w-full h-full object-cover brightness-50 group-hover:brightness-75 transition-all duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-darker/80 to-transparent" />
-                {/* Overlaid count */}
                 <div className="absolute bottom-3 left-3">
                   <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary">
                     {cat.count} events
                   </span>
                 </div>
               </div>
-
-              {/* Text */}
               <div className="px-0.5">
                 <h3 className="font-headline text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors mb-0.5">
                   {cat.label}
@@ -199,10 +156,8 @@ export default async function Home() {
         </ScrollCarousel>
       </section>
 
-      {/* ════════════════════════════════════════
-          UPCOMING BY TYPE  — quick row per type
-      ════════════════════════════════════════ */}
-      {(["hyrox", "running", "crossfit", "hybrid"] as const).map((type) => {
+      {/* ── PER-DISCIPLINE CAROUSELS ── */}
+      {EVENT_TYPE_ORDER.map((type) => {
         const typeEvents = events.filter((e) => e.type === type);
         if (typeEvents.length === 0) return null;
         return (

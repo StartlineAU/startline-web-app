@@ -7,7 +7,9 @@ import {
   Camera, FileText, Accessibility, ParkingCircle,
 } from "lucide-react";
 import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
-import { formatTime, formatShortDate } from "@/lib/utils";
+import { formatTime, formatShortDate, formatCompetitionFormat, formatExperienceLevel } from "@/lib/utils";
+import { getEventImage, getAlternateEventImage, getTypeImageArray } from "@/lib/images";
+import { getEventStatus } from "@/lib/event-status";
 import { fetchAllEvents } from "@/lib/supabase";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { SectionNav } from "@/components/ui/SectionNav";
@@ -17,50 +19,8 @@ import SaveEventButton from "@/components/SaveEventButton";
 
 export const dynamic = "force-dynamic";
 
-const TYPE_IMAGES: Record<string, string[]> = {
-  hyrox: [
-    "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1920&q=80",
-    "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=1920&q=80",
-    "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1920&q=80",
-  ],
-  crossfit: [
-    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920&q=80",
-    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1920&q=80",
-    "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=1920&q=80",
-  ],
-  running: [
-    "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1920&q=80",
-    "https://images.unsplash.com/photo-1502904550040-7534597429ae?w=1920&q=80",
-    "https://images.unsplash.com/photo-1544717305-2782549b5136?w=1920&q=80",
-  ],
-  hybrid: [
-    "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=1920&q=80",
-    "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=1920&q=80",
-    "https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=1920&q=80",
-  ],
-};
-
-function getBannerImage(type: string, id: string): string {
-  const pool = TYPE_IMAGES[type] ?? TYPE_IMAGES.running;
-  return pool[id.charCodeAt(id.length - 1) % pool.length];
-}
-
-function getRelatedImage(type: string, id: string): string {
-  const pool = TYPE_IMAGES[type] ?? TYPE_IMAGES.running;
-  return pool[(id.charCodeAt(0) + id.charCodeAt(id.length - 1)) % pool.length];
-}
-
 interface EventDetailPageProps {
   params: Promise<{ id: string }>;
-}
-
-function getStatusLabel(event: FitnessEvent): { label: string; style: string } {
-  const daysUntil = Math.ceil(
-    (new Date(event.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  );
-  if (daysUntil < 0)   return { label: "Registration Closed", style: "bg-dark-lighter text-muted" };
-  if (daysUntil <= 14) return { label: "Selling Fast",         style: "bg-primary text-dark" };
-  return                       { label: "Live Registration",   style: "bg-primary text-dark" };
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -94,16 +54,14 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 
   const typeLabel  = EVENT_TYPE_LABELS[event.type];
   const stateLabel = STATE_LABELS[event.state];
-  const status     = getStatusLabel(event);
+  const status     = getEventStatus(event);
   const [day, month] = formatShortDate(event.date).split(" ");
-  const bannerUrl  = getBannerImage(event.type, event.id);
-  const heroImages = TYPE_IMAGES[event.type] ?? TYPE_IMAGES.running;
+  const bannerUrl  = getEventImage(event.type, event.id, 1920, 80);
+  const heroImages = getTypeImageArray(event.type);
   const mapsUrl    = `https://maps.google.com/?q=${encodeURIComponent(
     (event.streetAddress ? event.streetAddress + ", " : "") + event.location + ", " + event.city + ", Australia"
   )}`;
-  const formatLabel =
-    event.format === "team" ? "Team" :
-    event.format === "both" ? "Individual & Team" : "Individual";
+  const formatLabel = formatCompetitionFormat(event.format);
 
   const relatedEvents = events
     .filter((e) => e.id !== event.id && e.type === event.type)
@@ -166,7 +124,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 >
                   REGISTER NOW <ExternalLink className="w-6 h-6" />
                 </a>
-                <RegisterInterestButton eventId={event.id} eventTitle={event.title} />
+                <RegisterInterestButton eventId={event.id} />
                 <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm w-12 h-12" />
               </div>
             </div>
@@ -247,7 +205,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 <div>
                   <span className="font-headline text-xs tracking-widest text-muted uppercase mb-2 block">Level</span>
                   <span className="font-headline text-2xl font-black italic text-light">
-                    {event.level === "elite" ? "Elite" : event.level === "beginner" ? "Beginner" : "Open"}
+                    {formatExperienceLevel(event.level)}
                   </span>
                 </div>
                 <div className="mt-auto">
@@ -682,7 +640,7 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {relatedEvents.map((related) => {
                 const [relDay, relMonth] = formatShortDate(related.date).split(" ");
-                const relImg = getRelatedImage(related.type, related.id);
+                const relImg = getAlternateEventImage(related.type, related.id);
                 return (
                   <Link key={related.id} href={`/events/${related.id}`} className="group bg-dark rounded-2xl overflow-hidden hover:ring-2 hover:ring-primary/50 transition-all">
                     <div className="relative h-48 overflow-hidden">

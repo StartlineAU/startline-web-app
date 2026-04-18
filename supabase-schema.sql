@@ -1,9 +1,9 @@
 -- ============================================================
--- StartLine: Auth0 + Supabase schema setup
+-- StartLine: Supabase schema setup (reference / optional migrations)
 -- Run this in the Supabase SQL Editor (Dashboard > SQL Editor)
 -- ============================================================
 
--- 1. Profiles table (linked to Auth0 users by sub)
+-- 1. Profiles table (legacy: auth0_sub column name retained for existing DBs)
 CREATE TABLE IF NOT EXISTS profiles (
   auth0_sub TEXT PRIMARY KEY,
   role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'organiser')),

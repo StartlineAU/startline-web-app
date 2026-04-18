@@ -56,9 +56,8 @@ export default function Footer() {
               </h4>
               <div className="space-y-2">
                 {[
-                  { href: "/organiser/events/new", label: "Submit Event" },
+                  { href: "/contact", label: "Contact & submissions" },
                   { href: "/about", label: "About" },
-                  { href: "/contact", label: "Contact" },
                 ].map((link) => (
                   <Link
                     key={link.href}
