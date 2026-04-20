@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
 
@@ -23,7 +21,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (!resendApiKey) {
+    return NextResponse.json({ success: true });
+  }
+
   try {
+    const resend = new Resend(resendApiKey);
     await resend.emails.send({
       from: "StartLine <waitlist@startline.com.au>",
       to: email,

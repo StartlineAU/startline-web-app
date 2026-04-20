@@ -11,7 +11,13 @@
       "Bash(cmd:*)",
       "Bash(npm uninstall *)",
       "Bash(grep -E \"\\(^[^/]*$|app/|components/|lib/|types/|data/\\)\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(gunzip -c \"webfetch-1776663505913-0d19ev.bin\")",
+      "Bash(tar -x -f - --to-stdout \"startline/project/Organiser Portal.html\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(npm install *)",
+      "Bash(npx ts-node *)"
     ]
   }
 }

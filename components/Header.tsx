@@ -9,6 +9,7 @@ import { Menu, X } from "lucide-react";
 const navItems = [
   { href: "/", label: "HOME" },
   { href: "/events", label: "EVENTS" },
+  { href: "/organiser", label: "ORGANISERS" },
   { href: "/about", label: "ABOUT" },
   { href: "/contact", label: "CONTACT" },
 ];
@@ -55,12 +56,12 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button
-            disabled
-            className="hidden md:inline font-headline text-[14px] font-bold text-muted border border-dark-lighter px-4 py-1.5 rounded opacity-50 cursor-not-allowed"
+          <Link
+            href="/organiser"
+            className="hidden md:inline font-headline text-[14px] font-bold text-muted border border-dark-lighter px-4 py-1.5 rounded hover:border-primary/60 hover:text-light transition-colors"
           >
             SIGN IN
-          </button>
+          </Link>
         </div>
 
         {/* Mobile menu button */}
@@ -87,12 +88,13 @@ export default function Header() {
                 {item.label}
               </Link>
             ))}
-            <button
-              disabled
-              className="font-headline text-sm font-bold text-muted border border-dark-lighter px-4 py-3 text-center mt-2 rounded opacity-50 cursor-not-allowed"
+            <Link
+              href="/organiser"
+              className="font-headline text-sm font-bold text-muted border border-dark-lighter px-4 py-3 text-center mt-2 rounded hover:border-primary/60 hover:text-light transition-colors"
+              onClick={() => setIsMenuOpen(false)}
             >
               SIGN IN
-            </button>
+            </Link>
           </div>
         </div>
       )}

@@ -223,3 +223,66 @@ input[type="radio"] {
 .animate-pulse-dot {
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
+
+/* ── Organiser portal utilities ───────────────────────────── */
+.placeholder-stripes {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255,255,255,.03) 0 8px,
+    rgba(255,255,255,.06) 8px 16px
+  );
+}
+
+.scan-grid {
+  background-image:
+    linear-gradient(rgba(179,225,83,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(179,225,83,.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.hero-topo {
+  background:
+    radial-gradient(ellipse 60% 80% at 75% 20%, rgba(179,225,83,.14), transparent 70%),
+    radial-gradient(ellipse 80% 60% at 15% 80%, rgba(179,225,83,.08), transparent 70%),
+    repeating-linear-gradient(-20deg,
+      rgba(179,225,83,.03) 0 2px,
+      transparent 2px 24px),
+    linear-gradient(180deg, rgb(var(--color-darker)) 0%, rgb(var(--color-dark)) 100%);
+}
+
+.step-line {
+  background-image: linear-gradient(90deg, rgb(var(--color-dark-lighter)) 50%, transparent 0);
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+  background-position: 0 50%;
+}
+
+.nav-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: rgb(var(--color-primary));
+}
+
+.chip {
+  border: 1px solid rgb(var(--color-dark-lighter));
+  color: rgb(var(--color-muted-light));
+}
+
+.chip-active {
+  border-color: rgb(var(--color-primary));
+  color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary) / 0.08);
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.anim-fade-slide {
+  animation: fadeSlide .35s ease-out both;
+}
