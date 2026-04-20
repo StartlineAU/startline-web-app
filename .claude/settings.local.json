@@ -17,7 +17,8 @@
       "Bash(tar -x -f - --to-stdout \"startline/project/Organiser Portal.html\")",
       "Bash(grep -v \"^$\")",
       "Bash(npm install *)",
-      "Bash(npx ts-node *)"
+      "Bash(npx ts-node *)",
+      "Bash(npx create-video@latest:*)"
     ]
   }
 }

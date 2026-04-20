@@ -8,17 +8,20 @@ export async function GET() {
   const session = await getOrganiserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
-  const events = await prisma.event.findMany({
-    where:   { organiserId: session.sub },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true, title: true, discipline: true, city: true, state: true,
-      eventDate: true, status: true, createdAt: true,
-      waves: true, registrationUrl: true,
-    },
-  });
-
-  return NextResponse.json(events);
+  try {
+    const events = await prisma.event.findMany({
+      where:   { organiserId: session.sub },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, title: true, discipline: true, city: true, state: true,
+        eventDate: true, status: true, createdAt: true,
+        waves: true, registrationUrl: true,
+      },
+    });
+    return NextResponse.json(events);
+  } catch {
+    return NextResponse.json([]);
+  }
 }
 
 export async function POST(req: NextRequest) {
