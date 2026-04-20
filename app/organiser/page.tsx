@@ -27,8 +27,10 @@ function SignInForm() {
         body:    JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      if (!res.ok) { setError(data.error ?? "Sign in failed. Please try again."); return; }
       router.push(data.redirect);
+    } catch {
+      setError("Something went wrong. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

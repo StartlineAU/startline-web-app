@@ -72,6 +72,9 @@ export async function clearAdminCookie() {
 }
 
 export async function getOrganiserSession(): Promise<TokenPayload | null> {
+  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
+    return { sub: "dev-organiser-id", role: "organiser", email: "dev@example.com", status: "APPROVED" };
+  }
   const jar   = await cookies();
   const token = jar.get(ORGANISER_COOKIE)?.value;
   if (!token) return null;

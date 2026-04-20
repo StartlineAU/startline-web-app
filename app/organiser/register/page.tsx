@@ -29,8 +29,10 @@ export default function RegisterPage() {
         body:    JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      if (!res.ok) { setError(data.error ?? "Registration failed. Please try again."); return; }
       router.push("/organiser/verify-email");
+    } catch {
+      setError("Something went wrong. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

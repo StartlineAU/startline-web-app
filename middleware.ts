@@ -27,6 +27,11 @@ async function getPayload(token: string | undefined) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // ── Dev bypass ──────────────────────────────────────────────────────────────
+  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
+    return NextResponse.next();
+  }
+
   // ── Admin routes ────────────────────────────────────────────────────────────
   if (ADMIN_PROTECTED.some((p) => pathname.startsWith(p))) {
     const token   = req.cookies.get("sl-admin-token")?.value;
