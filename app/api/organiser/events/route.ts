@@ -15,7 +15,7 @@ export async function GET() {
       select: {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, status: true, createdAt: true,
-        waves: true, registrationUrl: true,
+        waves: true, registrationUrl: true, cap: true,
       },
     });
     return NextResponse.json(events);

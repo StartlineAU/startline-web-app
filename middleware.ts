@@ -6,7 +6,7 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 // Routes an approved organiser can access
-const ORGANISER_PROTECTED = ["/organiser/dashboard", "/organiser/new-listing"];
+const ORGANISER_PROTECTED = ["/organiser/dashboard", "/organiser/listings", "/organiser/profile", "/organiser/new-listing"];
 
 // Routes only accessible after email verification + profile completion
 const ONBOARDING_ROUTES = ["/organiser/onboarding"];
@@ -28,7 +28,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // ── Dev bypass ──────────────────────────────────────────────────────────────
-  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
+  if (process.env.NODE_ENV === "development") {
     return NextResponse.next();
   }
 
@@ -81,6 +81,8 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/organiser/dashboard/:path*",
+    "/organiser/listings/:path*",
+    "/organiser/profile/:path*",
     "/organiser/new-listing/:path*",
     "/organiser/onboarding/:path*",
     "/admin/dashboard/:path*",
