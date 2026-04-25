@@ -15,7 +15,7 @@ export async function GET() {
       select: {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, status: true, createdAt: true,
-        waves: true, registrationUrl: true, cap: true,
+        waves: true, registrationUrl: true, cap: true, isPinned: true,
       },
     });
     return NextResponse.json(events);
@@ -34,22 +34,35 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { submit, ...data } = body;
 
-  const required = ["title", "discipline", "eventDate", "startTime", "endTime", "venue", "city", "state", "format", "level", "registrationUrl"];
-  for (const field of required) {
-    if (!data[field]) {
-      return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+  // Only enforce required fields when submitting for review — drafts can be partial
+  if (submit) {
+    const required = ["title", "discipline", "eventDate", "startTime", "endTime", "venue", "city", "state", "format", "level", "registrationUrl"];
+    for (const field of required) {
+      if (!data[field]) {
+        return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+      }
+    }
+  } else {
+    // Drafts still need at minimum a title
+    if (!data.title?.trim()) {
+      return NextResponse.json({ error: "A title is required to save a draft." }, { status: 400 });
     }
   }
 
-  const event = await prisma.event.create({
-    data: {
-      ...data,
-      organiserId: session.sub,
-      categories:  data.categories  ?? [],
-      waves:       data.waves        ?? [],
-      status:      submit ? "PENDING" : "DRAFT",
-    },
-  });
+  try {
+    const event = await prisma.event.create({
+      data: {
+        ...data,
+        organiserId: session.sub,
+        categories:  data.categories  ?? [],
+        waves:       data.waves        ?? [],
+        status:      submit ? "PENDING" : "DRAFT",
+      },
+    });
 
-  return NextResponse.json({ id: event.id, status: event.status });
+    return NextResponse.json({ id: event.id, status: event.status });
+  } catch (err) {
+    console.error("Event create error:", err);
+    return NextResponse.json({ error: "Failed to save event." }, { status: 500 });
+  }
 }

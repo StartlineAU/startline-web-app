@@ -77,7 +77,7 @@ function EventCard({ event }: { event: FitnessEvent }) {
           <span className={`font-headline text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${status.style}`}>
             {status.label}
           </span>
-          <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted group-hover:text-primary flex items-center gap-1 transition-colors">
+          <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted group-hover:text-primary flex items-center gap-1 transition-colors">
             View event <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
           </span>
         </div>
@@ -120,20 +120,27 @@ export default async function EventsPage() {
         <header className="relative overflow-hidden border-b border-dark-lighter">
           <div className="absolute inset-0 hero-topo" />
           <div className="absolute inset-0 scan-grid opacity-30" />
-          <div className="relative max-w-[1440px] mx-auto px-6 lg:px-8 py-20">
+          <div className="relative max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20">
             <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4 flex items-center gap-3">
               <span className="w-8 h-px bg-primary" /> Australia&apos;s fitness calendar
             </div>
-            <h1 className="font-headline text-5xl lg:text-7xl font-black italic tracking-tighter leading-none mb-4">
+            <h1 className="font-headline text-4xl sm:text-5xl lg:text-7xl font-black italic tracking-tighter leading-none mb-4">
               Find your next<br /><span className="text-primary">competition.</span>
             </h1>
             <p className="text-muted text-[15px] lg:text-[17px] max-w-xl leading-relaxed">
               {upcoming.length} upcoming event{upcoming.length !== 1 ? "s" : ""} across Australia — HYROX, CrossFit, running and hybrid fitness.
             </p>
+            {/* Mobile CTA */}
+            <a
+              href="#upcoming"
+              className="mt-6 inline-flex items-center gap-2 sm:hidden bg-primary text-dark font-headline font-black italic text-[14px] uppercase tracking-widest px-5 py-3 rounded-md"
+            >
+              Browse {upcoming.length} events <ArrowRight className="w-4 h-4" />
+            </a>
           </div>
         </header>
 
-        <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-12">
+        <main id="upcoming" className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
           {/* Upcoming */}
           {upcoming.length > 0 && (
             <section className="mb-16">

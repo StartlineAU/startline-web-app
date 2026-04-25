@@ -6,6 +6,9 @@ import { CalendarDays, User, ArrowRight, MapPin } from "lucide-react";
 import OrganiserSidebar from "@/components/organiser/Sidebar";
 import OrganiserTopBar  from "@/components/organiser/TopBar";
 
+// Page title — picked up by app/organiser/layout.tsx template → "Dashboard | Startline Organiser"
+export const dynamic = "force-dynamic";
+
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
 interface EventRow {
@@ -87,7 +90,7 @@ export default function DashboardPage() {
       <div className="flex pt-16">
         <OrganiserSidebar />
 
-        <main className="flex-1 min-w-0 p-6 lg:p-10 page-in">
+        <main className="flex-1 min-w-0 p-6 lg:p-10 pb-24 lg:pb-10 page-in">
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-10">
             <div>
@@ -192,17 +195,6 @@ export default function DashboardPage() {
                   <QuickAction icon={CalendarDays} label="View all events" hint="Manage your listings"     href="/organiser/listings" />
                   <QuickAction icon={User}         label="Edit my profile" hint="Bio, logo, socials"       href="/organiser/profile"  />
                 </div>
-              </section>
-
-              <section className="bg-dark border border-dark-lighter rounded-lg p-5 stagger-item" style={{ animationDelay: "320ms" }}>
-                <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary mb-2">Helpful tip</div>
-                <div className="text-[14px] text-light leading-relaxed mb-4">
-                  Events with a cover image and a clear tagline get{" "}
-                  <span className="text-primary font-semibold">38% more sign‑ups</span>.
-                </div>
-                <button className="font-headline text-[11px] uppercase tracking-widest text-light hover:text-primary flex items-center gap-1 transition-colors">
-                  Read more <ArrowRight className="w-3 h-3" />
-                </button>
               </section>
             </aside>
           </div>

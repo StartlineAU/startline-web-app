@@ -82,7 +82,7 @@ export default function ListingsPage() {
       <div className="flex pt-16">
         <OrganiserSidebar />
 
-        <main className="flex-1 min-w-0 p-6 lg:p-10 page-in">
+        <main className="flex-1 min-w-0 p-6 lg:p-10 pb-24 lg:pb-10 page-in">
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-8">
             <div>
