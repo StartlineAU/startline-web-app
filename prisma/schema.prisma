@@ -1,6 +1,3 @@
-// Prisma schema for local development using SQLite
-// run `npx prisma migrate dev --name init` to create the database
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,4 +12,35 @@ model User {
   email     String   @unique
   password  String
   createdAt DateTime @default(now())
+}
+
+model WaitlistSubscriber {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("waitlist_subscribers")
+}
+
+model Event {
+  id              Int      @id @default(autoincrement())
+  title           String
+  description     String
+  date            DateTime @db.Date
+  time            String
+  endTime         String?  @map("end_time")
+  location        String
+  city            String
+  state           String
+  type            String
+  format          String
+  level           String
+  image           String
+  registrationUrl String   @map("registration_url")
+  organizer       String?
+  distance        String?
+  isOfficial      Boolean  @default(false) @map("is_official")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("events")
 }

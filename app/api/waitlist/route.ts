@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { Resend } from "resend";
-import { supabase } from "@/lib/supabase";
+import prisma from "@/lib/prisma";
 
 function getResend() {
   const key = process.env.RESEND_API_KEY;
@@ -15,15 +16,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
   }
 
-  const { error: dbError } = await supabase
-    .from("waitlist_subscribers")
-    .insert({ email });
-
-  if (dbError) {
-    if (dbError.code === "23505") {
+  try {
+    await prisma.waitlistSubscriber.create({ data: { email } });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return NextResponse.json({ error: "You're already on the waitlist!" }, { status: 409 });
     }
-    console.error("DB error:", dbError);
+    console.error("DB error:", e);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 
