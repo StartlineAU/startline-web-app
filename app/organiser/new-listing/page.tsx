@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, Check, Plus, Trash2,
   Upload, Info, X, MapPin, Calendar, Users,
-  ChevronDown, ChevronLeft, ChevronRight, Clock,
+  ChevronDown, ChevronLeft, ChevronRight, Clock, Eye,
+  Ticket, Package, ShoppingBag, Tag, ExternalLink,
 } from "lucide-react";
 import OrganiserSidebar from "@/components/organiser/Sidebar";
 import OrganiserTopBar  from "@/components/organiser/TopBar";
@@ -1382,6 +1383,264 @@ function LivePreview({ form }: { form: FormState }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   FULL EVENT PAGE PREVIEW
+   ══════════════════════════════════════════════════════════════ */
+const STATE_LABELS_PREVIEW: Record<string, string> = {
+  nsw: "NSW", vic: "VIC", qld: "QLD", wa: "WA",
+  sa: "SA", tas: "TAS", act: "ACT", nt: "NT",
+};
+const FORMAT_LABELS_PREVIEW: Record<string, string> = {
+  individual: "Individual", team: "Team / Pairs", both: "Individual & Team",
+};
+const LEVEL_LABELS_PREVIEW: Record<string, string> = {
+  beginner: "Beginner Friendly", open: "Open (All Levels)", elite: "Elite / Pro",
+};
+
+function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => void }) {
+  const discipline = DISC_LABEL[form.discipline] || "—";
+  const stateLabel = STATE_LABELS_PREVIEW[form.state] || form.state.toUpperCase();
+  const formatLabel = FORMAT_LABELS_PREVIEW[form.format] || "—";
+  const levelLabel = LEVEL_LABELS_PREVIEW[form.level] || "—";
+  const ageLabel = form.minAge === "0" ? "Open to all" : form.minAge ? `${form.minAge}+` : "—";
+
+  const dateLabel = (() => {
+    if (!form.date) return "Date TBC";
+    const d = new Date(form.date);
+    const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+    if (form.endDate && form.endDate !== form.date) {
+      const e = new Date(form.endDate);
+      return `${d.toLocaleDateString("en-AU", { day: "numeric", month: "long" })} – ${e.toLocaleDateString("en-AU", opts)}`;
+    }
+    return d.toLocaleDateString("en-AU", opts);
+  })();
+
+  const inclusions = form.inclusions
+    ? form.inclusions.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const titleWords = (form.title || "Your Event Title").split(" ");
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col overlay-in">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="relative flex flex-col w-full h-full overflow-hidden modal-in">
+        {/* Top bar */}
+        <div className="relative z-10 flex items-center justify-between px-5 py-3 bg-dark-darker/95 backdrop-blur border-b border-dark-lighter shrink-0">
+          <div className="flex items-center gap-3">
+            <Eye className="w-4 h-4 text-primary" />
+            <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Athlete view preview</span>
+            <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark hidden sm:block">— This is how your listing will appear to athletes</span>
+          </div>
+          <button onClick={onClose}
+            className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors">
+            <X className="w-4 h-4" /> Close preview
+          </button>
+        </div>
+
+        {/* Scrollable page mock */}
+        <div className="relative flex-1 overflow-y-auto bg-dark-darker">
+
+          {/* Hero */}
+          <section className="relative h-72 sm:h-96 w-full overflow-hidden flex items-end">
+            <div className="absolute inset-0 bg-gradient-to-br from-dark via-dark-lighter to-dark-darker" />
+            {/* Grid texture */}
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "linear-gradient(#d4ff00 1px, transparent 1px), linear-gradient(90deg, #d4ff00 1px, transparent 1px)", backgroundSize: "60px 60px" }} />
+            <div className="relative z-10 w-full px-6 sm:px-10 pb-8 sm:pb-12">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {form.discipline && (
+                  <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-dark bg-primary px-3 py-1 rounded-full">{discipline}</span>
+                )}
+                <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary border border-primary/40 px-2.5 py-1 rounded-full">Draft</span>
+              </div>
+              <h1 className="font-headline text-4xl sm:text-6xl font-black italic tracking-tighter leading-none mb-3 text-light">
+                {titleWords.map((word, i) =>
+                  i === titleWords.length - 1
+                    ? <span key={i} className="text-primary"> {word}</span>
+                    : <span key={i}>{i > 0 ? " " : ""}{word}</span>
+                )}
+              </h1>
+              <p className="font-headline font-medium text-muted max-w-xl text-[14px] leading-relaxed mb-5">
+                {form.tagline || "Your event tagline will appear here."}
+              </p>
+              <span className="inline-flex items-center gap-3 bg-primary/20 border border-primary/30 text-primary font-headline text-[12px] font-black uppercase tracking-widest px-6 py-3 rounded-xl cursor-default">
+                Register Now <ExternalLink className="w-4 h-4" />
+              </span>
+            </div>
+          </section>
+
+          {/* Quick stats */}
+          <div className="px-5 sm:px-10 py-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { icon: <Calendar className="w-4 h-4 text-primary" />, label: "Date", value: dateLabel },
+                { icon: <Clock className="w-4 h-4 text-primary" />, label: "Start time", value: form.startTime ? fmt24to12(form.startTime) : "TBC" },
+                { icon: <MapPin className="w-4 h-4 text-primary" />, label: "Location", value: form.city ? `${form.city}, ${stateLabel}` : "Location TBC" },
+                { icon: <Users className="w-4 h-4 text-primary" />, label: "Format", value: formatLabel },
+              ].map(s => (
+                <div key={s.label} className="bg-dark rounded-xl px-4 py-3 flex items-center gap-3">
+                  {s.icon}
+                  <div>
+                    <span className="font-headline text-[10px] tracking-widest text-muted uppercase block">{s.label}</span>
+                    <span className="font-headline text-[13px] font-black text-light">{s.value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="px-5 sm:px-10 pb-16 space-y-4">
+
+            {/* 01 Overview */}
+            <PreviewSection number="01" title="Event Overview">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 bg-dark rounded-xl p-5">
+                  <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 block">About This Event</span>
+                  <p className="font-headline text-[13px] font-medium text-muted leading-relaxed">
+                    {form.description || <span className="italic text-muted-dark">Full description will appear here.</span>}
+                  </p>
+                </div>
+                <div className="bg-dark rounded-xl p-5 border-l-4 border-primary flex flex-col gap-4">
+                  <div>
+                    <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-2 block">Discipline</span>
+                    {form.discipline
+                      ? <span className="bg-primary text-dark font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full">{discipline}</span>
+                      : <span className="text-muted-dark text-[12px]">—</span>}
+                  </div>
+                  <div>
+                    <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-1 block">Level</span>
+                    <span className="font-headline text-xl font-black italic text-light">{levelLabel}</span>
+                  </div>
+                  <div>
+                    <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-1 block">Min age</span>
+                    <span className="font-headline text-xl font-black italic text-light">{ageLabel}</span>
+                  </div>
+                </div>
+              </div>
+            </PreviewSection>
+
+            {/* 02 Date, Time & Location */}
+            <PreviewSection number="02" title="Date, Time & Location">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-dark rounded-xl p-5">
+                  <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 flex items-center gap-2"><Calendar className="w-3.5 h-3.5 text-primary" /> Date</span>
+                  <div className="font-headline text-[15px] font-black text-light">{dateLabel}</div>
+                </div>
+                <div className="bg-dark rounded-xl p-5">
+                  <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-primary" /> Times</span>
+                  <div className="font-headline text-[13px] font-medium text-muted">Start: <span className="text-light font-bold">{form.startTime ? fmt24to12(form.startTime) : "TBC"}</span></div>
+                  {form.endTime && <div className="font-headline text-[13px] font-medium text-muted mt-1">Cut-off: <span className="text-light font-bold">{fmt24to12(form.endTime)}</span></div>}
+                </div>
+                <div className="bg-dark rounded-xl p-5">
+                  <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-primary" /> Venue</span>
+                  <div className="font-headline text-[16px] font-black italic text-light leading-tight">{form.venue || "Venue TBC"}</div>
+                  {form.address && <p className="font-headline text-[12px] text-muted mt-1">{form.address}</p>}
+                  {form.city && <p className="font-headline text-[12px] uppercase tracking-widest text-muted mt-0.5">{form.city}{stateLabel ? `, ${stateLabel}` : ""}</p>}
+                </div>
+              </div>
+            </PreviewSection>
+
+            {/* 03 Categories */}
+            {(form.categories.length > 0 || form.format) && (
+              <PreviewSection number="03" title="Categories & Format">
+                <div className="bg-dark rounded-xl p-5">
+                  {form.categories.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {form.categories.map(c => (
+                        <span key={c} className="font-headline text-[11px] font-bold uppercase tracking-widest text-dark bg-primary px-3 py-1.5 rounded-full">{c}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-dark text-[12px] italic mb-4">No categories selected.</p>
+                  )}
+                  {form.format && (
+                    <div className="pt-4 border-t border-dark-lighter flex items-center gap-3">
+                      <span className="font-headline text-[10px] tracking-widest text-muted uppercase">Format</span>
+                      <span className="font-headline text-[13px] font-bold text-light">{formatLabel}</span>
+                    </div>
+                  )}
+                </div>
+              </PreviewSection>
+            )}
+
+            {/* 04 Registration & Tickets */}
+            {form.waves.some(w => w.price) && (
+              <PreviewSection number="04" title="Registration & Tickets">
+                <div className={`grid gap-4 ${form.waves.length === 1 ? "grid-cols-1" : form.waves.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+                  {form.waves.filter(w => w.price).map((w, i) => (
+                    <div key={i} className={`bg-dark rounded-xl p-5 ${i === 0 ? "border-l-4 border-primary" : ""}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Ticket className="w-4 h-4 text-primary" />
+                        <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted">{w.label || "General admission"}</span>
+                      </div>
+                      <div className="font-headline text-3xl font-black text-primary leading-none mb-1">A${w.price}</div>
+                      {w.closes && <div className="font-headline text-[11px] font-medium uppercase tracking-widest text-muted-dark">Closes {w.closes}</div>}
+                    </div>
+                  ))}
+                </div>
+                {form.refundPolicy && (
+                  <div className="bg-dark rounded-xl p-5 mt-4">
+                    <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-2 block">Refund Policy</span>
+                    <p className="font-headline text-[13px] font-medium text-muted leading-relaxed">{form.refundPolicy}</p>
+                  </div>
+                )}
+              </PreviewSection>
+            )}
+
+            {/* 05 What's included */}
+            {(inclusions.length > 0 || form.extras || form.activations) && (
+              <PreviewSection number="05" title="What&apos;s Included">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {inclusions.length > 0 && (
+                    <div className="bg-dark rounded-xl p-5">
+                      <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 flex items-center gap-2"><Package className="w-3.5 h-3.5 text-primary" /> Included</span>
+                      <div className="flex flex-wrap gap-2">
+                        {inclusions.map(item => (
+                          <span key={item} className="font-headline text-[11px] font-bold uppercase tracking-widest text-dark bg-primary/80 px-3 py-1.5 rounded-full">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {form.activations && form.activations.trim() && (
+                    <div className="bg-dark rounded-xl p-5">
+                      <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-2 flex items-center gap-2"><Tag className="w-3.5 h-3.5 text-primary" /> Activations</span>
+                      <p className="font-headline text-[13px] font-medium text-muted leading-relaxed">{form.activations}</p>
+                    </div>
+                  )}
+                  {form.extras && form.extras.trim() && (
+                    <div className="bg-dark rounded-xl p-5">
+                      <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-2 flex items-center gap-2"><ShoppingBag className="w-3.5 h-3.5 text-primary" /> Optional Extras</span>
+                      <p className="font-headline text-[13px] font-medium text-muted leading-relaxed">{form.extras}</p>
+                    </div>
+                  )}
+                </div>
+              </PreviewSection>
+            )}
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewSection({ number, title, children }: { number: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="pt-2">
+      <div className="flex items-center gap-3 mb-3">
+        <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary/60">{number}</span>
+        <div className="h-px flex-1 bg-dark-lighter" />
+        <h2 className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">{title}</h2>
+        <div className="h-px flex-1 bg-dark-lighter" />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    MAIN WIZARD PAGE
    ══════════════════════════════════════════════════════════════ */
 export default function NewListingPage() {
@@ -1392,7 +1651,8 @@ export default function NewListingPage() {
   const [apiError,      setApiError]      = useState("");
   const [submitErrors,  setSubmitErrors]  = useState<number[]>([]);
   const [visited,       setVisited]       = useState<Set<number>>(new Set());
-  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCancelModal,   setShowCancelModal]   = useState(false);
+  const [showFullPreview,   setShowFullPreview]   = useState(false);
   const [direction,          setDirection]          = useState<"forward" | "back">("forward");
   const [showMobilePreview,  setShowMobilePreview]  = useState(false);
   const [eventId,   setEventId]   = useState<string | null>(null);
@@ -1499,9 +1759,15 @@ export default function NewListingPage() {
                 </button>
                 <span className="text-muted-dark">/</span>
                 <span className="font-headline text-[11px] uppercase tracking-widest text-light">Create new listing</span>
-                <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-muted-dark hidden sm:block">
-                  Draft
-                </span>
+                <div className="ml-auto flex items-center gap-3">
+                  <button
+                    onClick={() => setShowFullPreview(true)}
+                    className="flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Preview
+                  </button>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-dark hidden sm:block">Draft</span>
+                </div>
               </div>
 
               {/* Step rail */}
@@ -1670,6 +1936,11 @@ export default function NewListingPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Full event page preview modal ── */}
+      {showFullPreview && (
+        <EventFullPreview form={form} onClose={() => setShowFullPreview(false)} />
+      )}
 
       {/* ── Cancel confirmation modal ── */}
       {showCancelModal && (
