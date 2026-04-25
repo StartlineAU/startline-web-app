@@ -14,6 +14,21 @@ const nextConfig: NextConfig = {
   experimental: {
     // metadataBase is set in layout.tsx but this is the canonical declaration
   },
+
+  // Allow Google Maps iframe embeds
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "frame-src 'self' https://www.google.com https://maps.googleapis.com;",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

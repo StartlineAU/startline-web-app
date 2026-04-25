@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
   Plus, MapPin, ArrowRight, CheckCircle, Globe, Instagram,
   Phone, Mail, X, Edit2, Camera, CalendarDays, ChevronRight,
+  Star, ImageIcon,
 } from "lucide-react";
 import OrganiserSidebar from "@/components/organiser/Sidebar";
 import OrganiserTopBar  from "@/components/organiser/TopBar";
+import EventCarousel, { type CarouselEvent } from "@/components/organiser/EventCarousel";
+import ReviewsSection,  { type Review }        from "@/components/organiser/ReviewsSection";
+import PhotoCarousel from "@/components/organiser/PhotoCarousel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,7 +20,7 @@ type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 interface EventRow {
   id: string; title: string; discipline: string; city: string; state: string;
   eventDate: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null;
+  cap?: number | null; coverImageUrl?: string | null; isPinned?: boolean;
 }
 
 interface Profile {
@@ -29,23 +33,18 @@ const EMPTY: Profile = {
   website: "", instagram: "", facebook: "", bio: "", abn: "",
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
-  APPROVED: { bg: "bg-primary/20",  text: "text-primary",    dot: "bg-primary",    label: "LIVE"      },
-  PENDING:  { bg: "bg-blue-900/30", text: "text-blue-400",   dot: "bg-blue-400",   label: "PENDING"   },
-  DRAFT:    { bg: "bg-dark-lighter",text: "text-muted",      dot: "bg-muted",      label: "DRAFT"     },
-  REJECTED: { bg: "bg-red-900/30",  text: "text-red-400",    dot: "bg-red-400",    label: "REJECTED"  },
-  ARCHIVED: { bg: "bg-dark-lighter",text: "text-muted-dark", dot: "bg-muted-dark", label: "ARCHIVED"  },
+  APPROVED: { bg: "bg-primary/20",   text: "text-primary",    dot: "bg-primary",    label: "LIVE"     },
+  PENDING:  { bg: "bg-blue-900/30",  text: "text-blue-400",   dot: "bg-blue-400",   label: "PENDING"  },
+  DRAFT:    { bg: "bg-dark-lighter", text: "text-muted",      dot: "bg-muted",      label: "DRAFT"    },
+  REJECTED: { bg: "bg-red-900/30",   text: "text-red-400",    dot: "bg-red-400",    label: "REJECTED" },
+  ARCHIVED: { bg: "bg-dark-lighter", text: "text-muted-dark", dot: "bg-muted-dark", label: "ARCHIVED" },
 };
 
 function formatEventDate(dateStr: string) {
   try {
     const d = new Date(dateStr);
-    return {
-      day: d.getDate(),
-      month: d.toLocaleString("en-AU", { month: "short" }).toUpperCase(),
-    };
+    return { day: d.getDate(), month: d.toLocaleString("en-AU", { month: "short" }).toUpperCase() };
   } catch { return { day: "—", month: "" }; }
 }
 
@@ -53,7 +52,7 @@ function isUpcoming(dateStr: string) {
   try { return new Date(dateStr) >= new Date(); } catch { return true; }
 }
 
-// ─── Event card ───────────────────────────────────────────────────────────────
+// ─── Small event card (used in tab grid) ─────────────────────────────────────
 
 function EventCard({ e }: { e: EventRow }) {
   const s    = STATUS_STYLE[e.status];
@@ -62,36 +61,39 @@ function EventCard({ e }: { e: EventRow }) {
 
   return (
     <div className="bg-dark border border-dark-lighter rounded-lg overflow-hidden flex flex-col card-hover hover:border-primary/40">
-      {/* Top band */}
-      <div className="relative h-24 hero-topo scan-grid flex items-start justify-between p-3">
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-headline text-[10px] font-bold uppercase tracking-widest ${s.bg} ${s.text}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${e.status === "APPROVED" ? "animate-pulse-dot" : ""}`} />
-          {s.label}
-        </span>
+      <div className="relative h-24 overflow-hidden">
+        {e.coverImageUrl ? (
+          <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 hero-topo scan-grid" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-dark/60 to-transparent" />
+        <div className="absolute top-2 left-2">
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-headline text-[9px] font-bold uppercase tracking-widest backdrop-blur-sm ${s.bg} ${s.text}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${e.status === "APPROVED" ? "animate-pulse-dot" : ""}`} />
+            {s.label}
+          </span>
+        </div>
         {date.day !== "—" && (
-          <div className="text-right">
-            <div className="font-headline text-[10px] uppercase tracking-widest text-muted">{date.month}</div>
-            <div className="font-headline text-3xl font-black italic leading-none text-light">{date.day}</div>
+          <div className="absolute bottom-2 right-2 text-right">
+            <div className="font-headline text-[9px] uppercase tracking-widest text-light/60">{date.month}</div>
+            <div className="font-headline text-2xl font-black italic leading-none text-light">{date.day}</div>
           </div>
         )}
       </div>
 
-      {/* Body */}
       <div className="p-4 flex flex-col flex-1">
         <div className="font-headline text-[10px] uppercase tracking-widest text-muted mb-1">{e.discipline}</div>
-        <div className="font-headline text-[18px] font-black italic tracking-tighter text-light leading-tight mb-1.5">
-          {e.title}
-        </div>
+        <div className="font-headline text-[16px] font-black italic tracking-tighter text-light leading-tight mb-1.5 line-clamp-2">{e.title}</div>
         <div className="flex items-center gap-1 font-headline text-[11px] text-muted uppercase tracking-widest mb-4">
           <MapPin className="w-3 h-3 text-primary shrink-0" /> {e.city}, {e.state.toUpperCase()}
         </div>
 
-        {/* Sign-ups bar */}
         {cap > 0 ? (
           <div className="mt-auto mb-4">
             <div className="flex items-center justify-between font-headline text-[11px] uppercase tracking-widest mb-1.5">
               <span className="text-light font-bold">0 signed up</span>
-              <span className="text-muted-dark">0%</span>
+              <span className="text-muted-dark">of {cap}</span>
             </div>
             <div className="h-1 bg-dark-lighter rounded-full overflow-hidden">
               <div className="h-full bg-primary" style={{ width: "0%" }} />
@@ -101,7 +103,6 @@ function EventCard({ e }: { e: EventRow }) {
           <div className="mt-auto mb-4" />
         )}
 
-        {/* Footer link */}
         <div className="pt-3 border-t border-dark-lighter">
           <button className="w-full flex items-center justify-between font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors group">
             View event <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
@@ -141,28 +142,19 @@ const FTextarea = (p: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
 );
 
 interface EditPanelProps {
-  profile: Profile;
-  state: string;
-  disciplines: string[];
-  saving: boolean;
-  saved: boolean;
-  error: string;
+  profile: Profile; state: string; disciplines: string[];
+  saving: boolean; saved: boolean; error: string;
   onChange: (patch: Partial<Profile>) => void;
   onStateChange: (s: string) => void;
   onToggleDisc: (d: string) => void;
-  onSave: () => void;
-  onClose: () => void;
+  onSave: () => void; onClose: () => void;
 }
 
 function EditPanel({ profile, state, disciplines, saving, saved, error, onChange, onStateChange, onToggleDisc, onSave, onClose }: EditPanelProps) {
   return (
     <>
-      {/* Overlay */}
       <div className="fixed inset-0 z-40 bg-dark-darker/70 backdrop-blur-sm overlay-in" onClick={onClose} />
-
-      {/* Panel */}
       <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[520px] bg-dark border-l border-dark-lighter flex flex-col modal-in overflow-y-auto">
-        {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-dark border-b border-dark-lighter">
           <div>
             <h2 className="font-headline text-xl font-black italic tracking-tighter text-light">Edit Profile</h2>
@@ -173,31 +165,21 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
           </button>
         </div>
 
-        {/* Form body */}
         <div className="flex-1 px-6 py-6 space-y-6">
-
-          {/* About */}
           <div>
             <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4 flex items-center gap-3">
               <span className="w-6 h-px bg-primary" /> Organisation
             </div>
             <div className="space-y-4">
-              <div>
-                <FieldLabel label="Organisation name" required />
-                <FInput value={profile.orgName} onChange={e => onChange({ orgName: e.target.value })} placeholder="e.g. HYROX Australia" />
-              </div>
-              <div>
-                <FieldLabel label="About" hint={`${profile.bio.length}/600`} />
-                <FTextarea rows={4} maxLength={600} value={profile.bio} onChange={e => onChange({ bio: e.target.value })} placeholder="Tell athletes what you run and who you are…" />
-              </div>
+              <div><FieldLabel label="Organisation name" required /><FInput value={profile.orgName} onChange={e => onChange({ orgName: e.target.value })} placeholder="e.g. HYROX Australia" /></div>
+              <div><FieldLabel label="About" hint={`${profile.bio.length}/600`} /><FTextarea rows={4} maxLength={600} value={profile.bio} onChange={e => onChange({ bio: e.target.value })} placeholder="Tell athletes what you run and who you are…" /></div>
               <div>
                 <FieldLabel label="Event disciplines" hint="Pick all that apply" />
                 <div className="flex flex-wrap gap-2">
                   {DISCIPLINES.map(d => (
                     <button key={d} type="button" onClick={() => onToggleDisc(d)}
                       className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip flex items-center gap-1.5 ${disciplines.includes(d) ? "chip-active" : ""}`}>
-                      {disciplines.includes(d) && <CheckCircle className="w-3 h-3" />}
-                      {d}
+                      {disciplines.includes(d) && <CheckCircle className="w-3 h-3" />}{d}
                     </button>
                   ))}
                 </div>
@@ -205,16 +187,12 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
             </div>
           </div>
 
-          {/* Contact */}
           <div>
             <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4 flex items-center gap-3">
               <span className="w-6 h-px bg-primary" /> Contact
             </div>
             <div className="space-y-4">
-              <div>
-                <FieldLabel label="Contact name" required />
-                <FInput value={profile.contactName} onChange={e => onChange({ contactName: e.target.value })} placeholder="Full name" />
-              </div>
+              <div><FieldLabel label="Contact name" required /><FInput value={profile.contactName} onChange={e => onChange({ contactName: e.target.value })} placeholder="Full name" /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <FieldLabel label="State" required />
@@ -223,45 +201,29 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
                     {STATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-                <div>
-                  <FieldLabel label="ABN" />
-                  <FInput value={profile.abn} onChange={e => onChange({ abn: e.target.value })} placeholder="12 345 678 901" />
-                </div>
+                <div><FieldLabel label="ABN" /><FInput value={profile.abn} onChange={e => onChange({ abn: e.target.value })} placeholder="12 345 678 901" /></div>
               </div>
               <div>
                 <FieldLabel label="Contact email" required />
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                  <FInput className="pl-9" type="email" value={profile.email} onChange={e => onChange({ email: e.target.value })} placeholder="events@yourorg.com.au" />
-                </div>
+                <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" /><FInput className="pl-9" type="email" value={profile.email} onChange={e => onChange({ email: e.target.value })} placeholder="events@yourorg.com.au" /></div>
               </div>
               <div>
                 <FieldLabel label="Phone" />
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                  <FInput className="pl-9" type="tel" value={profile.phone} onChange={e => onChange({ phone: e.target.value })} placeholder="+61 4xx xxx xxx" />
-                </div>
+                <div className="relative"><Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" /><FInput className="pl-9" type="tel" value={profile.phone} onChange={e => onChange({ phone: e.target.value })} placeholder="+61 4xx xxx xxx" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <FieldLabel label="Website" />
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                    <FInput className="pl-9" value={profile.website} onChange={e => onChange({ website: e.target.value })} placeholder="https://…" />
-                  </div>
+                  <div className="relative"><Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" /><FInput className="pl-9" value={profile.website} onChange={e => onChange({ website: e.target.value })} placeholder="https://…" /></div>
                 </div>
                 <div>
                   <FieldLabel label="Instagram" />
-                  <div className="relative">
-                    <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                    <FInput className="pl-9" value={profile.instagram} onChange={e => onChange({ instagram: e.target.value })} placeholder="@handle" />
-                  </div>
+                  <div className="relative"><Instagram className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" /><FInput className="pl-9" value={profile.instagram} onChange={e => onChange({ instagram: e.target.value })} placeholder="@handle" /></div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Security */}
           <div>
             <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4 flex items-center gap-3">
               <span className="w-6 h-px bg-primary" /> Security
@@ -274,21 +236,10 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
                 </div>
                 <button className="font-headline text-[11px] font-bold uppercase tracking-widest text-light border border-dark-lighter hover:border-primary/60 px-3 py-2 rounded-md transition-colors">Change</button>
               </div>
-              <div className="flex items-center justify-between p-4 rounded-md border border-dark-lighter">
-                <div>
-                  <div className="font-headline text-[13px] font-bold text-light mb-0.5 flex items-center gap-2">
-                    Two-factor auth
-                    <span className="text-[9px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full uppercase tracking-widest">Recommended</span>
-                  </div>
-                  <div className="text-[11px] text-muted">Add a second sign-in step via your phone.</div>
-                </div>
-                <button className="font-headline text-[11px] font-bold uppercase tracking-widest text-dark bg-primary hover:bg-primary-light px-3 py-2 rounded-md transition-colors">Turn on</button>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Footer save bar */}
         <div className="sticky bottom-0 border-t border-dark-lighter bg-dark px-6 py-4 flex items-center justify-between gap-4">
           <div className="font-headline text-[11px] uppercase tracking-widest">
             {saved  && <span className="text-primary flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Saved</span>}
@@ -296,9 +247,7 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
             {!saved && !error && <span className="text-muted">Unsaved changes</span>}
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-4 py-2.5 transition-colors">
-              Cancel
-            </button>
+            <button onClick={onClose} className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-4 py-2.5 transition-colors">Cancel</button>
             <button onClick={onSave} disabled={saving}
               className="bg-machined shadow-machined text-dark font-headline text-[12px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-50">
               <CheckCircle className="w-4 h-4" /> {saving ? "Saving…" : "Save changes"}
@@ -310,21 +259,38 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
   );
 }
 
+// ─── Compact rating badge (sidebar) ──────────────────────────────────────────
+
+function RatingBadge({ avg, count }: { avg: number; count: number }) {
+  if (!count) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+      <span className="font-headline text-[13px] font-black text-light">{avg.toFixed(1)}</span>
+      <span className="font-headline text-[11px] text-muted">({count} review{count !== 1 ? "s" : ""})</span>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 type Tab = "upcoming" | "past" | "drafts";
 
 export default function ProfilePage() {
-  const [profile,     setProfile]     = useState<Profile>(EMPTY);
-  const [state,       setState]       = useState("nsw");
-  const [disciplines, setDisciplines] = useState<string[]>([]);
-  const [events,      setEvents]      = useState<EventRow[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [tab,         setTab]         = useState<Tab>("upcoming");
-  const [editOpen,    setEditOpen]    = useState(false);
-  const [saving,      setSaving]      = useState(false);
-  const [saved,       setSaved]       = useState(false);
-  const [error,       setError]       = useState("");
+  const [profile,        setProfile]        = useState<Profile>(EMPTY);
+  const [state,          setState]          = useState("nsw");
+  const [disciplines,    setDisciplines]    = useState<string[]>([]);
+  const [events,         setEvents]         = useState<EventRow[]>([]);
+  const [reviews,        setReviews]        = useState<Review[]>([]);
+  const [pinnedIds,      setPinnedIds]      = useState<string[]>([]);
+  const [organiserId,    setOrganiserId]    = useState<string>("");
+  const [loading,        setLoading]        = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [tab,            setTab]            = useState<Tab>("upcoming");
+  const [editOpen,       setEditOpen]       = useState(false);
+  const [saving,         setSaving]         = useState(false);
+  const [saved,          setSaved]          = useState(false);
+  const [error,          setError]          = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -332,6 +298,7 @@ export default function ProfilePage() {
       fetch("/api/organiser/events").then(r => r.json()),
     ]).then(([prof, evts]) => {
       if (prof && !prof.error) {
+        setOrganiserId(prof.id ?? "");
         setProfile({
           orgName:     prof.orgName     ?? "",
           contactName: prof.contactName ?? "",
@@ -344,8 +311,20 @@ export default function ProfilePage() {
           abn:         prof.abn         ?? "",
         });
       }
-      if (Array.isArray(evts)) setEvents(evts);
+      if (Array.isArray(evts)) {
+        setEvents(evts);
+        // Seed pinned ids from DB data
+        setPinnedIds(evts.filter((e: EventRow) => e.isPinned).map((e: EventRow) => e.id));
+      }
     }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/organiser/reviews")
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setReviews(data); })
+      .catch(() => {})
+      .finally(() => setReviewsLoading(false));
   }, []);
 
   const tabs = useMemo(() => ({
@@ -356,12 +335,45 @@ export default function ProfilePage() {
 
   const displayed = tabs[tab];
 
-  const u      = (patch: Partial<Profile>) => setProfile(p => ({ ...p, ...patch }));
+  // Events eligible for the top carousel (live or pending)
+  const carouselEvents: CarouselEvent[] = useMemo(
+    () => events.filter(e => e.status === "APPROVED" || e.status === "PENDING"),
+    [events],
+  );
+
+  // Photos from event cover images
+  const photos = useMemo(
+    () => events.map(e => e.coverImageUrl).filter((u): u is string => !!u),
+    [events],
+  );
+
+  // Rating aggregates
+  const avgRating = reviews.length
+    ? reviews.reduce((s, r) => s + r.overallRating, 0) / reviews.length
+    : 0;
+
+  const togglePin = useCallback(async (id: string) => {
+    const nowPinned = !pinnedIds.includes(id);
+    // Optimistic update
+    setPinnedIds(prev => nowPinned ? [...prev, id] : prev.filter(x => x !== id));
+
+    try {
+      await fetch(`/api/organiser/events/${id}/pin`, { method: "PATCH" });
+    } catch {
+      // If API fails, revert
+      setPinnedIds(prev => nowPinned ? prev.filter(x => x !== id) : [...prev, id]);
+    }
+  }, [pinnedIds]);
+
+  const handleNewReview = useCallback((r: Review) => {
+    setReviews(prev => [r, ...prev]);
+  }, []);
+
+  const u       = (patch: Partial<Profile>) => setProfile(p => ({ ...p, ...patch }));
   const toggleD = (d: string) => setDisciplines(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
 
   const handleSave = async () => {
-    setSaving(true);
-    setError("");
+    setSaving(true); setError("");
     try {
       const res  = await fetch("/api/organiser/profile", {
         method: "PUT", headers: { "Content-Type": "application/json" },
@@ -383,7 +395,7 @@ export default function ProfilePage() {
       <div className="flex pt-16">
         <OrganiserSidebar />
 
-        <main className="flex-1 min-w-0 page-in">
+        <main className="flex-1 min-w-0 page-in pb-24 lg:pb-0">
 
           {/* ── Banner ── */}
           <section className="relative h-44 border-b border-dark-lighter overflow-hidden">
@@ -400,31 +412,31 @@ export default function ProfilePage() {
             </button>
           </section>
 
-          {/* ── Profile header ── */}
           <div className="max-w-[1200px] mx-auto px-6 lg:px-10">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10 mb-8 relative z-10">
+
+            {/* ── Profile header ── */}
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10 mb-6 relative z-10">
               <div className="flex items-end gap-4">
-                {/* Avatar */}
                 <div className="relative group">
                   <div className="w-20 h-20 rounded-xl bg-primary text-dark font-headline font-black italic text-4xl flex items-center justify-center border-4 border-dark-darker shadow-machined">
                     {initial}
                   </div>
-                  <button
-                    onClick={() => setEditOpen(true)}
+                  <button onClick={() => setEditOpen(true)}
                     className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-dark border border-dark-lighter hover:border-primary text-muted hover:text-primary flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
                     <Camera className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
-                {/* Name + badge */}
                 <div className="pb-1">
                   <h1 className="font-headline text-2xl lg:text-3xl font-black italic tracking-tighter text-light leading-tight">
                     {loading ? "Loading…" : (profile.orgName || "Your Organisation")}
                   </h1>
-                  <div className="flex items-center gap-3 mt-1">
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-primary/15 text-primary font-headline text-[10px] font-bold uppercase tracking-widest rounded-full">
                       <CheckCircle className="w-3 h-3" /> Verified Organiser
                     </span>
+                    {reviews.length > 0 && (
+                      <RatingBadge avg={avgRating} count={reviews.length} />
+                    )}
                     {profile.website && (
                       <a href={profile.website} target="_blank" rel="noreferrer"
                         className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary flex items-center gap-1 transition-colors">
@@ -434,8 +446,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
-
-              {/* Action buttons */}
               <div className="flex items-center gap-3 pb-1">
                 <button onClick={() => setEditOpen(true)}
                   className="flex items-center gap-2 border border-dark-lighter hover:border-primary/60 text-muted hover:text-light font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md transition-colors">
@@ -448,76 +458,150 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ── My Events ── */}
+            {/* ── Stats bar ── */}
+            <div className="flex items-center gap-6 mb-8 pb-6 border-b border-dark-lighter flex-wrap">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-primary" />
+                <span className="font-headline text-[13px] font-bold text-light">{events.filter(e => e.status === "APPROVED").length}</span>
+                <span className="font-headline text-[11px] uppercase tracking-widest text-muted">events hosted</span>
+              </div>
+              {reviews.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                  <span className="font-headline text-[13px] font-bold text-light">{avgRating.toFixed(1)}</span>
+                  <span className="font-headline text-[11px] uppercase tracking-widest text-muted">avg rating</span>
+                </div>
+              )}
+              {profile.instagram && (
+                <a href={`https://instagram.com/${profile.instagram.replace("@","")}`} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">
+                  <Instagram className="w-4 h-4" /> {profile.instagram}
+                </a>
+              )}
+            </div>
+
+            {/* ── Main 2-col layout ── */}
             <div className="grid lg:grid-cols-[1fr_300px] gap-8 pb-16">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="font-headline text-2xl font-black italic tracking-tighter text-light">My Events</h2>
-                    <p className="text-[13px] text-muted mt-0.5">All the events you&apos;ve posted on Startline.</p>
-                  </div>
-                </div>
+              <div className="space-y-10">
 
-                {/* Tabs */}
-                <div className="flex items-center gap-0 border-b border-dark-lighter mb-6">
-                  {([
-                    { k: "upcoming", l: "Upcoming" },
-                    { k: "past",     l: "Past"     },
-                    { k: "drafts",   l: "Drafts"   },
-                  ] as { k: Tab; l: string }[]).map(t => (
-                    <button key={t.k} onClick={() => setTab(t.k)}
-                      className={`relative pb-3 px-4 font-headline text-[12px] font-bold uppercase tracking-widest transition-colors
-                        ${tab === t.k ? "text-light after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:rounded-t" : "text-muted hover:text-light"}`}>
-                      {t.l}
-                      <span className={`ml-1.5 font-headline text-[10px] px-1.5 py-0.5 rounded-full ${tab === t.k ? "bg-primary/20 text-primary" : "bg-dark-lighter text-muted-dark"}`}>
-                        {tabs[t.k].length}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {/* ── SECTION 1: Featured Events Carousel ── */}
+                {carouselEvents.length > 0 && (
+                  <section>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="font-headline text-xl font-black italic tracking-tighter text-light">Featured Events</h2>
+                        <p className="text-[12px] text-muted mt-0.5">
+                          {pinnedIds.length > 0
+                            ? `${pinnedIds.length} pinned · athletes see these first`
+                            : "Pin events to feature them at the top of your profile."}
+                        </p>
+                      </div>
+                    </div>
+                    <EventCarousel
+                      events={carouselEvents}
+                      pinnedIds={pinnedIds}
+                      isOrganiser
+                      onPin={togglePin}
+                    />
+                  </section>
+                )}
 
-                {/* Event grid */}
-                {loading ? (
-                  <div className="py-12 text-center">
-                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                    <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
-                  </div>
-                ) : displayed.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger-item">
-                    {displayed.map(e => <EventCard key={e.id} e={e} />)}
-                  </div>
-                ) : (
-                  <div className="py-16 text-center border border-dashed border-dark-lighter rounded-lg">
-                    <CalendarDays className="w-10 h-10 text-muted mx-auto mb-3 opacity-40" />
-                    <div className="font-headline text-[15px] font-black italic text-light mb-1">
-                      {tab === "upcoming" ? "No upcoming events" : tab === "past" ? "No past events" : "No drafts"}
+                {/* ── SECTION 2: My Events tabs ── */}
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="font-headline text-2xl font-black italic tracking-tighter text-light">My Events</h2>
+                      <p className="text-[13px] text-muted mt-0.5">All the events you&apos;ve posted on Startline.</p>
                     </div>
-                    <div className="text-[13px] text-muted mb-5">
-                      {tab === "drafts" ? "Start drafting a new event listing." : tab === "upcoming" ? "Post a new event to get started." : "Completed events will appear here."}
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex items-center gap-0 border-b border-dark-lighter mb-6">
+                    {([
+                      { k: "upcoming", l: "Upcoming" },
+                      { k: "past",     l: "Past"     },
+                      { k: "drafts",   l: "Drafts"   },
+                    ] as { k: Tab; l: string }[]).map(t => (
+                      <button key={t.k} onClick={() => setTab(t.k)}
+                        className={`relative pb-3 px-4 font-headline text-[12px] font-bold uppercase tracking-widest transition-colors
+                          ${tab === t.k ? "text-light after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:rounded-t" : "text-muted hover:text-light"}`}>
+                        {t.l}
+                        <span className={`ml-1.5 font-headline text-[10px] px-1.5 py-0.5 rounded-full ${tab === t.k ? "bg-primary/20 text-primary" : "bg-dark-lighter text-muted-dark"}`}>
+                          {tabs[t.k].length}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {loading ? (
+                    <div className="py-12 text-center">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                      <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
                     </div>
-                    {(tab === "upcoming" || tab === "drafts") && (
-                      <Link href="/organiser/new-listing"
-                        className="inline-flex items-center gap-2 bg-machined shadow-machined text-dark font-headline text-[12px] font-bold uppercase tracking-widest px-5 py-3 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform">
-                        <Plus className="w-4 h-4" /> Create listing
-                      </Link>
+                  ) : displayed.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger-item">
+                      {displayed.map(e => <EventCard key={e.id} e={e} />)}
+                    </div>
+                  ) : (
+                    <div className="py-16 text-center border border-dashed border-dark-lighter rounded-lg">
+                      <CalendarDays className="w-10 h-10 text-muted mx-auto mb-3 opacity-40" />
+                      <div className="font-headline text-[15px] font-black italic text-light mb-1">
+                        {tab === "upcoming" ? "No upcoming events" : tab === "past" ? "No past events" : "No drafts"}
+                      </div>
+                      <div className="text-[13px] text-muted mb-5">
+                        {tab === "drafts" ? "Start drafting a new event listing." : tab === "upcoming" ? "Post a new event to get started." : "Completed events will appear here."}
+                      </div>
+                      {(tab === "upcoming" || tab === "drafts") && (
+                        <Link href="/organiser/new-listing"
+                          className="inline-flex items-center gap-2 bg-machined shadow-machined text-dark font-headline text-[12px] font-bold uppercase tracking-widest px-5 py-3 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform">
+                          <Plus className="w-4 h-4" /> Create listing
+                        </Link>
+                      )}
+                    </div>
+                  )}
+
+                  {displayed.length > 0 && (
+                    <Link href="/organiser/new-listing"
+                      className="group w-full mt-4 border border-dashed border-dark-lighter hover:border-primary/60 rounded-lg p-4 flex items-center justify-center gap-3 text-muted hover:text-primary transition-colors">
+                      <Plus className="w-4 h-4" />
+                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest">Add another listing</span>
+                    </Link>
+                  )}
+                </section>
+
+                {/* ── SECTION 3: Photo gallery ── */}
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="font-headline text-xl font-black italic tracking-tighter text-light flex items-center gap-2">
+                        <ImageIcon className="w-5 h-5 text-primary" /> Photos
+                      </h2>
+                      <p className="text-[12px] text-muted mt-0.5">Event highlights and action shots.</p>
+                    </div>
+                    {photos.length > 0 && (
+                      <button className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary border border-dark-lighter hover:border-primary/50 px-3 py-1.5 rounded-md transition-colors">
+                        Upload
+                      </button>
                     )}
                   </div>
-                )}
+                  <PhotoCarousel photos={photos} isOrganiser />
+                </section>
 
-                {/* Add another listing CTA */}
-                {displayed.length > 0 && (
-                  <Link href="/organiser/new-listing"
-                    className="group w-full mt-4 border border-dashed border-dark-lighter hover:border-primary/60 rounded-lg p-4 flex items-center justify-center gap-3 text-muted hover:text-primary transition-colors">
-                    <Plus className="w-4 h-4" />
-                    <span className="font-headline text-[11px] font-bold uppercase tracking-widest">Add another listing</span>
-                  </Link>
-                )}
+                {/* ── SECTION 4: Reviews ── */}
+                <section>
+                  <ReviewsSection
+                    reviews={reviews}
+                    organiserId={organiserId}
+                    loading={reviewsLoading}
+                    onNewReview={handleNewReview}
+                  />
+                </section>
               </div>
 
               {/* ── Right sidebar ── */}
               <aside className="space-y-4 lg:sticky lg:top-24 h-fit">
 
-                {/* Public preview card */}
+                {/* Public preview */}
                 <div>
                   <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary flex items-center gap-2 mb-3">
                     <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse-dot" /> Public preview
@@ -532,6 +616,13 @@ export default function ProfilePage() {
                       <div className="flex items-center gap-1 font-headline text-[10px] uppercase tracking-widest text-primary mt-0.5">
                         <CheckCircle className="w-3 h-3" /> Verified
                       </div>
+                      {reviews.length > 0 && (
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                          <span className="font-headline text-[11px] font-bold text-light">{avgRating.toFixed(1)}</span>
+                          <span className="font-headline text-[10px] text-muted">({reviews.length})</span>
+                        </div>
+                      )}
                       {profile.bio && (
                         <p className="text-[12px] text-muted mt-2 leading-relaxed line-clamp-3">{profile.bio}</p>
                       )}
@@ -564,6 +655,32 @@ export default function ProfilePage() {
                   </div>
                 )}
 
+                {/* Rating snapshot */}
+                {reviews.length > 0 && (
+                  <div className="bg-dark border border-dark-lighter rounded-lg p-5">
+                    <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted mb-3">Rating</div>
+                    <div className="flex items-center gap-3">
+                      <div className="font-headline text-[36px] font-black italic leading-none text-light">{avgRating.toFixed(1)}</div>
+                      <div>
+                        <div className="flex gap-0.5 mb-0.5">
+                          {[1,2,3,4,5].map(i => (
+                            <svg key={i} className={`w-3.5 h-3.5 ${i <= Math.round(avgRating) ? "text-yellow-400" : "text-dark-lighter"}`} fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                        </div>
+                        <div className="font-headline text-[11px] uppercase tracking-widest text-muted">{reviews.length} review{reviews.length !== 1 ? "s" : ""}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { const el = document.getElementById("reviews"); el?.scrollIntoView({ behavior: "smooth" }); }}
+                      className="mt-3 w-full text-left font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:underline"
+                    >
+                      See all reviews →
+                    </button>
+                  </div>
+                )}
+
                 {/* Quick links */}
                 <div className="bg-dark border border-dark-lighter rounded-lg p-4">
                   <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted mb-3">Quick links</div>
@@ -590,8 +707,8 @@ export default function ProfilePage() {
                 <div className="bg-dark border border-dark-lighter rounded-lg p-5">
                   <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary mb-1.5">Tip</div>
                   <div className="text-[13px] text-light leading-relaxed">
-                    Profiles with a bio and social links get{" "}
-                    <span className="text-primary font-semibold">2× more</span> event views from athletes.
+                    Profiles with reviews get{" "}
+                    <span className="text-primary font-semibold">3× more</span> registrations. Share your profile with attendees after each event.
                   </div>
                 </div>
               </aside>
@@ -600,18 +717,11 @@ export default function ProfilePage() {
         </main>
       </div>
 
-      {/* ── Edit Profile slide-over ── */}
       {editOpen && (
         <EditPanel
-          profile={profile}
-          state={state}
-          disciplines={disciplines}
-          saving={saving}
-          saved={saved}
-          error={error}
-          onChange={u}
-          onStateChange={setState}
-          onToggleDisc={toggleD}
+          profile={profile} state={state} disciplines={disciplines}
+          saving={saving} saved={saved} error={error}
+          onChange={u} onStateChange={setState} onToggleDisc={toggleD}
           onSave={handleSave}
           onClose={() => { setEditOpen(false); setError(""); }}
         />

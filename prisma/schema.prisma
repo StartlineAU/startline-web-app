@@ -56,6 +56,7 @@ model Organiser {
   reviewedAt      DateTime?
 
   events    Event[]
+  reviews   Review[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -119,6 +120,9 @@ model Event {
   reviewedBy      Admin?    @relation("EventReviewedBy", fields: [reviewedById], references: [id])
   reviewedAt      DateTime?
 
+  isPinned Boolean @default(false)
+  reviews  Review[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -129,4 +133,29 @@ enum EventStatus {
   APPROVED // live on the platform
   REJECTED // admin denied
   ARCHIVED // organiser archived
+}
+
+// ─── Athlete reviews ──────────────────────────────────────────────────────────
+model Review {
+  id          String    @id @default(uuid())
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  eventId     String?
+  event       Event?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  eventTitle  String?
+
+  // Ratings 1–5
+  overallRating       Int
+  communicationRating Int?
+  organisationRating  Int?
+  experienceRating    Int?
+
+  title        String
+  body         String
+  reviewerName String
+
+  isVerified  Boolean  @default(false)
+  isPublished Boolean  @default(true)
+
+  createdAt DateTime @default(now())
 }

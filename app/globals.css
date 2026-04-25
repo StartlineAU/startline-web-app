@@ -91,6 +91,35 @@ input[type="radio"] {
   accent-color: rgb(var(--color-primary));
 }
 
+/*
+  iOS Safari auto-zooms when a focused input has font-size < 16px.
+  Force all text inputs to at least 16px on mobile to prevent this.
+  The visual font size is controlled per-component; this only affects
+  the rendered size seen by iOS's zoom heuristic.
+*/
+@media (max-width: 1023px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+/* Minimum 44px touch targets for all interactive elements on mobile */
+@media (max-width: 1023px) {
+  button:not(.chip-sm),
+  [role="button"],
+  a.btn {
+    min-height: 44px;
+  }
+}
+
 /* Animation utilities */
 @layer utilities {
   /* Theme token utility overrides */
@@ -310,3 +339,15 @@ input[type="radio"] {
 
 .card-hover { transition: transform 200ms ease, border-color 200ms ease, background-color 200ms ease; }
 .card-hover:hover { transform: translateY(-2px); }
+
+/* ── Wizard step transitions ────────────────────────────── */
+@keyframes stepForward {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+@keyframes stepBack {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+.step-forward { animation: stepForward .3s cubic-bezier(.2,.8,.2,1) both; }
+.step-back    { animation: stepBack    .3s cubic-bezier(.2,.8,.2,1) both; }
