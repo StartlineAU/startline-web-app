@@ -15,7 +15,7 @@ const STEPS = [
   { k: "basics",   n: "01", label: "The Basics",          sub: "Name, discipline, summary"   },
   { k: "when",     n: "02", label: "Date & Location",     sub: "When and where it happens"   },
   { k: "format",   n: "03", label: "Format & Categories", sub: "How athletes compete"        },
-  { k: "tickets",  n: "04", label: "Tickets & Pricing",   sub: "Waves, fees, inclusions"     },
+  { k: "tickets",  n: "04", label: "Tickets & Pricing",   sub: "Categories, fees, inclusions"  },
   { k: "extras",   n: "05", label: "Details & Media",     sub: "Cover image, logistics"      },
   { k: "review",   n: "06", label: "Review & Publish",    sub: "Check and go live"           },
 ] as const;
@@ -24,7 +24,7 @@ const STEP_ERRORS: Record<number, string> = {
   0: "Event name and short description (tagline) are required.",
   1: "Date, venue name, street address, city and state are required.",
   2: "Discipline, competition format, level and minimum age are required.",
-  3: "At least one entry wave with a price is required.",
+  3: "At least one ticket category with a price is required.",
   4: "A registration URL is required.",
 };
 
@@ -41,7 +41,7 @@ interface FormState {
   venue: string; address: string; city: string; state: AusState;
   format: Format; level: Level; categories: string[]; cap: string; minAge: string;
   waves: Wave[];
-  inclusions: string; extras: string; refundPolicy: string;
+  inclusions: string; extras: string; activations: string; refundPolicy: string;
   coverImage: File | null; registrationUrl: string; accessibilityInfo: string;
 }
 
@@ -54,10 +54,8 @@ const INITIAL: FormState = {
   cap: "", minAge: "",
   waves: [
     { label: "", price: "", closes: "" },
-    { label: "", price: "", closes: "" },
-    { label: "", price: "", closes: "" },
   ],
-  inclusions: "", extras: "", refundPolicy: "",
+  inclusions: "", extras: "", activations: "", refundPolicy: "",
   coverImage: null, registrationUrl: "", accessibilityInfo: "",
 };
 
@@ -638,7 +636,7 @@ const ALL_CATS = [
   "Individual","Doubles Mixed","Doubles Women","Doubles Men",
   "Relay 4-Person","Pro","Rx","Scaled","5K","10K","Half Marathon","Marathon","Ultra",
 ];
-const AGE_PRESETS  = ["16", "18", "21"];
+const AGE_PRESETS  = ["18"];
 const CAP_PRESETS  = ["250", "500", "1000", "2000", "3000", "5000"];
 
 function FormatStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
@@ -674,21 +672,6 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
 
   return (
     <div>
-      <Field label="Discipline" required>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {DISCIPLINES.map((d) => {
-            const on = form.discipline === d.v;
-            return (
-              <button key={d.v} type="button" onClick={() => update({ discipline: d.v })}
-                className={`text-left p-4 rounded-md border transition-all ${on ? "border-primary bg-primary/5" : "border-dark-lighter hover:border-muted"}`}>
-                <div className={`font-headline text-[15px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{d.l}</div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">{d.d}</div>
-              </button>
-            );
-          })}
-        </div>
-      </Field>
-
       <Field label="Competition format" required>
         <div className="grid grid-cols-3 gap-3">
           {FORMATS.map((f) => {
@@ -698,6 +681,21 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
                 className={`text-left p-4 rounded-md border transition-all ${on ? "border-primary bg-primary/5" : "border-dark-lighter hover:border-muted"}`}>
                 <div className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{f.l}</div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">{f.d}</div>
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <Field label="Discipline" required>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {DISCIPLINES.map((d) => {
+            const on = form.discipline === d.v;
+            return (
+              <button key={d.v} type="button" onClick={() => update({ discipline: d.v })}
+                className={`text-left p-4 rounded-md border transition-all ${on ? "border-primary bg-primary/5" : "border-dark-lighter hover:border-muted"}`}>
+                <div className={`font-headline text-[15px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{d.l}</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">{d.d}</div>
               </button>
             );
           })}
@@ -799,6 +797,11 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
       {/* Minimum age — chip picker */}
       <Field label="Minimum age" required>
         <div className="flex flex-wrap gap-2 mb-3">
+          <button type="button"
+            onClick={() => { update({ minAge: "0" }); setAgeMode("open"); }}
+            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${ageMode === "open" ? "chip-active" : ""}`}>
+            Open to all
+          </button>
           {AGE_PRESETS.map(a => {
             const active = ageMode === "preset" && form.minAge === a;
             return (
@@ -810,7 +813,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             );
           })}
           <button type="button"
-            onClick={() => setAgeMode("custom")}
+            onClick={() => { update({ minAge: "" }); setAgeMode("custom"); }}
             className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${ageMode === "custom" ? "chip-active" : ""}`}>
             Custom
           </button>
@@ -821,6 +824,9 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
               placeholder="e.g. 14" className={`${inputCls} w-32`} />
             <span className="font-headline text-[13px] text-muted">years old minimum</span>
           </div>
+        )}
+        {ageMode === "open" && (
+          <p className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">No age restriction — open to all ages.</p>
         )}
       </Field>
     </div>
@@ -867,6 +873,18 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
     update({ inclusions: next.join(", ") });
   };
 
+  const [showCustomInclusion,  setShowCustomInclusion]  = useState(false);
+  const [customInclusionInput, setCustomInclusionInput] = useState("");
+
+  const commitCustomInclusion = () => {
+    const val = customInclusionInput.trim();
+    if (val && !activeInclusions.includes(val)) {
+      update({ inclusions: [...activeInclusions, val].join(", ") });
+    }
+    setCustomInclusionInput("");
+    setShowCustomInclusion(false);
+  };
+
   // Derive active refund chips from the form value
   const [refundSelected, setRefundSelected] = useState<string[]>(() => {
     return REFUND_PRESETS.filter(r => form.refundPolicy.includes(r.l)).map(r => r.v);
@@ -901,17 +919,18 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
 
   return (
     <div>
-      <Field label="Ticket waves" hint="Staggered pricing (early bird → late entry)">
+      <Field label="Ticket categories">
         <div className="space-y-3">
           {form.waves.map((w, i) => (
             <div key={i} className="bg-dark border border-dark-lighter rounded-lg p-4 space-y-3">
-              {/* Row 1: number + name */}
+              {/* Row 1: number + category name */}
               <div className="flex items-center gap-3">
                 <div className="w-7 h-7 rounded-md bg-dark-lighter flex items-center justify-center font-headline font-black italic text-primary text-[13px] shrink-0">
                   {i + 1}
                 </div>
                 <input value={w.label} onChange={(e) => updateWave(i, { label: e.target.value })}
-                  placeholder="Wave name" className={`${inputCls} flex-1`} />
+                  placeholder="General admission"
+                  className={`${inputCls} flex-1`} />
                 <button onClick={() => removeWave(i)}
                   className="w-9 h-9 rounded text-muted-dark hover:text-primary hover:bg-dark-lighter flex items-center justify-center transition-colors shrink-0">
                   <Trash2 className="w-4 h-4" />
@@ -928,7 +947,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                   </div>
                 </div>
                 <div>
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-1.5">Wave closes</div>
+                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-1.5">Category closes</div>
                   <DatePickerPopover
                     value={w.closes}
                     onChange={v => updateWave(i, { closes: v })}
@@ -941,14 +960,14 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
           ))}
           <button onClick={addWave}
             className="w-full border border-dashed border-dark-lighter rounded-md py-3 font-headline text-[12px] uppercase tracking-widest text-muted hover:text-primary hover:border-primary/50 flex items-center justify-center gap-2 transition-colors">
-            <Plus className="w-4 h-4" /> Add ticket wave
+            <Plus className="w-4 h-4" /> Add ticket category
           </button>
         </div>
       </Field>
 
-      {/* Inclusions — preset chips + free text */}
+      {/* Inclusions — preset chips + custom input */}
       <Field label="What's included" hint="Shown on the event page">
-        <div className="flex flex-wrap gap-2 mb-3">
+        <div className="flex flex-wrap gap-2">
           {INCLUSION_PRESETS.map(item => {
             const active = activeInclusions.includes(item);
             return (
@@ -960,19 +979,113 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
               </button>
             );
           })}
+          {/* Custom inclusions added by organiser */}
+          {activeInclusions.filter(i => !INCLUSION_PRESETS.includes(i)).map(item => (
+            <button key={item} type="button" onClick={() => toggleInclusion(item)}
+              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip chip-active flex items-center gap-1.5">
+              <Check className="w-3 h-3" />{item}
+            </button>
+          ))}
+          {showCustomInclusion ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                type="text"
+                value={customInclusionInput}
+                onChange={e => setCustomInclusionInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") { e.preventDefault(); commitCustomInclusion(); }
+                  if (e.key === "Escape") { setShowCustomInclusion(false); setCustomInclusionInput(""); }
+                }}
+                placeholder="e.g. Warm-up area access"
+                className={`${inputCls} !py-2 w-44 text-[12px]`}
+              />
+              <button type="button" onClick={commitCustomInclusion}
+                className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors">
+                Add
+              </button>
+              <button type="button" onClick={() => { setShowCustomInclusion(false); setCustomInclusionInput(""); }}
+                className="text-muted-dark hover:text-light transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowCustomInclusion(true)}
+              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip hover:chip-active">
+              <Plus className="w-3 h-3 inline mr-1" /> Custom…
+            </button>
+          )}
         </div>
-        <textarea rows={2} value={form.inclusions}
-          onChange={(e) => update({ inclusions: e.target.value })}
-          placeholder="Any extras not listed above…"
-          className={textareaCls} />
       </Field>
 
       {/* Extras — keep as textarea */}
-      <Field label="Optional extras" hint="Add-ons at checkout">
-        <textarea rows={2} value={form.extras} onChange={(e) => update({ extras: e.target.value })}
-          placeholder="Race kit ($65), official photos ($45), merch bundle ($89)."
-          className={textareaCls} />
-      </Field>
+      {/* Activations — toggle + slide-in textarea */}
+      {(() => {
+        const on = form.activations !== "";
+        return (
+          <div className="border border-dark-lighter rounded-xl overflow-hidden mb-6">
+            <button
+              type="button"
+              onClick={() => update({ activations: on ? "" : " " })}
+              className="w-full flex items-center justify-between px-5 py-4 bg-dark hover:bg-dark-lighter transition-colors"
+            >
+              <div>
+                <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-light text-left">Activations</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5 text-left">Brand activations, experiences &amp; sponsor zones</div>
+              </div>
+              <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-primary" : "bg-dark-lighter"}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : "translate-x-0"}`} />
+              </div>
+            </button>
+            {on && (
+              <div className="px-5 pb-5 pt-3 bg-dark border-t border-dark-lighter">
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={form.activations.trim() === "" ? "" : form.activations}
+                  onChange={e => update({ activations: e.target.value })}
+                  placeholder="Describe the activations available — e.g. recovery zone, supplement sampling, athlete village, sponsor booths…"
+                  className={textareaCls}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Optional extras — toggle + slide-in textarea */}
+      {(() => {
+        const on = form.extras !== "";
+        return (
+          <div className="border border-dark-lighter rounded-xl overflow-hidden mb-6">
+            <button
+              type="button"
+              onClick={() => update({ extras: on ? "" : " " })}
+              className="w-full flex items-center justify-between px-5 py-4 bg-dark hover:bg-dark-lighter transition-colors"
+            >
+              <div>
+                <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-light text-left">Optional extras</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5 text-left">Add-ons athletes can purchase at checkout</div>
+              </div>
+              <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-primary" : "bg-dark-lighter"}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : "translate-x-0"}`} />
+              </div>
+            </button>
+            {on && (
+              <div className="px-5 pb-5 pt-3 bg-dark border-t border-dark-lighter">
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={form.extras.trim() === "" ? "" : form.extras}
+                  onChange={e => update({ extras: e.target.value })}
+                  placeholder="Race kit ($65), official photos ($45), merch bundle ($89)…"
+                  className={textareaCls}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Refund policy — preset chips + optional notes */}
       <Field label="Refund & transfer policy">
@@ -995,15 +1108,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
           className={textareaCls} />
       </Field>
 
-      <div className="bg-primary/5 border border-primary/30 rounded-md p-4 flex gap-3">
-        <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-        <div>
-          <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-primary mb-1">Startline fee</div>
-          <p className="text-[13px] text-muted-light leading-relaxed">
-            A 3.5% platform fee + A$0.50 per registration is deducted at checkout. All prices shown to athletes are inclusive.
-          </p>
-        </div>
-      </div>
+
     </div>
   );
 }
@@ -1101,8 +1206,8 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
     { k: "Format",        v: form.format || "—",                                                              step: 2 },
     { k: "Level",         v: form.level  || "—",                                                              step: 2 },
     { k: "Categories",    v: form.categories.join(", ") || "—",                                              step: 2 },
-    { k: "Cap / Min age", v: `${form.cap ? parseInt(form.cap).toLocaleString() : "∞"} · ${form.minAge}+`,   step: 2 },
-    { k: "Ticket waves",  v: `${form.waves.length} wave${form.waves.length !== 1 ? "s" : ""}, from A$${form.waves[0]?.price || "—"}`, step: 3 },
+    { k: "Cap / Min age", v: `${form.cap ? parseInt(form.cap).toLocaleString() : "∞"} · ${form.minAge === "0" ? "Open to all" : form.minAge ? `${form.minAge}+` : "—"}`,   step: 2 },
+    { k: "Ticket categories", v: `${form.waves.length} categor${form.waves.length !== 1 ? "ies" : "y"}, from A$${form.waves[0]?.price || "—"}`, step: 3 },
     { k: "Cover image",   v: form.coverImage ? "Uploaded" : "Using placeholder",                             step: 4 },
     { k: "Reg. URL",      v: form.registrationUrl || "—",                                                    step: 4 },
   ];
@@ -1287,6 +1392,7 @@ export default function NewListingPage() {
   const [apiError,      setApiError]      = useState("");
   const [submitErrors,  setSubmitErrors]  = useState<number[]>([]);
   const [visited,       setVisited]       = useState<Set<number>>(new Set());
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [direction,          setDirection]          = useState<"forward" | "back">("forward");
   const [showMobilePreview,  setShowMobilePreview]  = useState(false);
   const [eventId,   setEventId]   = useState<string | null>(null);
@@ -1297,7 +1403,7 @@ export default function NewListingPage() {
   const stepHasErrors = (s: number): boolean => {
     if (s === 0) return !(form.title.trim().length > 2 && form.tagline.trim().length > 2);
     if (s === 1) return !(form.date && form.venue.trim() && form.address.trim() && form.city.trim() && form.state);
-    if (s === 2) return !(form.format && form.level && form.minAge && form.discipline);
+    if (s === 2) return !(form.format && form.level && form.minAge !== "" && form.discipline);
     if (s === 3) return !(form.waves.length > 0 && !!form.waves[0]?.price);
     if (s === 4) return !form.registrationUrl.trim();
     return false;
@@ -1319,7 +1425,7 @@ export default function NewListingPage() {
         venue: form.venue, address: form.address, city: form.city, state: form.state,
         format: form.format, level: form.level, categories: form.categories,
         cap: form.cap ? parseInt(form.cap) : null, minAge: form.minAge ? parseInt(form.minAge) : null,
-        waves: form.waves, inclusions: form.inclusions, extras: form.extras,
+        waves: form.waves, inclusions: form.inclusions, extras: form.extras, activations: form.activations,
         refundPolicy: form.refundPolicy, registrationUrl: form.registrationUrl,
         accessibilityInfo: form.accessibilityInfo, submit: !asDraft,
       };
@@ -1371,7 +1477,7 @@ export default function NewListingPage() {
       setDirection("back");
       setStep(step - 1);
     } else {
-      router.push("/organiser/dashboard");
+      setShowCancelModal(true);
     }
   };
 
@@ -1387,7 +1493,7 @@ export default function NewListingPage() {
             <div className="px-6 lg:px-10 pt-3 pb-3">
               {/* Breadcrumb */}
               <div className="flex items-center gap-3 mb-2">
-                <button onClick={() => router.push("/organiser/dashboard")}
+                <button onClick={() => setShowCancelModal(true)}
                   className="flex items-center gap-1.5 text-muted hover:text-primary font-headline text-[11px] uppercase tracking-widest transition-colors">
                   <ArrowLeft className="w-4 h-4" /> Event Listings
                 </button>
@@ -1404,9 +1510,6 @@ export default function NewListingPage() {
                   const done    = visited.has(i) && !stepHasErrors(i) && i !== step;
                   const cur     = i === step;
                   const hasErr  = visited.has(i) && stepHasErrors(i) && !cur;
-                  const nextErr = i + 1 < STEPS.length
-                    ? visited.has(i + 1) && stepHasErrors(i + 1) && (i + 1) !== step
-                    : false;
                   return (
                     <div key={s.k} className="flex items-center flex-1 last:flex-none">
                       <button
@@ -1436,7 +1539,7 @@ export default function NewListingPage() {
                         </div>
                       </button>
                       {i < STEPS.length - 1 && (
-                        <div className={`flex-1 h-px mx-3 ${done && !hasErr && !nextErr ? "bg-primary/50" : "step-line"}`} />
+                        <div className="flex-1 h-px mx-3 step-line" />
                       )}
                     </div>
                   );
@@ -1457,7 +1560,7 @@ export default function NewListingPage() {
                     {step === 0 && <>Let&apos;s start with<br /><span className="text-primary">the basics.</span></>}
                     {step === 1 && <>When and where<br /><span className="text-primary">do athletes race?</span></>}
                     {step === 2 && <>Pick the<br /><span className="text-primary">race format.</span></>}
-                    {step === 3 && <>Tickets, waves<br /><span className="text-primary">and pricing.</span></>}
+                    {step === 3 && <>Tickets, categories<br /><span className="text-primary">and pricing.</span></>}
                     {step === 4 && <>Final details<br /><span className="text-primary">and cover image.</span></>}
                     {step === 5 && <>Review, then<br /><span className="text-primary">hit publish.</span></>}
                   </h1>
@@ -1465,7 +1568,7 @@ export default function NewListingPage() {
                     {step === 0 && "Keep it short and sharp — this is what athletes will see first."}
                     {step === 1 && "Athletes will search your event by city, state and date."}
                     {step === 2 && "You can enable multiple formats. Most HYROX events select Individual + Doubles."}
-                    {step === 3 && "Add up to 6 ticket waves. You can edit dates and prices anytime before opening sales."}
+                    {step === 3 && "Add ticket categories with pricing. You can edit dates and prices anytime before opening sales."}
                     {step === 4 && "Polish your listing with a cover image, logistics info and your registration link."}
                     {step === 5 && "Nothing's live yet. You can always come back to edit after publishing."}
                   </p>
@@ -1567,6 +1670,46 @@ export default function NewListingPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Cancel confirmation modal ── */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCancelModal(false)} />
+          <div className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-sm p-7 modal-in">
+            <h2 className="font-headline text-[22px] font-black italic tracking-tight text-light mb-2">
+              Leave without saving?
+            </h2>
+            <p className="text-muted text-[14px] leading-relaxed mb-7">
+              Your event details haven't been saved yet. Save as a draft so you can come back and finish it later.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={async () => {
+                  setShowCancelModal(false);
+                  await submitToApi(true, form.title.trim() || "Untitled draft");
+                  router.push("/organiser/dashboard");
+                }}
+                disabled={saving}
+                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/50 bg-primary/5 text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {saving ? "Saving…" : <><Check className="w-4 h-4" /> Save draft &amp; leave</>}
+              </button>
+              <button
+                onClick={() => router.push("/organiser/dashboard")}
+                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-muted hover:text-light hover:border-muted transition-colors"
+              >
+                Discard &amp; leave
+              </button>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="font-headline text-[12px] uppercase tracking-widest text-muted-dark hover:text-muted transition-colors text-center py-1"
+              >
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
