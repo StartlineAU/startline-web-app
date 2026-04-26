@@ -60,3 +60,4 @@ override.tf.json
 terraform.tfvars
 *.auto.tfvars
 *.auto.tfvars.json
+/.claude/worktrees
