@@ -39,6 +39,11 @@ output "database_url" {
   sensitive   = true
 }
 
+output "route53_nameservers" {
+  description = "Paste these into GoDaddy → Domain → Nameservers (use 'I'll use my own nameservers') to delegate DNS to Route 53."
+  value       = aws_route53_zone.primary.name_servers
+}
+
 output "amplify_domain_dns_records" {
   description = "DNS records you must create at GoDaddy to validate the cert and route traffic. Each entry has type/name/value."
   value = var.amplify_custom_domain == null ? [] : concat(
