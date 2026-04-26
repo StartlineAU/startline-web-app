@@ -99,6 +99,8 @@ resource "aws_amplify_domain_association" "this" {
   wait_for_verification = false
 
   # Apex (startlineau.com) and www both routed to the production branch.
+  # DNS lives in Route 53; aws_route53_record entries below resolve the apex
+  # via ALIAS to the Amplify CloudFront distribution.
   sub_domain {
     branch_name = aws_amplify_branch.production.branch_name
     prefix      = ""
