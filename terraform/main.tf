@@ -4,8 +4,11 @@ data "aws_iam_policy_document" "amplify_assume" {
   statement {
     effect = "Allow"
     principals {
-      type        = "Service"
-      identifiers = ["amplify.amazonaws.com"]
+      type = "Service"
+      identifiers = [
+        "amplify.amazonaws.com",
+        "amplify.${var.aws_region}.amazonaws.com",
+      ]
     }
     actions = ["sts:AssumeRole"]
   }
@@ -32,6 +35,8 @@ locals {
         preBuild:
           commands:
             - npm ci
+            - env | grep -E '^(DATABASE_URL|RESEND_API_KEY)=' >> .env.production
+            - npx prisma migrate deploy
         build:
           commands:
             - npm run build
@@ -51,6 +56,7 @@ resource "aws_amplify_app" "this" {
   build_spec = local.build_spec
 
   iam_service_role_arn = aws_iam_role.amplify.arn
+  compute_role_arn     = aws_iam_role.amplify.arn
 
   repository   = local.connect_repository ? var.amplify_repository_url : null
   access_token = local.connect_repository ? var.amplify_repository_access_token : null
