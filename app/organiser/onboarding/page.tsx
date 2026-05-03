@@ -3,15 +3,13 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ArrowRight, ArrowLeft, CheckCircle, Search, ExternalLink, Check } from "lucide-react";
+import { ArrowRight, ArrowLeft, Check } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const Aurora = dynamic(() => import("@/components/ui/Aurora"), { ssr: false });
 
-type AbnStatus = "idle" | "loading" | "found" | "not_found" | "unavailable";
-
-const inputCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
-const areaCls   = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none resize-none transition-colors";
+const inputCls = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
+const areaCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none resize-none transition-colors";
 
 function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
@@ -28,9 +26,9 @@ function Field({ label, required, hint, children }: { label: string; required?: 
 }
 
 const STEPS = [
-  { n: "01", label: "Organisation", sub: "Your details & bio"        },
-  { n: "02", label: "Verification",  sub: "Insurance & past events"  },
-  { n: "03", label: "Submit",        sub: "Review & send"            },
+  { n: "01", label: "Organisation", sub: "Name & bio"           },
+  { n: "02", label: "Contact",      sub: "Your contact details" },
+  { n: "03", label: "Submit",       sub: "Review & send"        },
 ];
 
 export default function OnboardingPage() {
@@ -40,14 +38,12 @@ export default function OnboardingPage() {
   const [animating, setAnimating] = useState(false);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState("");
-  const [abnStatus, setAbnStatus] = useState<AbnStatus>("idle");
-  const [abnEntity, setAbnEntity] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
-    orgName: "", contactName: "", phone: "", abn: "", bio: "",
-    insuranceUrl: "", pastEventsUrl: "", certifications: "",
-    emailOnApprove: true, emailOnReject: true,
+    orgName: "", bio: "",
+    firstName: "", lastName: "", phone: "", contactEmail: "",
+    agreedToCommunity: false, agreedToTerms: false,
   });
 
   const u = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
@@ -64,58 +60,47 @@ export default function OnboardingPage() {
     }, 260);
   };
 
-  // ── ABN lookup ──────────────────────────────────────────────────────────
-  const lookupAbn = async () => {
-    if (!form.abn) return;
-    setAbnStatus("loading");
-    try {
-      const res = await fetch(`/api/abn?abn=${form.abn.replace(/\s/g, "")}`);
-      if (res.status === 503) { setAbnStatus("unavailable"); return; }
-      if (!res.ok)            { setAbnStatus("not_found"); return; }
-      const data = await res.json();
-      setAbnEntity(data.entityName);
-      setAbnStatus("found");
-    } catch {
-      setAbnStatus("unavailable");
-    }
-  };
-
   // ── Validation ──────────────────────────────────────────────────────────
   const validateStep = (s: number) => {
     if (s === 0) {
-      if (!form.orgName.trim())     { setError("Organisation name is required."); return false; }
-      if (!form.contactName.trim()) { setError("Contact name is required."); return false; }
-      if (!form.phone.trim())       { setError("Phone number is required."); return false; }
+      if (!form.orgName.trim()) { setError("Please fill in all required fields to continue."); return false; }
     }
     if (s === 1) {
-      if (!form.insuranceUrl.trim()) { setError("Insurance document link is required."); return false; }
-      if (!form.pastEventsUrl.trim()) { setError("Past events evidence link is required."); return false; }
+      if (!form.firstName.trim() || !form.lastName.trim() || !form.phone.trim() || !form.contactEmail.trim()) {
+        setError("Please fill in all required fields to continue.");
+        return false;
+      }
     }
     return true;
   };
 
   // ── Save / submit ────────────────────────────────────────────────────────
-  const save = async (submit = false) => {
-    setError("");
-    setSaving(true);
+  const save = async (submit = false, silent = false) => {
+    if (!silent) setError("");
+    if (!silent) setSaving(true);
     try {
-      const res  = await fetch("/api/organiser/profile", {
+      if (submit && (!form.agreedToCommunity || !form.agreedToTerms)) {
+        setError("Please agree to both commitments to submit your application.");
+        return;
+      }
+      const contactName = `${form.firstName} ${form.lastName}`.trim();
+      const res = await fetch("/api/organiser/profile", {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ ...form, submit }),
+        body:    JSON.stringify({ orgName: form.orgName, bio: form.bio, contactName, contactEmail: form.contactEmail, phone: form.phone, submit }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      if (submit) router.push("/organiser/pending");
+      if (!res.ok) { if (!silent) setError(data.error); return; }
+      if (submit) router.push("/organiser/dashboard");
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
   };
 
   const handleNext = () => {
     if (!validateStep(step)) return;
     if (step < STEPS.length - 1) {
-      save(false); // save progress silently
+      save(false, true);
       goTo(step + 1);
     }
   };
@@ -130,9 +115,8 @@ export default function OnboardingPage() {
   return (
     <main className="min-h-screen bg-dark-darker relative">
 
-      {/* ── Aurora — centred in viewport ── */}
+      {/* ── Aurora ── */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {/* Aurora fills the full fixed layer so the shader sees correct dimensions */}
         <div className="absolute inset-0 opacity-70">
           <Aurora
             colorStops={["#0a1a05", "#1a3d08", "#b3e153"]}
@@ -141,16 +125,14 @@ export default function OnboardingPage() {
             speed={0.6}
           />
         </div>
-        {/* Vignette — fade all four edges into the background colour */}
         <div className="absolute inset-x-0 top-0    h-[30%] bg-gradient-to-b  from-dark-darker to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t  from-dark-darker to-transparent" />
         <div className="absolute inset-y-0 left-0   w-[20%] bg-gradient-to-r  from-dark-darker to-transparent" />
         <div className="absolute inset-y-0 right-0  w-[20%] bg-gradient-to-l  from-dark-darker to-transparent" />
-        {/* Scan-grid overlay */}
         <div className="absolute inset-0 scan-grid opacity-50" />
       </div>
 
-      {/* ── Minimal top bar — logo centred ── */}
+      {/* ── Logo bar ── */}
       <div className="fixed top-0 left-0 right-0 z-40 h-16 flex items-center justify-center">
         <Image src="/images/logo-title.svg" alt="Startline" width={140} height={36} className="h-8 w-auto" />
       </div>
@@ -159,7 +141,7 @@ export default function OnboardingPage() {
       <div className="relative z-10 pt-16 min-h-screen flex items-start justify-center px-6 py-12">
         <div className="w-full max-w-[600px]">
 
-          {/* ── Step indicators — same style as event listing ── */}
+          {/* ── Step indicators ── */}
           <div className="flex items-center mb-10">
             {STEPS.map((s, i) => {
               const done = i < step;
@@ -173,13 +155,8 @@ export default function OnboardingPage() {
                       :        "bg-dark border-dark-lighter text-muted-dark"}`}>
                       {done ? <Check className="w-4 h-4" /> : s.n}
                     </div>
-                    <div className="hidden sm:block">
-                      <div className={`font-headline text-[11px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors duration-300 ${cur ? "text-light" : "text-muted"}`}>
-                        {s.label}
-                      </div>
-                      <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark whitespace-nowrap">
-                        {s.sub}
-                      </div>
+                    <div className={`hidden sm:block font-headline text-[11px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors duration-300 ${cur ? "text-light" : "text-muted"}`}>
+                      {s.label}
                     </div>
                   </div>
                   {i < STEPS.length - 1 && (
@@ -191,8 +168,8 @@ export default function OnboardingPage() {
           </div>
 
           {/* Step label */}
-          <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary flex items-center gap-3 mb-4">
-            <span className="w-8 h-px bg-primary" /> Step {step + 1} of {STEPS.length}
+          <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4">
+            Step {step + 1} of {STEPS.length}
           </div>
 
           {/* Animated step content */}
@@ -208,87 +185,55 @@ export default function OnboardingPage() {
                   Tell us about your<br /><span className="text-primary">organisation.</span>
                 </h1>
                 <p className="text-muted text-[14px] mb-8">
-                  This information is reviewed by our team. You can add social links and a logo in your profile settings once approved.
+                  This information is reviewed by our team before your account is approved.
                 </p>
 
-                {error && <div className="mb-5 px-4 py-3 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]">{error}</div>}
+                {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
 
                 <Field label="Organisation / company name" required>
                   <input value={form.orgName} onChange={(e) => u({ orgName: e.target.value })}
                     placeholder="Endurance Events Australia" className={inputCls} />
                 </Field>
 
-                <div className="grid grid-cols-2 gap-5">
-                  <Field label="Contact person" required>
-                    <input value={form.contactName} onChange={(e) => u({ contactName: e.target.value })}
-                      placeholder="Jane Smith" className={inputCls} />
-                  </Field>
-                  <Field label="Phone" required>
-                    <input type="tel" value={form.phone} onChange={(e) => u({ phone: e.target.value })}
-                      placeholder="+61 4XX XXX XXX" className={inputCls} />
-                  </Field>
-                </div>
-
-                <Field label="ABN" hint="Optional — live lookup available">
-                  <div className="flex gap-2">
-                    <input value={form.abn} onChange={(e) => { u({ abn: e.target.value }); setAbnStatus("idle"); }}
-                      placeholder="XX XXX XXX XXX" className={`${inputCls} flex-1`} />
-                    <button type="button" onClick={lookupAbn} disabled={!form.abn || abnStatus === "loading"}
-                      className="px-4 py-3 bg-dark border border-dark-lighter rounded-md text-muted hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-40 flex items-center gap-2 font-headline text-[12px] uppercase tracking-widest">
-                      <Search className="w-4 h-4" /> {abnStatus === "loading" ? "…" : "Verify"}
-                    </button>
-                  </div>
-                  {abnStatus === "found"       && <p className="mt-1.5 font-headline text-[11px] uppercase tracking-widest text-primary flex items-center gap-1"><CheckCircle className="w-3 h-3" /> {abnEntity}</p>}
-                  {abnStatus === "not_found"   && <p className="mt-1.5 font-headline text-[11px] uppercase tracking-widest text-red-400">ABN not found in the register.</p>}
-                  {abnStatus === "unavailable" && <p className="mt-1.5 font-headline text-[11px] uppercase tracking-widest text-muted">Lookup unavailable — enter ABN manually.</p>}
-                </Field>
-
                 <Field label="About your organisation" hint={`${form.bio.length}/500`}>
-                  <textarea rows={4} maxLength={500} value={form.bio} onChange={(e) => u({ bio: e.target.value })}
+                  <textarea rows={6} maxLength={500} value={form.bio} onChange={(e) => u({ bio: e.target.value })}
                     placeholder="Briefly describe the types of events you run and your experience as an event organiser."
                     className={areaCls} />
                 </Field>
               </>
             )}
 
-            {/* ── Step 2: Verification ── */}
+            {/* ── Step 2: Contact ── */}
             {step === 1 && (
               <>
                 <h1 className="font-headline text-4xl font-black italic tracking-tighter text-light mb-2">
-                  Verify your<br /><span className="text-primary">credentials.</span>
+                  Your contact<br /><span className="text-primary">details.</span>
                 </h1>
-                <p className="text-muted text-[14px] mb-4">
-                  Upload your documents to Google Drive, Dropbox or similar and paste the shareable link below.
+                <p className="text-muted text-[14px] mb-8">
+                  This is who our team will reach out to about your application and events.
                 </p>
-                <div className="bg-primary/5 border border-primary/20 rounded-md p-4 mb-6 flex gap-3">
-                  <ExternalLink className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                  <p className="font-headline text-[11px] uppercase tracking-widest text-muted-light leading-relaxed">
-                    Make sure links are accessible to anyone. In Google Drive: Share → Anyone with the link → Viewer.
-                  </p>
+
+                {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
+
+                <div className="grid grid-cols-2 gap-5">
+                  <Field label="First name" required>
+                    <input value={form.firstName} onChange={(e) => u({ firstName: e.target.value })}
+                      placeholder="Jane" className={inputCls} />
+                  </Field>
+                  <Field label="Last name" required>
+                    <input value={form.lastName} onChange={(e) => u({ lastName: e.target.value })}
+                      placeholder="Smith" className={inputCls} />
+                  </Field>
                 </div>
 
-                {error && <div className="mb-5 px-4 py-3 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]">{error}</div>}
-
-                <Field label="Public liability insurance" required hint="PDF or image link">
-                  <input type="url" value={form.insuranceUrl} onChange={(e) => u({ insuranceUrl: e.target.value })}
-                    placeholder="https://drive.google.com/…" className={inputCls} />
-                  <p className="mt-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-dark">
-                    Current certificate of currency covering event activities in Australia.
-                  </p>
+                <Field label="Contact phone" required>
+                  <input type="tel" value={form.phone} onChange={(e) => u({ phone: e.target.value })}
+                    placeholder="+61 4XX XXX XXX" className={inputCls} />
                 </Field>
 
-                <Field label="Evidence of past events" required hint="Link to portfolio or examples">
-                  <input type="url" value={form.pastEventsUrl} onChange={(e) => u({ pastEventsUrl: e.target.value })}
-                    placeholder="https://drive.google.com/… or https://yourorg.com/events" className={inputCls} />
-                  <p className="mt-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-dark">
-                    Event website, results page, photos or a document listing events you&apos;ve run.
-                  </p>
-                </Field>
-
-                <Field label="Certifications" hint="Optional">
-                  <textarea rows={3} value={form.certifications} onChange={(e) => u({ certifications: e.target.value })}
-                    placeholder="e.g. Athletics Australia affiliate, CrossFit HQ licensed affiliate, accredited race director course."
-                    className={areaCls} />
+                <Field label="Contact email" required>
+                  <input type="email" value={form.contactEmail} onChange={(e) => u({ contactEmail: e.target.value })}
+                    placeholder="jane@enduranceevents.com.au" className={inputCls} />
                 </Field>
               </>
             )}
@@ -300,42 +245,57 @@ export default function OnboardingPage() {
                   Ready to<br /><span className="text-primary">submit.</span>
                 </h1>
                 <p className="text-muted text-[14px] mb-8">
-                  Review your notification preferences, then submit your application. Our team typically responds within 1–2 business days.
+                  Our team will review your application and get back to you within 1–2 business days.
                 </p>
 
-                {error && <div className="mb-5 px-4 py-3 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]">{error}</div>}
+                {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
 
-                <div className="space-y-3 mb-8">
-                  {[
-                    { key: "emailOnApprove" as const, title: "Application approved", desc: "Email when your account or an event is approved." },
-                    { key: "emailOnReject"  as const, title: "Application update",   desc: "Email when your account or an event requires attention." },
-                  ].map(({ key, title, desc }) => (
-                    <label key={key} className="flex items-start gap-4 p-4 bg-dark border border-dark-lighter rounded-lg cursor-pointer hover:border-primary/40 transition-colors">
-                      <input type="checkbox" checked={form[key]} onChange={(e) => u({ [key]: e.target.checked })}
-                        className="accent-primary w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <div className="font-headline text-[13px] font-bold uppercase tracking-tight text-light">{title}</div>
-                        <div className="font-headline text-[11px] uppercase tracking-widest text-muted mt-0.5">{desc}</div>
+                {/* Community commitment */}
+                <div className="bg-dark border border-dark-lighter rounded-lg p-6 mb-4">
+                  <h2 className="font-headline text-xl font-black italic tracking-tight text-light mb-3">
+                    Everyone belongs at<br /><span className="text-primary">the startline.</span>
+                  </h2>
+                  <p className="text-muted text-[14px] leading-relaxed mb-5">
+                    When you join Startline, we ask you to uphold our community standards. I commit to welcoming all athletes — regardless of their background, ability, age, or experience level — and to running events that are safe, inclusive, and free from discrimination.
+                  </p>
+                  <label className="flex items-start gap-4 cursor-pointer group">
+                    <div className="relative flex-shrink-0 mt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={form.agreedToCommunity}
+                        onChange={(e) => u({ agreedToCommunity: e.target.checked })}
+                        className="sr-only"
+                      />
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${form.agreedToCommunity ? "bg-primary border-primary" : "bg-dark-lighter border-dark-lighter group-hover:border-primary/50"}`}>
+                        {form.agreedToCommunity && <Check className="w-3 h-3 text-dark" />}
                       </div>
-                    </label>
-                  ))}
+                    </div>
+                    <p className="text-[14px] text-muted leading-relaxed">
+                      I agree to uphold Startline&apos;s community standards and treat all athletes with respect.
+                    </p>
+                  </label>
                 </div>
 
-                {/* Summary checklist */}
-                <div className="bg-dark border border-dark-lighter rounded-lg p-5 mb-2">
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-primary mb-3">Before you submit</div>
-                  <ul className="space-y-2">
-                    {[
-                      "Organisation details are complete",
-                      "Insurance document link is active and accessible",
-                      "Past events evidence is accessible",
-                    ].map((s, i) => (
-                      <li key={i} className="flex items-center gap-2 font-headline text-[12px] uppercase tracking-widest text-muted-light">
-                        <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" /> {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {/* Terms of service */}
+                <label className="flex items-start gap-4 p-5 bg-dark border border-dark-lighter rounded-lg cursor-pointer hover:border-primary/40 transition-colors group">
+                  <div className="relative flex-shrink-0 mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={form.agreedToTerms}
+                      onChange={(e) => u({ agreedToTerms: e.target.checked })}
+                      className="sr-only"
+                    />
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${form.agreedToTerms ? "bg-primary border-primary" : "bg-dark-lighter border-dark-lighter group-hover:border-primary/50"}`}>
+                      {form.agreedToTerms && <Check className="w-3 h-3 text-dark" />}
+                    </div>
+                  </div>
+                  <p className="text-[14px] text-muted leading-relaxed">
+                    I agree to the{" "}
+                    <a href="/terms" target="_blank" className="text-primary hover:underline">Terms of Service</a>
+                    {" "}and{" "}
+                    <a href="/privacy" target="_blank" className="text-primary hover:underline">Privacy Policy</a>.
+                  </p>
+                </label>
               </>
             )}
 
@@ -351,10 +311,12 @@ export default function OnboardingPage() {
             </button>
 
             <div className="flex items-center gap-3">
-              <button onClick={() => save(false)} disabled={saving}
-                className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light px-5 py-3 transition-colors disabled:opacity-40">
-                Save draft
-              </button>
+              {step < STEPS.length - 1 && (
+                <button onClick={() => save(false)} disabled={saving}
+                  className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light px-5 py-3 transition-colors disabled:opacity-40">
+                  Save draft
+                </button>
+              )}
 
               {step < STEPS.length - 1 ? (
                 <button onClick={handleNext} disabled={animating}
@@ -362,7 +324,7 @@ export default function OnboardingPage() {
                   Continue <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (
-                <button onClick={() => save(true)} disabled={saving}
+                <button onClick={() => save(true)} disabled={saving || !form.agreedToTerms || !form.agreedToCommunity}
                   className="bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
                   {saving ? "Submitting…" : <>Submit application <ArrowRight className="w-4 h-4" /></>}
                 </button>

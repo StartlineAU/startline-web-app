@@ -41,9 +41,8 @@ function SignInForm() {
 
       // 3. Redirect based on organiser application status
       const status: string = data.status;
-      if (status === "APPROVED")        { router.push("/organiser/dashboard"); return; }
       if (status === "PENDING_PROFILE") { router.push("/organiser/onboarding"); return; }
-      router.push("/organiser/pending");
+      router.push("/organiser/dashboard");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
       if (msg.includes("NotAuthorizedException") || msg.includes("Incorrect username or password")) {

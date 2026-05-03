@@ -86,8 +86,8 @@ export default function ListingsPage() {
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-8">
             <div>
-              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-3 flex items-center gap-3">
-                <span className="w-8 h-px bg-primary" /> Event Listings
+              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-3">
+                Event Listings
               </div>
               <h1 className="font-headline text-[44px] lg:text-[56px] font-black italic tracking-tighter leading-none">
                 Your race<br /><span className="text-primary">calendar.</span>

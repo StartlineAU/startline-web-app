@@ -27,13 +27,16 @@ model Organiser {
   status     OrganiserStatus @default(PENDING_PROFILE)
 
   // Profile — filled during onboarding
-  orgName     String?
-  contactName String?
-  phone       String?
-  abn         String?
-  website     String?
-  instagram   String?
-  facebook    String?
+  orgName      String?
+  contactName  String?
+  contactEmail String?
+  phone        String?
+  abn          String?
+  website    String?
+  instagram  String?
+  tiktok     String?
+  facebook   String?
+  eventTypes String[]
   bio         String?
   logoUrl     String?
 

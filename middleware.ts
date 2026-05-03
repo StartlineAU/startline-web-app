@@ -73,8 +73,8 @@ export async function middleware(req: NextRequest) {
     if (!organiserStatus || organiserStatus === "PENDING_PROFILE") {
       return NextResponse.redirect(new URL("/organiser/onboarding", req.url));
     }
-    if (organiserStatus === "PENDING_REVIEW" || organiserStatus === "REJECTED" || organiserStatus === "SUSPENDED") {
-      return NextResponse.redirect(new URL("/organiser/pending", req.url));
+    if (organiserStatus === "REJECTED" || organiserStatus === "SUSPENDED") {
+      return NextResponse.redirect(new URL("/organiser", req.url));
     }
 
     return NextResponse.next();

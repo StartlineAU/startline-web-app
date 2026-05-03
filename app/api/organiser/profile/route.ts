@@ -13,8 +13,9 @@ export async function GET() {
       where:  { id: session.sub },
       select: {
         id: true, email: true, status: true, orgName: true, contactName: true,
-        phone: true, abn: true, website: true, instagram: true, facebook: true,
-        bio: true, logoUrl: true, insuranceUrl: true, pastEventsUrl: true,
+        contactEmail: true, phone: true, abn: true, website: true, instagram: true,
+        tiktok: true, facebook: true, eventTypes: true, bio: true, logoUrl: true,
+        insuranceUrl: true, pastEventsUrl: true,
         certifications: true, emailOnApprove: true, emailOnReject: true,
       },
     });
@@ -24,8 +25,8 @@ export async function GET() {
       if (process.env.NODE_ENV === "development") {
         return NextResponse.json({
           id: session.sub, email: session.email, status: "APPROVED",
-          orgName: null, contactName: null, phone: null, abn: null,
-          website: null, instagram: null, facebook: null, bio: null, logoUrl: null,
+          orgName: null, contactName: null, contactEmail: null, phone: null, abn: null,
+          website: null, instagram: null, tiktok: null, facebook: null, eventTypes: [], bio: null, logoUrl: null,
           insuranceUrl: null, pastEventsUrl: null, certifications: null,
           emailOnApprove: true, emailOnReject: true,
         });
@@ -50,33 +51,31 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  if (!session) {
+    if (process.env.NODE_ENV === "development") {
+      return NextResponse.json({ ok: true, status: "PENDING_PROFILE" });
+    }
+    return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  }
 
   const body = await req.json();
   const {
-    orgName, contactName, phone, abn, website, instagram, facebook,
+    orgName, contactName, contactEmail, phone, abn, website, instagram, tiktok, facebook, eventTypes,
     bio, logoUrl, insuranceUrl, pastEventsUrl, certifications,
     emailOnApprove, emailOnReject, submit,
   } = body;
 
-  // Strict stage-3 validation when submitting for review
   if (submit) {
-    if (!orgName || !contactName || !phone) {
-      return NextResponse.json({ error: "Organisation name, contact name and phone are required." }, { status: 400 });
-    }
-    if (!insuranceUrl) {
-      return NextResponse.json({ error: "Public liability insurance document link is required." }, { status: 400 });
-    }
-    if (!pastEventsUrl) {
-      return NextResponse.json({ error: "Evidence of past events is required." }, { status: 400 });
+    if (!orgName || !contactName || !phone || !contactEmail) {
+      return NextResponse.json({ error: "Organisation name, contact details and phone are required." }, { status: 400 });
     }
   }
 
   const updated = await prisma.organiser.update({
     where: { id: session.sub },
     data: {
-      orgName, contactName, phone, abn, website, instagram, facebook,
-      bio, logoUrl, insuranceUrl, pastEventsUrl, certifications,
+      orgName, contactName, contactEmail, phone, abn, website, instagram, tiktok, facebook, eventTypes,
+      bio, logoUrl,
       emailOnApprove: emailOnApprove ?? true,
       emailOnReject:  emailOnReject  ?? true,
       ...(submit ? { status: "PENDING_REVIEW" } : {}),
