@@ -11,7 +11,7 @@ terraform {
       version = "~> 3.6"
     }
   }
-  
+
   backend "s3" {
     bucket       = "startline-tf-state-829182232071"
     key          = "startline/terraform.tfstate"
