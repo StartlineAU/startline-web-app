@@ -25,8 +25,9 @@ resource "aws_iam_role_policy_attachment" "amplify_admin" {
 }
 
 locals {
-  # coalesce(null, "") errors (empty strings are skipped); test explicitly instead.
-  connect_repository = var.amplify_repository_url != null && trimspace(var.amplify_repository_url) != ""
+  # Use a ternary rather than `&&` — Terraform doesn't short-circuit cleanly
+  # when the right operand calls a function that rejects null (trimspace).
+  connect_repository = var.amplify_repository_url != null ? trimspace(var.amplify_repository_url) != "" : false
 
   build_spec = <<-EOT
     version: 1
