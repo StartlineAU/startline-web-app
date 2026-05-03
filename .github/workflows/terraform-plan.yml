@@ -36,6 +36,9 @@ jobs:
       - id: plan
         run: terraform plan -no-color -out=tfplan
         continue-on-error: true
+        env:
+          TF_VAR_amplify_repository_access_token: ${{ secrets.AMPLIFY_REPOSITORY_ACCESS_TOKEN }}
+          TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
 
       - uses: actions/github-script@v7
         env:
