@@ -89,3 +89,8 @@ output "amplify_domain_dns_records" {
     }],
   )
 }
+
+output "github_actions_role_arn" {
+  description = "Set as GitHub repo variable AWS_ROLE_ARN for the terraform workflows."
+  value       = aws_iam_role.terraform_ci.arn
+}
