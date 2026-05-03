@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill in values.
+#
+# aws_region = "ap-southeast-2"
+# project_name = "startline"
+# production_branch = "main"
+#
+# Optional: connect Git for automatic builds (HTTPS URL + provider token).
+# amplify_repository_url            = "https://github.com/your-org/startline"
+# amplify_repository_access_token   = "ghp_..." # GitHub fine-grained or classic PAT with repo scope
+#
+# RDS: tighten ingress to known IPs where possible (Amplify has no fixed egress CIDRs).
+# database_allowed_cidr_blocks = ["203.0.113.10/32"]
+#
+# Optional: non-secret build/runtime env. Set DATABASE_URL from the Terraform output
+# or from Secrets Manager (see output database_secret_arn) — do not commit it here.
+# amplify_environment_variables = {}
