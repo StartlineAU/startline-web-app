@@ -145,3 +145,11 @@ variable "database_secret_recovery_window_days" {
   type        = number
   default     = 0
 }
+
+# --- Cognito ---
+
+variable "cognito_deletion_protection" {
+  description = "Enable deletion protection on the User Pool. Recommended for production."
+  type        = bool
+  default     = true
+}

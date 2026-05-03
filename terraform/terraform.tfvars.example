@@ -14,3 +14,6 @@
 # Optional: non-secret build/runtime env. Set DATABASE_URL from the Terraform output
 # or from Secrets Manager (see output database_secret_arn) — do not commit it here.
 # amplify_environment_variables = {}
+#
+# === Cognito ===
+# cognito_deletion_protection = true   # set false in dev if you want easy teardown
