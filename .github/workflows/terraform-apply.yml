@@ -31,3 +31,6 @@ jobs:
 
       - run: terraform init
       - run: terraform apply -auto-approve
+        env:
+          TF_VAR_amplify_repository_access_token: ${{ secrets.AMPLIFY_REPOSITORY_ACCESS_TOKEN }}
+          TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
