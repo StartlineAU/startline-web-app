@@ -25,10 +25,10 @@ export const metadata: Metadata = {
     template: "%s | Startline",
   },
   description:
-    "Discover HYROX, CrossFit, running races and hybrid fitness events across Australia. Find, compare and register for competitions near you.",
+    "Discover functional fitness, CrossFit, running races and hybrid fitness events across Australia. Find, compare and register for competitions near you.",
   keywords: [
     "fitness events Australia",
-    "HYROX Australia",
+    "functional fitness competition",
     "CrossFit competition",
     "running races",
     "hybrid fitness",
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     siteName:    "Startline",
     title:       "Startline — Find Fitness Events in Australia",
     description:
-      "Discover HYROX, CrossFit, running races and hybrid fitness events across Australia.",
+      "Discover functional fitness, CrossFit, running races and hybrid fitness events across Australia.",
     url:         SITE_URL,
     images: [
       {
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
   twitter: {
     card:        "summary_large_image",
     title:       "Startline — Find Fitness Events in Australia",
-    description: "Discover HYROX, CrossFit, running races and hybrid fitness events across Australia.",
+    description: "Discover functional fitness, CrossFit, running races and hybrid fitness events across Australia.",
     images:      ["/site-preview.png"],
   },
 

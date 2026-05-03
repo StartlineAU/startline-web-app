@@ -120,7 +120,7 @@ const STATES = [
   ["sa","SA"],["tas","TAS"],["act","ACT"],["nt","NT"],
 ] as const;
 
-const DISCIPLINES = ["hyrox", "crossfit", "running", "hybrid"] as const;
+const DISCIPLINES = ["functional_fitness", "crossfit", "running", "hybrid"] as const;
 
 function FieldLabel({ label, hint, required }: { label: string; hint?: string; required?: boolean }) {
   return (
@@ -171,7 +171,7 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
               <span className="w-6 h-px bg-primary" /> Organisation
             </div>
             <div className="space-y-4">
-              <div><FieldLabel label="Organisation name" required /><FInput value={profile.orgName} onChange={e => onChange({ orgName: e.target.value })} placeholder="e.g. HYROX Australia" /></div>
+              <div><FieldLabel label="Organisation name" required /><FInput value={profile.orgName} onChange={e => onChange({ orgName: e.target.value })} placeholder="e.g. Endurance Events Australia" /></div>
               <div><FieldLabel label="About" hint={`${profile.bio.length}/600`} /><FTextarea rows={4} maxLength={600} value={profile.bio} onChange={e => onChange({ bio: e.target.value })} placeholder="Tell athletes what you run and who you are…" /></div>
               <div>
                 <FieldLabel label="Event disciplines" hint="Pick all that apply" />

@@ -116,7 +116,7 @@ export function getEventsByState(events: FitnessEvent[]): Record<AustralianState
 
 export function getEventsByType(events: FitnessEvent[]): Record<string, number> {
   const today = startOfDay(new Date());
-  const counts: Record<string, number> = { hyrox: 0, crossfit: 0, running: 0, hybrid: 0 };
+  const counts: Record<string, number> = { functional_fitness: 0, crossfit: 0, running: 0, hybrid: 0 };
   for (const event of events) {
     if (isOnOrAfterToday(event.date, today)) counts[event.type]++;
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getOrganiserSession } from "@/lib/auth";
+import { getOrganiserSession } from "@/lib/amplify-server";
 
 const prisma = new PrismaClient();
 

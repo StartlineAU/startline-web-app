@@ -1,11 +1,67 @@
+"use client";
+
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail } from "lucide-react";
+import { Mail, ArrowRight, RotateCcw } from "lucide-react";
+import { confirmSignUp, resendSignUpCode } from "aws-amplify/auth";
 
-export default function VerifyEmailPage() {
+function VerifyEmailForm() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const emailParam   = searchParams.get("email") ?? "";
+
+  const [email,   setEmail]   = useState(emailParam);
+  const [code,    setCode]    = useState("");
+  const [error,   setError]   = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      await confirmSignUp({ username: email, confirmationCode: code.trim() });
+      // Verified — send to sign-in
+      router.push("/organiser");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("CodeMismatchException")) {
+        setError("That code is incorrect. Please check and try again.");
+      } else if (msg.includes("ExpiredCodeException")) {
+        setError("That code has expired. Use the resend button below.");
+      } else if (msg.includes("AliasExistsException")) {
+        setError("This email is already verified. Try signing in.");
+      } else {
+        setError("Verification failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) { setError("Enter your email address first."); return; }
+    setError("");
+    setSuccess("");
+    setResending(true);
+    try {
+      await resendSignUpCode({ username: email });
+      setSuccess("A new code has been sent to your inbox.");
+    } catch {
+      setError("Could not resend the code. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-dark-darker flex items-center justify-center px-6">
-      <div className="w-full max-w-[480px] text-center">
+      <div className="w-full max-w-[480px]">
         <Link href="/organiser">
           <Image src="/images/logo-title.svg" alt="Startline" width={160} height={40} className="h-10 w-auto mx-auto mb-12 opacity-80" />
         </Link>
@@ -14,34 +70,85 @@ export default function VerifyEmailPage() {
           <Mail className="w-7 h-7 text-primary" />
         </div>
 
-        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4">
-          Check your inbox
+        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4 text-center">
+          Verify your email
         </div>
-        <h1 className="font-headline text-4xl font-black italic tracking-tighter text-light mb-4">
-          Verify your<br /><span className="text-primary">email address.</span>
+        <h1 className="font-headline text-4xl font-black italic tracking-tighter text-light mb-4 text-center">
+          Enter your<br /><span className="text-primary">6-digit code.</span>
         </h1>
-        <p className="text-muted text-[15px] leading-relaxed mb-8">
-          We&apos;ve sent a verification link to your email. Click it to verify your address and continue
-          setting up your organiser account.
+        <p className="text-muted text-[15px] leading-relaxed mb-8 text-center">
+          We sent a verification code to{" "}
+          {email ? <strong className="text-light">{email}</strong> : "your email"}.
+          Enter it below to activate your account.
         </p>
 
-        <div className="bg-dark border border-dark-lighter rounded-lg p-5 text-left mb-8">
-          <div className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">What happens next</div>
-          <ul className="space-y-2">
-            {["Click the link in your email","Complete your organiser profile","Submit your application for review","Get approved and start listing events"].map((s, i) => (
-              <li key={i} className="flex items-center gap-3 font-headline text-[12px] uppercase tracking-widest text-muted-light">
-                <span className="w-5 h-5 rounded-full bg-dark-light border border-dark-lighter flex items-center justify-center font-headline text-[10px] text-muted flex-shrink-0">{i + 1}</span>
-                {s}
-              </li>
-            ))}
-          </ul>
+        {error && (
+          <div className="mb-5 px-4 py-3 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-5 px-4 py-3 rounded-md bg-green-900/20 border border-green-500/30 text-green-400 font-headline text-[13px]">
+            {success}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Only show email field if it wasn't passed via query param */}
+          {!emailParam && (
+            <div>
+              <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">Email address</label>
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="events@yourorg.com.au"
+                className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+            </div>
+          )}
+
+          <div>
+            <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">Verification code</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="000000"
+              className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors font-headline font-black"
+            />
+          </div>
+
+          <button type="submit" disabled={loading || code.length < 6}
+            className="bg-machined shadow-machined w-full text-dark font-headline text-sm font-bold uppercase tracking-widest py-4 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
+            {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Verifying…</> : <>Verify email <ArrowRight className="w-4 h-4" /></>}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={handleResend}
+            disabled={resending}
+            className="inline-flex items-center gap-2 font-headline text-[12px] uppercase tracking-widest text-muted hover:text-primary transition-colors disabled:opacity-50"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            {resending ? "Sending…" : "Resend code"}
+          </button>
         </div>
 
-        <p className="font-headline text-[12px] uppercase tracking-widest text-muted">
-          Didn&apos;t receive it? Check your spam folder, or{" "}
-          <Link href="/organiser/register" className="text-primary hover:underline">try a different email</Link>.
+        <p className="mt-4 text-center font-headline text-[12px] uppercase tracking-widest text-muted">
+          Wrong email?{" "}
+          <Link href="/organiser/register" className="text-primary hover:underline">Go back</Link>
         </p>
       </div>
     </main>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense>
+      <VerifyEmailForm />
+    </Suspense>
   );
 }

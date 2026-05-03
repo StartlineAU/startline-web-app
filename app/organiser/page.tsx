@@ -1,36 +1,60 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { Suspense } from "react";
+import { signIn } from "aws-amplify/auth";
 
 function SignInForm() {
-  const router       = useRouter();
-  const searchParams = useSearchParams();
+  const router = useRouter();
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [showPw,   setShowPw]   = useState(false);
-  const [error,    setError]    = useState(searchParams.get("error") === "invalid_token" ? "Verification link is invalid or expired." : "");
+  const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
-      const res  = await fetch("/api/organiser/auth/login", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ email, password }),
-      });
+      // 1. Sign in via Cognito — tokens are stored in Amplify cookies (ssr:true)
+      const result = await signIn({ username: email, password });
+
+      if (result.nextStep.signInStep !== "DONE") {
+        // Handle edge cases: e.g. user must confirm email first
+        if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
+          router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
+          return;
+        }
+        setError("Additional verification required. Please contact support.");
+        return;
+      }
+
+      // 2. Hit our session API to upsert the Prisma organiser record and get status
+      const res  = await fetch("/api/organiser/auth/session", { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Sign in failed. Please try again."); return; }
-      router.push(data.redirect);
-    } catch {
-      setError("Something went wrong. Please check your connection and try again.");
+
+      // 3. Redirect based on organiser application status
+      const status: string = data.status;
+      if (status === "APPROVED")        { router.push("/organiser/dashboard"); return; }
+      if (status === "PENDING_PROFILE") { router.push("/organiser/onboarding"); return; }
+      router.push("/organiser/pending");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("NotAuthorizedException") || msg.includes("Incorrect username or password")) {
+        setError("Incorrect email or password.");
+      } else if (msg.includes("UserNotConfirmedException")) {
+        router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
+      } else if (msg.includes("UserNotFoundException")) {
+        setError("No account found with that email.");
+      } else {
+        setError("Something went wrong. Please check your connection and try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -76,9 +100,9 @@ function SignInForm() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">Password</label>
-                <button type="button" className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">
+                <Link href="/organiser/forgot-password" className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">
                   Forgot?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />

@@ -1,24 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "change-this-secret-in-production"
+const region     = process.env.NEXT_PUBLIC_AWS_REGION                 ?? "";
+const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID        ?? "";
+const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID           ?? "";
+
+/**
+ * Cognito publishes its RS256 public keys at this well-known URL.
+ * jose's createRemoteJWKSet fetches and caches the keyset automatically.
+ */
+const JWKS = createRemoteJWKSet(
+  new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`)
 );
 
 // Routes an approved organiser can access
-const ORGANISER_PROTECTED = ["/organiser/dashboard", "/organiser/listings", "/organiser/profile", "/organiser/new-listing"];
+const ORGANISER_PROTECTED = [
+  "/organiser/dashboard",
+  "/organiser/listings",
+  "/organiser/profile",
+  "/organiser/new-listing",
+];
 
-// Routes only accessible after email verification + profile completion
+// Routes that require at least PENDING_PROFILE (email verified, completing onboarding)
 const ONBOARDING_ROUTES = ["/organiser/onboarding"];
 
-// Admin routes
-const ADMIN_PROTECTED = ["/admin/dashboard", "/admin/organisers", "/admin/events"];
+/**
+ * Reads and verifies the Cognito access token from the Amplify cookie.
+ * Amplify stores the access token under:
+ *   CognitoIdentityServiceProvider.{clientId}.{lastAuthUser}.accessToken
+ */
+async function getVerifiedSub(req: NextRequest): Promise<string | null> {
+  const lastAuthUser = req.cookies.get(
+    `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
+  )?.value;
 
-async function getPayload(token: string | undefined) {
-  if (!token) return null;
+  if (!lastAuthUser) return null;
+
+  const accessToken = req.cookies.get(
+    `CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`
+  )?.value;
+
+  if (!accessToken) return null;
+
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload as { sub: string; role: string; status: string };
+    const { payload } = await jwtVerify(accessToken, JWKS, {
+      issuer:   `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+      audience: undefined, // access tokens don't carry aud — idTokens do
+    });
+    return (payload.sub as string) ?? null;
   } catch {
     return null;
   }
@@ -27,49 +56,34 @@ async function getPayload(token: string | undefined) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // ── Dev bypass ──────────────────────────────────────────────────────────────
+  // ── Dev bypass — skip all auth checks locally ──────────────────────────────
   if (process.env.NODE_ENV === "development") {
-    return NextResponse.next();
-  }
-
-  // ── Admin routes ────────────────────────────────────────────────────────────
-  if (ADMIN_PROTECTED.some((p) => pathname.startsWith(p))) {
-    const token   = req.cookies.get("sl-admin-token")?.value;
-    const payload = await getPayload(token);
-    if (!payload || payload.role !== "admin") {
-      return NextResponse.redirect(new URL("/admin", req.url));
-    }
     return NextResponse.next();
   }
 
   // ── Organiser protected routes (must be APPROVED) ───────────────────────────
   if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
-    const token   = req.cookies.get("sl-token")?.value;
-    const payload = await getPayload(token);
-
-    if (!payload || payload.role !== "organiser") {
+    const sub = await getVerifiedSub(req);
+    if (!sub) {
       return NextResponse.redirect(new URL("/organiser", req.url));
     }
 
-    // Redirect based on account status
-    if (payload.status === "PENDING_EMAIL") {
-      return NextResponse.redirect(new URL("/organiser/verify-email", req.url));
-    }
-    if (payload.status === "PENDING_PROFILE") {
+    // Status-based redirects use the sl-status cookie set by /api/organiser/auth/session
+    const organiserStatus = req.cookies.get("sl-status")?.value;
+    if (!organiserStatus || organiserStatus === "PENDING_PROFILE") {
       return NextResponse.redirect(new URL("/organiser/onboarding", req.url));
     }
-    if (payload.status === "PENDING_REVIEW" || payload.status === "REJECTED") {
+    if (organiserStatus === "PENDING_REVIEW" || organiserStatus === "REJECTED" || organiserStatus === "SUSPENDED") {
       return NextResponse.redirect(new URL("/organiser/pending", req.url));
     }
 
     return NextResponse.next();
   }
 
-  // ── Onboarding route (must be PENDING_PROFILE) ───────────────────────────────
+  // ── Onboarding route (must have a valid session) ────────────────────────────
   if (ONBOARDING_ROUTES.some((p) => pathname.startsWith(p))) {
-    const token   = req.cookies.get("sl-token")?.value;
-    const payload = await getPayload(token);
-    if (!payload || payload.role !== "organiser") {
+    const sub = await getVerifiedSub(req);
+    if (!sub) {
       return NextResponse.redirect(new URL("/organiser", req.url));
     }
     return NextResponse.next();
@@ -85,8 +99,5 @@ export const config = {
     "/organiser/profile/:path*",
     "/organiser/new-listing/:path*",
     "/organiser/onboarding/:path*",
-    "/admin/dashboard/:path*",
-    "/admin/organisers/:path*",
-    "/admin/events/:path*",
   ],
 };

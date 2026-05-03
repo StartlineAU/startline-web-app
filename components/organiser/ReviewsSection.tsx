@@ -277,7 +277,7 @@ function WriteReviewModal({ organiserId, onClose, onSuccess }: ModalProps) {
                 <input
                   value={event}
                   onChange={e => setEvent(e.target.value)}
-                  placeholder="e.g. HYROX Sydney 2025"
+                  placeholder="e.g. Functional Fitness Championship Sydney 2025"
                   className="w-full bg-dark-darker border border-dark-lighter rounded-md px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
