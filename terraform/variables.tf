@@ -25,7 +25,7 @@ variable "environment" {
 variable "production_branch" {
   description = "Git branch treated as production in Amplify."
   type        = string
-  default     = "main"
+  default     = "master"
 }
 
 variable "amplify_repository_url" {
