@@ -44,6 +44,32 @@ output "route53_nameservers" {
   value       = aws_route53_zone.primary.name_servers
 }
 
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID."
+  value       = aws_cognito_user_pool.this.id
+}
+
+output "cognito_user_pool_arn" {
+  description = "Cognito User Pool ARN."
+  value       = aws_cognito_user_pool.this.arn
+}
+
+output "cognito_issuer_url" {
+  description = "OIDC issuer URL for the User Pool. Append /.well-known/openid-configuration for discovery."
+  value       = "https://${aws_cognito_user_pool.this.endpoint}"
+}
+
+output "cognito_app_client_id" {
+  description = "App Client ID used by the Next.js app."
+  value       = aws_cognito_user_pool_client.web.id
+}
+
+output "cognito_app_client_secret" {
+  description = "App Client secret. Store in Amplify env / Secrets Manager — do not commit."
+  value       = aws_cognito_user_pool_client.web.client_secret
+  sensitive   = true
+}
+
 output "amplify_domain_dns_records" {
   description = "DNS records you must create at GoDaddy to validate the cert and route traffic. Each entry has type/name/value."
   value = var.amplify_custom_domain == null ? [] : concat(
