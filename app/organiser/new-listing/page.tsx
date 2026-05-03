@@ -29,7 +29,7 @@ const STEP_ERRORS: Record<number, string> = {
   4: "A registration URL is required.",
 };
 
-type Discipline = "hyrox" | "crossfit" | "running" | "hybrid" | "";
+type Discipline = "functional_fitness" | "crossfit" | "running" | "hybrid" | "";
 type Format     = "individual" | "team" | "both" | "";
 type Level      = "beginner" | "open" | "elite" | "";
 type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
@@ -478,7 +478,7 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
    STEP 1 — BASICS
    ══════════════════════════════════════════════════════════════ */
 const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
-  { v: "hyrox",    l: "HYROX",    d: "8 stations × 1km runs"      },
+  { v: "functional_fitness", l: "Functional Fitness", d: "Station-based functional workouts" },
   { v: "crossfit", l: "CrossFit", d: "Functional fitness comp"    },
   { v: "running",  l: "Running",  d: "5K · 10K · Half · Marathon" },
   { v: "hybrid",   l: "Hybrid",   d: "Multi-discipline / OCR"     },
@@ -489,7 +489,7 @@ function BasicsStep({ form, update }: { form: FormState; update: (p: Partial<For
     <div>
       <Field label="Event title" required hint={`${form.title.length}/60`}>
         <input maxLength={60} value={form.title} onChange={(e) => update({ title: e.target.value })}
-          placeholder="e.g. HYROX Sydney 2026" className={inputCls} />
+          placeholder="e.g. Functional Fitness Championship Sydney 2026" className={inputCls} />
       </Field>
 
       <Field label="Tagline" required hint={`${form.tagline.length}/80 · shown in cards`}>
@@ -1163,7 +1163,7 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
 
       <Field label="Registration URL" required hint="Where athletes sign up">
         <input value={form.registrationUrl} onChange={(e) => update({ registrationUrl: e.target.value })}
-          placeholder="https://hyrox.com/sydney-2026" className={inputCls} />
+          placeholder="https://yourorg.com/events/sydney-2026" className={inputCls} />
       </Field>
 
       <div className="grid grid-cols-2 gap-5">
@@ -1262,7 +1262,7 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
    LIVE PREVIEW SIDEBAR
    ══════════════════════════════════════════════════════════════ */
 const DISC_LABEL: Record<string, string> = {
-  hyrox: "HYROX", crossfit: "CrossFit", running: "Running", hybrid: "Hybrid",
+  functional_fitness: "Functional Fitness", crossfit: "CrossFit", running: "Running", hybrid: "Hybrid",
 };
 const MONTHS_SHORT = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
@@ -1833,7 +1833,7 @@ export default function NewListingPage() {
                   <p className="text-muted mt-2 max-w-lg text-[14px]">
                     {step === 0 && "Keep it short and sharp — this is what athletes will see first."}
                     {step === 1 && "Athletes will search your event by city, state and date."}
-                    {step === 2 && "You can enable multiple formats. Most HYROX events select Individual + Doubles."}
+                    {step === 2 && "You can enable multiple formats. Functional fitness events commonly offer Individual and Doubles."}
                     {step === 3 && "Add ticket categories with pricing. You can edit dates and prices anytime before opening sales."}
                     {step === 4 && "Polish your listing with a cover image, logistics info and your registration link."}
                     {step === 5 && "Nothing's live yet. You can always come back to edit after publishing."}

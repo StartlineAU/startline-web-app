@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getOrganiserSession, signToken, setOrganiserCookie } from "@/lib/auth";
+import { getOrganiserSession } from "@/lib/amplify-server";
 
 const prisma = new PrismaClient();
 
@@ -83,15 +83,17 @@ export async function PUT(req: NextRequest) {
     },
   });
 
-  // Reissue token with updated status so middleware reflects the change
+  // Update the sl-status cookie so middleware reflects the new status immediately
   if (submit) {
-    const jwt = await signToken({
-      sub:    updated.id,
-      role:   "organiser",
-      email:  updated.email,
-      status: updated.status,
+    const { cookies } = await import("next/headers");
+    const jar = await cookies();
+    jar.set("sl-status", updated.status, {
+      httpOnly: true,
+      secure:   process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path:     "/",
+      maxAge:   60 * 60 * 24 * 7,
     });
-    await setOrganiserCookie(jwt);
   }
 
   return NextResponse.json({ ok: true, status: updated.status });

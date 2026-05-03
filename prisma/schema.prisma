@@ -21,12 +21,10 @@ model Admin {
 
 // ─── Organiser accounts ───────────────────────────────────────────────────────
 model Organiser {
-  id            String          @id @default(uuid())
-  email         String          @unique
-  password      String
-  status        OrganiserStatus @default(PENDING_EMAIL)
-  emailVerified Boolean         @default(false)
-  verifyToken   String?
+  id         String          @id @default(uuid())
+  email      String          @unique
+  cognitoSub String          @unique
+  status     OrganiserStatus @default(PENDING_PROFILE)
 
   // Profile — filled during onboarding
   orgName     String?

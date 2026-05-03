@@ -1,15 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Clock, CheckCircle, XCircle, Mail } from "lucide-react";
-import { getOrganiserSession } from "@/lib/auth";
+import { getServerSession } from "@/lib/amplify-server";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 export default async function PendingPage() {
-  const session   = await getOrganiserSession();
+  const session   = await getServerSession();
   const organiser = session
-    ? await prisma.organiser.findUnique({ where: { id: session.sub }, select: { status: true, rejectionReason: true, orgName: true } })
+    ? await prisma.organiser.findUnique({ where: { cognitoSub: session.sub }, select: { status: true, rejectionReason: true, orgName: true } })
     : null;
 
   const status = organiser?.status ?? "PENDING_REVIEW";

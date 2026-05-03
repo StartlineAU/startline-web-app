@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, User } from "lucide-react";
+import { signUp } from "aws-amplify/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,21 +19,33 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
     if (password !== confirm) { setError("Passwords do not match."); return; }
     if (password.length < 8)  { setError("Password must be at least 8 characters."); return; }
 
     setLoading(true);
     try {
-      const res  = await fetch("/api/organiser/auth/register", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ email, password }),
+      // Cognito creates the user and sends a 6-digit verification code by email
+      await signUp({
+        username: email,
+        password,
+        options: {
+          userAttributes: { email },
+        },
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Registration failed. Please try again."); return; }
-      router.push("/organiser/verify-email");
-    } catch {
-      setError("Something went wrong. Please check your connection and try again.");
+
+      // Redirect to code-entry page, passing email so it can pre-fill
+      router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("signUp error:", err);
+      if (msg.includes("UsernameExistsException")) {
+        setError("An account with that email already exists.");
+      } else if (msg.includes("InvalidPasswordException")) {
+        setError("Password does not meet requirements (min 8 characters, upper, lower, number).");
+      } else {
+        setError(msg || "Registration failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -125,10 +138,10 @@ export default function RegisterPage() {
           </div>
           <div className="space-y-6">
             {[
-              { n: "01", title: "Create account",     desc: "Email + password. Takes 30 seconds." },
-              { n: "02", title: "Verify email",        desc: "Click the link we send to your inbox." },
-              { n: "03", title: "Complete profile",    desc: "Organisation details, ABN, insurance and past event evidence." },
-              { n: "04", title: "Submit for review",   desc: "Our team reviews applications within 1–2 business days." },
+              { n: "01", title: "Create account",      desc: "Email + password. Takes 30 seconds." },
+              { n: "02", title: "Verify email",         desc: "Enter the 6-digit code we send to your inbox." },
+              { n: "03", title: "Complete profile",     desc: "Organisation details, ABN, insurance and past event evidence." },
+              { n: "04", title: "Submit for review",    desc: "Our team reviews applications within 1–2 business days." },
               { n: "05", title: "Start listing events", desc: "Publish events and reach thousands of athletes." },
             ].map((step, i) => (
               <div key={i} className="flex gap-4">

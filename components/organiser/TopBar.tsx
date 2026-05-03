@@ -26,7 +26,8 @@ export default function OrganiserTopBar() {
   }, []);
 
   const handleLogout = async () => {
-    await fetch("/api/organiser/auth/logout", { method: "POST" });
+    const { signOut } = await import("aws-amplify/auth");
+    await signOut();
     router.push("/organiser");
   };
 
