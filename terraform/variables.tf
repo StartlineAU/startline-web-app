@@ -25,13 +25,13 @@ variable "environment" {
 variable "production_branch" {
   description = "Git branch treated as production in Amplify."
   type        = string
-  default     = "main"
+  default     = "master"
 }
 
 variable "amplify_repository_url" {
-  description = "HTTPS Git URL for Amplify (e.g. https://github.com/org/startline). Leave null to create the app without a connected repository."
+  description = "HTTPS Git URL for Amplify. Set to null to create the app without a connected repository."
   type        = string
-  default     = null
+  default     = "https://github.com/StartlineAU/startline"
 }
 
 variable "amplify_repository_access_token" {
@@ -48,9 +48,9 @@ variable "amplify_environment_variables" {
 }
 
 variable "amplify_custom_domain" {
-  description = "Apex domain to attach to the Amplify app (e.g. startlineau.com). Leave null to skip the domain association."
+  description = "Apex domain to attach to the Amplify app. Set to null to skip the domain association."
   type        = string
-  default     = null
+  default     = "startlineau.com"
 }
 
 variable "resend_api_key" {
@@ -99,9 +99,9 @@ variable "database_allocated_storage" {
 }
 
 variable "database_max_allocated_storage" {
-  description = "Autoscaling storage cap (GB). Set 0 to disable autoscaling (not recommended)."
+  description = "Autoscaling storage cap (GB). 0 disables autoscaling — required while the AWS account is in Free Tier restricted mode (FreeTierRestrictionError otherwise)."
   type        = number
-  default     = 100
+  default     = 0
 }
 
 variable "database_publicly_accessible" {
@@ -123,9 +123,9 @@ variable "database_skip_final_snapshot" {
 }
 
 variable "database_backup_retention_period" {
-  description = "Days of automated backups (0 disables)."
+  description = "Days of automated backups. 0 disables backups — required while the AWS account is in Free Tier restricted mode."
   type        = number
-  default     = 7
+  default     = 0
 }
 
 variable "database_deletion_protection" {
