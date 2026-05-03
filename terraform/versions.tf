@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.10.0" # native S3 state locking landed in 1.10
 
   required_providers {
     aws = {
@@ -11,13 +11,12 @@ terraform {
       version = "~> 3.6"
     }
   }
-
-  # Uncomment and configure for remote state (recommended for teams).
-  # backend "s3" {
-  #   bucket         = "your-terraform-state-bucket"
-  #   key            = "startline/terraform.tfstate"
-  #   region         = "ap-southeast-2"
-  #   encrypt        = true
-  #   dynamodb_table = "terraform-locks"
-  # }
+  
+  backend "s3" {
+    bucket       = "startline-tf-state-829182232071"
+    key          = "startline/terraform.tfstate"
+    region       = "ap-southeast-2"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
