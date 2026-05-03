@@ -13,9 +13,10 @@ const NAV = [
 
 export default function OrganiserSidebar() {
   const pathname = usePathname();
-  const [orgName,  setOrgName]  = useState("");
-  const [initial,  setInitial]  = useState("O");
-  const [email,    setEmail]    = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [initial, setInitial] = useState("O");
+  const [email,   setEmail]   = useState("");
+  const [loaded,  setLoaded]  = useState(false);
 
   useEffect(() => {
     fetch("/api/organiser/profile")
@@ -28,8 +29,11 @@ export default function OrganiserSidebar() {
         setOrgName(name);
         setInitial(fallbackInitial);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
+
+  const displayName = orgName || email;
 
   return (
     <aside className="hidden lg:flex flex-col w-[260px] shrink-0 border-r border-dark-lighter bg-dark min-h-[calc(100vh-64px)] p-4">
@@ -41,10 +45,15 @@ export default function OrganiserSidebar() {
             {initial}
           </div>
           <div className="min-w-0 flex-1">
-            {(orgName || email) ? (
+            {!loaded ? (
+              <div className="space-y-1.5">
+                <div className="h-3 w-28 rounded bg-dark-lighter animate-pulse" />
+                <div className="h-2.5 w-16 rounded bg-dark-lighter animate-pulse" />
+              </div>
+            ) : displayName ? (
               <>
                 <div className="font-headline text-[14px] font-bold text-light truncate">
-                  {orgName || email}
+                  {displayName}
                 </div>
                 <div className="flex items-center gap-1 font-headline text-[10px] text-primary uppercase tracking-widest mt-0.5">
                   {orgName ? (
@@ -55,10 +64,7 @@ export default function OrganiserSidebar() {
                 </div>
               </>
             ) : (
-              <div className="space-y-1.5">
-                <div className="h-3 w-28 rounded bg-dark-lighter animate-pulse" />
-                <div className="h-2.5 w-16 rounded bg-dark-lighter animate-pulse" />
-              </div>
+              <div className="font-headline text-[13px] font-bold text-muted">My Organisation</div>
             )}
           </div>
         </div>

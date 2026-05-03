@@ -10,6 +10,7 @@ export default function OrganiserTopBar() {
   const router = useRouter();
   const [orgName, setOrgName] = useState("");
   const [initial, setInitial] = useState("O");
+  const [loaded,  setLoaded]  = useState(false);
 
   useEffect(() => {
     fetch("/api/organiser/profile")
@@ -17,12 +18,11 @@ export default function OrganiserTopBar() {
       .then(data => {
         if (!data) return;
         const name = data.orgName || data.contactName || data.email || "";
-        if (name) {
-          setOrgName(data.orgName || data.contactName || "");
-          setInitial(name.charAt(0).toUpperCase());
-        }
+        setOrgName(data.orgName || data.contactName || data.email || "");
+        if (name) setInitial(name.charAt(0).toUpperCase());
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
   const handleLogout = async () => {
@@ -31,9 +31,10 @@ export default function OrganiserTopBar() {
     router.push("/organiser");
   };
 
-  const displayName = orgName
-    ? orgName.length > 18 ? orgName.slice(0, 18) + "…" : orgName
+  const displayName = loaded
+    ? (orgName.length > 18 ? orgName.slice(0, 18) + "…" : orgName) || null
     : null;
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 h-16 bg-dark border-b border-dark-lighter flex items-center">
       <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-6 flex items-center justify-between">
@@ -42,7 +43,6 @@ export default function OrganiserTopBar() {
         </Link>
 
         <div className="flex items-center gap-1">
-          {/* 44×44 touch target wrapper for the bell */}
           <button
             className="w-11 h-11 flex items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-dark-light/60 transition-colors"
             aria-label="Notifications"
@@ -57,13 +57,13 @@ export default function OrganiserTopBar() {
             <div className="w-8 h-8 rounded-full bg-primary text-dark font-headline font-black italic text-sm flex items-center justify-center shrink-0">
               {initial}
             </div>
-            {displayName ? (
+            {!loaded ? (
+              <span className="hidden md:inline w-24 h-3.5 rounded bg-dark-lighter animate-pulse" />
+            ) : displayName ? (
               <span className="font-headline text-[13px] font-bold uppercase tracking-tight text-light group-hover:text-primary hidden md:inline transition-colors">
                 {displayName}
               </span>
-            ) : (
-              <span className="hidden md:inline w-24 h-3.5 rounded bg-dark-lighter animate-pulse" />
-            )}
+            ) : null}
           </button>
         </div>
       </div>

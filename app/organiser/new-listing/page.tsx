@@ -1819,8 +1819,8 @@ export default function NewListingPage() {
             <div className="p-6 lg:p-10 max-w-[820px] pb-24 lg:pb-10">
               <div key={step} className={direction === "forward" ? "step-forward" : "step-back"}>
                 <div className="mb-6">
-                  <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary flex items-center gap-3 mb-2">
-                    <span className="w-8 h-px bg-primary" /> STEP {STEPS[step].n} / {STEPS[STEPS.length - 1].n}
+                  <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
+                    STEP {STEPS[step].n} / {STEPS[STEPS.length - 1].n}
                   </div>
                   <h1 className="font-headline text-[28px] sm:text-[38px] font-black italic tracking-tighter leading-none">
                     {step === 0 && <>Let&apos;s start with<br /><span className="text-primary">the basics.</span></>}
