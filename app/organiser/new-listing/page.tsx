@@ -1678,6 +1678,20 @@ export default function NewListingPage() {
   const submitToApi = async (asDraft: boolean, overrideTitle?: string) => {
     setSaving(true); setApiError(""); setSavedAt(null); setSubmitErrors([]);
     try {
+      let coverImageUrl: string | null = null;
+      if (form.coverImage) {
+        const presignRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "cover", contentType: form.coverImage.type, filename: form.coverImage.name }),
+        });
+        if (presignRes.ok) {
+          const { uploadUrl, fileUrl } = await presignRes.json();
+          await fetch(uploadUrl, { method: "PUT", body: form.coverImage, headers: { "Content-Type": form.coverImage.type } });
+          coverImageUrl = fileUrl;
+        }
+      }
+
       const payload = {
         title: overrideTitle ?? form.title, discipline: form.discipline, tagline: form.tagline,
         description: form.description, eventDate: form.date, endDate: form.endDate || null,
@@ -1688,6 +1702,7 @@ export default function NewListingPage() {
         waves: form.waves, inclusions: form.inclusions, extras: form.extras, activations: form.activations,
         refundPolicy: form.refundPolicy, registrationUrl: form.registrationUrl,
         accessibilityInfo: form.accessibilityInfo, submit: !asDraft,
+        ...(coverImageUrl ? { coverImageUrl } : {}),
       };
 
       let res: Response;

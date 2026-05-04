@@ -65,6 +65,7 @@ export async function PATCH(
         refundPolicy:    data.refundPolicy    ?? undefined,
         registrationUrl: data.registrationUrl ?? undefined,
         accessibilityInfo: data.accessibilityInfo ?? undefined,
+        coverImageUrl:   data.coverImageUrl   ?? undefined,
         status:          submit ? "PENDING" : "DRAFT",
       },
     });
