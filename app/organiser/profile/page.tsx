@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Plus, MapPin, ArrowRight, CheckCircle, Globe, Instagram,
@@ -26,11 +26,12 @@ interface EventRow {
 interface Profile {
   orgName: string; contactName: string; phone: string; email: string;
   website: string; instagram: string; facebook: string; bio: string; abn: string;
+  logoUrl: string;
 }
 
 const EMPTY: Profile = {
   orgName: "", contactName: "", phone: "", email: "",
-  website: "", instagram: "", facebook: "", bio: "", abn: "",
+  website: "", instagram: "", facebook: "", bio: "", abn: "", logoUrl: "",
 };
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
@@ -291,6 +292,8 @@ export default function ProfilePage() {
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [error,          setError]          = useState("");
+  const [logoUploading,  setLogoUploading]  = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     Promise.all([
@@ -309,6 +312,7 @@ export default function ProfilePage() {
           facebook:    prof.facebook    ?? "",
           bio:         prof.bio         ?? "",
           abn:         prof.abn         ?? "",
+          logoUrl:     prof.logoUrl     ?? "",
         });
       }
       if (Array.isArray(evts)) {
@@ -387,6 +391,33 @@ export default function ProfilePage() {
     finally   { setSaving(false); }
   };
 
+  const handleLogoUpload = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const presignRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "logo", contentType: file.type, filename: file.name }),
+      });
+      if (!presignRes.ok) throw new Error("Failed to get upload URL.");
+      const { uploadUrl, fileUrl } = await presignRes.json();
+
+      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+
+      await fetch("/api/organiser/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...profile, logoUrl: fileUrl }),
+      });
+
+      setProfile(p => ({ ...p, logoUrl: fileUrl }));
+    } catch {
+      setError("Logo upload failed. Please try again.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   const initial = (profile.orgName || "O").charAt(0).toUpperCase();
 
   return (
@@ -418,13 +449,29 @@ export default function ProfilePage() {
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10 mb-6 relative z-10">
               <div className="flex items-end gap-4">
                 <div className="relative group">
-                  <div className="w-20 h-20 rounded-xl bg-primary text-dark font-headline font-black italic text-4xl flex items-center justify-center border-4 border-dark-darker shadow-machined">
-                    {initial}
+                  <div className="w-20 h-20 rounded-xl bg-primary text-dark font-headline font-black italic text-4xl flex items-center justify-center border-4 border-dark-darker shadow-machined overflow-hidden">
+                    {profile.logoUrl
+                      ? <img src={profile.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                      : initial}
                   </div>
-                  <button onClick={() => setEditOpen(true)}
-                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-dark border border-dark-lighter hover:border-primary text-muted hover:text-primary flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={logoUploading}
+                    className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-dark border border-dark-lighter hover:border-primary text-muted hover:text-primary flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50">
                     <Camera className="w-3.5 h-3.5" />
                   </button>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }}
+                  />
+                  {logoUploading && (
+                    <div className="absolute inset-0 rounded-xl bg-dark/70 flex items-center justify-center">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
                 </div>
                 <div className="pb-1">
                   <h1 className="font-headline text-2xl lg:text-3xl font-black italic tracking-tighter text-light leading-tight">
