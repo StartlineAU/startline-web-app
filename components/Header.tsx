@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 const navItems = [
   { href: "/", label: "HOME" },
   { href: "/events", label: "EVENTS" },
@@ -55,22 +57,25 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button
+          <Button
             disabled
-            className="hidden md:inline font-headline text-[14px] font-bold text-muted border border-dark-lighter px-4 py-1.5 rounded opacity-50 cursor-not-allowed"
+            className="hidden md:inline-flex h-auto px-4 py-1.5 rounded font-headline text-[14px] font-bold tracking-normal normal-case text-muted bg-transparent border border-dark-lighter hover:bg-transparent disabled:opacity-50 cursor-not-allowed"
           >
             SIGN IN
-          </button>
+          </Button>
         </div>
 
-        {/* Mobile menu button */}
-        <button
-          className="md:hidden p-2 text-light hover:text-primary transition-colors"
+        {/* Mobile menu button. Override the Button's default `[&_svg]:size-4`
+            so the menu / close icon renders at its intended 24px. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-auto w-auto p-2 text-light hover:text-primary hover:bg-transparent transition-colors [&_svg]:size-6"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           aria-label="Toggle menu"
         >
           {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        </Button>
       </div>
 
       {/* Mobile Navigation */}
@@ -87,12 +92,12 @@ export default function Header() {
                 {item.label}
               </Link>
             ))}
-            <button
+            <Button
               disabled
-              className="font-headline text-sm font-bold text-muted border border-dark-lighter px-4 py-3 text-center mt-2 rounded opacity-50 cursor-not-allowed"
+              className="font-headline text-sm font-bold tracking-normal normal-case text-muted bg-transparent border border-dark-lighter px-4 py-3 h-auto text-center mt-2 rounded hover:bg-transparent disabled:opacity-50 cursor-not-allowed"
             >
               SIGN IN
-            </button>
+            </Button>
           </div>
         </div>
       )}

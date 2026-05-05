@@ -5,6 +5,7 @@ import { formatMediumDate, formatShortDate, formatTime, formatCompetitionFormat 
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
 import SaveEventButton from "./SaveEventButton";
+import { Card } from "@/components/ui/card";
 
 interface EventCardProps {
   event: FitnessEvent;
@@ -20,7 +21,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
   if (variant === "compact") {
     return (
       <Link href={`/events/${event.id}`} className="group block">
-        <article className="bg-dark border border-dark-lighter overflow-hidden rounded-xl hover:border-primary/40 transition-colors">
+        <Card className="rounded-xl border border-dark-lighter hover:border-primary/40 transition-colors">
           <div className="relative aspect-[16/9] image-placeholder overflow-hidden transition-all duration-500">
             <span className="absolute top-2 left-2 text-[10px] font-headline uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
               {typeLabel}
@@ -37,7 +38,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
               <span>{stateLabel}</span>
             </div>
           </div>
-        </article>
+        </Card>
       </Link>
     );
   }
@@ -45,7 +46,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
   if (variant === "list") {
     return (
       <Link href={`/events/${event.id}`} className="group block">
-        <article className="bg-dark border-b border-dark-lighter p-4 hover:bg-dark-light transition-colors">
+        <Card className="rounded-none border-b border-dark-lighter p-4 hover:bg-dark-light transition-colors">
           <div className="flex gap-4">
             <div className="flex-shrink-0 w-14 text-center bg-dark-lighter py-2 px-3">
               <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">{month}</p>
@@ -75,7 +76,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
               </div>
             </div>
           </div>
-        </article>
+        </Card>
       </Link>
     );
   }
@@ -85,7 +86,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
 
   return (
     <Link href={`/events/${event.id}`} className="block group">
-      <article className="bg-dark flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200 rounded-xl overflow-hidden">
+      <Card className="rounded-xl flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200">
         {/* Banner image */}
         <div className="relative h-44 overflow-hidden flex-shrink-0">
           <img
@@ -147,7 +148,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
             {event.description}
           </p>
         </div>
-      </article>
+      </Card>
     </Link>
   );
 }

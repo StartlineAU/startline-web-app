@@ -2,6 +2,9 @@
 
 import { useState, FormEvent } from "react";
 
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
 export default function WaitlistForm() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "duplicate">("idle");
@@ -52,7 +55,7 @@ export default function WaitlistForm() {
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-md mx-auto">
       <div className="flex flex-col sm:flex-row gap-3">
-        <input
+        <Input
           type="email"
           value={email}
           onChange={(e) => {
@@ -62,15 +65,15 @@ export default function WaitlistForm() {
           placeholder="your@email.com"
           required
           disabled={status === "loading"}
-          className="flex-1 px-4 py-3 rounded-xl bg-dark-light border border-dark-lighter text-light placeholder:text-muted focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-colors disabled:opacity-50"
+          className="flex-1 h-auto px-4 py-3 rounded-xl bg-dark-light border border-dark-lighter focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors"
         />
-        <button
+        <Button
           type="submit"
           disabled={status === "loading"}
-          className="px-6 py-3 rounded-xl bg-primary text-dark font-bold hover:bg-primary-light active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          className="px-6 py-3 h-auto rounded-xl bg-primary text-dark font-bold normal-case tracking-normal hover:bg-primary-light active:scale-95 transition-all whitespace-nowrap"
         >
           {status === "loading" ? "Joining…" : "Join Waitlist"}
-        </button>
+        </Button>
       </div>
 
       {(status === "error" || status === "duplicate") && (

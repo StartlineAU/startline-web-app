@@ -7,6 +7,7 @@ import { getEventImage, getCategoryImage } from "@/lib/images";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
+import { Button } from "@/components/ui/button";
 import { fetchAllEvents } from "@/lib/supabase";
 
 export const revalidate = 60;
@@ -228,19 +229,15 @@ export default async function Home() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
-            <Link
-              href="/events"
-              className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
-            >
-              <Search className="w-4 h-4" />
-              Browse Events
-            </Link>
-            <Link
-              href="/contact"
-              className="border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl hover:border-primary/50 hover:text-light transition-colors flex items-center gap-2"
-            >
-              List Your Event
-            </Link>
+            <Button asChild variant="machined" size="ctaLg">
+              <Link href="/events">
+                <Search className="w-4 h-4" />
+                Browse Events
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="ctaLg">
+              <Link href="/contact">List Your Event</Link>
+            </Button>
           </div>
         </div>
       </section>
