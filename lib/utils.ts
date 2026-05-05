@@ -1,4 +1,6 @@
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 import { FitnessEvent, FilterState, AustralianState } from "@/types";
 
 // ── Date formatting ────────────────────────────────────────────────────────
@@ -130,8 +132,13 @@ export function getTotalUpcomingEvents(events: FitnessEvent[]): number {
 
 // ── Misc ───────────────────────────────────────────────────────────────────
 
-export function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(" ");
+/**
+ * Merge Tailwind class names. Combines `clsx` (conditional class composition)
+ * with `tailwind-merge` (deduping conflicting Tailwind utilities). This is the
+ * canonical shadcn/ui `cn` helper — required by every shadcn primitive.
+ */
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
 }
 
 /** Truncates an event title to `maxLength` chars so card layouts stay consistent. */

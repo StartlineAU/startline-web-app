@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { MapPin, Search, Calendar } from "lucide-react";
-import eventsData from "@/data/events.json";
-import { FitnessEvent, EVENT_TYPE_LABELS } from "@/types";
+import { EVENT_TYPE_LABELS } from "@/types";
 import { formatShortDate, truncateTitle } from "@/lib/utils";
 import { getEventImage, getCategoryImage } from "@/lib/images";
+import { getAllEvents } from "@/lib/events";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
-import { fetchAllEvents } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
 
 export const revalidate = 60;
 
@@ -21,16 +21,7 @@ const CATEGORIES = [
 const EVENT_TYPE_ORDER = ["hyrox", "running", "crossfit", "hybrid"] as const;
 
 export default async function Home() {
-  const liveEvents = await fetchAllEvents();
-  const jsonEvents = eventsData.events as FitnessEvent[];
-
-  // Merge so all events have full catalog detail fields
-  const events: FitnessEvent[] = liveEvents.length > 0
-    ? liveEvents.map((live) => {
-        const json = jsonEvents.find((j) => j.id === live.id);
-        return json ? { ...json, ...live } : live;
-      })
-    : jsonEvents;
+  const events = await getAllEvents();
 
   const categories = CATEGORIES.map((c) => ({
     ...c,
@@ -228,19 +219,15 @@ export default async function Home() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
-            <Link
-              href="/events"
-              className="bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 flex items-center gap-2"
-            >
-              <Search className="w-4 h-4" />
-              Browse Events
-            </Link>
-            <Link
-              href="/contact"
-              className="border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl hover:border-primary/50 hover:text-light transition-colors flex items-center gap-2"
-            >
-              List Your Event
-            </Link>
+            <Button asChild variant="machined" size="ctaLg">
+              <Link href="/events">
+                <Search className="w-4 h-4" />
+                Browse Events
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="ctaLg">
+              <Link href="/contact">List Your Event</Link>
+            </Button>
           </div>
         </div>
       </section>

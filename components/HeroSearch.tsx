@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, MapPin } from "lucide-react";
 
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
 export default function HeroSearch() {
   const router = useRouter();
   const [what, setWhat] = useState("");
@@ -32,18 +35,25 @@ export default function HeroSearch() {
             Event
           </label>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="text"
               placeholder="Event name, type or keyword"
               value={what}
               onChange={(e) => setWhat(e.target.value)}
               onKeyDown={handleKey}
-              className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+              className="h-auto p-0 font-headline text-xl placeholder:text-muted/40 focus-visible:ring-0"
             />
             {what && (
-              <button onClick={() => setWhat("")} className="text-muted hover:text-light flex-shrink-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setWhat("")}
+                className="h-auto w-auto p-0 text-muted hover:text-light hover:bg-transparent"
+                aria-label="Clear event"
+              >
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -55,30 +65,40 @@ export default function HeroSearch() {
           </label>
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-muted flex-shrink-0" />
-            <input
+            <Input
               type="text"
               placeholder="State, city, or suburb"
               value={where}
               onChange={(e) => setWhere(e.target.value)}
               onKeyDown={handleKey}
-              className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+              className="h-auto p-0 font-headline text-xl placeholder:text-muted/40 focus-visible:ring-0"
             />
             {where && (
-              <button onClick={() => setWhere("")} className="text-muted hover:text-light flex-shrink-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setWhere("")}
+                className="h-auto w-auto p-0 text-muted hover:text-light hover:bg-transparent"
+                aria-label="Clear location"
+              >
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             )}
           </div>
         </div>
 
-        {/* CTA button */}
-        <button
+        {/* CTA button — preserve original shape (square edges, full-height,
+            primary fill, no machined shadow) by overriding the variant via
+            className. */}
+        <Button
+          type="button"
           onClick={handleSearch}
-          className="flex items-center gap-3 bg-primary hover:bg-primary/90 text-dark font-headline text-base font-black uppercase tracking-widest px-10 hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0"
+          className="flex items-center gap-3 bg-primary hover:bg-primary/90 text-dark font-headline text-base font-black uppercase tracking-widest px-10 h-auto rounded-none flex-shrink-0 hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0 [&_svg]:size-5"
         >
           <Search className="w-5 h-5" />
           Find Events Now
-        </button>
+        </Button>
 
       </div>
     </div>

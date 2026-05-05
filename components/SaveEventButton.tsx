@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 import { getSavedEventIds, toggleSavedEventId } from "@/lib/client-lists";
 
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
 interface SaveEventButtonProps {
   eventId: string;
   className?: string;
@@ -31,18 +34,23 @@ export default function SaveEventButton({ eventId, className = "" }: SaveEventBu
   }
 
   return (
-    <button
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
       onClick={toggle}
       disabled={loading}
-      className={`p-2 rounded-full transition-all ${
-        saved
-          ? "text-primary bg-primary/10 hover:bg-primary/20"
-          : "text-muted hover:text-primary hover:bg-dark-light"
-      } disabled:opacity-50 ${className}`}
       aria-label={saved ? "Unsave event" : "Save event"}
       title={saved ? "Remove from saved" : "Save event"}
+      className={cn(
+        "h-auto w-auto p-2 rounded-full transition-all",
+        saved
+          ? "text-primary bg-primary/10 hover:bg-primary/20 hover:text-primary"
+          : "text-muted hover:text-primary hover:bg-dark-light",
+        className
+      )}
     >
-      <Heart className={`w-4 h-4 ${saved ? "fill-primary" : ""}`} />
-    </button>
+      <Heart className={cn("w-4 h-4", saved && "fill-primary")} />
+    </Button>
   );
 }
