@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { MapPin, Search, Calendar } from "lucide-react";
-import eventsData from "@/data/events.json";
-import { FitnessEvent, EVENT_TYPE_LABELS } from "@/types";
+import { EVENT_TYPE_LABELS } from "@/types";
 import { formatShortDate, truncateTitle } from "@/lib/utils";
 import { getEventImage, getCategoryImage } from "@/lib/images";
+import { getAllEvents } from "@/lib/events";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
 import { Button } from "@/components/ui/button";
-import { fetchAllEvents } from "@/lib/supabase";
 
 export const revalidate = 60;
 
@@ -22,16 +21,7 @@ const CATEGORIES = [
 const EVENT_TYPE_ORDER = ["hyrox", "running", "crossfit", "hybrid"] as const;
 
 export default async function Home() {
-  const liveEvents = await fetchAllEvents();
-  const jsonEvents = eventsData.events as FitnessEvent[];
-
-  // Merge so all events have full catalog detail fields
-  const events: FitnessEvent[] = liveEvents.length > 0
-    ? liveEvents.map((live) => {
-        const json = jsonEvents.find((j) => j.id === live.id);
-        return json ? { ...json, ...live } : live;
-      })
-    : jsonEvents;
+  const events = await getAllEvents();
 
   const categories = CATEGORIES.map((c) => ({
     ...c,

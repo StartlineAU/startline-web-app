@@ -10,7 +10,7 @@ import { FitnessEvent, EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatTime, formatShortDate, formatCompetitionFormat, formatExperienceLevel } from "@/lib/utils";
 import { getEventImage, getAlternateEventImage, getTypeImageArray } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
-import { fetchAllEvents } from "@/lib/supabase";
+import { getAllEvents } from "@/lib/events";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { SectionNav } from "@/components/ui/SectionNav";
 import { HeroImageCarousel } from "@/components/ui/HeroImageCarousel";
@@ -48,7 +48,7 @@ function AvailPill({ label, available }: { label: string; available?: boolean })
 
 export default async function EventDetailPage({ params }: EventDetailPageProps) {
   const { id } = await params;
-  const events = await fetchAllEvents();
+  const events = await getAllEvents();
   const event = events.find((e) => e.id === id);
   if (!event) notFound();
 
@@ -687,6 +687,6 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 }
 
 export async function generateStaticParams() {
-  const events = await fetchAllEvents();
+  const events = await getAllEvents();
   return events.map((event) => ({ id: event.id }));
 }
