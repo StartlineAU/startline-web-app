@@ -129,8 +129,6 @@ export default function RegisterPage() {
 
       {/* ── RIGHT — steps overview ── */}
       <section className="hidden lg:flex items-center justify-center relative overflow-hidden hero-topo px-12">
-        <div className="absolute top-8 left-8 w-6 h-6 hud-corner-tl" />
-        <div className="absolute bottom-8 right-8 w-6 h-6 hud-corner-br" />
         <div className="absolute inset-0 scan-grid opacity-40" />
         <div className="relative z-10 max-w-sm">
           <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-6">
