@@ -603,10 +603,6 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         return (
           <Field label="Venue preview" hint={apiKey ? "Enter address or city above to see map" : "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local to enable maps"}>
             <div className="relative rounded-md border border-dark-lighter overflow-hidden placeholder-stripes scan-grid h-48 flex items-center justify-center">
-              <div className="absolute top-2 left-2 w-4 h-4 hud-corner-tl" />
-              <div className="absolute top-2 right-2 w-4 h-4 hud-corner-tr" />
-              <div className="absolute bottom-2 left-2 w-4 h-4 hud-corner-bl" />
-              <div className="absolute bottom-2 right-2 w-4 h-4 hud-corner-br" />
               <div className="text-center">
                 <MapPin className="w-5 h-5 text-primary mx-auto mb-2" />
                 <div className="font-mono text-[11px] uppercase tracking-widest text-muted">{form.venue || "Venue preview"}</div>
@@ -1144,10 +1140,6 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
             </div>
           ) : (
             <div className="relative rounded-md border-2 border-dashed border-dark-lighter hover:border-primary/60 placeholder-stripes scan-grid aspect-video flex flex-col items-center justify-center transition-colors">
-              <div className="absolute top-3 left-3 w-5 h-5 hud-corner-tl" />
-              <div className="absolute top-3 right-3 w-5 h-5 hud-corner-tr" />
-              <div className="absolute bottom-3 left-3 w-5 h-5 hud-corner-bl" />
-              <div className="absolute bottom-3 right-3 w-5 h-5 hud-corner-br" />
               <div className="w-12 h-12 rounded-full bg-dark-light border border-dark-lighter flex items-center justify-center mb-3">
                 <Upload className="w-5 h-5 text-primary" />
               </div>

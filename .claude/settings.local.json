@@ -22,7 +22,14 @@
       "Bash(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\sweet\\\\Desktop\\\\Developer\\\\startline\\\\app\\\\api\\\\upload\")",
       "Bash(Out-Null)",
       "Bash(Write-Output \"done\")",
-      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\sweet\\\\Desktop\\\\Developer\\\\startline\\\\app\\\\api\\\\upload\")"
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\sweet\\\\Desktop\\\\Developer\\\\startline\\\\app\\\\api\\\\upload\")",
+      "PowerShell(Get-Process -Id \\(Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue\\).OwningProcess -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, MainWindowTitle)",
+      "PowerShell(Get-Process -Id 10216 -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 10216 -Force)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000\" -UseBasicParsing -TimeoutSec 15 -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\sweet\\\\Desktop\\\\Developer\\\\startline\"; $env:NODE_ENV = \"development\"; npx next dev 2>&1 | Select-Object -First 60)",
+      "PowerShell(Stop-Process -Name \"node\" -Force -ErrorAction SilentlyContinue)"
     ]
   }
 }

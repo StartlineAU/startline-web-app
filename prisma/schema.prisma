@@ -86,6 +86,7 @@ model Event {
 
   // Step 2 — date & location
   eventDate String
+  endDate   String? // optional multi-day end (ISO yyyy-mm-dd)
   startTime String
   endTime   String
   venue     String

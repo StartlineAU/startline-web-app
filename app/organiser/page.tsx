@@ -65,8 +65,7 @@ function SignInForm() {
       <section className="flex items-center justify-center px-6 py-16 lg:py-24 bg-dark-darker">
         <div className="w-full max-w-[440px]">
           <div className="flex items-center gap-2 mb-10">
-            <span className="w-2 h-2 bg-primary rounded-full animate-pulse-dot" />
-            <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary">
+<span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary">
               Organiser Portal
             </span>
           </div>
@@ -129,11 +128,7 @@ function SignInForm() {
 
       {/* ── RIGHT — visual ── */}
       <section className="hidden lg:flex items-center justify-center relative overflow-hidden hero-topo">
-        <div className="absolute top-8 left-8 w-6 h-6 hud-corner-tl" />
-        <div className="absolute top-8 right-8 w-6 h-6 hud-corner-tr" />
-        <div className="absolute bottom-8 left-8 w-6 h-6 hud-corner-bl" />
-        <div className="absolute bottom-8 right-8 w-6 h-6 hud-corner-br" />
-        <div className="absolute inset-0 scan-grid opacity-60" />
+<div className="absolute inset-0 scan-grid opacity-60" />
         <div className="relative z-10 text-center px-12">
           <Image src="/images/logo-title.svg" alt="Startline" width={200} height={50} className="h-12 w-auto mx-auto mb-10 opacity-90" />
           <div className="font-headline text-6xl font-black italic tracking-tighter leading-none text-light mb-6">

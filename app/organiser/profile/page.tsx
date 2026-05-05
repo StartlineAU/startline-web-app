@@ -432,12 +432,6 @@ export default function ProfilePage() {
           <section className="relative h-44 border-b border-dark-lighter overflow-hidden">
             <div className="absolute inset-0 hero-topo" />
             <div className="absolute inset-0 scan-grid opacity-40" />
-            <div className="absolute inset-5 pointer-events-none">
-              <div className="absolute top-0 left-0 w-5 h-5 hud-corner-tl" />
-              <div className="absolute top-0 right-0 w-5 h-5 hud-corner-tr" />
-              <div className="absolute bottom-0 left-0 w-5 h-5 hud-corner-bl" />
-              <div className="absolute bottom-0 right-0 w-5 h-5 hud-corner-br" />
-            </div>
             <button className="absolute top-4 right-4 flex items-center gap-2 bg-dark/70 backdrop-blur-sm border border-dark-lighter hover:border-primary/60 rounded-md px-3 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors">
               <Camera className="w-3.5 h-3.5" /> Change banner
             </button>
