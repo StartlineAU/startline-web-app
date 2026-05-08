@@ -16,7 +16,6 @@ model Admin {
   createdAt DateTime @default(now())
 
   eventReviews     Event[]     @relation("EventReviewedBy")
-  organiserReviews Organiser[] @relation("OrganiserReviewedBy")
 }
 
 // ─── Organiser accounts ───────────────────────────────────────────────────────
@@ -24,7 +23,7 @@ model Organiser {
   id         String          @id @default(uuid())
   email      String          @unique
   cognitoSub String          @unique
-  status     OrganiserStatus @default(PENDING_PROFILE)
+  status     OrganiserStatus @default(APPROVED)
 
   // Profile — filled during onboarding
   orgName      String?
@@ -45,17 +44,6 @@ model Organiser {
   pastEventsUrl  String?
   certifications String?
 
-  // Email notification preferences
-  emailOnApprove Boolean @default(true)
-  emailOnReject  Boolean @default(true)
-
-  // Admin review
-  adminNotes      String?
-  rejectionReason String?
-  reviewedById    String?
-  reviewedBy      Admin?    @relation("OrganiserReviewedBy", fields: [reviewedById], references: [id])
-  reviewedAt      DateTime?
-
   events    Event[]
   reviews   Review[]
   createdAt DateTime @default(now())
@@ -63,12 +51,8 @@ model Organiser {
 }
 
 enum OrganiserStatus {
-  PENDING_EMAIL   // signed up — awaiting email verification
-  PENDING_PROFILE // email verified — must complete onboarding
-  PENDING_REVIEW  // profile submitted — awaiting admin approval
-  APPROVED        // active organiser
-  REJECTED        // application denied
-  SUSPENDED       // account suspended post-approval
+  APPROVED
+  SUSPENDED
 }
 
 // ─── Event listings ───────────────────────────────────────────────────────────

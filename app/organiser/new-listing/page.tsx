@@ -8,7 +8,6 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, Clock, Eye,
   Ticket, Package, ShoppingBag, Tag, ExternalLink,
 } from "lucide-react";
-import OrganiserSidebar from "@/components/organiser/Sidebar";
 import OrganiserTopBar  from "@/components/organiser/TopBar";
 
 /* ── Step definitions ───────────────────────────────────────── */
@@ -67,18 +66,18 @@ function Field({ label, hint, required, children }: {
   return (
     <div className="mb-6">
       <div className="flex items-baseline justify-between mb-2">
-        <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-light">
-          {label}{required && <span className="text-primary font-black text-[15px] leading-none ml-1">*</span>}
+        <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-700">
+          {label}{required && <span className="text-lime-600 font-black text-[15px] leading-none ml-1">*</span>}
         </label>
-        {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">{hint}</span>}
+        {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-gray-400">{hint}</span>}
       </div>
       {children}
     </div>
   );
 }
 
-const inputCls    = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
-const textareaCls = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none resize-none transition-colors";
+const inputCls    = "w-full bg-white border border-gray-200 rounded-md px-4 py-3 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-lime-500 focus:outline-none transition-colors";
+const textareaCls = "w-full bg-white border border-gray-200 rounded-md px-4 py-3 text-[14px] text-gray-900 placeholder:text-gray-400 focus:border-lime-500 focus:outline-none resize-none transition-colors";
 
 /* ═══════════════════════════════════════════════════════════════
    DATE PICKER POPOVER  (single OR range mode)
@@ -206,29 +205,29 @@ function DatePickerPopover({
       <button
         type="button"
         onClick={() => { setOpen(v => !v); if (!open) setPicking(value && !rangeEnd ? "end" : "start"); }}
-        className={`w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-left flex items-center justify-between transition-colors
-          ${open ? "border-primary" : "border-dark-lighter hover:border-muted"}
-          ${displayValue ? "text-light" : "text-muted-dark"}`}
+        className={`w-full bg-white border rounded-md px-4 py-3 text-[15px] text-left flex items-center justify-between transition-colors
+          ${open ? "border-lime-500" : "border-gray-200 hover:border-gray-300"}
+          ${displayValue ? "text-gray-900" : "text-gray-400"}`}
       >
         <span className="flex items-center gap-2.5 min-w-0">
-          <Calendar className="w-4 h-4 text-muted-dark shrink-0" />
+          <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
           <span className="truncate">{displayValue || placeholder}</span>
         </span>
-        <ChevronDown className={`w-4 h-4 text-muted-dark shrink-0 ml-2 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 z-50 bg-dark border border-dark-lighter rounded-xl shadow-2xl p-4 w-full sm:w-72 modal-in">
+        <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-full sm:w-72 modal-in">
           {/* Range mode hint */}
           {isRange && (
             <div className="mb-3 flex items-center justify-between">
               <span className={`font-headline text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-md
-                ${picking === "start" ? "bg-primary/10 text-primary" : "text-muted-dark"}`}>
+                ${picking === "start" ? "bg-lime-50 text-lime-700" : "text-gray-400"}`}>
                 {picking === "start" ? "▸ Tap start date" : "▸ Tap end date"}
               </span>
               {value && !rangeEnd && (
                 <button type="button" onClick={() => { onChange(""); if (onChangeEnd) onChangeEnd(""); setPicking("start"); }}
-                  className="font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors">
+                  className="font-headline text-[10px] uppercase tracking-widest text-gray-500 hover:text-lime-600 transition-colors">
                   Reset
                 </button>
               )}
@@ -238,14 +237,14 @@ function DatePickerPopover({
           {/* Month nav */}
           <div className="flex items-center justify-between mb-4">
             <button type="button" onClick={prevMonth}
-              className="w-9 h-9 rounded-md hover:bg-dark-lighter flex items-center justify-center text-muted hover:text-primary transition-colors">
+              className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-headline text-[13px] font-bold text-light">
+            <span className="font-headline text-[13px] font-bold text-gray-900">
               {MONTH_NAMES[viewMonth]} {viewYear}
             </span>
             <button type="button" onClick={nextMonth}
-              className="w-9 h-9 rounded-md hover:bg-dark-lighter flex items-center justify-center text-muted hover:text-primary transition-colors">
+              className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -253,7 +252,7 @@ function DatePickerPopover({
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 mb-1">
             {["Mo","Tu","We","Th","Fr","Sa","Su"].map(d => (
-              <div key={d} className="font-headline text-[9px] uppercase tracking-widest text-muted-dark text-center py-1">{d}</div>
+              <div key={d} className="font-headline text-[9px] uppercase tracking-widest text-gray-400 text-center py-1">{d}</div>
             ))}
           </div>
 
@@ -279,12 +278,12 @@ function DatePickerPopover({
                     disabled={past}
                     onClick={() => selectDay(d)}
                     className={`w-9 h-9 rounded-full text-[13px] font-headline font-bold transition-colors
-                      ${start || sel   ? "bg-primary text-dark"
-                      : end            ? "bg-primary/75 text-dark"
-                      : inRange        ? "text-primary hover:bg-primary/20"
-                      : past           ? "text-muted-dark opacity-30 cursor-not-allowed"
-                      : today          ? "text-primary border border-primary/50 hover:bg-primary/10"
-                      :                  "text-light hover:bg-dark-lighter hover:text-primary"}`}
+                      ${start || sel   ? "bg-lime-500 text-white"
+                      : end            ? "bg-lime-400 text-white"
+                      : inRange        ? "text-lime-700 hover:bg-lime-50"
+                      : past           ? "text-gray-300 opacity-50 cursor-not-allowed"
+                      : today          ? "text-lime-600 border border-lime-400 hover:bg-lime-50"
+                      :                  "text-gray-700 hover:bg-gray-100 hover:text-lime-600"}`}
                   >
                     {d}
                   </button>
@@ -294,13 +293,13 @@ function DatePickerPopover({
           </div>
 
           {/* Footer */}
-          <div className="mt-3 pt-3 border-t border-dark-lighter flex items-center justify-between">
+          <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
             <button type="button" onClick={() => { onChange(""); if (onChangeEnd) onChangeEnd(""); setOpen(false); setPicking("start"); }}
-              className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">
+              className="font-headline text-[11px] uppercase tracking-widest text-gray-500 hover:text-lime-600 transition-colors">
               Clear
             </button>
             <button type="button" onClick={selectToday}
-              className="font-headline text-[11px] uppercase tracking-widest text-primary hover:underline transition-colors">
+              className="font-headline text-[11px] uppercase tracking-widest text-lime-600 hover:underline transition-colors">
               Today
             </button>
           </div>
@@ -394,21 +393,21 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className={`w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-left flex items-center justify-between transition-colors
-            ${open ? "border-primary" : "border-dark-lighter hover:border-muted"}
-            ${value ? "text-light" : "text-muted-dark"}`}
+          className={`w-full bg-white border rounded-md px-4 py-3 text-[15px] text-left flex items-center justify-between transition-colors
+            ${open ? "border-lime-500" : "border-gray-200 hover:border-gray-300"}
+            ${value ? "text-gray-900" : "text-gray-400"}`}
         >
           <span className="flex items-center gap-2.5">
-            <Clock className="w-4 h-4 text-muted-dark shrink-0" />
+            <Clock className="w-4 h-4 text-gray-400 shrink-0" />
             {value ? fmt24to12(value) : placeholder}
           </span>
-          <ChevronDown className={`w-4 h-4 text-muted-dark transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
         </button>
         {value && (
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onChange(""); setOpen(false); }}
-            className="absolute right-9 p-1.5 text-muted-dark hover:text-light transition-colors"
+            className="absolute right-9 p-1.5 text-gray-400 hover:text-gray-700 transition-colors"
             title="Clear time"
           >
             <X className="w-3.5 h-3.5" />
@@ -417,10 +416,10 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
       </div>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 z-50 bg-dark border border-dark-lighter rounded-xl shadow-2xl overflow-hidden w-56 modal-in">
+        <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden w-56 modal-in">
           {/* Custom time input */}
-          <div className="p-3 border-b border-dark-lighter">
-            <div className="font-headline text-[9px] uppercase tracking-widest text-muted-dark mb-1.5">Custom time</div>
+          <div className="p-3 border-b border-gray-200">
+            <div className="font-headline text-[9px] uppercase tracking-widest text-gray-400 mb-1.5">Custom time</div>
             <div className="flex gap-2">
               <input
                 ref={inputRef}
@@ -429,8 +428,8 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
                 onChange={e => { setCustomRaw(e.target.value); setCustomError(false); }}
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commitCustom(); } }}
                 placeholder="e.g. 7:15 AM or 19:15"
-                className={`flex-1 min-w-0 bg-dark-light border rounded px-3 py-2 text-[13px] text-light placeholder:text-muted-dark focus:outline-none transition-colors
-                  ${customError ? "border-red-500/60 focus:border-red-500" : "border-dark-lighter focus:border-primary"}`}
+                className={`flex-1 min-w-0 bg-gray-50 border rounded px-3 py-2 text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none transition-colors
+                  ${customError ? "border-red-400 focus:border-red-500" : "border-gray-200 focus:border-lime-500"}`}
               />
               <button
                 type="button"
@@ -441,14 +440,14 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
               </button>
             </div>
             {customError && (
-              <p className="font-headline text-[10px] text-red-400 mt-1">
+              <p className="font-headline text-[10px] text-red-500 mt-1">
                 Use format: 7:15 AM, 7:15 PM, or 19:15
               </p>
             )}
           </div>
 
           {/* Divider */}
-          <div className="px-4 py-2 font-headline text-[9px] uppercase tracking-widest text-muted-dark text-center">
+          <div className="px-4 py-2 font-headline text-[9px] uppercase tracking-widest text-gray-400 text-center">
             — or pick a slot —
           </div>
 
@@ -461,8 +460,8 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
                 onClick={() => { onChange(s); setOpen(false); }}
                 className={`w-full px-4 py-3 text-left font-headline text-[14px] font-bold transition-colors
                   ${s === value
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted hover:bg-dark-lighter hover:text-light"}`}
+                    ? "bg-lime-50 text-lime-700"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"}`}
               >
                 {fmt24to12(s)}
               </button>
@@ -532,7 +531,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
           <button
             type="button"
             onClick={() => update({ endDate: "" })}
-            className="mt-1.5 font-headline text-[10px] uppercase tracking-widest text-muted hover:text-primary transition-colors flex items-center gap-1"
+            className="mt-1.5 font-headline text-[10px] uppercase tracking-widest text-gray-400 hover:text-lime-600 transition-colors flex items-center gap-1"
           >
             <X className="w-3 h-3" /> Make single-day event
           </button>
@@ -548,7 +547,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         </Field>
       </div>
 
-      <div className="my-6 border-t border-dark-lighter" />
+      <div className="my-6 border-t border-gray-200" />
 
       <Field label="Venue name" required>
         <input value={form.venue} onChange={(e) => update({ venue: e.target.value })}
@@ -570,7 +569,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
             {AUS_STATES.map(([v, l]) => (
               <button key={v} type="button" onClick={() => update({ state: v })}
                 className={`font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2.5 rounded-md border transition-all
-                  ${form.state === v ? "border-primary bg-primary/5 text-primary" : "border-dark-lighter text-muted hover:border-muted hover:text-light"}`}>
+                  ${form.state === v ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
                 {l}
               </button>
             ))}
@@ -586,7 +585,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         if (apiKey && hasQuery) {
           return (
             <Field label="Venue preview">
-              <div className="relative rounded-md border border-dark-lighter overflow-hidden h-52">
+              <div className="relative rounded-md border border-gray-200 overflow-hidden h-52">
                 <iframe
                   title="Venue map"
                   className="w-full h-full"
@@ -602,11 +601,11 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         }
         return (
           <Field label="Venue preview" hint={apiKey ? "Enter address or city above to see map" : "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local to enable maps"}>
-            <div className="relative rounded-md border border-dark-lighter overflow-hidden placeholder-stripes scan-grid h-48 flex items-center justify-center">
+            <div className="relative rounded-md border border-gray-200 overflow-hidden bg-gray-100 h-48 flex items-center justify-center">
               <div className="text-center">
-                <MapPin className="w-5 h-5 text-primary mx-auto mb-2" />
-                <div className="font-mono text-[11px] uppercase tracking-widest text-muted">{form.venue || "Venue preview"}</div>
-                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-dark mt-1">{form.city || "—"}, {form.state ? form.state.toUpperCase() : "—"}</div>
+                <MapPin className="w-5 h-5 text-lime-500 mx-auto mb-2" />
+                <div className="font-mono text-[11px] uppercase tracking-widest text-gray-500">{form.venue || "Venue preview"}</div>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-gray-400 mt-1">{form.city || "—"}, {form.state ? form.state.toUpperCase() : "—"}</div>
               </div>
             </div>
           </Field>
@@ -675,9 +674,9 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             const on = form.format === f.v;
             return (
               <button key={f.v} type="button" onClick={() => update({ format: f.v })}
-                className={`text-left p-4 rounded-md border transition-all ${on ? "border-primary bg-primary/5" : "border-dark-lighter hover:border-muted"}`}>
-                <div className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{f.l}</div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">{f.d}</div>
+                className={`text-left p-4 rounded-md border transition-all ${on ? "border-lime-500 bg-lime-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <div className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-lime-700" : "text-gray-900"}`}>{f.l}</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-500 mt-1">{f.d}</div>
               </button>
             );
           })}
@@ -690,9 +689,9 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             const on = form.discipline === d.v;
             return (
               <button key={d.v} type="button" onClick={() => update({ discipline: d.v })}
-                className={`text-left p-4 rounded-md border transition-all ${on ? "border-primary bg-primary/5" : "border-dark-lighter hover:border-muted"}`}>
-                <div className={`font-headline text-[15px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{d.l}</div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">{d.d}</div>
+                className={`text-left p-4 rounded-md border transition-all ${on ? "border-lime-500 bg-lime-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <div className={`font-headline text-[15px] font-black italic tracking-tighter ${on ? "text-lime-700" : "text-gray-900"}`}>{d.l}</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-500 mt-1">{d.d}</div>
               </button>
             );
           })}
@@ -703,7 +702,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
         <div className="flex flex-wrap gap-2">
           {LEVELS.map((l) => (
             <button key={l.v} type="button" onClick={() => update({ level: l.v })}
-              className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${form.level === l.v ? "chip-active" : ""}`}>
+              className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md border transition-colors ${form.level === l.v ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
               {l.l}
             </button>
           ))}
@@ -714,7 +713,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
         <div className="flex flex-wrap gap-2">
           {ALL_CATS.map((c) => (
             <button key={c} type="button" onClick={() => toggle(c)}
-              className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip ${form.categories.includes(c) ? "chip-active" : ""}`}>
+              className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border transition-colors ${form.categories.includes(c) ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
               {form.categories.includes(c) && <Check className="w-3 h-3 inline mr-1" />}
               {c}
             </button>
@@ -722,7 +721,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
           {/* Custom categories added by organiser */}
           {form.categories.filter(c => !ALL_CATS.includes(c)).map(c => (
             <button key={c} type="button" onClick={() => toggle(c)}
-              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip chip-active">
+              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-lime-500 bg-lime-50 text-lime-700">
               <Check className="w-3 h-3 inline mr-1" />{c}
             </button>
           ))}
@@ -745,13 +744,13 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
                 Add
               </button>
               <button type="button" onClick={() => { setShowCustomCat(false); setCustomCatInput(""); }}
-                className="text-muted-dark hover:text-light transition-colors">
+                className="text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button type="button" onClick={() => setShowCustomCat(true)}
-              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip hover:chip-active">
+              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-gray-200 text-gray-500 hover:border-lime-500 hover:bg-lime-50 hover:text-lime-700 transition-colors">
               <Plus className="w-3 h-3 inline mr-1" /> Custom…
             </button>
           )}
@@ -766,19 +765,19 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             return (
               <button key={c} type="button"
                 onClick={() => { update({ cap: c }); setCapMode("preset"); }}
-                className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${active ? "chip-active" : ""}`}>
+                className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md border transition-colors ${active ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
                 {parseInt(c).toLocaleString()}
               </button>
             );
           })}
           <button type="button"
             onClick={() => { update({ cap: "" }); setCapMode("unlimited"); }}
-            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${capMode === "unlimited" ? "chip-active" : ""}`}>
+            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md border transition-colors ${capMode === "unlimited" ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
             Unlimited
           </button>
           <button type="button"
             onClick={() => setCapMode("custom")}
-            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${capMode === "custom" ? "chip-active" : ""}`}>
+            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md border transition-colors ${capMode === "custom" ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
             Custom
           </button>
         </div>
@@ -787,7 +786,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             placeholder="e.g. 4200" className={`${inputCls} w-40`} />
         )}
         {capMode === "unlimited" && (
-          <p className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">No cap — open registrations until you close manually.</p>
+          <p className="font-headline text-[11px] uppercase tracking-widest text-gray-400">No cap — open registrations until you close manually.</p>
         )}
       </Field>
 
@@ -796,7 +795,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
         <div className="flex flex-wrap gap-2 mb-3">
           <button type="button"
             onClick={() => { update({ minAge: "0" }); setAgeMode("open"); }}
-            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${ageMode === "open" ? "chip-active" : ""}`}>
+            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md border transition-colors ${ageMode === "open" ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
             Open to all
           </button>
           {AGE_PRESETS.map(a => {
@@ -804,14 +803,14 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             return (
               <button key={a} type="button"
                 onClick={() => { update({ minAge: a }); setAgeMode("preset"); }}
-                className={`font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md chip ${active ? "chip-active" : ""}`}>
+                className={`font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md border transition-colors ${active ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
                 {a}+
               </button>
             );
           })}
           <button type="button"
             onClick={() => { update({ minAge: "" }); setAgeMode("custom"); }}
-            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md chip ${ageMode === "custom" ? "chip-active" : ""}`}>
+            className={`font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md border transition-colors ${ageMode === "custom" ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
             Custom
           </button>
         </div>
@@ -819,11 +818,11 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
           <div className="flex items-center gap-3">
             <input type="number" value={form.minAge} onChange={(e) => update({ minAge: e.target.value })}
               placeholder="e.g. 14" className={`${inputCls} w-32`} />
-            <span className="font-headline text-[13px] text-muted">years old minimum</span>
+            <span className="font-headline text-[13px] text-gray-500">years old minimum</span>
           </div>
         )}
         {ageMode === "open" && (
-          <p className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">No age restriction — open to all ages.</p>
+          <p className="font-headline text-[11px] uppercase tracking-widest text-gray-400">No age restriction — open to all ages.</p>
         )}
       </Field>
     </div>
@@ -919,32 +918,32 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
       <Field label="Ticket categories">
         <div className="space-y-3">
           {form.waves.map((w, i) => (
-            <div key={i} className="bg-dark border border-dark-lighter rounded-lg p-4 space-y-3">
+            <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
               {/* Row 1: number + category name */}
               <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-md bg-dark-lighter flex items-center justify-center font-headline font-black italic text-primary text-[13px] shrink-0">
+                <div className="w-7 h-7 rounded-md bg-gray-200 flex items-center justify-center font-headline font-black italic text-lime-600 text-[13px] shrink-0">
                   {i + 1}
                 </div>
                 <input value={w.label} onChange={(e) => updateWave(i, { label: e.target.value })}
                   placeholder="General admission"
                   className={`${inputCls} flex-1`} />
                 <button onClick={() => removeWave(i)}
-                  className="w-9 h-9 rounded text-muted-dark hover:text-primary hover:bg-dark-lighter flex items-center justify-center transition-colors shrink-0">
+                  className="w-9 h-9 rounded text-gray-400 hover:text-lime-600 hover:bg-gray-100 flex items-center justify-center transition-colors shrink-0">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
               {/* Row 2: price + close date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-1.5">Price (A$)</div>
+                  <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Price (A$)</div>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-headline text-[13px] text-muted">A$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-headline text-[13px] text-gray-500">A$</span>
                     <input value={w.price} onChange={(e) => updateWave(i, { price: e.target.value })}
                       placeholder="129" className={`${inputCls} pl-9`} />
                   </div>
                 </div>
                 <div>
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-1.5">Category closes</div>
+                  <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Category closes</div>
                   <DatePickerPopover
                     value={w.closes}
                     onChange={v => updateWave(i, { closes: v })}
@@ -956,7 +955,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
             </div>
           ))}
           <button onClick={addWave}
-            className="w-full border border-dashed border-dark-lighter rounded-md py-3 font-headline text-[12px] uppercase tracking-widest text-muted hover:text-primary hover:border-primary/50 flex items-center justify-center gap-2 transition-colors">
+            className="w-full border border-dashed border-gray-200 rounded-md py-3 font-headline text-[12px] uppercase tracking-widest text-gray-500 hover:text-lime-600 hover:border-lime-400 flex items-center justify-center gap-2 transition-colors">
             <Plus className="w-4 h-4" /> Add ticket category
           </button>
         </div>
@@ -969,8 +968,8 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
             const active = activeInclusions.includes(item);
             return (
               <button key={item} type="button" onClick={() => toggleInclusion(item)}
-                className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip flex items-center gap-1.5
-                  ${active ? "chip-active" : ""}`}>
+                className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border transition-colors flex items-center gap-1.5
+                  ${active ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
                 {active && <Check className="w-3 h-3" />}
                 {item}
               </button>
@@ -979,7 +978,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
           {/* Custom inclusions added by organiser */}
           {activeInclusions.filter(i => !INCLUSION_PRESETS.includes(i)).map(item => (
             <button key={item} type="button" onClick={() => toggleInclusion(item)}
-              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip chip-active flex items-center gap-1.5">
+              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-lime-500 bg-lime-50 text-lime-700 flex items-center gap-1.5">
               <Check className="w-3 h-3" />{item}
             </button>
           ))}
@@ -1002,13 +1001,13 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                 Add
               </button>
               <button type="button" onClick={() => { setShowCustomInclusion(false); setCustomInclusionInput(""); }}
-                className="text-muted-dark hover:text-light transition-colors">
+                className="text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button type="button" onClick={() => setShowCustomInclusion(true)}
-              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md chip hover:chip-active">
+              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-gray-200 text-gray-500 hover:border-lime-500 hover:bg-lime-50 hover:text-lime-700 transition-colors">
               <Plus className="w-3 h-3 inline mr-1" /> Custom…
             </button>
           )}
@@ -1020,22 +1019,22 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
       {(() => {
         const on = form.activations !== "";
         return (
-          <div className="border border-dark-lighter rounded-xl overflow-hidden mb-6">
+          <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
             <button
               type="button"
               onClick={() => update({ activations: on ? "" : " " })}
-              className="w-full flex items-center justify-between px-5 py-4 bg-dark hover:bg-dark-lighter transition-colors"
+              className="w-full flex items-center justify-between px-5 py-4 bg-white hover:bg-gray-50 transition-colors"
             >
               <div>
-                <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-light text-left">Activations</div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5 text-left">Brand activations, experiences &amp; sponsor zones</div>
+                <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 text-left">Activations</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mt-0.5 text-left">Brand activations, experiences &amp; sponsor zones</div>
               </div>
-              <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-primary" : "bg-dark-lighter"}`}>
+              <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-lime-500" : "bg-gray-200"}`}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : "translate-x-0"}`} />
               </div>
             </button>
             {on && (
-              <div className="px-5 pb-5 pt-3 bg-dark border-t border-dark-lighter">
+              <div className="px-5 pb-5 pt-3 bg-gray-50 border-t border-gray-200">
                 <textarea
                   autoFocus
                   rows={3}
@@ -1054,22 +1053,22 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
       {(() => {
         const on = form.extras !== "";
         return (
-          <div className="border border-dark-lighter rounded-xl overflow-hidden mb-6">
+          <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
             <button
               type="button"
               onClick={() => update({ extras: on ? "" : " " })}
-              className="w-full flex items-center justify-between px-5 py-4 bg-dark hover:bg-dark-lighter transition-colors"
+              className="w-full flex items-center justify-between px-5 py-4 bg-white hover:bg-gray-50 transition-colors"
             >
               <div>
-                <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-light text-left">Optional extras</div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5 text-left">Add-ons athletes can purchase at checkout</div>
+                <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 text-left">Optional extras</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mt-0.5 text-left">Add-ons athletes can purchase at checkout</div>
               </div>
-              <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-primary" : "bg-dark-lighter"}`}>
+              <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-lime-500" : "bg-gray-200"}`}>
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : "translate-x-0"}`} />
               </div>
             </button>
             {on && (
-              <div className="px-5 pb-5 pt-3 bg-dark border-t border-dark-lighter">
+              <div className="px-5 pb-5 pt-3 bg-gray-50 border-t border-gray-200">
                 <textarea
                   autoFocus
                   rows={3}
@@ -1091,8 +1090,8 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
             const active = refundSelected.includes(v);
             return (
               <button key={v} type="button" onClick={() => toggleRefund(v)}
-                className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2.5 rounded-md chip flex items-center gap-1.5
-                  ${active ? "chip-active" : ""}`}>
+                className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2.5 rounded-md border transition-colors flex items-center gap-1.5
+                  ${active ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
                 {active && <Check className="w-3 h-3" />}
                 {l}
               </button>
@@ -1128,7 +1127,7 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
               <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); update({ coverImage: null }); }}
-                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-dark/80 text-muted hover:text-primary flex items-center justify-center transition-colors"
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bg-gray-900/70 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1139,13 +1138,13 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
               </div>
             </div>
           ) : (
-            <div className="relative rounded-md border-2 border-dashed border-dark-lighter hover:border-primary/60 placeholder-stripes scan-grid aspect-video flex flex-col items-center justify-center transition-colors">
-              <div className="w-12 h-12 rounded-full bg-dark-light border border-dark-lighter flex items-center justify-center mb-3">
-                <Upload className="w-5 h-5 text-primary" />
+            <div className="relative rounded-md border-2 border-dashed border-gray-200 hover:border-lime-400 bg-gray-50 aspect-video flex flex-col items-center justify-center transition-colors">
+              <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
+                <Upload className="w-5 h-5 text-lime-600" />
               </div>
-              <div className="font-headline text-sm font-bold uppercase tracking-widest text-light">Drop cover image here</div>
-              <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mt-1">or click to browse</div>
-              <div className="mt-4 font-mono text-[10px] uppercase tracking-widest text-muted-dark">JPG · PNG · WEBP</div>
+              <div className="font-headline text-sm font-bold uppercase tracking-widest text-gray-900">Drop cover image here</div>
+              <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400 mt-1">or click to browse</div>
+              <div className="mt-4 font-mono text-[10px] uppercase tracking-widest text-gray-400">JPG · PNG · WEBP</div>
             </div>
           )}
           <input type="file" accept="image/*" className="sr-only"
@@ -1207,13 +1206,13 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
 
   return (
     <div>
-      <div className="bg-dark border border-dark-lighter rounded-lg overflow-hidden mb-6">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mb-6">
         {rows.map((r, i) => (
-          <div key={r.k} className={`flex items-center gap-4 px-5 py-4 ${i === rows.length - 1 ? "" : "border-b border-dark-lighter"}`}>
-            <div className="font-headline text-[11px] uppercase tracking-widest text-muted w-32 flex-shrink-0">{r.k}</div>
-            <div className="flex-1 text-[14px] text-light truncate">{r.v}</div>
+          <div key={r.k} className={`flex items-center gap-4 px-5 py-4 ${i === rows.length - 1 ? "" : "border-b border-gray-100"}`}>
+            <div className="font-headline text-[11px] uppercase tracking-widest text-gray-500 w-32 flex-shrink-0">{r.k}</div>
+            <div className="flex-1 text-[14px] text-gray-900 truncate">{r.v}</div>
             <button onClick={() => setStep(r.step)}
-              className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary flex items-center gap-1 transition-colors">
+              className="font-headline text-[11px] uppercase tracking-widest text-gray-400 hover:text-lime-600 flex items-center gap-1 transition-colors">
               Edit <ArrowRight className="w-3 h-3" />
             </button>
           </div>
@@ -1226,10 +1225,10 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
             <Check className="w-5 h-5" />
           </div>
           <div>
-            <div className="font-headline text-[14px] font-black italic tracking-tighter text-light mb-1">
+            <div className="font-headline text-[14px] font-black italic tracking-tighter text-gray-900 mb-1">
               Your listing is ready to publish.
             </div>
-            <p className="text-[13px] text-muted-light leading-relaxed">
+            <p className="text-[13px] text-gray-600 leading-relaxed">
               Once published, athletes will be able to find your event in search and carousels.
               You&apos;ll receive a notification each time someone registers.
             </p>
@@ -1239,11 +1238,11 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
 
       <label className="flex items-start gap-3 cursor-pointer">
         <input type="checkbox" defaultChecked className="accent-primary w-4 h-4 mt-1" />
-        <span className="text-[13px] text-muted-light leading-relaxed">
+        <span className="text-[13px] text-gray-600 leading-relaxed">
           I confirm I have the rights to host this event and the information provided is accurate.
           I agree to the{" "}
-          <span className="text-primary hover:underline cursor-pointer">Organiser Terms</span> and{" "}
-          <span className="text-primary hover:underline cursor-pointer">Event Listing Policy</span>.
+          <span className="text-lime-600 hover:underline cursor-pointer">Organiser Terms</span> and{" "}
+          <span className="text-lime-600 hover:underline cursor-pointer">Event Listing Policy</span>.
         </span>
       </label>
     </div>
@@ -1277,10 +1276,10 @@ function LivePreview({ form }: { form: FormState }) {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">
+        <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-lime-600">
           Live preview
         </span>
-        <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+        <span className="font-headline text-[10px] uppercase tracking-widest text-gray-400">
           How it appears in search
         </span>
       </div>
@@ -1749,31 +1748,30 @@ export default function NewListingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-darker">
+    <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
-      <div className="flex pt-16 min-h-[calc(100vh-64px)]">
-        <OrganiserSidebar />
+      <div className="pt-16">
 
-        <div className="flex-1 min-w-0 anim-fade-slide">
+        <div className="anim-fade-slide">
           {/* Sticky header */}
-          <div className="sticky top-16 z-30 bg-dark-darker/95 backdrop-blur border-b border-dark-lighter">
-            <div className="px-6 lg:px-10 pt-3 pb-3">
+          <div className="sticky top-16 z-30 bg-white/95 backdrop-blur border-b border-gray-200">
+            <div className="max-w-[1280px] mx-auto px-6 lg:px-8 pt-3 pb-3">
               {/* Breadcrumb */}
               <div className="flex items-center gap-3 mb-2">
                 <button onClick={() => setShowCancelModal(true)}
-                  className="flex items-center gap-1.5 text-muted hover:text-primary font-headline text-[11px] uppercase tracking-widest transition-colors">
+                  className="flex items-center gap-1.5 text-gray-500 hover:text-lime-600 font-headline text-[11px] uppercase tracking-widest transition-colors">
                   <ArrowLeft className="w-4 h-4" /> Event Listings
                 </button>
-                <span className="text-muted-dark">/</span>
-                <span className="font-headline text-[11px] uppercase tracking-widest text-light">Create new listing</span>
+                <span className="text-gray-300">/</span>
+                <span className="font-headline text-[11px] uppercase tracking-widest text-gray-900">Create new listing</span>
                 <div className="ml-auto flex items-center gap-3">
                   <button
                     onClick={() => setShowFullPreview(true)}
-                    className="flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                    className="flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-lime-600 transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" /> Preview
                   </button>
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-dark hidden sm:block">Draft</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-gray-400 hidden sm:block">Draft</span>
                 </div>
               </div>
 
@@ -1791,28 +1789,28 @@ export default function NewListingPage() {
                       >
                         {/* Circle — hasErr takes priority over done */}
                         <div className={`relative w-8 h-8 rounded-md border flex items-center justify-center font-headline font-black italic text-[13px] flex-shrink-0
-                          ${cur    ? "bg-primary text-dark border-primary"
-                          : hasErr ? "bg-orange-500/10 text-orange-400 border-orange-400/50"
-                          : done   ? "bg-dark-lighter text-primary border-primary/40"
-                          :          "bg-dark border-dark-lighter text-muted-dark"}`}>
+                          ${cur    ? "bg-lime-500 text-white border-lime-500"
+                          : hasErr ? "bg-orange-50 text-orange-500 border-orange-300"
+                          : done   ? "bg-gray-100 text-lime-600 border-lime-400/50"
+                          :          "bg-white border-gray-200 text-gray-400"}`}>
                           {hasErr ? <span className="text-[15px] leading-none font-black">!</span>
                            : done  ? <Check className="w-4 h-4" />
                            :         s.n}
                           {hasErr && (
-                            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400 border border-dark-darker animate-pulse-dot" />
+                            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400 border border-white animate-pulse-dot" />
                           )}
                         </div>
                         <div className="hidden xl:block">
-                          <div className={`font-headline text-[11px] font-bold uppercase tracking-widest whitespace-nowrap ${cur ? "text-light" : hasErr ? "text-orange-400" : "text-muted"}`}>
+                          <div className={`font-headline text-[11px] font-bold uppercase tracking-widest whitespace-nowrap ${cur ? "text-gray-900" : hasErr ? "text-orange-500" : "text-gray-500"}`}>
                             {s.label}
                           </div>
-                          <div className={`font-headline text-[10px] uppercase tracking-widest whitespace-nowrap ${hasErr ? "text-orange-400/70" : "text-muted-dark"}`}>
+                          <div className={`font-headline text-[10px] uppercase tracking-widest whitespace-nowrap ${hasErr ? "text-orange-400" : "text-gray-400"}`}>
                             {hasErr ? "Missing required fields" : s.sub}
                           </div>
                         </div>
                       </button>
                       {i < STEPS.length - 1 && (
-                        <div className="flex-1 h-px mx-3 step-line" />
+                        <div className="flex-1 h-px mx-3 bg-gray-200" />
                       )}
                     </div>
                   );
@@ -1822,14 +1820,14 @@ export default function NewListingPage() {
           </div>
 
           {/* Two-column layout */}
-          <div className="grid lg:grid-cols-[1fr_360px]">
-            <div className="p-6 lg:p-10 max-w-[820px] pb-24 lg:pb-10">
+          <div className="max-w-[1280px] mx-auto grid lg:grid-cols-[1fr_360px]">
+            <div className="p-6 lg:p-8 pb-24 lg:pb-10">
               <div key={step} className={direction === "forward" ? "step-forward" : "step-back"}>
                 <div className="mb-6">
-                  <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
+                  <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
                     STEP {STEPS[step].n} / {STEPS[STEPS.length - 1].n}
                   </div>
-                  <h1 className="font-headline text-[28px] sm:text-[38px] font-black italic tracking-tighter leading-none">
+                  <h1 className="font-headline text-[28px] sm:text-[38px] font-black italic tracking-tighter leading-none text-gray-900">
                     {step === 0 && <>Let&apos;s start with<br /><span className="text-primary">the basics.</span></>}
                     {step === 1 && <>When and where<br /><span className="text-primary">do athletes race?</span></>}
                     {step === 2 && <>Pick the<br /><span className="text-primary">race format.</span></>}
@@ -1837,7 +1835,7 @@ export default function NewListingPage() {
                     {step === 4 && <>Final details<br /><span className="text-primary">and cover image.</span></>}
                     {step === 5 && <>Review, then<br /><span className="text-primary">hit publish.</span></>}
                   </h1>
-                  <p className="text-muted mt-2 max-w-lg text-[14px]">
+                  <p className="text-gray-500 mt-2 max-w-lg text-[14px]">
                     {step === 0 && "Keep it short and sharp — this is what athletes will see first."}
                     {step === 1 && "Athletes will search your event by city, state and date."}
                     {step === 2 && "You can enable multiple formats. Functional fitness events commonly offer Individual and Doubles."}
@@ -1855,7 +1853,7 @@ export default function NewListingPage() {
                 {step === 5 && <ReviewStep  form={form} setStep={goTo} />}
 
                 {apiError && (
-                  <div className="mt-4 px-4 py-3 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]">
+                  <div className="mt-4 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-600 font-headline text-[13px]">
                     {apiError}
                   </div>
                 )}
@@ -1870,12 +1868,12 @@ export default function NewListingPage() {
                       {submitErrors.map(i => (
                         <li key={i} className="flex items-start justify-between gap-4 py-2.5 px-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
                           <div>
-                            <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-orange-300">{STEPS[i].n} — {STEPS[i].label}</p>
-                            <p className="text-orange-400/70 text-[12px] mt-0.5">{STEP_ERRORS[i]}</p>
+                            <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-orange-600">{STEPS[i].n} — {STEPS[i].label}</p>
+                            <p className="text-orange-500 text-[12px] mt-0.5">{STEP_ERRORS[i]}</p>
                           </div>
                           <button
                             onClick={() => { setSubmitErrors([]); goTo(i); }}
-                            className="shrink-0 font-headline text-[11px] font-bold uppercase tracking-widest text-orange-400 hover:text-orange-200 flex items-center gap-1 transition-colors mt-0.5"
+                            className="shrink-0 font-headline text-[11px] font-bold uppercase tracking-widest text-orange-500 hover:text-orange-700 flex items-center gap-1 transition-colors mt-0.5"
                           >
                             Fix now <ArrowRight className="w-3 h-3" />
                           </button>
@@ -1887,32 +1885,32 @@ export default function NewListingPage() {
               </div>
 
               {/* ── Mobile preview (collapsible, sits above nav) ── */}
-              <div className="lg:hidden mt-8 rounded-xl border border-dark-lighter overflow-hidden">
+              <div className="lg:hidden mt-8 rounded-xl border border-gray-200 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setShowMobilePreview(v => !v)}
-                  className="w-full flex items-center justify-between px-5 py-4 bg-dark text-left"
+                  className="w-full flex items-center justify-between px-5 py-4 bg-white text-left"
                 >
-                  <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">
+                  <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-lime-600">
                     Event preview
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-muted transition-transform duration-200 ${showMobilePreview ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${showMobilePreview ? "rotate-180" : ""}`} />
                 </button>
                 {showMobilePreview && (
-                  <div className="p-5 pt-0 bg-dark border-t border-dark-lighter">
+                  <div className="p-5 pt-0 bg-white border-t border-gray-200">
                     <LivePreview form={form} />
                   </div>
                 )}
               </div>
 
-              <div className="mt-6 flex items-center justify-between pt-5 border-t border-dark-lighter">
+              <div className="mt-6 flex items-center justify-between pt-5 border-t border-gray-200">
                 <button onClick={prev}
-                  className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-2 transition-colors">
+                  className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 flex items-center gap-2 transition-colors">
                   <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Cancel" : "Back"}
                 </button>
                 <div className="flex items-center gap-3">
                   {savedAt && !apiError && !submitErrors.length && (
-                    <span className="font-headline text-[11px] uppercase tracking-widest text-primary flex items-center gap-1.5">
+                    <span className="font-headline text-[11px] uppercase tracking-widest text-lime-600 flex items-center gap-1.5">
                       <Check className="w-3.5 h-3.5" />
                       Saved {savedAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })}
                     </span>
@@ -1920,7 +1918,7 @@ export default function NewListingPage() {
                   <button
                     onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")}
                     disabled={saving}
-                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light px-5 py-3 transition-colors disabled:opacity-40"
+                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 px-5 py-3 transition-colors disabled:opacity-40"
                   >
                     Save draft
                   </button>
@@ -1929,7 +1927,7 @@ export default function NewListingPage() {
                     {saving
                       ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Saving…</>
                       : step === STEPS.length - 1
-                        ? <><Check className="w-4 h-4" /> Submit for review</>
+                        ? <><Check className="w-4 h-4" /> Publish listing</>
                         : <>Continue <ArrowRight className="w-4 h-4" /></>}
                   </button>
                 </div>
@@ -1937,7 +1935,7 @@ export default function NewListingPage() {
             </div>
 
             {/* Live preview */}
-            <aside className="hidden lg:block border-l border-dark-lighter bg-dark p-6 sticky top-[152px] h-[calc(100vh-152px)] overflow-y-auto">
+            <aside className="hidden lg:block border-l border-gray-200 bg-white p-6 sticky top-[152px] h-[calc(100vh-152px)] overflow-y-auto">
               <LivePreview form={form} />
             </aside>
           </div>
@@ -1953,11 +1951,11 @@ export default function NewListingPage() {
       {showCancelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCancelModal(false)} />
-          <div className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-sm p-7 modal-in">
-            <h2 className="font-headline text-[22px] font-black italic tracking-tight text-light mb-2">
+          <div className="relative bg-white border border-gray-200 rounded-2xl shadow-2xl w-full max-w-sm p-7 modal-in">
+            <h2 className="font-headline text-[22px] font-black italic tracking-tight text-gray-900 mb-2">
               Leave without saving?
             </h2>
-            <p className="text-muted text-[14px] leading-relaxed mb-7">
+            <p className="text-gray-500 text-[14px] leading-relaxed mb-7">
               Your event details haven't been saved yet. Save as a draft so you can come back and finish it later.
             </p>
             <div className="flex flex-col gap-3">
@@ -1968,19 +1966,19 @@ export default function NewListingPage() {
                   router.push("/organiser/dashboard");
                 }}
                 disabled={saving}
-                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/50 bg-primary/5 text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-lime-400 bg-lime-50 text-lime-700 hover:bg-lime-100 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
                 {saving ? "Saving…" : <><Check className="w-4 h-4" /> Save draft &amp; leave</>}
               </button>
               <button
                 onClick={() => router.push("/organiser/dashboard")}
-                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-muted hover:text-light hover:border-muted transition-colors"
+                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-colors"
               >
                 Discard &amp; leave
               </button>
               <button
                 onClick={() => setShowCancelModal(false)}
-                className="font-headline text-[12px] uppercase tracking-widest text-muted-dark hover:text-muted transition-colors text-center py-1"
+                className="font-headline text-[12px] uppercase tracking-widest text-gray-400 hover:text-gray-600 transition-colors text-center py-1"
               >
                 Keep editing
               </button>

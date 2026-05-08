@@ -68,10 +68,10 @@ export default function RegisterPage() {
           </div>
 
           <h1 className="font-headline text-4xl sm:text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
-            Apply to<br /><span className="text-primary">list events.</span>
+            Start listing<br /><span className="text-primary">events.</span>
           </h1>
           <p className="text-muted text-[14px] leading-relaxed mb-8">
-            Create your account, verify your email, complete your organiser profile and submit for review. Approval typically takes 1–2 business days.
+            Create your account, verify your email and complete your organiser profile to start publishing events.
           </p>
 
           {error && (
@@ -132,15 +132,14 @@ export default function RegisterPage() {
         <div className="absolute inset-0 scan-grid opacity-40" />
         <div className="relative z-10 max-w-sm">
           <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-6">
-            Application process
+            Getting started
           </div>
           <div className="space-y-6">
             {[
               { n: "01", title: "Create account",      desc: "Email + password. Takes 30 seconds." },
               { n: "02", title: "Verify email",         desc: "Enter the 6-digit code we send to your inbox." },
-              { n: "03", title: "Complete profile",     desc: "Organisation details, ABN, insurance and past event evidence." },
-              { n: "04", title: "Submit for review",    desc: "Our team reviews applications within 1–2 business days." },
-              { n: "05", title: "Start listing events", desc: "Publish events and reach thousands of athletes." },
+              { n: "03", title: "Complete profile",     desc: "Organisation details and contact information." },
+              { n: "04", title: "Start listing events", desc: "Publish events and reach thousands of athletes." },
             ].map((step, i) => (
               <div key={i} className="flex gap-4">
                 <div className={`w-8 h-8 rounded-md border flex items-center justify-center font-headline font-black italic text-[13px] flex-shrink-0 ${i === 0 ? "bg-primary text-dark border-primary" : "bg-dark border-dark-lighter text-muted-dark"}`}>

@@ -1,5 +1,11 @@
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
 import { FitnessEvent, FilterState, AustralianState } from "@/types";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 // ── Date formatting ────────────────────────────────────────────────────────
 
@@ -130,9 +136,6 @@ export function getTotalUpcomingEvents(events: FitnessEvent[]): number {
 
 // ── Misc ───────────────────────────────────────────────────────────────────
 
-export function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
 
 /** Truncates an event title to `maxLength` chars so card layouts stay consistent. */
 export function truncateTitle(title: string, maxLength = 28): string {

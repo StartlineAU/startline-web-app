@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { signIn } from "aws-amplify/auth";
+import { signIn, signOut } from "aws-amplify/auth";
 
 function SignInForm() {
   const router = useRouter();
@@ -21,6 +21,9 @@ function SignInForm() {
     setLoading(true);
 
     try {
+      // Clear any stale session before signing in
+      await signOut({ global: false }).catch(() => {});
+
       // 1. Sign in via Cognito — tokens are stored in Amplify cookies (ssr:true)
       const result = await signIn({ username: email, password });
 
@@ -34,25 +37,21 @@ function SignInForm() {
         return;
       }
 
-      // 2. Hit our session API to upsert the Prisma organiser record and get status
-      const res  = await fetch("/api/organiser/auth/session", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Sign in failed. Please try again."); return; }
+      // Best-effort upsert of the organiser record — don't block login if DB is down
+      fetch("/api/organiser/auth/session", { method: "POST" }).catch(() => {});
 
-      // 3. Redirect based on organiser application status
-      const status: string = data.status;
-      if (status === "PENDING_PROFILE") { router.push("/organiser/onboarding"); return; }
       router.push("/organiser/dashboard");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("NotAuthorizedException") || msg.includes("Incorrect username or password")) {
+      const name = (err as { name?: string })?.name ?? "";
+      const msg  = err instanceof Error ? err.message : "";
+      if (name === "NotAuthorizedException" || msg.includes("Incorrect username or password")) {
         setError("Incorrect email or password.");
-      } else if (msg.includes("UserNotConfirmedException")) {
+      } else if (name === "UserNotConfirmedException" || msg.includes("UserNotConfirmedException")) {
         router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
-      } else if (msg.includes("UserNotFoundException")) {
+      } else if (name === "UserNotFoundException" || msg.includes("UserNotFoundException")) {
         setError("No account found with that email.");
       } else {
-        setError("Something went wrong. Please check your connection and try again.");
+        setError(msg || "Something went wrong. Please check your connection and try again.");
       }
     } finally {
       setLoading(false);
