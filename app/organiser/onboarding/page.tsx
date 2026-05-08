@@ -28,7 +28,7 @@ function Field({ label, required, hint, children }: { label: string; required?: 
 const STEPS = [
   { n: "01", label: "Organisation", sub: "Name & bio"           },
   { n: "02", label: "Contact",      sub: "Your contact details" },
-  { n: "03", label: "Submit",       sub: "Review & send"        },
+  { n: "03", label: "Finish",       sub: "Agree & get started"  },
 ];
 
 export default function OnboardingPage() {
@@ -185,7 +185,7 @@ export default function OnboardingPage() {
                   Tell us about your<br /><span className="text-primary">organisation.</span>
                 </h1>
                 <p className="text-muted text-[14px] mb-8">
-                  This information is reviewed by our team before your account is approved.
+                  This will appear on your organiser profile and event listings.
                 </p>
 
                 {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
@@ -210,7 +210,7 @@ export default function OnboardingPage() {
                   Your contact<br /><span className="text-primary">details.</span>
                 </h1>
                 <p className="text-muted text-[14px] mb-8">
-                  This is who our team will reach out to about your application and events.
+                  This is who athletes and our team will reach out to about your events.
                 </p>
 
                 {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
@@ -238,14 +238,14 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {/* ── Step 3: Submit ── */}
+            {/* ── Step 3: Finish ── */}
             {step === 2 && (
               <>
                 <h1 className="font-headline text-4xl font-black italic tracking-tighter text-light mb-2">
-                  Ready to<br /><span className="text-primary">submit.</span>
+                  Almost<br /><span className="text-primary">there.</span>
                 </h1>
                 <p className="text-muted text-[14px] mb-8">
-                  Our team will review your application and get back to you within 1–2 business days.
+                  Agree to our community standards and terms to complete your setup.
                 </p>
 
                 {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
@@ -326,7 +326,7 @@ export default function OnboardingPage() {
               ) : (
                 <button onClick={() => save(true)} disabled={saving || !form.agreedToTerms || !form.agreedToCommunity}
                   className="bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
-                  {saving ? "Submitting…" : <>Submit application <ArrowRight className="w-4 h-4" /></>}
+                  {saving ? "Saving…" : <>Complete setup <ArrowRight className="w-4 h-4" /></>}
                 </button>
               )}
             </div>

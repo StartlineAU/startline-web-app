@@ -13,16 +13,13 @@ const JWKS = createRemoteJWKSet(
   new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`)
 );
 
-// Routes an approved organiser can access
 const ORGANISER_PROTECTED = [
   "/organiser/dashboard",
   "/organiser/listings",
   "/organiser/profile",
   "/organiser/new-listing",
+  "/organiser/onboarding",
 ];
-
-// Routes that require at least PENDING_PROFILE (email verified, completing onboarding)
-const ONBOARDING_ROUTES = ["/organiser/onboarding"];
 
 /**
  * Reads and verifies the Cognito access token from the Amplify cookie.
@@ -61,27 +58,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Organiser protected routes (must be APPROVED) ───────────────────────────
+  // ── Organiser protected routes (must be signed in) ─────────────────────────
   if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
-    const sub = await getVerifiedSub(req);
-    if (!sub) {
-      return NextResponse.redirect(new URL("/organiser", req.url));
-    }
-
-    // Status-based redirects use the sl-status cookie set by /api/organiser/auth/session
-    const organiserStatus = req.cookies.get("sl-status")?.value;
-    if (!organiserStatus || organiserStatus === "PENDING_PROFILE") {
-      return NextResponse.redirect(new URL("/organiser/onboarding", req.url));
-    }
-    if (organiserStatus === "REJECTED" || organiserStatus === "SUSPENDED") {
-      return NextResponse.redirect(new URL("/organiser", req.url));
-    }
-
-    return NextResponse.next();
-  }
-
-  // ── Onboarding route (must have a valid session) ────────────────────────────
-  if (ONBOARDING_ROUTES.some((p) => pathname.startsWith(p))) {
     const sub = await getVerifiedSub(req);
     if (!sub) {
       return NextResponse.redirect(new URL("/organiser", req.url));
@@ -101,3 +79,4 @@ export const config = {
     "/organiser/onboarding/:path*",
   ],
 };
+

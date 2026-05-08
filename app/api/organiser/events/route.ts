@@ -27,10 +27,6 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getOrganiserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
-  if (session.status !== "APPROVED") {
-    return NextResponse.json({ error: "Your account must be approved before listing events." }, { status: 403 });
-  }
-
   const body = await req.json();
   const { submit, ...data } = body;
 

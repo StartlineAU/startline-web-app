@@ -24,43 +24,6 @@ export async function sendVerificationEmail(email: string, token: string) {
   });
 }
 
-// ── Organiser application approved ───────────────────────────────────────────
-export async function sendApprovalEmail(email: string, orgName: string) {
-  await resend.emails.send({
-    from:    FROM,
-    to:      email,
-    subject: "Your Startline organiser account has been approved",
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2 style="color:#B3E153">You're approved!</h2>
-        <p>Hi ${orgName},</p>
-        <p>Your Startline organiser account has been approved. You can now log in and start listing events.</p>
-        <a href="${SITE}/organiser" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Go to organiser portal
-        </a>
-      </div>
-    `,
-  });
-}
-
-// ── Organiser application rejected ───────────────────────────────────────────
-export async function sendRejectionEmail(email: string, orgName: string, reason?: string) {
-  await resend.emails.send({
-    from:    FROM,
-    to:      email,
-    subject: "Update on your Startline organiser application",
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2 style="color:#141414">Application update</h2>
-        <p>Hi ${orgName},</p>
-        <p>After reviewing your application, we're unable to approve your organiser account at this time.</p>
-        ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
-        <p>If you believe this is an error or would like to reapply with updated information, please contact us at <a href="mailto:admin@startlineau.com">admin@startlineau.com</a>.</p>
-      </div>
-    `,
-  });
-}
-
 // ── Event approved ────────────────────────────────────────────────────────────
 export async function sendEventApprovedEmail(email: string, eventTitle: string) {
   await resend.emails.send({
