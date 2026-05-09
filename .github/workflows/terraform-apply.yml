@@ -2,7 +2,7 @@ name: Terraform apply
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform-*.yml'

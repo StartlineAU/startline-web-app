@@ -1,5 +1,6 @@
 data "aws_caller_identity" "current" {}
 
+# IAM role shared by both Amplify branches at build + runtime.
 data "aws_iam_policy_document" "amplify_assume" {
   statement {
     effect = "Allow"
@@ -49,8 +50,32 @@ locals {
         paths:
           - node_modules/**/*
   EOT
+
+  # Per-environment knobs. Most values default from root variables; this map
+  # captures only the things that diverge between prod and nonprod.
+  environments = {
+    prod = {
+      branch_name                  = "production"
+      amplify_stage                = "PRODUCTION"
+      vpc_cidr                     = "10.20.0.0/16"
+      database_name                = "${var.project_name}_prod"
+      database_skip_final_snapshot = false
+      database_deletion_protection = true
+      cognito_deletion_protection  = true
+    }
+    nonprod = {
+      branch_name                  = "non-production"
+      amplify_stage                = "DEVELOPMENT"
+      vpc_cidr                     = "10.21.0.0/16"
+      database_name                = "${var.project_name}_nonprod"
+      database_skip_final_snapshot = true
+      database_deletion_protection = false
+      cognito_deletion_protection  = false
+    }
+  }
 }
 
+# Singleton Amplify app. Branches (prod, nonprod) attach via the env module.
 resource "aws_amplify_app" "this" {
   name       = var.project_name
   platform   = "WEB_COMPUTE"
@@ -62,10 +87,9 @@ resource "aws_amplify_app" "this" {
   repository   = local.connect_repository ? var.amplify_repository_url : null
   access_token = local.connect_repository ? var.amplify_repository_access_token : null
 
+  # App-level env vars apply to BOTH branches. Per-env values (DATABASE_URL,
+  # Cognito IDs, etc.) are set at the branch level by the env module.
   environment_variables = merge(
-    {
-      DATABASE_URL = local.database_url
-    },
     var.resend_api_key != null ? { RESEND_API_KEY = var.resend_api_key } : {},
     var.amplify_environment_variables,
   )
@@ -81,14 +105,40 @@ resource "aws_amplify_app" "this" {
   }
 }
 
-resource "aws_amplify_branch" "production" {
-  app_id      = aws_amplify_app.this.id
-  branch_name = var.production_branch
-  stage       = "PRODUCTION"
+module "env" {
+  for_each = local.environments
+  source   = "./modules/environment"
 
-  enable_auto_build = local.connect_repository
+  name           = each.key
+  project_name   = var.project_name
+  amplify_app_id = aws_amplify_app.this.id
+
+  branch_name        = each.value.branch_name
+  amplify_stage      = each.value.amplify_stage
+  auto_build_enabled = local.connect_repository
+
+  vpc_cidr      = each.value.vpc_cidr
+  database_name = each.value.database_name
+
+  database_engine_version               = var.database_engine_version
+  database_instance_class               = var.database_instance_class
+  database_allocated_storage            = var.database_allocated_storage
+  database_max_allocated_storage        = var.database_max_allocated_storage
+  database_username                     = var.database_username
+  database_publicly_accessible          = var.database_publicly_accessible
+  database_allowed_cidr_blocks          = var.database_allowed_cidr_blocks
+  database_skip_final_snapshot          = each.value.database_skip_final_snapshot
+  database_backup_retention_period      = var.database_backup_retention_period
+  database_deletion_protection          = each.value.database_deletion_protection
+  database_performance_insights_enabled = var.database_performance_insights_enabled
+  database_secret_recovery_window_days  = var.database_secret_recovery_window_days
+
+  cognito_deletion_protection = each.value.cognito_deletion_protection
 }
 
+# Custom apex domain attaches only to the prod branch. Route 53 records that
+# resolve the apex via ALIAS to the Amplify CloudFront distribution live in
+# dns.tf and reference this association.
 resource "aws_amplify_domain_association" "this" {
   count       = var.amplify_custom_domain != null ? 1 : 0
   app_id      = aws_amplify_app.this.id
@@ -96,19 +146,16 @@ resource "aws_amplify_domain_association" "this" {
 
   # Default behavior blocks until ACM/Amplify reports AVAILABLE, which can only
   # happen after the DNS records below are propagated at the registrar. Skip
-  # the wait so apply returns the records to add at GoDaddy.
+  # the wait so apply returns the records to add.
   wait_for_verification = false
 
-  # Apex (startlineau.com) and www both routed to the production branch.
-  # DNS lives in Route 53; aws_route53_record entries below resolve the apex
-  # via ALIAS to the Amplify CloudFront distribution.
   sub_domain {
-    branch_name = aws_amplify_branch.production.branch_name
+    branch_name = module.env["prod"].branch_name
     prefix      = ""
   }
 
   sub_domain {
-    branch_name = aws_amplify_branch.production.branch_name
+    branch_name = module.env["prod"].branch_name
     prefix      = "www"
   }
 }
