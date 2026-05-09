@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&amp;family=Inter:wght@100..900&amp;family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0e0e0e;
+            color: #ffffff;
+            margin: 0;
+        }
+        .font-chakra { font-family: 'Chakra Petch', sans-serif; }
+        .font-space { font-family: 'Space Grotesk', sans-serif; }
+        
+        /* Custom Scrollbar for Machined Aesthetic */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0e0e0e; }
+        ::-webkit-scrollbar-thumb { background: #484847; }
+        ::-webkit-scrollbar-thumb:hover { background: #CCFF00; }
+
+        .kinetic-border-left {
+            border-left: 3px solid #CCFF00;
+        }
+        
+        .machined-gradient {
+            background: linear-gradient(135deg, #f3ffca 0%, #cafd00 100%);
+        }
+
+        .glass-panel {
+            backdrop-filter: blur(20px);
+            background: rgba(38, 38, 38, 0.4);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "surface-dim": "#0e0e0e",
+                "inverse-primary": "#516700",
+                "surface": "#0e0e0e",
+                "primary-dim": "#beee00",
+                "on-tertiary": "#665800",
+                "surface-container-highest": "#262626",
+                "secondary-fixed": "#e5e2e1",
+                "inverse-on-surface": "#565555",
+                "surface-container-low": "#131313",
+                "on-surface": "#ffffff",
+                "surface-variant": "#262626",
+                "outline": "#767575",
+                "on-secondary-fixed-variant": "#5c5b5b",
+                "tertiary": "#ffeea5",
+                "outline-variant": "#484847",
+                "on-tertiary-fixed": "#483d00",
+                "primary-container": "#cafd00",
+                "inverse-surface": "#fcf9f8",
+                "on-primary-fixed-variant": "#526900",
+                "primary-fixed": "#cafd00",
+                "secondary-fixed-dim": "#d6d4d3",
+                "on-primary-container": "#4a5e00",
+                "error": "#ff7351",
+                "surface-tint": "#f3ffca",
+                "primary-fixed-dim": "#beee00",
+                "on-primary-fixed": "#3a4a00",
+                "on-tertiary-container": "#5d5000",
+                "tertiary-fixed-dim": "#edd13a",
+                "surface-container-lowest": "#000000",
+                "surface-bright": "#2c2c2c",
+                "on-error": "#450900",
+                "on-background": "#ffffff",
+                "tertiary-container": "#fce047",
+                "secondary-dim": "#d6d4d3",
+                "on-surface-variant": "#adaaaa",
+                "on-error-container": "#ffd2c8",
+                "on-tertiary-fixed-variant": "#685900",
+                "error-container": "#b92902",
+                "secondary-container": "#474746",
+                "error-dim": "#d53d18",
+                "on-primary": "#516700",
+                "tertiary-fixed": "#fce047",
+                "on-secondary": "#525151",
+                "surface-container-high": "#201f1f",
+                "background": "#0e0e0e",
+                "surface-container": "#1a1919",
+                "primary": "#f3ffca",
+                "on-secondary-fixed": "#403f3f",
+                "on-secondary-container": "#d2d0cf",
+                "secondary": "#e5e2e1",
+                "tertiary-dim": "#edd13a"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Space Grotesk"]
+              },
+              borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<header class="bg-[#0e0e0e] docked full-width top-0 border-none sticky z-50">
+<nav class="flex justify-between items-center w-full px-6 py-4 max-w-[1440px] mx-auto">
+<div class="text-2xl font-black italic text-[#CCFF00] font-['Chakra_Petch'] uppercase tracking-tighter">
+                StartLineAU
+            </div>
+<div class="hidden md:flex gap-8 items-center">
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Events</a>
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Training</a>
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Community</a>
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Leaderboard</a>
+</div>
+<div class="flex items-center gap-6">
+<button class="material-symbols-outlined text-[#767575] hover:text-[#CCFF00] transition-colors">search</button>
+<button class="bg-[#cafd00] text-[#516700] px-6 py-2 font-['Chakra_Petch'] font-bold uppercase tracking-tighter active:scale-95 transition-transform hover:bg-[#beee00]">
+                    GO PRO
+                </button>
+</div>
+</nav>
+</header>
+<main>
+<!-- Hero Section -->
+<section class="relative h-[921px] w-full flex items-center justify-center overflow-hidden bg-surface-container-lowest">
+<div class="absolute inset-0 z-0">
+<img alt="Athletic Excellence" class="w-full h-full object-cover opacity-40 grayscale contrast-125" data-alt="High-contrast monochrome photo of a sprinter exploding from starting blocks, muscles tense, dramatic side lighting, grit and determination" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJ2lGtI1sut147qDiXKdNmp3_4CVpzUrev_A2ITelOld0a0h-ORjzGU2GVX9rM9rM-0LOhfgP7hDTqLqnP7DCEAxZak6Hkel2qvfUDAwjNZqtGA0_WO94_FmuZC9xWcq3FnuuKdjuO_F1V-1VJwLuXWbuqaRTg30q1pSNVaD9TXodvrH3UiaKRJGhXH-VTGEClORo27zJKeW7npefmEFCXlVzwQBfFwGa7daZDHCfaRF2iPKLnOVWhMRepzar6hjraJkRmMllpv7Ir"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-surface-container-lowest/80"></div>
+</div>
+<div class="relative z-10 text-center px-4 max-w-6xl">
+<div class="inline-block bg-primary-container text-on-primary-container px-3 py-1 font-chakra font-bold text-xs tracking-widest uppercase mb-6">
+                    Performance Protocol v2.0
+                </div>
+<h1 class="font-chakra text-5xl md:text-8xl font-black italic tracking-tighter leading-none text-on-surface mb-4">
+                    ENGINEERING PRECISION.<br/>
+<span class="text-primary-fixed">ATHLETIC EXCELLENCE.</span>
+</h1>
+<p class="font-chakra uppercase tracking-[0.3em] text-outline text-sm md:text-lg">
+                    The intersection of data and drive.
+                </p>
+</div>
+<div class="absolute bottom-12 right-12 hidden md:block">
+<div class="flex flex-col items-end gap-2">
+<span class="font-chakra text-[10px] uppercase tracking-widest text-outline">System Coordinates</span>
+<span class="font-chakra text-primary text-sm tracking-tighter">LAT: -37.8136 // LONG: 144.9631</span>
+</div>
+</div>
+</section>
+<!-- Our Story Section -->
+<section class="py-32 px-6 bg-surface">
+<div class="max-w-[1440px] mx-auto grid md:grid-cols-2 gap-24 items-start">
+<div>
+<h2 class="font-chakra text-xs font-bold uppercase tracking-[0.5em] text-primary mb-12 flex items-center gap-4">
+<span class="w-12 h-px bg-primary"></span> 01 // ORIGIN
+                    </h2>
+<h3 class="font-chakra text-4xl md:text-6xl font-black italic uppercase tracking-tighter leading-[0.9] mb-8">
+                        BRIDGING THE GAP BETWEEN <span class="text-outline">DISCOVERY</span> AND <span class="text-primary">PERFORMANCE</span>.
+                    </h3>
+</div>
+<div class="space-y-8">
+<p class="text-on-surface-variant text-lg leading-relaxed font-body">
+                        StartLine was founded with a singular, unyielding objective: to eliminate the friction that exists between an athlete's potential and their execution. We saw a landscape fractured by disparate platforms—data lived in one silo, events in another, and community in the shadows.
+                    </p>
+<p class="text-on-surface-variant text-lg leading-relaxed font-body">
+                        We engineered a unified architecture. A platform machined for precision, designed to serve those who measure progress in milliseconds and heartbeats. This isn't just about logging miles; it's about the kinetic energy of a community moving toward excellence.
+                    </p>
+<div class="pt-8">
+<div class="kinetic-border-left pl-6 py-4 bg-surface-container-low">
+<span class="font-chakra text-xs uppercase tracking-widest text-outline block mb-2">Philosophy</span>
+<p class="font-chakra italic text-on-surface text-xl">"Complexity is the enemy of performance. We build the tools that make speed simple."</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Our Mission Section -->
+<section class="bg-surface-container-lowest py-32 px-6">
+<div class="max-w-[1440px] mx-auto">
+<div class="flex justify-between items-end mb-20">
+<div>
+<h2 class="font-chakra text-xs font-bold uppercase tracking-[0.5em] text-primary mb-6">02 // CORE MISSION</h2>
+<h3 class="font-chakra text-4xl font-black italic uppercase tracking-tighter">THE THREE PILLARS</h3>
+</div>
+<div class="hidden md:block font-chakra text-outline text-[10px] tracking-widest uppercase">
+                        Vertical Integration // Kinetic Sync
+                    </div>
+</div>
+<div class="grid md:grid-cols-3 gap-0.5 bg-surface-container-lowest">
+<!-- Column: Discovery -->
+<div class="bg-surface-container p-12 group hover:bg-surface-container-high transition-colors duration-300">
+<div class="mb-12">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">explore</span>
+</div>
+<h4 class="font-chakra text-2xl font-bold italic uppercase tracking-tighter mb-6 text-on-surface group-hover:text-primary transition-colors">Discovery</h4>
+<p class="text-on-surface-variant font-body leading-relaxed mb-8">
+                            Finding your next challenge shouldn't be the hardest part of the race. Our discovery engine aggregates global events with surgical precision, filtered by your physiological readiness and historical performance data.
+                        </p>
+<div class="flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary-container"></span>
+<span class="font-chakra text-[10px] uppercase tracking-widest text-outline">Event Aggregation v4</span>
+</div>
+</div>
+<!-- Column: Performance -->
+<div class="bg-surface-container p-12 group hover:bg-surface-container-high transition-colors duration-300">
+<div class="mb-12">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+</div>
+<h4 class="font-chakra text-2xl font-bold italic uppercase tracking-tighter mb-6 text-on-surface group-hover:text-primary transition-colors">Performance</h4>
+<p class="text-on-surface-variant font-body leading-relaxed mb-8">
+                            Data is only as good as the insight it generates. We provide a head-up display for your training, translating raw telemetry into actionable intensity levels, recovery scores, and biomechanical feedback.
+                        </p>
+<div class="flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary-container"></span>
+<span class="font-chakra text-[10px] uppercase tracking-widest text-outline">Telemetry Analysis</span>
+</div>
+</div>
+<!-- Column: Community -->
+<div class="bg-surface-container p-12 group hover:bg-surface-container-high transition-colors duration-300">
+<div class="mb-12">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">hub</span>
+</div>
+<h4 class="font-chakra text-2xl font-bold italic uppercase tracking-tighter mb-6 text-on-surface group-hover:text-primary transition-colors">Community</h4>
+<p class="text-on-surface-variant font-body leading-relaxed mb-8">
+                            Connecting athletes through shared intent. Our community layer isn't about social validation; it's about collective advancement, elite-level mentorship, and the competitive fire of the global leaderboard.
+                        </p>
+<div class="flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary-container"></span>
+<span class="font-chakra text-[10px] uppercase tracking-widest text-outline">Kinetic Social Mesh</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- The Team Section -->
+<section class="py-32 px-6 bg-surface">
+<div class="max-w-[1440px] mx-auto">
+<div class="grid md:grid-cols-3 gap-16">
+<div class="md:col-span-1">
+<h2 class="font-chakra text-xs font-bold uppercase tracking-[0.5em] text-primary mb-6">03 // THE COLLECTIVE</h2>
+<h3 class="font-chakra text-4xl font-black italic uppercase tracking-tighter leading-tight mb-8">
+                            MACHINED BY ATHLETES, FOR ATHLETES.
+                        </h3>
+<p class="text-on-surface-variant font-body mb-8">
+                            We are a lean collective of engineers, sports scientists, and endurance specialists based in Melbourne, Australia. Our team operates at the intersection of high-frequency data and high-intensity sport.
+                        </p>
+<button class="flex items-center gap-4 group">
+<span class="font-chakra font-bold text-sm uppercase tracking-widest text-on-surface group-hover:text-primary transition-colors">View Open Positions</span>
+<span class="material-symbols-outlined text-primary group-hover:translate-x-2 transition-transform">arrow_forward</span>
+</button>
+</div>
+<div class="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+<!-- Team Card 1 -->
+<div class="aspect-[3/4] bg-surface-container relative overflow-hidden group">
+<img alt="Marcus Thorne" class="w-full h-full object-cover grayscale opacity-60 group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-500" data-alt="Professional portrait of a male tech founder in dark athletic wear, serious expression, high-contrast studio lighting, dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqgGiZDtCae3Kq9Mj-XscbaT0gTzi_uecurLOqecaBwThkQq-Vr5BN1ZP0HdooKxA11Rd3DZx-7o-gpI8EAN43ngL46IPZFJvc-zleTEQREuCooCxWqm_irwi9eBBCHPB9TMjcART1QPxJmvmtvGxPXTwkyL3yChFLc1Z99qPi0jdxSswHUHHGiB0QNyntbhLmI0kKk_8Wr5g2yQhu8TnKUr4IiiSW2RhXf9arldeI5sDBjGMYkUlqz_SClwlGKtRYqoL9TKtUa_gw"/>
+<div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-surface-container-lowest to-transparent">
+<span class="font-chakra text-xs font-bold text-primary block">MARCUS T.</span>
+<span class="font-chakra text-[10px] text-outline uppercase tracking-widest">Chief of Engineering</span>
+</div>
+</div>
+<!-- Team Card 2 -->
+<div class="aspect-[3/4] bg-surface-container relative overflow-hidden group">
+<img alt="Elena Chen" class="w-full h-full object-cover grayscale opacity-60 group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-500" data-alt="Professional portrait of a female sport scientist, dark athletic minimalist clothing, focused look, dramatic architectural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCsiNyxT92F2EyKn0QqJBlCmZFZxIf0hNIEEnoOj3bQgz8nR4adEgp1i8Gnjbm24KDiU3feM4sjs1Obe_bntlh4N633pmAPmxgm5xrtBxizWF0O5jXWtoRTDbTHligI7j5js9zpWw4_6LghBNFL105m1u68tHRd7bOjLfa3pHK_nJ3Udn0CRacAdvN4TOaFAF5z1ovEUwhnmy16Z4T5-r5faBZwOhSS2FbXGLVq614WVXWe9EfyuL9jypNXPsXKvJ9mlHtrKdhpQeZm"/>
+<div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-surface-container-lowest to-transparent">
+<span class="font-chakra text-xs font-bold text-primary block">ELENA C.</span>
+<span class="font-chakra text-[10px] text-outline uppercase tracking-widest">Head of Data Science</span>
+</div>
+</div>
+<!-- Team Card 3 -->
+<div class="aspect-[3/4] bg-surface-container relative overflow-hidden group">
+<img alt="David Volkov" class="w-full h-full object-cover grayscale opacity-60 group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-500" data-alt="Portrait of a young male creative director in black turtleneck, moody lighting, artistic composition with deep shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYAxAsvxkCp41PhzHqKl9twIrffCyCrCPQ4dmtAkppUgrTTXHxiFcx4jThV0YsKjZPCY4DuBXKohdALrAXUEySvPgJHrOEFt-6p5yJVgxkwPK0xJYjLQ4A--WBRsxiRtbskQGYJEkjPNR3GnxYKvEkYW8zHjdGDM3oM_27BjkMuEO2YZOBGyb9vJIWCAnHsnGaQnDEi1xuJPbX9CwqZHrt-UXIxwC1sw0G0IfIMSf2-PPh5IhCAdfW-vKh_MYwrduCwjSrOSi0SnVI"/>
+<div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-surface-container-lowest to-transparent">
+<span class="font-chakra text-xs font-bold text-primary block">DAVID V.</span>
+<span class="font-chakra text-[10px] text-outline uppercase tracking-widest">Lead Product Designer</span>
+</div>
+</div>
+<!-- Team Card 4 -->
+<div class="bg-surface-container flex flex-col items-center justify-center border-2 border-dashed border-outline-variant p-4">
+<span class="material-symbols-outlined text-outline text-3xl mb-4">group_add</span>
+<span class="font-chakra text-[10px] text-outline uppercase tracking-widest text-center">Join The Mission</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA Section -->
+<section class="py-24 px-6 bg-surface-container-lowest">
+<div class="max-w-4xl mx-auto text-center machined-gradient p-[1px]">
+<div class="bg-surface-container-lowest py-20 px-8">
+<h2 class="font-chakra text-4xl md:text-6xl font-black italic uppercase tracking-tighter mb-8">READY TO REDEFINE YOUR <span class="text-primary-fixed">STARTLINE</span>?</h2>
+<p class="text-outline-variant font-chakra uppercase tracking-widest text-sm mb-12">Experience the kinetic precision of elite performance tracking.</p>
+<div class="flex flex-col md:flex-row justify-center gap-6">
+<button class="bg-primary-container text-on-primary-container px-12 py-4 font-chakra font-bold uppercase tracking-tighter hover:bg-primary-dim transition-colors active:scale-95">
+                            INITIATE PROTOCOL
+                        </button>
+<button class="border border-outline-variant text-on-surface px-12 py-4 font-chakra font-bold uppercase tracking-tighter hover:border-primary transition-colors active:scale-95">
+                            EXPLORE THE ECOSYSTEM
+                        </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0e0e0e] mt-16 border-none">
+<div class="flex flex-col md:flex-row justify-between items-center w-full px-8 py-12 gap-4 max-w-[1440px] mx-auto">
+<div class="flex flex-col items-center md:items-start gap-2">
+<div class="text-sm font-bold text-[#CCFF00] font-['Chakra_Petch'] uppercase">StartLineAU</div>
+<p class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847]">© 2024 StartLineAU. Kinetic Precision.</p>
+</div>
+<div class="flex gap-8">
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">System Status</a>
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">Legal</a>
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">Privacy</a>
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">API</a>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-[#484847] cursor-pointer hover:text-[#CCFF00]">share</span>
+<span class="material-symbols-outlined text-[#484847] cursor-pointer hover:text-[#CCFF00]">rss_feed</span>
+</div>
+</div>
+</footer>
+</body></html>

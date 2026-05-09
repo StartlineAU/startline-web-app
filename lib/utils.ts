@@ -1,21 +1,23 @@
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 import { FitnessEvent, FilterState, AustralianState } from "@/types";
 
+// ── Date formatting ────────────────────────────────────────────────────────
+
 export function formatEventDate(dateString: string): string {
-  const date = parseISO(dateString);
-  return format(date, "EEEE, d MMMM yyyy");
+  return format(parseISO(dateString), "EEEE, d MMMM yyyy");
 }
 
 export function formatShortDate(dateString: string): string {
-  const date = parseISO(dateString);
-  return format(date, "d MMM");
+  return format(parseISO(dateString), "d MMM");
 }
 
 export function formatMediumDate(dateString: string): string {
-  const date = parseISO(dateString);
-  return format(date, "d MMM yyyy");
+  return format(parseISO(dateString), "d MMM yyyy");
 }
 
+/** Converts a 24-hour time string (e.g. "09:30") to 12-hour AM/PM format. */
 export function formatTime(timeString: string): string {
   const [hours, minutes] = timeString.split(":");
   const hour = parseInt(hours, 10);
@@ -24,64 +26,67 @@ export function formatTime(timeString: string): string {
   return `${hour12}:${minutes} ${ampm}`;
 }
 
+// ── Label formatters ───────────────────────────────────────────────────────
+
+/** Maps a CompetitionFormat value to a human-readable string. */
+export function formatCompetitionFormat(format: string): string {
+  if (format === "team") return "Team";
+  if (format === "both") return "Individual & Team";
+  return "Individual";
+}
+
+/** Maps an ExperienceLevel value to a human-readable string. */
+export function formatExperienceLevel(level: string): string {
+  if (level === "elite")   return "Elite";
+  if (level === "beginner") return "Beginner";
+  return "Open";
+}
+
+// ── Date helpers ───────────────────────────────────────────────────────────
+
+/** Returns true if the event date is today or in the future. */
+function isOnOrAfterToday(dateString: string, today: Date): boolean {
+  const eventDate = parseISO(dateString);
+  return isAfter(eventDate, today) ||
+    format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
+}
+
+// ── Filtering & sorting ────────────────────────────────────────────────────
+
 export function filterEvents(
   events: FitnessEvent[],
   filters: FilterState
 ): FitnessEvent[] {
   const today = startOfDay(new Date());
-  
+
   return events.filter((event) => {
     const eventDate = startOfDay(parseISO(event.date));
-    
-    // Only show upcoming events
-    if (isBefore(eventDate, today)) {
-      return false;
-    }
 
-    // Filter by event types
-    if (filters.types.length > 0 && !filters.types.includes(event.type)) {
-      return false;
-    }
+    // Only show upcoming (and today's) events
+    if (isBefore(eventDate, today)) return false;
 
-    // Filter by states
-    if (filters.states.length > 0 && !filters.states.includes(event.state)) {
-      return false;
-    }
+    if (filters.types.length > 0 && !filters.types.includes(event.type)) return false;
+    if (filters.states.length > 0 && !filters.states.includes(event.state)) return false;
 
-    // Filter by format
     if (filters.format) {
-      if (filters.format === "individual" && event.format === "team") {
-        return false;
-      }
-      if (filters.format === "team" && event.format === "individual") {
-        return false;
-      }
+      if (filters.format === "individual" && event.format === "team")   return false;
+      if (filters.format === "team"       && event.format === "individual") return false;
     }
 
-    // Filter by date range
     if (filters.dateRange === "this-month") {
-      const endOfThisMonth = endOfMonth(today);
-      if (isAfter(eventDate, endOfThisMonth)) {
-        return false;
-      }
+      if (isAfter(eventDate, endOfMonth(today))) return false;
     } else if (filters.dateRange === "next-3") {
-      const threeMonthsFromNow = addMonths(today, 3);
-      if (isAfter(eventDate, threeMonthsFromNow)) {
-        return false;
-      }
+      if (isAfter(eventDate, addMonths(today, 3))) return false;
     }
 
-    // Filter by search query
     if (filters.searchQuery) {
-      const query = filters.searchQuery.toLowerCase();
-      const matchesTitle = event.title.toLowerCase().includes(query);
-      const matchesLocation = event.location.toLowerCase().includes(query);
-      const matchesCity = event.city.toLowerCase().includes(query);
-      const matchesOrganizer = event.organizer?.toLowerCase()?.includes(query) ?? false;
-      
-      if (!matchesTitle && !matchesLocation && !matchesCity && !matchesOrganizer) {
-        return false;
-      }
+      const q = filters.searchQuery.toLowerCase();
+      const matches =
+        event.title.toLowerCase().includes(q) ||
+        event.location.toLowerCase().includes(q) ||
+        event.city.toLowerCase().includes(q) ||
+        (event.organizer?.toLowerCase().includes(q) ?? false);
+      if (!matches) return false;
     }
 
     return true;
@@ -89,74 +94,55 @@ export function filterEvents(
 }
 
 export function sortEventsByDate(events: FitnessEvent[]): FitnessEvent[] {
-  return [...events].sort((a, b) => {
-    const dateA = parseISO(a.date);
-    const dateB = parseISO(b.date);
-    return dateA.getTime() - dateB.getTime();
-  });
+  return [...events].sort(
+    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+  );
 }
 
-export function getUpcomingEvents(events: FitnessEvent[], limit: number = 10): FitnessEvent[] {
+export function getUpcomingEvents(events: FitnessEvent[], limit = 10): FitnessEvent[] {
   const today = startOfDay(new Date());
-  const upcoming = events.filter((event) => {
-    const eventDate = parseISO(event.date);
-    return isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
-  });
+  const upcoming = events.filter((e) => isOnOrAfterToday(e.date, today));
   return sortEventsByDate(upcoming).slice(0, limit);
 }
 
 export function getEventsByState(events: FitnessEvent[]): Record<AustralianState, number> {
-  const counts: Record<AustralianState, number> = {
-    nsw: 0,
-    vic: 0,
-    qld: 0,
-    wa: 0,
-    sa: 0,
-    tas: 0,
-    act: 0,
-    nt: 0,
-  };
-  
   const today = startOfDay(new Date());
-  
-  events.forEach((event) => {
-    const eventDate = parseISO(event.date);
-    if (isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd")) {
-      counts[event.state]++;
-    }
-  });
-  
+  const counts: Record<AustralianState, number> = {
+    nsw: 0, vic: 0, qld: 0, wa: 0, sa: 0, tas: 0, act: 0, nt: 0,
+  };
+  for (const event of events) {
+    if (isOnOrAfterToday(event.date, today)) counts[event.state]++;
+  }
   return counts;
 }
 
 export function getEventsByType(events: FitnessEvent[]): Record<string, number> {
-  const counts: Record<string, number> = {
-    hyrox: 0,
-    crossfit: 0,
-    running: 0,
-    hybrid: 0,
-  };
-  
   const today = startOfDay(new Date());
-  
-  events.forEach((event) => {
-    const eventDate = parseISO(event.date);
-    if (isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd")) {
-      counts[event.type]++;
-    }
-  });
-  
+  const counts: Record<string, number> = { hyrox: 0, crossfit: 0, running: 0, hybrid: 0 };
+  for (const event of events) {
+    if (isOnOrAfterToday(event.date, today)) counts[event.type]++;
+  }
   return counts;
 }
 
 export function getTotalUpcomingEvents(events: FitnessEvent[]): number {
   const today = startOfDay(new Date());
-  return events.filter((event) => {
-    const eventDate = parseISO(event.date);
-    return isAfter(eventDate, today) || format(eventDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
-  }).length;
+  return events.filter((e) => isOnOrAfterToday(e.date, today)).length;
 }
 
-export function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(" ");
+// ── Misc ───────────────────────────────────────────────────────────────────
+
+/**
+ * Merge Tailwind class names. Combines `clsx` (conditional class composition)
+ * with `tailwind-merge` (deduping conflicting Tailwind utilities). This is the
+ * canonical shadcn/ui `cn` helper — required by every shadcn primitive.
+ */
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}
+
+/** Truncates an event title to `maxLength` chars so card layouts stay consistent. */
+export function truncateTitle(title: string, maxLength = 28): string {
+  if (title.length <= maxLength) return title;
+  return title.slice(0, maxLength).trimEnd() + "…";
 }

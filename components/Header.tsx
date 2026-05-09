@@ -2,128 +2,105 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
+const navItems = [
+  { href: "/", label: "HOME" },
+  { href: "/events", label: "EVENTS" },
+  { href: "/about", label: "ABOUT" },
+  { href: "/contact", label: "CONTACT" },
+];
+
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
-    <header className="bg-dark-darker border-b border-dark-light sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3">
-            <Image
-              src="/images/logo.png"
-              alt="StartLine logo mark"
-              width={526}
-              height={156}
-              className="h-8 w-auto object-contain shrink-0"
-              unoptimized
-              priority
-            />
-            <Image
-              src="/images/startline-title-white.png"
-              alt="StartLine"
-              width={140}
-              height={28}
-              className="h-6 w-auto"
-              priority
-            />
-          </Link>
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-light border-b border-dark-lighter">
+      <div className="flex justify-between items-center w-full px-6 py-4 max-w-[1440px] mx-auto">
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/images/logo-title.svg"
+            alt="StartLine"
+            width={160}
+            height={40}
+            className="h-8 w-auto"
+            priority
+          />
+        </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8 font-title font-bold">
-            <Link
-              href="/events"
-              className="text-muted hover:text-primary transition-colors duration-200 text-sm"
-            >
-              All Competitions
-            </Link>
-            <Link
-              href="/events?type=hyrox"
-              className="text-muted hover:text-primary transition-colors duration-200 text-sm"
-            >
-              HYROX
-            </Link>
-            <Link
-              href="/events?type=crossfit"
-              className="text-muted hover:text-primary transition-colors duration-200 text-sm"
-            >
-              CrossFit
-            </Link>
-            <Link
-              href="/events?type=running"
-              className="text-muted hover:text-primary transition-colors duration-200 text-sm"
-            >
-              Running
-            </Link>
-            <Link
-              href="/events"
-              className="bg-primary text-dark px-4 py-2 rounded font-semibold text-sm hover:bg-primary-light transition-colors duration-200"
-            >
-              Find Competitions
-            </Link>
-          </nav>
-
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 rounded hover:bg-dark-light transition-colors"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {isMenuOpen ? (
-              <X className="w-6 h-6 text-light" />
-            ) : (
-              <Menu className="w-6 h-6 text-light" />
-            )}
-          </button>
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex gap-8 items-center">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname?.startsWith(item.href);
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={`font-headline text-[14px] uppercase tracking-tighter font-medium transition-all duration-100 ${
+                  isActive
+                    ? "text-primary border-b-2 border-primary pb-1"
+                    : "text-muted hover:text-primary hover:-translate-y-0.5 hover:-translate-x-0.5"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
 
-        {/* Mobile Navigation */}
-        {isMenuOpen && (
-          <nav className="md:hidden py-4 border-t border-dark-light animate-fade-in font-title font-bold">
-            <div className="flex flex-col space-y-3">
-              <Link
-                href="/events"
-                className="text-muted hover:text-primary transition-colors duration-200 py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                All Competitions
-              </Link>
-              <Link
-                href="/events?type=hyrox"
-                className="text-muted hover:text-primary transition-colors duration-200 py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                HYROX
-              </Link>
-              <Link
-                href="/events?type=crossfit"
-                className="text-muted hover:text-primary transition-colors duration-200 py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                CrossFit
-              </Link>
-              <Link
-                href="/events?type=running"
-                className="text-muted hover:text-primary transition-colors duration-200 py-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Running
-              </Link>
-              <Link
-                href="/events"
-                className="bg-primary text-dark px-4 py-3 rounded font-semibold text-center hover:bg-primary-light transition-colors duration-200 mt-2"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Find Competitions
-              </Link>
-            </div>
-          </nav>
-        )}
+        <div className="flex items-center gap-4">
+          <Button
+            disabled
+            className="hidden md:inline-flex h-auto px-4 py-1.5 rounded font-headline text-[14px] font-bold tracking-normal normal-case text-muted bg-transparent border border-dark-lighter hover:bg-transparent disabled:opacity-50 cursor-not-allowed"
+          >
+            SIGN IN
+          </Button>
+        </div>
+
+        {/* Mobile menu button. Override the Button's default `[&_svg]:size-4`
+            so the menu / close icon renders at its intended 24px. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-auto w-auto p-2 text-light hover:text-primary hover:bg-transparent transition-colors [&_svg]:size-6"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          aria-label="Toggle menu"
+        >
+          {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </Button>
       </div>
-    </header>
+
+      {/* Mobile Navigation */}
+      {isMenuOpen && (
+        <div className="md:hidden border-t border-dark-lighter py-4 px-6 animate-fade-in">
+          <div className="flex flex-col gap-3">
+            {navItems.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="font-headline text-sm uppercase tracking-tighter text-muted hover:text-primary py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                {item.label}
+              </Link>
+            ))}
+            <Button
+              disabled
+              className="font-headline text-sm font-bold tracking-normal normal-case text-muted bg-transparent border border-dark-lighter px-4 py-3 h-auto text-center mt-2 rounded hover:bg-transparent disabled:opacity-50 cursor-not-allowed"
+            >
+              SIGN IN
+            </Button>
+          </div>
+        </div>
+      )}
+    </nav>
   );
 }
