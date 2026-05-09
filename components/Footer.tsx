@@ -3,69 +3,97 @@ import Image from "next/image";
 
 export default function Footer() {
   return (
-    <footer className="bg-dark-darker border-t border-dark-light">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+    <footer className="bg-[#000000] border-t border-dark-lighter">
+      <div className="max-w-[1440px] mx-auto px-6 py-10">
+        {/* Top row: brand + links */}
+        <div className="flex flex-col sm:flex-row sm:items-start gap-10 mb-10">
           {/* Brand */}
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-3">
+          <div className="flex-shrink-0 w-48">
+            <Link href="/" className="inline-flex items-center mb-4">
               <Image
-                src="/images/logo.png"
-                alt="StartLine logo mark"
-                width={526}
-                height={156}
-                className="h-8 w-auto object-contain shrink-0"
-                unoptimized
-              />
-              <Image
-                src="/images/startline-title-white.png"
+                src="/images/logo-title.svg"
                 alt="StartLine"
-                width={120}
-                height={24}
-                className="h-5 w-auto"
+                width={160}
+                height={40}
+                className="h-8 w-auto"
               />
             </Link>
-            <span className="hidden md:inline text-muted text-sm">
-              Australia&apos;s Competitive Fitness Calendar
-            </span>
+            <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-relaxed">
+              Australia&apos;s Fitness<br />Event Calendar
+            </p>
           </div>
 
           {/* Links */}
-          <div className="flex items-center gap-6">
-            <Link
-              href="/events"
-              className="text-sm text-muted hover:text-primary transition-colors"
-            >
-              All Competitions
-            </Link>
-            <Link
-              href="/submit"
-              className="text-sm text-muted hover:text-primary transition-colors"
-            >
-              Submit Event
-            </Link>
-            <Link
-              href="/about"
-              className="text-sm text-muted hover:text-primary transition-colors"
-            >
-              About
-            </Link>
-            <Link
-              href="/contact"
-              className="text-sm text-muted hover:text-primary transition-colors"
-            >
-              Contact
-            </Link>
+          <div className="flex flex-wrap gap-10 sm:gap-16">
+            {/* Events */}
+            <div>
+              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+                Events
+              </h4>
+              <div className="space-y-2">
+                {[
+                  { href: "/events", label: "All Events" },
+                  { href: "/events?type=hyrox", label: "HYROX" },
+                  { href: "/events?type=crossfit", label: "CrossFit" },
+                  { href: "/events?type=running", label: "Running" },
+                  { href: "/events?type=hybrid", label: "Hybrid" },
+                ].map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Platform */}
+            <div>
+              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+                Platform
+              </h4>
+              <div className="space-y-2">
+                {[
+                  { href: "/contact", label: "Contact & submissions" },
+                  { href: "/about", label: "About" },
+                ].map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Social */}
+            <div>
+              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+                Follow
+              </h4>
+              <a
+                href="https://www.instagram.com/startlineau/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
+              >
+                Instagram
+              </a>
+            </div>
           </div>
         </div>
 
-        {/* Copyright */}
-        <div className="mt-8 pt-6 border-t border-dark-light text-center md:text-left">
-          <p className="text-sm text-muted-dark">
-            © {new Date().getFullYear()} StartLine. All rights reserved.
+        <div className="border-t border-dark-lighter pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
+            © {new Date().getFullYear()} StartLine. All Rights Reserved.
           </p>
         </div>
       </div>
     </footer>
   );
 }
+

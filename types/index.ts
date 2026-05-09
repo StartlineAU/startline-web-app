@@ -24,24 +24,75 @@ export type ExperienceLevel =
   | "beginner"
   | "elite";
 
+export interface TicketDrop {
+  label: string;
+  date: string;
+  price: string;
+}
+
 export interface FitnessEvent {
   id: string;
   title: string;
   description: string;
+  fullDescription?: string;
   date: string;
   time: string;
   endTime?: string;
+  cutOffTime?: string;
+  dates?: string[];
   location: string;
+  streetAddress?: string;
   city: string;
   state: AustralianState;
+  country?: string;
+  courseMapUrl?: string;
   type: EventType;
   format: CompetitionFormat;
   level: ExperienceLevel;
   image: string;
   registrationUrl: string;
+  registrationCloseDate?: string;
   organizer?: string;
   distance?: string;
   isOfficial?: boolean;
+  // Categories & Distances
+  categories?: string[];
+  workoutDescription?: string;
+  soloAvailable?: boolean;
+  partnerAvailable?: boolean;
+  teamAvailable?: boolean;
+  // Registration & Tickets
+  ticketDrops?: TicketDrop[];
+  transferPolicy?: string;
+  refundPolicy?: string;
+  waitlistAvailable?: boolean;
+  // Cost & Pricing
+  entryFeeInclusions?: string;
+  optionalExtras?: string;
+  groupDiscount?: string;
+  charityComponent?: string;
+  // Prizes & Awards
+  prizeStructure?: string;
+  prizePoolTotal?: string;
+  ageGroupCategories?: string;
+  ceremonyDate?: string;
+  ceremonyLocation?: string;
+  specialAwards?: string;
+  // Expo & Public Activations
+  hasExpo?: boolean;
+  expoDetails?: string;
+  vendorOpportunities?: boolean;
+  bibCollectionInfo?: string;
+  athleteBriefing?: string;
+  // Additional Information
+  participantCap?: string;
+  minAge?: string;
+  accessibilityInfo?: string;
+  parkingInfo?: string;
+  bagDropInfo?: string;
+  resultsProvider?: string;
+  resultsLink?: string;
+  additionalNotes?: string;
 }
 
 export interface FilterState {
