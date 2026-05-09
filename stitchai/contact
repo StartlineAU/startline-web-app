@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Contact | StartLineAU</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&amp;family=Inter:wght@100..900&amp;family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0e0e0e;
+            color: #ffffff;
+        }
+        .font-chakra { font-family: 'Chakra Petch', sans-serif; }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        
+        /* Custom scrollbar for technical feel */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0e0e0e; }
+        ::-webkit-scrollbar-thumb { background: #484847; }
+        ::-webkit-scrollbar-thumb:hover { background: #CCFF00; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "surface-dim": "#0e0e0e",
+                "inverse-primary": "#516700",
+                "surface": "#0e0e0e",
+                "primary-dim": "#beee00",
+                "on-tertiary": "#665800",
+                "surface-container-highest": "#262626",
+                "secondary-fixed": "#e5e2e1",
+                "inverse-on-surface": "#565555",
+                "surface-container-low": "#131313",
+                "on-surface": "#ffffff",
+                "surface-variant": "#262626",
+                "outline": "#767575",
+                "on-secondary-fixed-variant": "#5c5b5b",
+                "tertiary": "#ffeea5",
+                "outline-variant": "#484847",
+                "on-tertiary-fixed": "#483d00",
+                "primary-container": "#cafd00",
+                "inverse-surface": "#fcf9f8",
+                "on-primary-fixed-variant": "#526900",
+                "primary-fixed": "#cafd00",
+                "secondary-fixed-dim": "#d6d4d3",
+                "on-primary-container": "#4a5e00",
+                "error": "#ff7351",
+                "surface-tint": "#f3ffca",
+                "primary-fixed-dim": "#beee00",
+                "on-primary-fixed": "#3a4a00",
+                "on-tertiary-container": "#5d5000",
+                "tertiary-fixed-dim": "#edd13a",
+                "surface-container-lowest": "#000000",
+                "surface-bright": "#2c2c2c",
+                "on-error": "#450900",
+                "on-background": "#ffffff",
+                "tertiary-container": "#fce047",
+                "secondary-dim": "#d6d4d3",
+                "on-surface-variant": "#adaaaa",
+                "on-error-container": "#ffd2c8",
+                "on-tertiary-fixed-variant": "#685900",
+                "error-container": "#b92902",
+                "secondary-container": "#474746",
+                "error-dim": "#d53d18",
+                "on-primary": "#516700",
+                "tertiary-fixed": "#fce047",
+                "on-secondary": "#525151",
+                "surface-container-high": "#201f1f",
+                "background": "#0e0e0e",
+                "surface-container": "#1a1919",
+                "primary": "#f3ffca",
+                "on-secondary-fixed": "#403f3f",
+                "on-secondary-container": "#d2d0cf",
+                "secondary": "#e5e2e1",
+                "tertiary-dim": "#edd13a"
+              },
+              fontFamily: {
+                "headline": ["Space Grotesk"],
+                "body": ["Inter"],
+                "label": ["Space Grotesk"]
+              },
+              borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<header class="bg-[#0e0e0e] docked full-width top-0 border-none sticky z-50">
+<nav class="flex justify-between items-center w-full px-6 py-4 max-w-[1440px] mx-auto">
+<div class="text-2xl font-black italic text-[#CCFF00] font-['Chakra_Petch'] uppercase tracking-tighter">
+                StartLineAU
+            </div>
+<div class="hidden md:flex items-center gap-8">
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Events</a>
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Training</a>
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Community</a>
+<a class="font-['Chakra_Petch'] uppercase tracking-tighter text-[#767575] hover:text-[#f3ffca] transition-colors duration-200" href="#">Leaderboard</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="font-['Chakra_Petch'] uppercase tracking-tighter bg-primary-container text-on-primary font-bold px-6 py-2 active:scale-95 transition-transform">
+                    GO PRO
+                </button>
+</div>
+</nav>
+</header>
+<main class="min-h-screen">
+<!-- Hero Section -->
+<section class="relative pt-24 pb-16 px-6 overflow-hidden bg-surface-container-lowest">
+<div class="max-w-[1440px] mx-auto flex flex-col md:flex-row items-end justify-between gap-8 border-b border-outline-variant/20 pb-12">
+<div class="max-w-4xl">
+<span class="font-chakra text-[#CCFF00] uppercase tracking-[0.3em] text-sm mb-4 block">Transmission Status: Active</span>
+<h1 class="font-chakra font-black italic text-6xl md:text-8xl leading-none uppercase tracking-tighter text-on-surface">
+                        GET IN TOUCH.<br/>THE CLOCK IS TICKING.
+                    </h1>
+</div>
+<div class="hidden lg:block text-right">
+<div class="font-chakra text-[#767575] text-xs uppercase tracking-widest leading-loose">
+                        Coord: 37.8136° S, 144.9631° E<br/>
+                        System: Kinetic v2.04<br/>
+                        Latency: 14ms
+                    </div>
+</div>
+</div>
+<!-- Technical background element -->
+<div class="absolute top-0 right-0 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-[400px]" style="font-variation-settings: 'wght' 100;">history</span>
+</div>
+</section>
+<!-- Main Grid -->
+<section class="max-w-[1440px] mx-auto px-6 py-16">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-0.5 bg-surface-container-lowest">
+<!-- Contact Form Section -->
+<div class="lg:col-span-7 bg-surface-container p-8 md:p-12">
+<div class="mb-12">
+<h2 class="font-chakra font-bold text-2xl uppercase tracking-tight text-primary flex items-center gap-3">
+<span class="w-8 h-[2px] bg-primary"></span>
+                            Direct Uplink
+                        </h2>
+</div>
+<form action="#" class="space-y-10">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+<div class="relative group">
+<label class="block font-chakra text-[10px] uppercase tracking-widest text-outline mb-2 group-focus-within:text-primary transition-colors">Identification / Name</label>
+<input class="w-full bg-transparent border-none border-b border-outline-variant py-3 px-0 focus:ring-0 focus:border-primary text-on-surface placeholder:text-outline/30 font-chakra transition-all uppercase tracking-tight" placeholder="OPERATOR NAME" type="text"/>
+<div class="absolute bottom-0 left-0 w-0 h-[2px] bg-primary transition-all duration-300 group-focus-within:w-full"></div>
+</div>
+<div class="relative group">
+<label class="block font-chakra text-[10px] uppercase tracking-widest text-outline mb-2 group-focus-within:text-primary transition-colors">Protocol / Email</label>
+<input class="w-full bg-transparent border-none border-b border-outline-variant py-3 px-0 focus:ring-0 focus:border-primary text-on-surface placeholder:text-outline/30 font-chakra transition-all uppercase tracking-tight" placeholder="EMAIL@DOMAIN.COM" type="email"/>
+<div class="absolute bottom-0 left-0 w-0 h-[2px] bg-primary transition-all duration-300 group-focus-within:w-full"></div>
+</div>
+</div>
+<div class="relative group">
+<label class="block font-chakra text-[10px] uppercase tracking-widest text-outline mb-2 group-focus-within:text-primary transition-colors">Subject / Objective</label>
+<input class="w-full bg-transparent border-none border-b border-outline-variant py-3 px-0 focus:ring-0 focus:border-primary text-on-surface placeholder:text-outline/30 font-chakra transition-all uppercase tracking-tight" placeholder="PURPOSE OF CONTACT" type="text"/>
+<div class="absolute bottom-0 left-0 w-0 h-[2px] bg-primary transition-all duration-300 group-focus-within:w-full"></div>
+</div>
+<div class="relative group">
+<label class="block font-chakra text-[10px] uppercase tracking-widest text-outline mb-2 group-focus-within:text-primary transition-colors">Payload / Message</label>
+<textarea class="w-full bg-transparent border-none border-b border-outline-variant py-3 px-0 focus:ring-0 focus:border-primary text-on-surface placeholder:text-outline/30 font-chakra transition-all uppercase tracking-tight resize-none" placeholder="TRANSMIT YOUR DATA HERE..." rows="4"></textarea>
+<div class="absolute bottom-0 left-0 w-0 h-[2px] bg-primary transition-all duration-300 group-focus-within:w-full"></div>
+</div>
+<div class="pt-6">
+<button class="group relative inline-flex items-center gap-4 bg-primary-container text-on-primary px-10 py-5 font-chakra font-black uppercase italic tracking-tighter hover:bg-primary-dim transition-all active:translate-y-1 active:translate-x-1">
+                                TRANSMIT DATA
+                                <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform">send</span>
+</button>
+</div>
+</form>
+</div>
+<!-- Contact Details / Info Section -->
+<div class="lg:col-span-5 flex flex-col gap-0.5">
+<!-- Melbourne Office -->
+<div class="bg-surface-container-high p-8 flex-1">
+<div class="flex justify-between items-start mb-8">
+<h3 class="font-chakra font-bold text-xl uppercase tracking-tight text-white">Physical Hub</h3>
+<span class="material-symbols-outlined text-primary">location_on</span>
+</div>
+<div class="space-y-2">
+<p class="font-chakra text-lg uppercase tracking-tight">Ground Zero Melbourne</p>
+<p class="font-body text-outline text-sm">Collins Street Precinct<br/>Melbourne, VIC 3000</p>
+</div>
+<div class="mt-8 relative h-48 w-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover grayscale opacity-50 hover:grayscale-0 transition-all duration-700 cursor-pointer" data-alt="Modern dark industrial office interior in Melbourne with neon accent lighting and sleek metallic furniture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvsw2M-xf23KK4zJJemESxKurJaGWRmazA_deC8iky2bFMtD2dNwwDQZI-V8yn3GyYyfWMnlQPqqvftJKKcZUD7OKiMwi_Q8-OTABP38zcLM8oajoITlcdvKDPo828RhxKGhrhEQgsm4sze9tPIw6ZneSd5GhI-k8fREhn_kq6xImHFuMV7mDqvAjjF0uzOYwulifjbOb0Bx6Bjl6NPug0p2fGnfyYTZZm1ew2h0q8cKwdsSiQY4PUA0BRmtD_AfPG_jLXKJ27a00i"/>
+<div class="absolute inset-0 border border-primary/20 pointer-events-none"></div>
+</div>
+</div>
+<!-- Digital Nodes -->
+<div class="bg-surface-container-high p-8">
+<div class="flex justify-between items-start mb-6">
+<h3 class="font-chakra font-bold text-xl uppercase tracking-tight text-white">Digital Nodes</h3>
+<span class="material-symbols-outlined text-primary">hub</span>
+</div>
+<div class="space-y-6">
+<div class="flex items-center justify-between border-b border-outline-variant/10 pb-4 group cursor-pointer">
+<div>
+<p class="font-chakra text-[10px] uppercase tracking-widest text-outline">Direct Signal</p>
+<p class="font-chakra text-on-surface uppercase group-hover:text-primary transition-colors">support@startlineau.com</p>
+</div>
+<span class="material-symbols-outlined text-sm text-outline group-hover:text-primary">arrow_forward</span>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<a class="bg-surface-container-highest p-4 flex items-center justify-between group hover:bg-primary-container transition-all" href="#">
+<span class="font-chakra text-xs uppercase tracking-widest text-on-surface group-hover:text-on-primary">Instagram</span>
+<span class="material-symbols-outlined text-sm text-primary group-hover:text-on-primary">open_in_new</span>
+</a>
+<a class="bg-surface-container-highest p-4 flex items-center justify-between group hover:bg-primary-container transition-all" href="#">
+<span class="font-chakra text-xs uppercase tracking-widest text-on-surface group-hover:text-on-primary">Strava</span>
+<span class="material-symbols-outlined text-sm text-primary group-hover:text-on-primary">open_in_new</span>
+</a>
+</div>
+</div>
+</div>
+<!-- FAQ Link -->
+<a class="bg-primary p-8 group overflow-hidden relative" href="#">
+<div class="relative z-10 flex justify-between items-center">
+<div>
+<h3 class="font-chakra font-black italic text-2xl uppercase tracking-tighter text-on-primary">STUCK IN THE PITS?</h3>
+<p class="font-chakra text-[10px] uppercase tracking-[0.2em] text-on-primary/70">Access Knowledge Base / System Status</p>
+</div>
+<span class="material-symbols-outlined text-4xl text-on-primary group-hover:translate-x-2 transition-transform">bolt</span>
+</div>
+<div class="absolute top-0 right-0 h-full w-24 bg-on-primary/5 -skew-x-12 translate-x-12 group-hover:translate-x-8 transition-transform"></div>
+</a>
+</div>
+</div>
+</section>
+<!-- Technical Metadata Footer Overlay (Asymmetric UI pattern) -->
+<section class="max-w-[1440px] mx-auto px-6 mb-16">
+<div class="bg-surface-container-low p-6 border-l-4 border-primary flex flex-col md:flex-row justify-between items-center gap-8">
+<div class="flex items-center gap-6">
+<div class="flex flex-col">
+<span class="font-chakra text-[9px] text-outline uppercase tracking-widest">Global Status</span>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 bg-[#CCFF00] animate-pulse"></span>
+<span class="font-chakra text-xs text-white uppercase tracking-widest">Operational</span>
+</div>
+</div>
+<div class="w-[1px] h-8 bg-outline-variant/30"></div>
+<div class="flex flex-col">
+<span class="font-chakra text-[9px] text-outline uppercase tracking-widest">Version</span>
+<span class="font-chakra text-xs text-white uppercase tracking-widest">2.04.1-KINETIC</span>
+</div>
+</div>
+<div class="font-chakra text-[10px] text-outline uppercase tracking-[0.3em]">
+                    End of Transmission // Next Sync in 04:59s
+                </div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0e0e0e] w-full border-none mt-16">
+<div class="bg-[#000000] flex flex-col md:flex-row justify-between items-center w-full px-8 py-12 gap-4 max-w-[1440px] mx-auto">
+<div class="text-sm font-bold text-[#CCFF00] font-['Chakra_Petch'] uppercase tracking-widest">
+                StartLineAU
+            </div>
+<div class="flex flex-wrap justify-center gap-8">
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">System Status</a>
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">Legal</a>
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">Privacy</a>
+<a class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847] hover:text-[#CCFF00] transition-colors opacity-80 hover:opacity-100" href="#">API</a>
+</div>
+<div class="font-['Chakra_Petch'] text-[10px] uppercase tracking-widest text-[#484847]">
+                © 2024 StartLineAU. Kinetic Precision.
+            </div>
+</div>
+</footer>
+</body></html>
