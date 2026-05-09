@@ -1,0 +1,58 @@
+name: Terraform plan
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.0'
+
+      - run: terraform init
+      - run: terraform fmt -check
+      - run: terraform validate
+
+      - id: plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+        env:
+          TF_VAR_amplify_repository_access_token: ${{ secrets.AMPLIFY_REPOSITORY_ACCESS_TOKEN }}
+          TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
+
+      - uses: actions/github-script@v7
+        env:
+          PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
+        with:
+          script: |
+            const body = `### Terraform plan\n\n\`\`\`\n${process.env.PLAN_STDOUT}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - if: steps.plan.outcome == 'failure'
+        run: exit 1
