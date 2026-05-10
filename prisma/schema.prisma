@@ -7,15 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Admin accounts (4 pre-seeded, managed internally) ───────────────────────
+// ─── Admin accounts (created on first Cognito login, must be in "Admins" group) ─
 model Admin {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  password  String
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  cognitoSub String   @unique
+  email      String   @unique
+  name       String?
+  createdAt  DateTime @default(now())
 
-  eventReviews     Event[]     @relation("EventReviewedBy")
+  eventReviews Event[] @relation("EventReviewedBy")
 }
 
 // ─── Organiser accounts ───────────────────────────────────────────────────────
@@ -25,24 +25,17 @@ model Organiser {
   cognitoSub String          @unique
   status     OrganiserStatus @default(APPROVED)
 
-  // Profile — filled during onboarding
+  // Profile — filled during onboarding, editable afterwards
   orgName      String?
   contactName  String?
   contactEmail String?
   phone        String?
   abn          String?
-  website    String?
-  instagram  String?
-  tiktok     String?
-  facebook   String?
-  eventTypes String[]
-  bio         String?
-  logoUrl     String?
-
-  // Verification documents (URLs — Google Drive, Dropbox, etc.)
-  insuranceUrl   String?
-  pastEventsUrl  String?
-  certifications String?
+  website      String?
+  instagram    String?
+  facebook     String?
+  bio          String?
+  logoUrl      String?
 
   events    Event[]
   reviews   Review[]
@@ -89,6 +82,7 @@ model Event {
   waves        Json
   inclusions   String?
   extras       String?
+  activations  String?
   refundPolicy String?
 
   // Step 5 — media & logistics

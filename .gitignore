@@ -39,6 +39,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local uploads (dev only)
+/public/uploads/
+
 # IDE
 .idea
 .vscode

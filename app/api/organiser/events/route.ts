@@ -14,8 +14,9 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
       select: {
         id: true, title: true, discipline: true, city: true, state: true,
-        eventDate: true, status: true, createdAt: true,
+        eventDate: true, startTime: true, status: true, createdAt: true,
         waves: true, registrationUrl: true, cap: true, isPinned: true,
+        coverImageUrl: true,
       },
     });
     return NextResponse.json(events);
@@ -27,20 +28,17 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getOrganiserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
-  const body = await req.json();
-  const { submit, ...data } = body;
 
-  // Only enforce required fields when submitting for review — drafts can be partial
+  const body = await req.json();
+  const { submit } = body;
+
   if (submit) {
     const required = ["title", "discipline", "eventDate", "startTime", "endTime", "venue", "city", "state", "format", "level", "registrationUrl"];
     for (const field of required) {
-      if (!data[field]) {
-        return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
-      }
+      if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
     }
   } else {
-    // Drafts still need at minimum a title
-    if (!data.title?.trim()) {
+    if (!body.title?.trim()) {
       return NextResponse.json({ error: "A title is required to save a draft." }, { status: 400 });
     }
   }
@@ -48,11 +46,33 @@ export async function POST(req: NextRequest) {
   try {
     const event = await prisma.event.create({
       data: {
-        ...data,
-        organiserId: session.sub,
-        categories:  data.categories  ?? [],
-        waves:       data.waves        ?? [],
-        status:      submit ? "PENDING" : "DRAFT",
+        organiserId:      session.sub,
+        status:           submit ? "PENDING" : "DRAFT",
+        title:            body.title,
+        discipline:       body.discipline        ?? "",
+        tagline:          body.tagline           ?? null,
+        description:      body.description       ?? null,
+        eventDate:        body.eventDate         ?? "",
+        endDate:          body.endDate           ?? null,
+        startTime:        body.startTime         ?? "",
+        endTime:          body.endTime           ?? "",
+        venue:            body.venue             ?? "",
+        address:          body.address           ?? null,
+        city:             body.city              ?? "",
+        state:            body.state             ?? "",
+        format:           body.format            ?? "",
+        level:            body.level             ?? "",
+        categories:       body.categories        ?? [],
+        cap:              body.cap               ?? null,
+        minAge:           body.minAge            ?? 16,
+        waves:            body.waves             ?? [],
+        inclusions:       body.inclusions        ?? null,
+        extras:           body.extras            ?? null,
+        activations:      body.activations       ?? null,
+        refundPolicy:     body.refundPolicy      ?? null,
+        registrationUrl:  body.registrationUrl   ?? null,
+        accessibilityInfo: body.accessibilityInfo ?? null,
+        coverImageUrl:    body.coverImageUrl      ?? null,
       },
     });
 

@@ -37,10 +37,14 @@ function SignInForm() {
         return;
       }
 
-      // Best-effort upsert of the organiser record — don't block login if DB is down
-      fetch("/api/organiser/auth/session", { method: "POST" }).catch(() => {});
+      // Upsert organiser record, then check if onboarding is needed
+      await fetch("/api/organiser/auth/session", { method: "POST" }).catch(() => {});
 
-      router.push("/organiser/dashboard");
+      const profileRes = await fetch("/api/organiser/profile").catch(() => null);
+      const profile    = profileRes?.ok ? await profileRes.json().catch(() => null) : null;
+      const needsOnboarding = !profile || !profile.orgName;
+
+      router.push(needsOnboarding ? "/organiser/onboarding" : "/organiser/dashboard");
     } catch (err: unknown) {
       const name = (err as { name?: string })?.name ?? "";
       const msg  = err instanceof Error ? err.message : "";

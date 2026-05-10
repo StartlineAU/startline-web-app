@@ -15,8 +15,21 @@ type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
 interface EventRow {
   id: string; title: string; discipline: string; city: string; state: string;
-  eventDate: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null;
+  eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
+  cap?: number | null; coverImageUrl?: string | null;
+}
+
+function formatEventDate(dateStr: string, startTime: string) {
+  try {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+    const time = startTime
+      ? new Date(`1970-01-01T${startTime}`).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()
+      : null;
+    return time ? `${day} · ${time}` : day;
+  } catch {
+    return dateStr;
+  }
 }
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string; pulse?: boolean }> = {
@@ -163,10 +176,12 @@ export default function DashboardPage() {
                   const s = STATUS_STYLE[e.status];
                   return (
                     <Link key={e.id} href="/organiser/listings"
-                      className={`grid grid-cols-12 gap-4 px-5 py-4 items-center hover:bg-gray-50 transition-colors ${i < recent.length - 1 ? "border-b border-gray-100" : ""}`}>
+                      className={`grid grid-cols-12 gap-4 px-5 py-4 items-center hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400 transition-all ${i < recent.length - 1 ? "border-b border-gray-100" : ""}`}>
                       <div className="col-span-6 flex items-center gap-4 min-w-0">
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                          <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                          {e.coverImageUrl
+                            ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
+                            : <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>}
                         </div>
                         <div className="min-w-0">
                           <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900 truncate">{e.title}</div>
@@ -176,7 +191,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="col-span-3">
-                        <div className="font-headline text-sm font-bold text-gray-700">{e.eventDate}</div>
+                        <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(e.eventDate, e.startTime)}</div>
                       </div>
                       <div className="col-span-2">
                         <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
