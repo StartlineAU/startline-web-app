@@ -1,23 +1,31 @@
-﻿"use client";
+"use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, CalendarDays, User, LogOut } from "lucide-react";
+import { LayoutDashboard, CalendarDays, User, LogOut, Plus, Settings } from "lucide-react";
 
 const NAV = [
-  { href: "/organiser/dashboard", label: "Dashboard",   icon: LayoutDashboard },
-  { href: "/organiser/listings",  label: "Listings",    icon: CalendarDays    },
-  { href: "/organiser/profile",   label: "My Profile",  icon: User            },
+  { href: "/organiser/dashboard", label: "Dashboard",  icon: LayoutDashboard },
+  { href: "/organiser/listings",  label: "Listings",   icon: CalendarDays    },
+  { href: "/organiser/profile",   label: "My Profile", icon: User            },
+];
+
+const MENU = [
+  { href: "/organiser/profile",     label: "My Profile",    icon: User        },
+  { href: "/organiser/new-listing", label: "Post an Event", icon: Plus        },
+  { href: "/organiser/profile",     label: "Settings",      icon: Settings    },
 ];
 
 export default function OrganiserTopBar() {
   const router   = useRouter();
   const pathname = usePathname();
-  const [orgName, setOrgName] = useState("");
-  const [initial, setInitial] = useState("O");
-  const [loaded,  setLoaded]  = useState(false);
+  const [orgName,  setOrgName]  = useState("");
+  const [initial,  setInitial]  = useState("O");
+  const [loaded,   setLoaded]   = useState(false);
+  const [open,     setOpen]     = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/organiser/profile")
@@ -25,14 +33,27 @@ export default function OrganiserTopBar() {
       .then(data => {
         if (!data) return;
         const name = data.orgName || data.contactName || data.email || "";
-        setOrgName(data.orgName || data.contactName || data.email || "");
+        setOrgName(name);
         if (name) setInitial(name.charAt(0).toUpperCase());
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, []);
 
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   const handleLogout = async () => {
+    setOpen(false);
     const { signOut } = await import("aws-amplify/auth");
     await signOut();
     router.push("/organiser");
@@ -73,21 +94,58 @@ export default function OrganiserTopBar() {
           </div>
 
           {/* User — right */}
-          <div className="ml-auto flex items-center gap-2 px-2 shrink-0">
-            {displayName && (
-              <span className="hidden md:block font-headline text-[12px] font-bold uppercase tracking-widest text-white/40">
-                {displayName}
-              </span>
-            )}
-            <div className="w-7 h-7 rounded-lg bg-primary text-dark font-headline font-black italic text-sm flex items-center justify-center shrink-0">
-              {initial}
-            </div>
+          <div ref={menuRef} className="ml-auto relative shrink-0">
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/50 hover:text-white hover:bg-white/10 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none will-change-transform transition-all duration-300 ease-out"
+              onClick={() => setOpen(o => !o)}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
             >
-              <LogOut className="w-4 h-4" /> Sign out
+              <div className="w-7 h-7 rounded-lg bg-primary text-dark font-headline font-black italic text-sm flex items-center justify-center shrink-0">
+                {initial}
+              </div>
+              {displayName && (
+                <span className="hidden md:block font-headline text-[12px] font-bold uppercase tracking-widest text-white/70">
+                  {displayName}
+                </span>
+              )}
+              <svg className={`w-3.5 h-3.5 text-white/40 transition-transform duration-200 ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
+
+            {/* Dropdown */}
+            {open && (
+              <div className="absolute right-0 top-[calc(100%+8px)] w-52 bg-[#0f0f0f] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                {/* Account info */}
+                <div className="px-4 py-3 border-b border-white/10">
+                  <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-white/40">Account</div>
+                  {displayName && (
+                    <div className="font-headline text-[13px] font-bold text-white mt-0.5 truncate">{orgName}</div>
+                  )}
+                </div>
+
+                {/* Menu items */}
+                <div className="py-1.5">
+                  {MENU.map(({ href, label, icon: Icon }) => (
+                    <Link key={label} href={href}
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Sign out */}
+                <div className="border-t border-white/10 py-1.5">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 font-headline text-[13px] font-bold uppercase tracking-widest text-red-400/80 hover:text-red-400 hover:bg-white/5 transition-colors">
+                    <LogOut className="w-4 h-4 shrink-0" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
@@ -95,4 +153,3 @@ export default function OrganiserTopBar() {
     </nav>
   );
 }
-

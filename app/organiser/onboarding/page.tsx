@@ -256,7 +256,7 @@ export default function OnboardingPage() {
                     Everyone belongs at<br /><span className="text-primary">the startline.</span>
                   </h2>
                   <p className="text-muted text-[14px] leading-relaxed mb-5">
-                    When you join Startline, we ask you to uphold our community standards. I commit to welcoming all athletes — regardless of their background, ability, age, or experience level — and to running events that are safe, inclusive, and free from discrimination.
+                    When you join Startline, we ask you to uphold our community standards. I commit to welcoming all athletes regardless of their background, ability, age, or experience level, and to running events that are safe, inclusive, and free from discrimination.
                   </p>
                   <label className="flex items-start gap-4 cursor-pointer group">
                     <div className="relative flex-shrink-0 mt-0.5">

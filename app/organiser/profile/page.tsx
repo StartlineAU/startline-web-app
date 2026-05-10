@@ -7,6 +7,7 @@ import {
   Phone, Mail, X, Edit2, Camera, CalendarDays, ChevronRight,
   Star, ImageIcon,
 } from "lucide-react";
+
 import OrganiserTopBar from "@/components/organiser/TopBar";
 import EventCarousel, { type CarouselEvent } from "@/components/organiser/EventCarousel";
 import ReviewsSection,  { type Review }        from "@/components/organiser/ReviewsSection";
@@ -24,13 +25,13 @@ interface EventRow {
 }
 
 interface Profile {
-  orgName: string; contactName: string; phone: string; email: string;
+  orgName: string; contactName: string; phone: string; contactEmail: string;
   website: string; instagram: string; facebook: string; bio: string; abn: string;
   logoUrl: string;
 }
 
 const EMPTY: Profile = {
-  orgName: "", contactName: "", phone: "", email: "",
+  orgName: "", contactName: "", phone: "", contactEmail: "",
   website: "", instagram: "", facebook: "", bio: "", abn: "", logoUrl: "",
 };
 
@@ -119,7 +120,6 @@ const STATES = [
   ["sa","SA"],["tas","TAS"],["act","ACT"],["nt","NT"],
 ] as const;
 
-const DISCIPLINES = ["functional_fitness", "crossfit", "running", "hybrid"] as const;
 
 function FieldLabel({ label, hint, required }: { label: string; hint?: string; required?: boolean }) {
   return (
@@ -141,15 +141,14 @@ const FTextarea = (p: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
 );
 
 interface EditPanelProps {
-  profile: Profile; state: string; disciplines: string[];
+  profile: Profile; state: string;
   saving: boolean; saved: boolean; error: string;
   onChange: (patch: Partial<Profile>) => void;
   onStateChange: (s: string) => void;
-  onToggleDisc: (d: string) => void;
   onSave: () => void; onClose: () => void;
 }
 
-function EditPanel({ profile, state, disciplines, saving, saved, error, onChange, onStateChange, onToggleDisc, onSave, onClose }: EditPanelProps) {
+function EditPanel({ profile, state, saving, saved, error, onChange, onStateChange, onSave, onClose }: EditPanelProps) {
   return (
     <>
       <div className="fixed inset-0 z-40 bg-gray-900/40 backdrop-blur-sm overlay-in" onClick={onClose} />
@@ -171,19 +170,7 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
             </div>
             <div className="space-y-4">
               <div><FieldLabel label="Organisation name" required /><FInput value={profile.orgName} onChange={e => onChange({ orgName: e.target.value })} placeholder="e.g. Endurance Events Australia" /></div>
-              <div><FieldLabel label="About" hint={`${profile.bio.length}/600`} /><FTextarea rows={4} maxLength={600} value={profile.bio} onChange={e => onChange({ bio: e.target.value })} placeholder="Tell athletes what you run and who you areâ€¦" /></div>
-              <div>
-                <FieldLabel label="Event disciplines" hint="Pick all that apply" />
-                <div className="flex flex-wrap gap-2">
-                  {DISCIPLINES.map(d => (
-                    <Button key={d} type="button" size="sm"
-                      variant={disciplines.includes(d) ? "lime" : "outline"}
-                      onClick={() => onToggleDisc(d)}>
-                      {disciplines.includes(d) && <CheckCircle className="w-3 h-3" />}{d}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              <div><FieldLabel label="About" hint={`${profile.bio.length}/600`} /><FTextarea rows={4} maxLength={600} value={profile.bio} onChange={e => onChange({ bio: e.target.value })} placeholder="Tell athletes what you run and who you are…" /></div>
             </div>
           </div>
 
@@ -205,7 +192,7 @@ function EditPanel({ profile, state, disciplines, saving, saved, error, onChange
               </div>
               <div>
                 <FieldLabel label="Contact email" required />
-                <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><FInput className="pl-9" type="email" value={profile.email} onChange={e => onChange({ email: e.target.value })} placeholder="events@yourorg.com.au" /></div>
+                <div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><FInput className="pl-9" type="email" value={profile.contactEmail} onChange={e => onChange({ contactEmail: e.target.value })} placeholder="events@yourorg.com.au" /></div>
               </div>
               <div>
                 <FieldLabel label="Phone" />
@@ -272,7 +259,6 @@ type Tab = "upcoming" | "past" | "drafts";
 export default function ProfilePage() {
   const [profile,        setProfile]        = useState<Profile>(EMPTY);
   const [state,          setState]          = useState("nsw");
-  const [disciplines,    setDisciplines]    = useState<string[]>([]);
   const [events,         setEvents]         = useState<EventRow[]>([]);
   const [reviews,        setReviews]        = useState<Review[]>([]);
   const [pinnedIds,      setPinnedIds]      = useState<string[]>([]);
@@ -295,16 +281,16 @@ export default function ProfilePage() {
       if (prof && !prof.error) {
         setOrganiserId(prof.id ?? "");
         setProfile({
-          orgName:     prof.orgName     ?? "",
-          contactName: prof.contactName ?? "",
-          phone:       prof.phone       ?? "",
-          email:       prof.email       ?? "",
-          website:     prof.website     ?? "",
-          instagram:   prof.instagram   ?? "",
-          facebook:    prof.facebook    ?? "",
-          bio:         prof.bio         ?? "",
-          abn:         prof.abn         ?? "",
-          logoUrl:     prof.logoUrl     ?? "",
+          orgName:      prof.orgName      ?? "",
+          contactName:  prof.contactName  ?? "",
+          phone:        prof.phone        ?? "",
+          contactEmail: prof.contactEmail ?? "",
+          website:      prof.website      ?? "",
+          instagram:    prof.instagram    ?? "",
+          facebook:     prof.facebook     ?? "",
+          bio:          prof.bio          ?? "",
+          abn:          prof.abn          ?? "",
+          logoUrl:      prof.logoUrl      ?? "",
         });
       }
       if (Array.isArray(evts)) {
@@ -358,8 +344,7 @@ export default function ProfilePage() {
     setReviews(prev => [r, ...prev]);
   }, []);
 
-  const u       = (patch: Partial<Profile>) => setProfile(p => ({ ...p, ...patch }));
-  const toggleD = (d: string) => setDisciplines(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
+  const u = (patch: Partial<Profile>) => setProfile(p => ({ ...p, ...patch }));
 
   const handleSave = async () => {
     setSaving(true); setError("");
@@ -379,14 +364,12 @@ export default function ProfilePage() {
   const handleLogoUpload = async (file: File) => {
     setLogoUploading(true);
     try {
-      const presignRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "logo", contentType: file.type, filename: file.name }),
-      });
-      if (!presignRes.ok) throw new Error("Failed to get upload URL.");
-      const { uploadUrl, fileUrl } = await presignRes.json();
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("type", "logo");
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!uploadRes.ok) throw new Error("Upload failed.");
+      const { fileUrl } = await uploadRes.json();
       await fetch("/api/organiser/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -409,18 +392,18 @@ export default function ProfilePage() {
       <main className="pt-16 page-in pb-24 lg:pb-0">
 
         {/* Banner */}
-        <section className="relative h-44 border-b border-gray-200 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
+        <section className="relative h-36 sm:h-44 border-b border-gray-200 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
           <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #b3e153 0%, transparent 50%), radial-gradient(circle at 80% 20%, #86efac 0%, transparent 40%)" }} />
-          <button className="absolute top-4 right-4 flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-gray-200 hover:border-gray-400 rounded-lg px-3 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors">
+          <button className="absolute top-3 right-3 flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-gray-200 hover:border-gray-400 rounded-lg px-3 py-2 font-headline text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors">
             <Camera className="w-3.5 h-3.5" /> Change banner
           </button>
         </section>
 
-        <div className="max-w-[1200px] mx-auto px-6 lg:px-10">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10">
 
-          {/* Profile header */}
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10 mb-6 relative z-10">
-            <div className="flex items-end gap-4">
+          {/* Profile header — centered on mobile, left-aligned on sm+ */}
+          <div className="flex flex-col items-center text-center sm:flex-row sm:items-end sm:text-left sm:justify-between gap-4 -mt-10 mb-6 relative z-10">
+            <div className="flex flex-col items-center sm:flex-row sm:items-end gap-3 sm:gap-4">
               <div className="relative group">
                 <div className="w-20 h-20 rounded-xl bg-lime-400 text-gray-900 font-headline font-black italic text-4xl flex items-center justify-center border-4 border-white shadow-md overflow-hidden">
                   {profile.logoUrl
@@ -430,7 +413,7 @@ export default function ProfilePage() {
                 <button
                   onClick={() => logoInputRef.current?.click()}
                   disabled={logoUploading}
-                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white border border-gray-200 hover:border-gray-400 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50">
+                  className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white border border-gray-200 hover:border-gray-400 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors sm:opacity-0 sm:group-hover:opacity-100 disabled:opacity-50">
                   <Camera className="w-3.5 h-3.5" />
                 </button>
                 <input ref={logoInputRef} type="file" accept="image/*" className="sr-only"
@@ -443,9 +426,9 @@ export default function ProfilePage() {
               </div>
               <div className="pb-1">
                 <h1 className="font-headline text-2xl lg:text-3xl font-black italic tracking-tighter text-gray-900 leading-tight">
-                  {loading ? "Loadingâ€¦" : (profile.orgName || "Your Organisation")}
+                  {loading ? "Loading…" : (profile.orgName || "Your Organisation")}
                 </h1>
-                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <div className="flex items-center justify-center sm:justify-start gap-3 mt-1.5 flex-wrap">
                   <Badge variant="live" className="gap-1">
                     <CheckCircle className="w-3 h-3" /> Verified Organiser
                   </Badge>
@@ -459,11 +442,11 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 pb-1">
-              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <div className="flex items-center gap-3 pb-1 w-full sm:w-auto">
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial" onClick={() => setEditOpen(true)}>
                 <Edit2 className="w-4 h-4" /> Edit Profile
               </Button>
-              <Button asChild size="sm">
+              <Button asChild size="sm" className="flex-1 sm:flex-initial">
                 <Link href="/organiser/new-listing">
                   <Plus className="w-4 h-4" /> Post a new event
                 </Link>
@@ -472,7 +455,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats bar */}
-          <div className="flex items-center gap-6 mb-8 pb-6 border-b border-gray-200 flex-wrap">
+          <div className="flex items-center justify-center sm:justify-start gap-6 mb-8 pb-6 border-b border-gray-200 flex-wrap">
             <div className="flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-lime-500" />
               <span className="font-headline text-[13px] font-bold text-gray-900">{events.filter(e => e.status === "APPROVED").length}</span>
@@ -492,6 +475,13 @@ export default function ProfilePage() {
               </a>
             )}
           </div>
+
+          {/* Bio — visible on mobile only, above events */}
+          {profile.bio && (
+            <div className="lg:hidden mb-8">
+              <p className="text-[14px] text-gray-600 leading-relaxed">{profile.bio}</p>
+            </div>
+          )}
 
           {/* Main 2-col layout */}
           <div className="grid lg:grid-cols-[1fr_300px] gap-8 pb-16">
@@ -547,7 +537,7 @@ export default function ProfilePage() {
                     <div className="font-headline text-sm text-gray-400 uppercase tracking-widest">Loadingâ€¦</div>
                   </div>
                 ) : displayed.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger-item">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger-item">
                     {displayed.map(e => <EventCard key={e.id} e={e} />)}
                   </div>
                 ) : (
@@ -601,54 +591,8 @@ export default function ProfilePage() {
             {/* Right sidebar */}
             <aside className="space-y-4 lg:sticky lg:top-24 h-fit">
 
-              {/* Public preview */}
-              <div>
-                <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-lime-600 flex items-center gap-2 mb-3">
-                  <span className="w-1.5 h-1.5 bg-lime-500 rounded-full animate-pulse-dot" /> Public preview
-                </div>
-                <Card className="overflow-hidden shadow-sm">
-                  <div className="relative h-20 bg-gradient-to-br from-gray-100 to-gray-200" />
-                  <div className="px-4 pb-4 -mt-6 relative">
-                    <div className="w-12 h-12 rounded-lg bg-lime-400 text-gray-900 font-headline font-black italic text-2xl flex items-center justify-center border-2 border-white shadow-sm mb-2">
-                      {initial}
-                    </div>
-                    <div className="font-headline text-[16px] font-black italic tracking-tighter text-gray-900">{profile.orgName || "Your Organisation"}</div>
-                    <div className="flex items-center gap-1 font-headline text-[10px] uppercase tracking-widest text-lime-600 mt-0.5">
-                      <CheckCircle className="w-3 h-3" /> Verified
-                    </div>
-                    {reviews.length > 0 && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                        <span className="font-headline text-[11px] font-bold text-gray-900">{avgRating.toFixed(1)}</span>
-                        <span className="font-headline text-[10px] text-gray-400">({reviews.length})</span>
-                      </div>
-                    )}
-                    {profile.bio && (
-                      <p className="text-[12px] text-gray-500 mt-2 leading-relaxed line-clamp-3">{profile.bio}</p>
-                    )}
-                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
-                      {profile.website && (
-                        <div className="flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-gray-400 truncate">
-                          <Globe className="w-3 h-3 text-lime-500 shrink-0" /> {profile.website.replace(/https?:\/\//, "")}
-                        </div>
-                      )}
-                      {profile.instagram && (
-                        <div className="flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-gray-400">
-                          <Instagram className="w-3 h-3 text-lime-500" /> {profile.instagram}
-                        </div>
-                      )}
-                      {profile.email && (
-                        <div className="flex items-center gap-2 font-headline text-[10px] uppercase tracking-widest text-gray-400 truncate">
-                          <Mail className="w-3 h-3 text-lime-500 shrink-0" /> {profile.email}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
               {profile.bio && (
-                <Card>
+                <Card className="hidden lg:block">
                   <CardContent className="p-5">
                     <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">About</div>
                     <p className="text-[13px] text-gray-700 leading-relaxed">{profile.bio}</p>
@@ -683,7 +627,7 @@ export default function ProfilePage() {
                 </Card>
               )}
 
-              <Card>
+              <Card className="hidden lg:block">
                 <CardContent className="p-4">
                   <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Quick links</div>
                   <div className="space-y-1">
@@ -706,13 +650,6 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
 
-              <div className="bg-lime-50 border border-lime-100 rounded-xl p-5">
-                <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-lime-700 mb-1.5">Tip</div>
-                <div className="text-[13px] text-gray-700 leading-relaxed">
-                  Profiles with reviews get{" "}
-                  <span className="text-lime-700 font-semibold">3× more</span> registrations. Share your profile with attendees after each event.
-                </div>
-              </div>
             </aside>
           </div>
         </div>
@@ -720,9 +657,9 @@ export default function ProfilePage() {
 
       {editOpen && (
         <EditPanel
-          profile={profile} state={state} disciplines={disciplines}
+          profile={profile} state={state}
           saving={saving} saved={saved} error={error}
-          onChange={u} onStateChange={setState} onToggleDisc={toggleD}
+          onChange={u} onStateChange={setState}
           onSave={handleSave}
           onClose={() => { setEditOpen(false); setError(""); }}
         />

@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Search, Edit, Trash2, MapPin, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Search, Trash2, MapPin, RefreshCw } from "lucide-react";
 import OrganiserTopBar from "@/components/organiser/TopBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,8 +14,21 @@ type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
 interface EventRow {
   id: string; title: string; discipline: string; city: string; state: string;
-  eventDate: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null;
+  eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
+  cap?: number | null; coverImageUrl?: string | null;
+}
+
+function formatEventDate(dateStr: string, startTime: string) {
+  try {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+    const time = startTime
+      ? new Date(`1970-01-01T${startTime}`).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()
+      : null;
+    return time ? `${day} · ${time}` : day;
+  } catch {
+    return dateStr;
+  }
 }
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string; pulse?: boolean }> = {
@@ -37,6 +51,7 @@ const FILTERS: { k: Filter; l: string }[] = [
 ];
 
 export default function ListingsPage() {
+  const router = useRouter();
   const [events,     setEvents]     = useState<EventRow[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [filter,     setFilter]     = useState<Filter>("all");
@@ -130,10 +145,10 @@ export default function ListingsPage() {
 
           {/* Table */}
           <Card className="overflow-hidden stagger-item">
-            <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-gray-50 border-b border-gray-200 font-headline text-[10px] uppercase tracking-widest text-gray-400">
-              <div className="col-span-5">Event</div>
-              <div className="col-span-2">Date</div>
-              <div className="col-span-2">Status</div>
+            <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-gray-50 border-b border-gray-200 font-headline font-bold text-[12px] uppercase tracking-widest text-gray-900">
+              <div className="col-span-4">Event</div>
+              <div className="col-span-3 text-center">Date</div>
+              <div className="col-span-2 text-right">Status</div>
               <div className="col-span-2">Cap / Entry</div>
               <div className="col-span-1 text-right">Actions</div>
             </div>
@@ -150,11 +165,14 @@ export default function ListingsPage() {
               const price = (e.waves as { price: string }[])?.[0]?.price;
               return (
                 <div key={e.id}
-                  className={`grid grid-cols-12 gap-4 px-5 py-4 items-center hover:bg-gray-50 transition-colors ${i < filtered.length - 1 ? "border-b border-gray-100" : ""}`}>
+                  onClick={() => router.push(`/organiser/new-listing?id=${e.id}`)}
+                  className={`grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400 transition-all ${i < filtered.length - 1 ? "border-b border-gray-100" : ""}`}>
 
-                  <div className="col-span-5 flex items-center gap-4 min-w-0">
-                    <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                      <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>
+                  <div className="col-span-4 flex items-center gap-4 min-w-0">
+                    <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                      {e.coverImageUrl
+                        ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
+                        : <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>}
                     </div>
                     <div className="min-w-0">
                       <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900 truncate">{e.title}</div>
@@ -164,11 +182,11 @@ export default function ListingsPage() {
                     </div>
                   </div>
 
-                  <div className="col-span-2">
-                    <div className="font-headline text-sm font-bold text-gray-700">{e.eventDate}</div>
+                  <div className="col-span-3 text-center">
+                    <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(e.eventDate, e.startTime)}</div>
                   </div>
 
-                  <div className="col-span-2">
+                  <div className="col-span-2 flex justify-end">
                     <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? "animate-pulse-dot" : ""}`} />
                       {s.label}
@@ -186,11 +204,9 @@ export default function ListingsPage() {
                     )}
                   </div>
 
-                  <div className="col-span-1 flex items-center justify-end gap-1">
-                    <Button size="icon" variant="ghost" title="Edit">
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" title="Delete" onClick={() => setConfirmDel(e)}
+                  <div className="col-span-1 flex items-center justify-end">
+                    <Button size="icon" variant="ghost" title="Delete"
+                      onClick={(evt) => { evt.stopPropagation(); setConfirmDel(e); }}
                       className="text-gray-400 hover:text-red-500 hover:bg-red-50">
                       <Trash2 className="w-4 h-4" />
                     </Button>

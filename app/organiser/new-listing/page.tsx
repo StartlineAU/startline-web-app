@@ -42,7 +42,7 @@ interface FormState {
   format: Format; level: Level; categories: string[]; cap: string; minAge: string;
   waves: Wave[];
   inclusions: string; extras: string; activations: string; refundPolicy: string;
-  coverImage: File | null; registrationUrl: string; accessibilityInfo: string;
+  coverImage: File | null; coverImageUrl: string; registrationUrl: string; accessibilityInfo: string;
 }
 
 const INITIAL: FormState = {
@@ -56,7 +56,7 @@ const INITIAL: FormState = {
     { label: "", price: "", closes: "" },
   ],
   inclusions: "", extras: "", activations: "", refundPolicy: "",
-  coverImage: null, registrationUrl: "", accessibilityInfo: "",
+  coverImage: null, coverImageUrl: "", registrationUrl: "", accessibilityInfo: "",
 };
 
 /* ── Shared field primitive ─────────────────────────────────── */
@@ -816,8 +816,24 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
         </div>
         {ageMode === "custom" && (
           <div className="flex items-center gap-3">
-            <input type="number" value={form.minAge} onChange={(e) => update({ minAge: e.target.value })}
-              placeholder="e.g. 14" className={`${inputCls} w-32`} />
+            <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
+              <button type="button"
+                onClick={() => update({ minAge: String(Math.max(0, (parseInt(form.minAge) || 0) - 1)) })}
+                className="w-9 h-11 flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors font-headline text-lg select-none">
+                −
+              </button>
+              <input
+                type="number" value={form.minAge}
+                onChange={(e) => update({ minAge: e.target.value })}
+                placeholder="0"
+                className="w-16 bg-white px-2 py-3 text-[15px] text-gray-900 text-center placeholder:text-gray-400 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button type="button"
+                onClick={() => update({ minAge: String((parseInt(form.minAge) || 0) + 1) })}
+                className="w-9 h-11 flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors font-headline text-lg select-none">
+                +
+              </button>
+            </div>
             <span className="font-headline text-[13px] text-gray-500">years old minimum</span>
           </div>
         )}
@@ -1117,16 +1133,16 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
     <div>
       <Field label="Cover image" required hint="Recommended 1920×1080 · max 5MB">
         <label className="block cursor-pointer">
-          {form.coverImage ? (
+          {(form.coverImage || form.coverImageUrl) ? (
             <div className="relative rounded-md border border-primary/40 overflow-hidden aspect-video">
               <img
-                src={URL.createObjectURL(form.coverImage)}
+                src={form.coverImage ? URL.createObjectURL(form.coverImage) : form.coverImageUrl}
                 alt="Cover preview"
                 className="w-full h-full object-cover"
               />
               <button
                 type="button"
-                onClick={(e) => { e.preventDefault(); update({ coverImage: null }); }}
+                onClick={(e) => { e.preventDefault(); update({ coverImage: null, coverImageUrl: "" }); }}
                 className="absolute top-3 right-3 w-8 h-8 rounded-full bg-gray-900/70 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -1288,9 +1304,9 @@ function LivePreview({ form }: { form: FormState }) {
       <div className="bg-dark-darker rounded-xl border border-dark-lighter overflow-hidden">
         {/* Cover image */}
         <div className="relative h-52 placeholder-stripes scan-grid flex items-center justify-center overflow-hidden">
-          {form.coverImage && (
+          {(form.coverImage || form.coverImageUrl) && (
             <img
-              src={URL.createObjectURL(form.coverImage)}
+              src={form.coverImage ? URL.createObjectURL(form.coverImage) : form.coverImageUrl}
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
             />
@@ -1638,6 +1654,7 @@ export default function NewListingPage() {
   const router = useRouter();
   const [step,     setStep]     = useState(0);
   const [form,     setForm]     = useState<FormState>(INITIAL);
+  const [loadingEvent, setLoadingEvent] = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [apiError,      setApiError]      = useState("");
   const [submitErrors,  setSubmitErrors]  = useState<number[]>([]);
@@ -1647,9 +1664,51 @@ export default function NewListingPage() {
   const [direction,          setDirection]          = useState<"forward" | "back">("forward");
   const [showMobilePreview,  setShowMobilePreview]  = useState(false);
   const [eventId,   setEventId]   = useState<string | null>(null);
-  const [savedAt,   setSavedAt]   = useState<Date | null>(null);
 
   const update = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+  // Load existing event when navigating from listings edit button
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    setLoadingEvent(true);
+    fetch(`/api/organiser/events/${id}`)
+      .then(r => r.json())
+      .then(e => {
+        if (e.error) return;
+        setEventId(id);
+        setForm({
+          title:             e.title        ?? "",
+          discipline:        e.discipline   ?? "",
+          tagline:           e.tagline      ?? "",
+          description:       e.description  ?? "",
+          date:              e.eventDate    ?? "",
+          endDate:           e.endDate      ?? "",
+          startTime:         e.startTime    ?? "",
+          endTime:           e.endTime      ?? "",
+          venue:             e.venue        ?? "",
+          address:           e.address      ?? "",
+          city:              e.city         ?? "",
+          state:             e.state        ?? "",
+          format:            e.format       ?? "",
+          level:             e.level        ?? "",
+          categories:        Array.isArray(e.categories) ? e.categories : [],
+          cap:               e.cap != null  ? String(e.cap) : "",
+          minAge:            e.minAge != null ? String(e.minAge) : "",
+          waves:             Array.isArray(e.waves) && e.waves.length ? e.waves : [{ label: "", price: "", closes: "" }],
+          inclusions:        e.inclusions   ?? "",
+          extras:            e.extras       ?? "",
+          activations:       e.activations  ?? "",
+          refundPolicy:      e.refundPolicy ?? "",
+          registrationUrl:   e.registrationUrl   ?? "",
+          accessibilityInfo: e.accessibilityInfo ?? "",
+          coverImage:        null,
+          coverImageUrl:     e.coverImageUrl ?? "",
+        });
+      })
+      .catch(() => {})
+      .finally(() => setLoadingEvent(false));
+  }, []);
 
   const stepHasErrors = (s: number): boolean => {
     if (s === 0) return !(form.title.trim().length > 2 && form.tagline.trim().length > 2);
@@ -1667,18 +1726,16 @@ export default function NewListingPage() {
   };
 
   const submitToApi = async (asDraft: boolean, overrideTitle?: string) => {
-    setSaving(true); setApiError(""); setSavedAt(null); setSubmitErrors([]);
+    setSaving(true); setApiError(""); setSubmitErrors([]);
     try {
       let coverImageUrl: string | null = null;
       if (form.coverImage) {
-        const presignRes = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "cover", contentType: form.coverImage.type, filename: form.coverImage.name }),
-        });
-        if (presignRes.ok) {
-          const { uploadUrl, fileUrl } = await presignRes.json();
-          await fetch(uploadUrl, { method: "PUT", body: form.coverImage, headers: { "Content-Type": form.coverImage.type } });
+        const fd = new FormData();
+        fd.append("file", form.coverImage);
+        fd.append("type", "cover");
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: fd });
+        if (uploadRes.ok) {
+          const { fileUrl } = await uploadRes.json();
           coverImageUrl = fileUrl;
         }
       }
@@ -1693,7 +1750,7 @@ export default function NewListingPage() {
         waves: form.waves, inclusions: form.inclusions, extras: form.extras, activations: form.activations,
         refundPolicy: form.refundPolicy, registrationUrl: form.registrationUrl,
         accessibilityInfo: form.accessibilityInfo, submit: !asDraft,
-        ...(coverImageUrl ? { coverImageUrl } : {}),
+        coverImageUrl: coverImageUrl ?? form.coverImageUrl ?? null,
       };
 
       let res: Response;
@@ -1714,7 +1771,7 @@ export default function NewListingPage() {
 
       if (asDraft) {
         if (!eventId && data.id) setEventId(data.id);
-        setSavedAt(new Date());
+        router.push("/organiser/dashboard");
       } else {
         router.push("/organiser/dashboard");
       }
@@ -1909,12 +1966,6 @@ export default function NewListingPage() {
                   <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Cancel" : "Back"}
                 </button>
                 <div className="flex items-center gap-3">
-                  {savedAt && !apiError && !submitErrors.length && (
-                    <span className="font-headline text-[11px] uppercase tracking-widest text-lime-600 flex items-center gap-1.5">
-                      <Check className="w-3.5 h-3.5" />
-                      Saved {savedAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  )}
                   <button
                     onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")}
                     disabled={saving}
