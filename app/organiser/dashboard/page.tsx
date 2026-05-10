@@ -2,12 +2,12 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { CalendarDays, User, ArrowRight, MapPin } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, ArrowRight, MapPin } from "lucide-react";
 import OrganiserTopBar from "@/components/organiser/TopBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 interface EventRow {
   id: string; title: string; discipline: string; city: string; state: string;
   eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null; coverImageUrl?: string | null;
+  cap?: number | null; coverImageUrl?: string | null; registrationCount?: number | null; registrationUrl?: string | null;
 }
 
 function formatEventDate(dateStr: string, startTime: string) {
@@ -49,12 +49,12 @@ function StatCard({
       style={{ animationDelay: `${delay}ms` }}
     >
       <CardContent className="p-6">
-        <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400 mb-3">{label}</div>
+        <div className="font-headline text-[11px] uppercase tracking-widest text-gray-900 mb-3">{label}</div>
         <div className="font-headline text-5xl font-black italic tracking-tighter text-gray-900 mb-3">{value}</div>
         <div className="flex items-center justify-between">
-          <span className="text-[12px] text-gray-500">{sub}</span>
+          <span className="text-[12px] text-gray-900">{sub}</span>
           {trend && (
-            <span className={`font-headline text-[11px] uppercase tracking-widest ${good ? "text-lime-600" : "text-gray-400"}`}>
+            <span className={`font-headline text-[11px] uppercase tracking-widest ${good ? "text-lime-600" : "text-gray-700"}`}>
               {trend}
             </span>
           )}
@@ -64,24 +64,9 @@ function StatCard({
   );
 }
 
-function QuickAction({
-  icon: Icon, label, hint, href,
-}: { icon: React.ComponentType<{ className?: string }>; label: string; hint: string; href: string }) {
-  return (
-    <Link href={href} className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none group will-change-transform transition-all duration-300 ease-out">
-      <div className="w-10 h-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-500 group-hover:bg-gray-900 group-hover:text-white transition-colors">
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="font-headline text-[14px] font-bold text-gray-900">{label}</div>
-        <div className="text-[11px] text-gray-400">{hint}</div>
-      </div>
-      <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-gray-600 transition-colors" />
-    </Link>
-  );
-}
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [events,  setEvents]  = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -93,9 +78,9 @@ export default function DashboardPage() {
   }, []);
 
   const stats = useMemo(() => ({
-    live:  events.filter(e => e.status === "APPROVED").length,
-    total: events.length,
-    draft: events.filter(e => e.status === "DRAFT").length,
+    live:          events.filter(e => e.status === "APPROVED").length,
+    total:         events.length,
+    registrations: events.reduce((sum, e) => sum + (e.registrationCount ?? 0), 0),
   }), [events]);
 
   const recent = events.filter(e => e.status !== "ARCHIVED").slice(0, 3);
@@ -116,9 +101,9 @@ export default function DashboardPage() {
               <h1 className="font-headline text-[44px] lg:text-[56px] font-black italic tracking-tighter leading-none text-gray-900">
                 Hi there.<br /><span className="text-lime-500">Here's your day.</span>
               </h1>
-              <p className="text-gray-500 mt-4 max-w-xl text-[15px]">
+              <p className="text-gray-900 mt-4 max-w-xl text-[15px]">
                 {loading
-                  ? "Loading your eventsâ€¦"
+                  ? "Loading your events…"
                   : stats.live > 0
                   ? `${stats.live} event${stats.live !== 1 ? "s" : ""} live and taking registrations.`
                   : events.length === 0
@@ -135,93 +120,92 @@ export default function DashboardPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-            <StatCard label="Events live now"  value={loading ? "—" : stats.live}  sub={`of ${stats.total} total`} good trend={stats.live > 0 ? "Taking sign-ups" : undefined} delay={0}   />
-            <StatCard label="Drafts"           value={loading ? "—" : stats.draft} sub="not yet published"                                                                         delay={80}  />
-            <StatCard label="Total events"     value={loading ? "—" : stats.total} sub="all time"                                                                                  delay={160} />
+            <StatCard label="Events live now"  value={loading ? "—" : stats.live}          sub={`of ${stats.total} total`} good trend={stats.live > 0 ? "Taking sign-ups" : undefined} delay={0}   />
+            <StatCard label="Registrations"    value={loading ? "—" : stats.registrations} sub="across all events"          good={stats.registrations > 0}                         delay={80}  />
+            <StatCard label="Total events"     value={loading ? "—" : stats.total}         sub="all time"                                                                           delay={160} />
           </div>
 
-          {/* Body grid */}
-          <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+          {/* Recent events */}
+          <section className="stagger-item" style={{ animationDelay: "200ms" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-headline text-xl font-black italic tracking-tighter text-gray-900">Your upcoming events</h2>
+              <Link href="/organiser/listings" className="font-headline text-[11px] uppercase tracking-widest text-gray-700 hover:text-gray-900 flex items-center gap-1 transition-colors">
+                See all <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
 
-            {/* Recent events */}
-            <section className="stagger-item" style={{ animationDelay: "200ms" }}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-headline text-xl font-black italic tracking-tighter text-gray-900">Your upcoming events</h2>
-                <Link href="/organiser/listings" className="font-headline text-[11px] uppercase tracking-widest text-gray-400 hover:text-gray-900 flex items-center gap-1 transition-colors">
-                  See all <ArrowRight className="w-3 h-3" />
-                </Link>
+            <Card className="overflow-hidden">
+              <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-gray-50 border-b border-gray-200 font-headline font-bold text-[12px] uppercase tracking-widest text-gray-900">
+                <div className="col-span-5">Event</div>
+                <div className="col-span-2 text-center">Date</div>
+                <div className="col-span-2 text-center">Status</div>
+                <div className="col-span-3">Registered / Cap</div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                {loading && (
-                  <div className="p-10 text-center">
-                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-                    <div className="font-headline text-sm text-gray-400 uppercase tracking-widest">Loadingâ€¦</div>
-                  </div>
-                )}
+              {loading && (
+                <div className="p-10 text-center">
+                  <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
+                  <div className="font-headline text-sm text-gray-700 uppercase tracking-widest">Loading…</div>
+                </div>
+              )}
 
-                {!loading && recent.length === 0 && (
-                  <div className="p-10 text-center">
-                    <div className="font-headline text-lg font-black italic text-gray-900 mb-1">Nothing here yet</div>
-                    <div className="text-gray-400 text-sm mb-5">Create your first listing to get started.</div>
-                    <Button asChild>
-                      <Link href="/organiser/new-listing">
-                        <CalendarDays className="w-4 h-4" /> Add new listing
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-
-                {!loading && recent.map((e, i) => {
-                  const s = STATUS_STYLE[e.status];
-                  return (
-                    <Link key={e.id} href="/organiser/listings"
-                      className={`grid grid-cols-12 gap-4 px-5 py-4 items-center hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400 transition-all ${i < recent.length - 1 ? "border-b border-gray-100" : ""}`}>
-                      <div className="col-span-6 flex items-center gap-4 min-w-0">
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
-                          {e.coverImageUrl
-                            ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
-                            : <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900 truncate">{e.title}</div>
-                          <div className="flex items-center gap-1 font-headline text-[11px] text-gray-400 uppercase tracking-widest mt-0.5">
-                            <MapPin className="w-3 h-3 text-lime-500" /> {e.city}, {e.state.toUpperCase()}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(e.eventDate, e.startTime)}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? "animate-pulse-dot" : ""}`} />
-                          {s.label}
-                        </Badge>
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        <ArrowRight className="w-4 h-4 text-gray-300" />
-                      </div>
+              {!loading && recent.length === 0 && (
+                <div className="p-10 text-center">
+                  <div className="font-headline text-lg font-black italic text-gray-900 mb-1">Nothing here yet</div>
+                  <div className="text-gray-700 text-sm mb-5">Create your first listing to get started.</div>
+                  <Button asChild>
+                    <Link href="/organiser/new-listing">
+                      <CalendarDays className="w-4 h-4" /> Add new listing
                     </Link>
-                  );
-                })}
-              </div>
-            </section>
+                  </Button>
+                </div>
+              )}
 
-            {/* Sidebar panels */}
-            <aside className="space-y-4">
-              <Card className="stagger-item" style={{ animationDelay: "260ms" }}>
-                <CardContent className="p-5">
-                  <h3 className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">Quick actions</h3>
-                  <div className="space-y-2">
-                    <QuickAction icon={CalendarDays} label="View all events" hint="Manage your listings" href="/organiser/listings" />
-                    <QuickAction icon={User}         label="Edit my profile" hint="Bio, logo, socials"   href="/organiser/profile"  />
+              {!loading && recent.map((e, i) => {
+                const s     = STATUS_STYLE[e.status];
+                const price = (e.waves as { price: string }[])?.[0]?.price;
+                return (
+                  <div key={e.id}
+                    onClick={() => router.push(`/organiser/new-listing?id=${e.id}`)}
+                    className={`grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400 transition-all ${i < recent.length - 1 ? "border-b border-gray-100" : ""}`}>
+
+                    <div className="col-span-5 flex items-center gap-4 min-w-0">
+                      <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                        {e.coverImageUrl
+                          ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
+                          : <div className="font-mono text-[9px] text-gray-700 uppercase">{e.discipline.slice(0, 4)}</div>}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900">{e.title}</div>
+                        <div className="flex items-center gap-1 font-headline text-[11px] text-gray-700 uppercase tracking-widest mt-0.5">
+                          <MapPin className="w-3 h-3 text-lime-500" /> {e.city}, {e.state.toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2 text-center">
+                      <div className="font-headline text-sm font-bold text-gray-900">{formatEventDate(e.eventDate, e.startTime)}</div>
+                    </div>
+
+                    <div className="col-span-2 flex justify-center">
+                      <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? "animate-pulse-dot" : ""}`} />
+                        {s.label}
+                      </Badge>
+                    </div>
+
+                    <div className="col-span-3">
+                      <div className="font-headline text-sm font-bold text-gray-900">
+                        {(e.registrationCount ?? 0).toLocaleString()}
+                        {e.cap ? <span className="text-gray-400 font-normal"> / {e.cap.toLocaleString()}</span> : <span className="text-gray-400 font-normal"> / —</span>}
+                      </div>
+                      {price && <div className="font-headline text-[10px] uppercase tracking-widest text-gray-700 mt-0.5">from A${price}</div>}
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            </aside>
-
-          </div>
+                );
+              })}
+            </Card>
+          </section>
         </div>
       </main>
     </div>

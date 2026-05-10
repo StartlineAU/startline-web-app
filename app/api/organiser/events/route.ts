@@ -16,7 +16,7 @@ export async function GET() {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, startTime: true, status: true, createdAt: true,
         waves: true, registrationUrl: true, cap: true, isPinned: true,
-        coverImageUrl: true,
+        coverImageUrl: true, registrationCount: true,
       },
     });
     return NextResponse.json(events);

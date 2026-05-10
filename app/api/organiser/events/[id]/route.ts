@@ -93,3 +93,29 @@ export async function PATCH(
     return NextResponse.json({ error: "Failed to update event." }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getOrganiserSession();
+  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  const { id } = await params;
+
+  try {
+    const existing = await prisma.event.findUnique({
+      where:  { id },
+      select: { organiserId: true },
+    });
+
+    if (!existing) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    if (existing.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+    await prisma.event.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Event delete error:", err);
+    return NextResponse.json({ error: "Failed to delete event." }, { status: 500 });
+  }
+}

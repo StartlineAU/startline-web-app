@@ -13,7 +13,7 @@ export default function PhotoCarousel({ photos, isOrganiser }: Props) {
   const [lightbox, setLightbox] = useState<string | null>(null);
 
   const scroll = (dir: "left" | "right") => {
-    scrollRef.current?.scrollBy({ left: dir === "left" ? -260 : 260, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: dir === "left" ? -340 : 340, behavior: "smooth" });
   };
 
   if (!photos.length && !isOrganiser) return null;
@@ -61,7 +61,7 @@ export default function PhotoCarousel({ photos, isOrganiser }: Props) {
               <button
                 key={i}
                 onClick={() => setLightbox(src)}
-                className="flex-none w-[200px] h-[140px] rounded-lg overflow-hidden border border-dark-lighter hover:border-primary/50 transition-all group/photo card-hover"
+                className="flex-none w-[320px] h-[220px] rounded-lg overflow-hidden border border-dark-lighter hover:border-primary/50 transition-all group/photo card-hover"
               >
                 <img
                   src={src}
@@ -73,7 +73,7 @@ export default function PhotoCarousel({ photos, isOrganiser }: Props) {
 
             {/* Upload more — organiser only */}
             {isOrganiser && (
-              <button className="flex-none w-[200px] h-[140px] rounded-lg border border-dashed border-dark-lighter hover:border-primary/50 flex flex-col items-center justify-center gap-2 transition-colors group">
+              <button className="flex-none w-[320px] h-[220px] rounded-lg border border-dashed border-dark-lighter hover:border-primary/50 flex flex-col items-center justify-center gap-2 transition-colors group">
                 <div className="w-9 h-9 rounded-full bg-dark-lighter group-hover:bg-primary/10 flex items-center justify-center transition-colors">
                   <ImageIcon className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
                 </div>

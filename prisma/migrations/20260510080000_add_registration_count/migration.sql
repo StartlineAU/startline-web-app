@@ -1,0 +1,1 @@
+ALTER TABLE "Event" ADD COLUMN "registrationCount" INTEGER NOT NULL DEFAULT 0;

@@ -79,11 +79,12 @@ model Event {
   minAge     Int    @default(16)
 
   // Step 4 — tickets
-  waves        Json
-  inclusions   String?
-  extras       String?
-  activations  String?
-  refundPolicy String?
+  waves             Json
+  inclusions        String?
+  extras            String?
+  activations       String?
+  refundPolicy      String?
+  registrationCount Int     @default(0)
 
   // Step 5 — media & logistics
   coverImageUrl     String?
