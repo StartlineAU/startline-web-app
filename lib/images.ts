@@ -5,7 +5,7 @@
  * resolution it actually needs (thumbnails vs. full-bleed hero).
  */
 const IMAGE_POOLS: Record<string, string[]> = {
-  functional_fitness: [
+  hyrox: [
     "https://images.unsplash.com/photo-1571008887538-b36bb32f4571",
     "https://images.unsplash.com/photo-1549060279-7e168fcee0c2",
     "https://images.unsplash.com/photo-1517963879433-6ad2b056d712",

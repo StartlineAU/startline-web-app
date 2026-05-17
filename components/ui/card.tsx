@@ -1,11 +1,20 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Card primitives — canonical shadcn/ui structure (`Card`, `CardHeader`,
+ * `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`), restyled to
+ * match the project's dark theme: dark surface, large rounded corners
+ * (`rounded-3xl` matches the existing event/category cards), no shadow.
+ */
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("bg-white border border-gray-200 rounded-xl", className)}
+      className={cn(
+        "rounded-3xl bg-dark text-card-foreground overflow-hidden",
+        className
+      )}
       {...props}
     />
   )
@@ -14,25 +23,28 @@ Card.displayName = "Card";
 
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("p-6 pb-4", className)} {...props} />
+    <div ref={ref} className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
   )
 );
 CardHeader.displayName = "CardHeader";
 
-const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
+const CardTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <h3
+    <div
       ref={ref}
-      className={cn("font-headline font-black italic tracking-tighter text-gray-900", className)}
+      className={cn(
+        "font-headline text-base font-black italic tracking-tighter text-light leading-tight",
+        className
+      )}
       {...props}
     />
   )
 );
 CardTitle.displayName = "CardTitle";
 
-const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
+const CardDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn("text-sm text-gray-500", className)} {...props} />
+    <div ref={ref} className={cn("text-sm text-muted", className)} {...props} />
   )
 );
 CardDescription.displayName = "CardDescription";
@@ -46,7 +58,7 @@ CardContent.displayName = "CardContent";
 
 const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("p-6 pt-0 flex items-center", className)} {...props} />
+    <div ref={ref} className={cn("flex items-center p-6 pt-0", className)} {...props} />
   )
 );
 CardFooter.displayName = "CardFooter";
