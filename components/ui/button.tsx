@@ -1,32 +1,43 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+
 import { cn } from "@/lib/utils";
 
+/**
+ * Button — canonical shadcn/ui primitive, extended with project-specific
+ * variants:
+ *   - `machined`: the neon-green CTA with the offset hard shadow used across
+ *     the site (e.g. "Find Events Now", "Browse Events").
+ *   - `outline`: matches the existing "List Your Event" outlined CTA.
+ *   - `ctaLg`: pill-radius + extra padding, sized to match the existing CTAs.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 font-headline font-bold uppercase tracking-widest will-change-transform transition-all duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 focus-visible:ring-offset-2",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-headline text-sm font-bold uppercase tracking-widest ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "bg-gray-900 text-white hover:bg-gray-800 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
-        primary:
-          "bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-[rgb(31,31,31)] hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
-        outline:
-          "border border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:text-gray-900 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
-        ghost:
-          "text-gray-500 hover:text-gray-900 hover:bg-gray-100 hover:scale-[1.01] active:scale-100",
+          "bg-primary text-dark hover:bg-primary-light rounded-md",
+        machined:
+          "bg-machined text-dark machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 rounded-xl",
         destructive:
-          "bg-red-500 text-white hover:bg-red-600 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
-        lime:
-          "border border-lime-400 bg-lime-50 text-lime-700 hover:bg-lime-100 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
-        link: "text-lime-600 underline-offset-4 hover:underline",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md",
+        outline:
+          "border border-dark-lighter text-muted hover:border-primary/50 hover:text-light rounded-xl",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md",
+        ghost:
+          "text-muted hover:text-light rounded-md",
+        link:
+          "text-primary underline-offset-4 hover:underline normal-case tracking-normal",
       },
       size: {
-        sm: "text-[11px] px-3 py-2 rounded-lg",
-        default: "text-[13px] px-5 py-3 rounded-xl",
-        lg: "text-sm px-6 py-4 rounded-xl",
-        icon: "w-9 h-9 rounded-lg text-[11px]",
+        default: "h-10 px-4 py-2",
+        sm: "h-9 px-3 text-xs",
+        lg: "h-11 px-6",
+        icon: "h-10 w-10",
+        ctaLg: "px-8 py-4 h-auto",
       },
     },
     defaultVariants: {
@@ -39,6 +50,7 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
+  /** Render as the child element instead of a <button> (Radix Slot pattern). */
   asChild?: boolean;
 }
 

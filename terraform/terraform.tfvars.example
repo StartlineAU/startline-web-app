@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (gitignored) and fill in values.
+#
+# aws_region   = "ap-southeast-2"
+# project_name = "startline"
+#
+# Per-environment values (branch names, DB names, deletion protection, VPC
+# CIDRs) are set in main.tf's local.environments map — no override needed here.
+#
+# Optional: connect Git for automatic builds (HTTPS URL + provider token).
+# amplify_repository_url          = "https://github.com/StartlineAU/startline"
+# amplify_repository_access_token = "ghp_..." # GitHub fine-grained or classic PAT with repo scope
+#
+# RDS: tighten ingress to known IPs where possible (Amplify has no fixed egress CIDRs).
+# database_allowed_cidr_blocks = ["203.0.113.10/32"]
+#
+# Optional: app-level env vars, applied to BOTH branches. DATABASE_URL is set
+# per-branch by the env module — do NOT put it here. Resend key is its own var.
+# amplify_environment_variables = {}
+# resend_api_key = "re_..."

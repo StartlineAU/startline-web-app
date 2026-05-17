@@ -7,6 +7,7 @@
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 :root {
+  /* ── Existing project tokens (rgb triples) ─────────────────────────────── */
   /* Dark mode primary - matching logo green (#B3E153) */
   --color-primary: 179 225 83;
   --color-primary-light: 194 236 119;
@@ -23,6 +24,31 @@
   --color-muted-light: 160 165 174;
   --color-muted-dark: 110 115 123;
   color-scheme: dark;
+
+  /* ── shadcn/ui tokens (HSL, mapped to the same palette) ────────────────── */
+  /* These let shadcn primitives inherit the existing dark theme + neon green
+   * primary without changing the look. Keep both layers in sync if you ever
+   * tweak the palette. */
+  --background: 0 0% 8%;            /* darker  → page background          */
+  --foreground: 214 33% 97%;        /* light   → main text                */
+  --card: 0 0% 12%;                 /* dark    → card surface             */
+  --card-foreground: 214 33% 97%;
+  --popover: 0 0% 12%;
+  --popover-foreground: 214 33% 97%;
+  --primary: 78 71% 60%;            /* neon green                          */
+  --primary-foreground: 0 0% 12%;   /* on-primary text = dark              */
+  --secondary: 0 0% 16%;            /* dark-light                          */
+  --secondary-foreground: 214 33% 97%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 219 6% 57%;   /* muted grey                          */
+  --accent: 0 0% 16%;
+  --accent-foreground: 214 33% 97%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 21%;               /* dark-lighter                        */
+  --input: 0 0% 21%;
+  --ring: 78 71% 60%;               /* primary green                       */
+  --radius: 0.5rem;
 }
 
 * {

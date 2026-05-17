@@ -89,6 +89,10 @@ Edit `data/events.json` to add competitions:
 }
 ```
 
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the branch model, CI/CD workflows, and how changes flow from feature branch to production.
+
 ## License
 
 MIT
