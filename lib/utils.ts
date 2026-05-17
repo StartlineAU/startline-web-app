@@ -1,7 +1,11 @@
-import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
-import { clsx, type ClassValue } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
 import { FitnessEvent, FilterState, AustralianState } from "@/types";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 // ── Date formatting ────────────────────────────────────────────────────────
 
@@ -118,7 +122,7 @@ export function getEventsByState(events: FitnessEvent[]): Record<AustralianState
 
 export function getEventsByType(events: FitnessEvent[]): Record<string, number> {
   const today = startOfDay(new Date());
-  const counts: Record<string, number> = { hyrox: 0, crossfit: 0, running: 0, hybrid: 0 };
+  const counts: Record<string, number> = { functional_fitness: 0, crossfit: 0, running: 0, hybrid: 0 };
   for (const event of events) {
     if (isOnOrAfterToday(event.date, today)) counts[event.type]++;
   }
@@ -132,14 +136,6 @@ export function getTotalUpcomingEvents(events: FitnessEvent[]): number {
 
 // ── Misc ───────────────────────────────────────────────────────────────────
 
-/**
- * Merge Tailwind class names. Combines `clsx` (conditional class composition)
- * with `tailwind-merge` (deduping conflicting Tailwind utilities). This is the
- * canonical shadcn/ui `cn` helper — required by every shadcn primitive.
- */
-export function cn(...inputs: ClassValue[]): string {
-  return twMerge(clsx(inputs));
-}
 
 /** Truncates an event title to `maxLength` chars so card layouts stay consistent. */
 export function truncateTitle(title: string, maxLength = 28): string {
