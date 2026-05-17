@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const { submit } = body;
 
   if (submit) {
-    const required = ["title", "discipline", "eventDate", "startTime", "endTime", "venue", "city", "state", "format", "level", "registrationUrl"];
+    const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level", "registrationUrl"];
     for (const field of required) {
       if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
     }
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
-        endTime:          body.endTime           ?? "",
+        endTime:          body.endTime           || null,
         venue:            body.venue             ?? "",
         address:          body.address           ?? null,
         city:             body.city              ?? "",

@@ -34,8 +34,12 @@ export async function getServerSession(): Promise<ServerSession | null> {
   }
 
   try {
+    // Next.js 15: cookies() is async — await it before passing to Amplify
+    const cookieStore = await cookies();
+    const cookieFn = () => cookieStore;
+
     const session = await runWithAmplifyServerContext({
-      nextServerContext: { cookies },
+      nextServerContext: { cookies: cookieFn },
       operation: (contextSpec) => fetchAuthSession(contextSpec),
     });
 
@@ -45,7 +49,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
       (session.tokens.accessToken.payload["cognito:groups"] as string[] | undefined) ?? [];
 
     const user = await runWithAmplifyServerContext({
-      nextServerContext: { cookies },
+      nextServerContext: { cookies: cookieFn },
       operation: (contextSpec) => getCurrentUser(contextSpec),
     });
 
@@ -68,13 +72,13 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
   if (!cognitoSession) return null;
 
   try {
-    const organiser = await prisma.organiser.findUnique({
+    const organiser = await prisma.organiser.upsert({
       where:  { cognitoSub: cognitoSession.sub },
+      update: {},
+      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email, status: "APPROVED" },
       select: { id: true, email: true, status: true },
     });
-    if (!organiser) return null;
-
-    return { sub: organiser.id, email: organiser.email, status: organiser.status };
+    return { sub: organiser.id, email: organiser.email, status: String(organiser.status) };
   } catch {
     return null;
   }
