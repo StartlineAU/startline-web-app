@@ -49,7 +49,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Only draft events can be updated this way." }, { status: 409 });
 
     if (submit) {
-      const required = ["title", "discipline", "eventDate", "startTime", "endTime", "venue", "city", "state", "format", "level", "registrationUrl"];
+      const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level", "registrationUrl"];
       for (const field of required) {
         if (!data[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
       }
@@ -65,7 +65,7 @@ export async function PATCH(
         eventDate:         data.eventDate         ?? undefined,
         endDate:           data.endDate           ?? null,
         startTime:         data.startTime         ?? undefined,
-        endTime:           data.endTime           ?? undefined,
+        endTime:           data.endTime           || null,
         venue:             data.venue             ?? undefined,
         address:           data.address           ?? undefined,
         city:              data.city              ?? undefined,

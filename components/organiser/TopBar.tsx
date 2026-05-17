@@ -4,12 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, CalendarDays, User, LogOut, Plus, Settings } from "lucide-react";
+import { LayoutDashboard, CalendarDays, User, LogOut, Plus, Settings, BookOpen } from "lucide-react";
 
 const NAV = [
-  { href: "/organiser/dashboard", label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/organiser/listings",  label: "Listings",   icon: CalendarDays    },
-  { href: "/organiser/profile",   label: "My Profile", icon: User            },
+  { href: "/organiser/dashboard",    label: "Dashboard",   icon: LayoutDashboard },
+  { href: "/organiser/listings",     label: "Listings",    icon: CalendarDays    },
+  { href: "/organiser/profile",      label: "Profile",     icon: User            },
+  { href: "/organiser/how-it-works", label: "How it Works",icon: BookOpen        },
 ];
 
 const MENU = [
@@ -65,7 +66,7 @@ export default function OrganiserTopBar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 h-16 flex items-center pointer-events-none">
-      <div className="max-w-[1440px] w-full mx-auto px-4 sm:px-6">
+      <div className="max-w-[1200px] w-full mx-auto px-6">
 
         {/* Single pill */}
         <div className="pointer-events-auto bg-[#0f0f0f] rounded-xl shadow-lg h-12 flex items-center px-2 relative">
@@ -81,7 +82,7 @@ export default function OrganiserTopBar() {
               const isActive = pathname === href || (pathname?.startsWith(href + "/") ?? false);
               return (
                 <Link key={href} href={href}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none will-change-transform transition-all duration-300 ease-out
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest whitespace-nowrap hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none will-change-transform transition-all duration-300 ease-out
                     ${isActive
                       ? "bg-white/15 text-white"
                       : "text-white/50 hover:text-white hover:bg-white/10"

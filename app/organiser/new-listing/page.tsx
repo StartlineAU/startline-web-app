@@ -28,7 +28,7 @@ const STEP_ERRORS: Record<number, string> = {
   4: "A registration URL is required.",
 };
 
-type Discipline = "functional_fitness" | "crossfit" | "running" | "hybrid" | "";
+type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "";
 type Format     = "individual" | "team" | "both" | "";
 type Level      = "beginner" | "open" | "elite" | "";
 type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
@@ -477,11 +477,18 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
    STEP 1 — BASICS
    ══════════════════════════════════════════════════════════════ */
 const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
-  { v: "functional_fitness", l: "Functional Fitness", d: "Station-based functional workouts" },
-  { v: "crossfit", l: "CrossFit", d: "Functional fitness comp"    },
-  { v: "running",  l: "Running",  d: "5K · 10K · Half · Marathon" },
-  { v: "hybrid",   l: "Hybrid",   d: "Multi-discipline / OCR"     },
+  { v: "crossfit",  l: "CrossFit", d: "Functional fitness comp"    },
+  { v: "running",   l: "Running",  d: "5K · 10K · Half · Marathon" },
+  { v: "hybrid",    l: "Hybrid",   d: "Multi-discipline / OCR"     },
+  { v: "cycling",   l: "Cycling",  d: "Road · Criterium · Gravel"  },
+  { v: "swimming",  l: "Swimming", d: "Pool · Open water events"   },
 ];
+
+const DISCIPLINE_CATS: Partial<Record<Discipline, string[]>> = {
+  running:  ["5K", "10K", "Half Marathon", "Marathon", "Ultra"],
+  cycling:  ["Road Race", "Criterium", "Time Trial", "Gran Fondo", "Mountain Bike", "Gravel"],
+  swimming: ["50m", "100m", "200m", "400m", "800m", "1500m", "Open Water"],
+};
 
 function BasicsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
   return (
@@ -577,40 +584,6 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         </Field>
       </div>
 
-      {/* Venue map preview */}
-      {(() => {
-        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-        const query = [form.address, form.city, form.state ? form.state.toUpperCase() : ""].filter(Boolean).join(", ");
-        const hasQuery = !!(form.address.trim() || form.city.trim());
-        if (apiKey && hasQuery) {
-          return (
-            <Field label="Venue preview">
-              <div className="relative rounded-md border border-gray-200 overflow-hidden h-52">
-                <iframe
-                  title="Venue map"
-                  className="w-full h-full"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  allowFullScreen
-                  referrerPolicy="no-referrer-when-downgrade"
-                  src={`https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${encodeURIComponent(query)}&zoom=15`}
-                />
-              </div>
-            </Field>
-          );
-        }
-        return (
-          <Field label="Venue preview" hint={apiKey ? "Enter address or city above to see map" : "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local to enable maps"}>
-            <div className="relative rounded-md border border-gray-200 overflow-hidden bg-gray-100 h-48 flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="w-5 h-5 text-lime-500 mx-auto mb-2" />
-                <div className="font-mono text-[11px] uppercase tracking-widest text-gray-500">{form.venue || "Venue preview"}</div>
-                <div className="font-mono text-[10px] uppercase tracking-widest text-gray-400 mt-1">{form.city || "—"}, {form.state ? form.state.toUpperCase() : "—"}</div>
-              </div>
-            </div>
-          </Field>
-        );
-      })()}
     </div>
   );
 }
@@ -630,7 +603,7 @@ const LEVELS: { v: Level; l: string }[] = [
 ];
 const ALL_CATS = [
   "Individual","Doubles Mixed","Doubles Women","Doubles Men",
-  "Relay 4-Person","Pro","Rx","Scaled","5K","10K","Half Marathon","Marathon","Ultra",
+  "Relay 4-Person","Pro","Rx","Scaled",
 ];
 const AGE_PRESETS  = ["18"];
 const CAP_PRESETS  = ["250", "500", "1000", "2000", "3000", "5000"];
@@ -684,11 +657,11 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
       </Field>
 
       <Field label="Discipline" required>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {DISCIPLINES.map((d) => {
             const on = form.discipline === d.v;
             return (
-              <button key={d.v} type="button" onClick={() => update({ discipline: d.v })}
+              <button key={d.v} type="button" onClick={() => update({ discipline: d.v, categories: [] })}
                 className={`text-left p-4 rounded-md border transition-all ${on ? "border-lime-500 bg-lime-50" : "border-gray-200 hover:border-gray-300"}`}>
                 <div className={`font-headline text-[15px] font-black italic tracking-tighter ${on ? "text-lime-700" : "text-gray-900"}`}>{d.l}</div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-500 mt-1">{d.d}</div>
@@ -698,6 +671,56 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
         </div>
       </Field>
 
+      {DISCIPLINE_CATS[form.discipline as Discipline] && (
+        <Field label="Divisions & categories" hint={`${form.categories.length} selected`}>
+          <div className="flex flex-wrap gap-2">
+            {(DISCIPLINE_CATS[form.discipline as Discipline] ?? []).map((c) => (
+              <button key={c} type="button" onClick={() => toggle(c)}
+                className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border transition-colors ${form.categories.includes(c) ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
+                {form.categories.includes(c) && <Check className="w-3 h-3 inline mr-1" />}
+                {c}
+              </button>
+            ))}
+            {/* Custom categories added by organiser */}
+            {form.categories.filter(c => !(DISCIPLINE_CATS[form.discipline as Discipline] ?? []).includes(c)).map(c => (
+              <button key={c} type="button" onClick={() => toggle(c)}
+                className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-lime-500 bg-lime-50 text-lime-700">
+                <Check className="w-3 h-3 inline mr-1" />{c}
+              </button>
+            ))}
+            {showCustomCat ? (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={customCatInput}
+                  onChange={e => setCustomCatInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { e.preventDefault(); commitCustomCat(); }
+                    if (e.key === "Escape") { setShowCustomCat(false); setCustomCatInput(""); }
+                  }}
+                  placeholder="e.g. Masters 45+"
+                  className={`${inputCls} !py-2 w-36 text-[12px]`}
+                />
+                <button type="button" onClick={commitCustomCat}
+                  className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors">
+                  Add
+                </button>
+                <button type="button" onClick={() => { setShowCustomCat(false); setCustomCatInput(""); }}
+                  className="text-gray-400 hover:text-gray-700 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setShowCustomCat(true)}
+                className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-gray-200 text-gray-500 hover:border-lime-500 hover:bg-lime-50 hover:text-lime-700 transition-colors">
+                <Plus className="w-3 h-3 inline mr-1" /> Custom…
+              </button>
+            )}
+          </div>
+        </Field>
+      )}
+
       <Field label="Experience level" required>
         <div className="flex flex-wrap gap-2">
           {LEVELS.map((l) => (
@@ -706,54 +729,6 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
               {l.l}
             </button>
           ))}
-        </div>
-      </Field>
-
-      <Field label="Divisions & categories" hint={`${form.categories.length} selected`}>
-        <div className="flex flex-wrap gap-2">
-          {ALL_CATS.map((c) => (
-            <button key={c} type="button" onClick={() => toggle(c)}
-              className={`font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border transition-colors ${form.categories.includes(c) ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
-              {form.categories.includes(c) && <Check className="w-3 h-3 inline mr-1" />}
-              {c}
-            </button>
-          ))}
-          {/* Custom categories added by organiser */}
-          {form.categories.filter(c => !ALL_CATS.includes(c)).map(c => (
-            <button key={c} type="button" onClick={() => toggle(c)}
-              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-lime-500 bg-lime-50 text-lime-700">
-              <Check className="w-3 h-3 inline mr-1" />{c}
-            </button>
-          ))}
-          {showCustomCat ? (
-            <div className="flex items-center gap-2">
-              <input
-                autoFocus
-                type="text"
-                value={customCatInput}
-                onChange={e => setCustomCatInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter") { e.preventDefault(); commitCustomCat(); }
-                  if (e.key === "Escape") { setShowCustomCat(false); setCustomCatInput(""); }
-                }}
-                placeholder="e.g. Masters 45+"
-                className={`${inputCls} !py-2 w-36 text-[12px]`}
-              />
-              <button type="button" onClick={commitCustomCat}
-                className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors">
-                Add
-              </button>
-              <button type="button" onClick={() => { setShowCustomCat(false); setCustomCatInput(""); }}
-                className="text-gray-400 hover:text-gray-700 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setShowCustomCat(true)}
-              className="font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border border-gray-200 text-gray-500 hover:border-lime-500 hover:bg-lime-50 hover:text-lime-700 transition-colors">
-              <Plus className="w-3 h-3 inline mr-1" /> Custom…
-            </button>
-          )}
         </div>
       </Field>
 
@@ -951,12 +926,28 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
               {/* Row 2: price + close date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Price (A$)</div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-headline text-[13px] text-gray-500">A$</span>
-                    <input value={w.price} onChange={(e) => updateWave(i, { price: e.target.value })}
-                      placeholder="129" className={`${inputCls} pl-9`} />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Price (A$)</div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <span className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Free</span>
+                      <div
+                        onClick={() => updateWave(i, { price: w.price === "0" ? "" : "0" })}
+                        className={`relative w-8 h-4 rounded-full transition-colors duration-200 cursor-pointer ${w.price === "0" ? "bg-lime-500" : "bg-gray-200"}`}>
+                        <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${w.price === "0" ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </div>
+                    </label>
                   </div>
+                  {w.price === "0" ? (
+                    <div className="w-full bg-lime-50 border border-lime-200 rounded-md px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-lime-600">
+                      Free
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-headline text-[13px] text-gray-500">A$</span>
+                      <input value={w.price} onChange={(e) => updateWave(i, { price: e.target.value })}
+                        placeholder="129" className={`${inputCls} pl-9`} />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Category closes</div>
@@ -1209,13 +1200,13 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
           ? `${new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })} — ${new Date(form.endDate + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })}`
           : new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })
         : "—", step: 1 },
-    { k: "Start / End",   v: form.startTime ? `${fmt24to12(form.startTime)} → ${fmt24to12(form.endTime)}` : "—", step: 1 },
+    { k: "Start / End",   v: form.startTime ? `${fmt24to12(form.startTime)}${form.endTime ? ` → ${fmt24to12(form.endTime)}` : ""}` : "—", step: 1 },
     { k: "Venue",         v: `${form.venue || "—"}, ${form.city || "—"}, ${form.state ? form.state.toUpperCase() : "—"}`, step: 1 },
     { k: "Format",        v: form.format || "—",                                                              step: 2 },
     { k: "Level",         v: form.level  || "—",                                                              step: 2 },
     { k: "Categories",    v: form.categories.join(", ") || "—",                                              step: 2 },
     { k: "Cap / Min age", v: `${form.cap ? parseInt(form.cap).toLocaleString() : "∞"} · ${form.minAge === "0" ? "Open to all" : form.minAge ? `${form.minAge}+` : "—"}`,   step: 2 },
-    { k: "Ticket categories", v: `${form.waves.length} categor${form.waves.length !== 1 ? "ies" : "y"}, from A$${form.waves[0]?.price || "—"}`, step: 3 },
+    { k: "Ticket categories", v: `${form.waves.length} categor${form.waves.length !== 1 ? "ies" : "y"}, from ${form.waves[0]?.price === "0" ? "Free" : form.waves[0]?.price ? `A$${form.waves[0].price}` : "—"}`, step: 3 },
     { k: "Cover image",   v: form.coverImage ? "Uploaded" : "Using placeholder",                             step: 4 },
     { k: "Reg. URL",      v: form.registrationUrl || "—",                                                    step: 4 },
   ];
@@ -1269,7 +1260,7 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
    LIVE PREVIEW SIDEBAR
    ══════════════════════════════════════════════════════════════ */
 const DISC_LABEL: Record<string, string> = {
-  functional_fitness: "Functional Fitness", crossfit: "CrossFit", running: "Running", hybrid: "Hybrid",
+  crossfit: "CrossFit", running: "Running", hybrid: "Hybrid", cycling: "Cycling", swimming: "Swimming",
 };
 const MONTHS_SHORT = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
@@ -1280,7 +1271,7 @@ function LivePreview({ form }: { form: FormState }) {
   const sMon  = sp[1] ? MONTHS_SHORT[parseInt(sp[1]) - 1] : "—";
   const eDay  = ep[2];
   const eMon  = ep[1] ? MONTHS_SHORT[parseInt(ep[1]) - 1] : null;
-  const price = form.waves.find(w => w.price)?.price;
+  const price = form.waves.find(w => w.price === "0" || !!w.price)?.price;
 
   const dateLabel = form.date
     ? form.endDate && form.endDate !== form.date
@@ -1377,10 +1368,10 @@ function LivePreview({ form }: { form: FormState }) {
           </div>
 
           {/* Price */}
-          {price && (
+          {(price === "0" || !!price) && (
             <div className="mt-5 pt-4 border-t border-dark-lighter flex items-center justify-between">
               <span className="font-headline text-[10px] uppercase tracking-widest text-muted">Entry from</span>
-              <span className="font-headline text-xl font-black italic tracking-tighter text-primary">A${price}</span>
+              <span className="font-headline text-xl font-black italic tracking-tighter text-primary">{price === "0" ? "Free" : `A$${price}`}</span>
             </div>
           )}
         </div>
@@ -1573,16 +1564,16 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
             )}
 
             {/* 04 Registration & Tickets */}
-            {form.waves.some(w => w.price) && (
+            {form.waves.some(w => w.price === "0" || !!w.price) && (
               <PreviewSection number="04" title="Registration & Tickets">
                 <div className={`grid gap-4 ${form.waves.length === 1 ? "grid-cols-1" : form.waves.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
-                  {form.waves.filter(w => w.price).map((w, i) => (
+                  {form.waves.filter(w => w.price === "0" || !!w.price).map((w, i) => (
                     <div key={i} className={`bg-dark rounded-xl p-5 ${i === 0 ? "border-l-4 border-primary" : ""}`}>
                       <div className="flex items-center gap-2 mb-2">
                         <Ticket className="w-4 h-4 text-primary" />
                         <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted">{w.label || "General admission"}</span>
                       </div>
-                      <div className="font-headline text-3xl font-black text-primary leading-none mb-1">A${w.price}</div>
+                      <div className="font-headline text-3xl font-black text-primary leading-none mb-1">{w.price === "0" ? "Free" : `A$${w.price}`}</div>
                       {w.closes && <div className="font-headline text-[11px] font-medium uppercase tracking-widest text-muted-dark">Closes {w.closes}</div>}
                     </div>
                   ))}
@@ -1714,7 +1705,7 @@ export default function NewListingPage() {
     if (s === 0) return !(form.title.trim().length > 2 && form.tagline.trim().length > 2);
     if (s === 1) return !(form.date && form.venue.trim() && form.address.trim() && form.city.trim() && form.state);
     if (s === 2) return !(form.format && form.level && form.minAge !== "" && form.discipline);
-    if (s === 3) return !(form.waves.length > 0 && !!form.waves[0]?.price);
+    if (s === 3) return !(form.waves.length > 0 && (form.waves[0]?.price === "0" || !!form.waves[0]?.price));
     if (s === 4) return !form.registrationUrl.trim();
     return false;
   };

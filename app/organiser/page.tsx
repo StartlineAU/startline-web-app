@@ -37,8 +37,15 @@ function SignInForm() {
         return;
       }
 
-      // Upsert organiser record, then check if onboarding is needed
-      await fetch("/api/organiser/auth/session", { method: "POST" }).catch(() => {});
+      // Upsert organiser record — retry once if the first attempt fails (cookie timing)
+      let sessionOk = false;
+      for (let attempt = 0; attempt < 2 && !sessionOk; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 400));
+        try {
+          const r = await fetch("/api/organiser/auth/session", { method: "POST" });
+          if (r.ok) sessionOk = true;
+        } catch { /* network error, continue */ }
+      }
 
       const profileRes = await fetch("/api/organiser/profile").catch(() => null);
       const profile    = profileRes?.ok ? await profileRes.json().catch(() => null) : null;
