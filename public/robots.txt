@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Allow: /events
+Allow: /events/
+Allow: /about
+Allow: /contact
+
+# Block the organiser portal and admin — not for indexing
+Disallow: /organiser
+Disallow: /organiser/
+Disallow: /admin
+Disallow: /admin/
+
+# Block API routes
+Disallow: /api/
+
+# Block Next.js internals
+Disallow: /_next/
+
+Sitemap: https://www.startlineau.com/sitemap.xml

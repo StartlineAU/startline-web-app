@@ -117,6 +117,35 @@ input[type="radio"] {
   accent-color: rgb(var(--color-primary));
 }
 
+/*
+  iOS Safari auto-zooms when a focused input has font-size < 16px.
+  Force all text inputs to at least 16px on mobile to prevent this.
+  The visual font size is controlled per-component; this only affects
+  the rendered size seen by iOS's zoom heuristic.
+*/
+@media (max-width: 1023px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+/* Minimum 44px touch targets for all interactive elements on mobile */
+@media (max-width: 1023px) {
+  button:not(.chip-sm),
+  [role="button"],
+  a.btn {
+    min-height: 44px;
+  }
+}
+
 /* Animation utilities */
 @layer utilities {
   /* Theme token utility overrides */
@@ -249,3 +278,102 @@ input[type="radio"] {
 .animate-pulse-dot {
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
+
+/* ── Organiser portal utilities ───────────────────────────── */
+.placeholder-stripes {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255,255,255,.03) 0 8px,
+    rgba(255,255,255,.06) 8px 16px
+  );
+}
+
+.scan-grid {
+  background-image:
+    linear-gradient(rgba(179,225,83,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(179,225,83,.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.hero-topo {
+  background:
+    radial-gradient(ellipse 60% 80% at 75% 20%, rgba(179,225,83,.14), transparent 70%),
+    radial-gradient(ellipse 80% 60% at 15% 80%, rgba(179,225,83,.08), transparent 70%),
+    repeating-linear-gradient(-20deg,
+      rgba(179,225,83,.03) 0 2px,
+      transparent 2px 24px),
+    linear-gradient(180deg, rgb(var(--color-darker)) 0%, rgb(var(--color-dark)) 100%);
+}
+
+.step-line {
+  background-image: linear-gradient(90deg, rgb(var(--color-dark-lighter)) 50%, transparent 0);
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+  background-position: 0 50%;
+}
+
+.nav-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: rgb(var(--color-primary));
+}
+
+.chip {
+  border: 1px solid rgb(var(--color-dark-lighter));
+  color: rgb(var(--color-muted-light));
+}
+
+.chip-active {
+  border-color: rgb(var(--color-primary));
+  color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary) / 0.08);
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.anim-fade-slide {
+  animation: fadeSlide .35s ease-out both;
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-in { animation: pageIn .4s cubic-bezier(.2,.7,.2,1) both; }
+
+@keyframes stagger {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stagger-item { animation: stagger .45s cubic-bezier(.2,.7,.2,1) both; }
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(.96) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
+.modal-in { animation: modalIn .3s cubic-bezier(.2,.7,.2,1) both; }
+
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+.overlay-in { animation: overlayIn .25s ease-out both; }
+
+.card-hover { transition: transform 200ms ease, border-color 200ms ease, background-color 200ms ease; }
+.card-hover:hover { transform: translateY(-2px); }
+
+/* ── Wizard step transitions ────────────────────────────── */
+@keyframes stepForward {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+@keyframes stepBack {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+.step-forward { animation: stepForward .3s cubic-bezier(.2,.8,.2,1) both; }
+.step-back    { animation: stepBack    .3s cubic-bezier(.2,.8,.2,1) both; }
