@@ -1,17 +1,17 @@
 # Tasks
 
 ## Short-term
-- [ ] Admin account setup `created: 2026-05-17`
+- [ ] Admin account setup
   - [ ] Approve events that organisers submit
   - [ ] Database full of pending events that need to be reviewed by admin before moved into final events database
-- [ ] Dashboard `created: 2026-05-17`
-- [ ] Finish the testing setup on branch "feat/test-setup" `created: 2026-05-17`
+- [ ] Dashboard
+- [ ] Finish the testing setup on branch "feat/test-setup"
   - [ ] Might need to redo the tests to work on "mvp-clean"
-- [ ] Switch MVP work back to dark theme `created: 2026-05-17`
-- [ ] Integrate google maps address API into event submission `created: 2026-05-17`
+- [ ] Switch MVP work back to dark theme
+- [ ] Integrate google maps address API into event submission
 
 ## Medium-term
-- [ ] Setup registrations so that organisers can see who has regirsterd to their events `created: 2026-05-17`
+- [ ] Setup registrations so that organisers can see who has regirsterd to their events
   - [ ] Data and stats for the events they've published
 
 
@@ -22,5 +22,5 @@
 - [ ] Have images change to colour when hovered over
 
 ## Done
-- [x] Terraform Setup `created: 2026-05-15` `completed: 2026-05-16`
-- [x] Non Prod Setup `created: 2026-05-15` `completed: 2026-05-16`
+- [x] Terraform Setup
+- [x] Non Prod Setup
