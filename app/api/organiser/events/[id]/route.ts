@@ -49,9 +49,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Only draft events can be updated this way." }, { status: 409 });
 
     if (submit) {
-      const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level", "registrationUrl"];
+      const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level"];
       for (const field of required) {
         if (!data[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+      }
+      if (data.registrationType === "external" && !data.registrationUrl) {
+        return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
       }
     }
 
@@ -80,6 +83,8 @@ export async function PATCH(
         extras:            data.extras            ?? undefined,
         activations:       data.activations       ?? undefined,
         refundPolicy:      data.refundPolicy      ?? undefined,
+        registrationType:  data.registrationType  ?? undefined,
+        feeStructure:      data.feeStructure      ?? undefined,
         registrationUrl:   data.registrationUrl   ?? undefined,
         accessibilityInfo: data.accessibilityInfo ?? undefined,
         coverImageUrl:     data.coverImageUrl     ?? undefined,

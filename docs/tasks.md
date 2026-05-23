@@ -8,7 +8,7 @@
 - [ ] Finish the testing setup on branch "feat/test-setup" `created: 2026-05-17`
   - [ ] Might need to redo the tests to work on "mvp-clean"
 - [ ] Switch MVP work back to dark theme `created: 2026-05-17`
-- [ ] Integrate google maps address API into event submission `created: 2026-05-17`
+- [x] Integrate google maps address API into event submission `created: 2026-05-17` `completed: 2026-05-23`
 
 ## Medium-term
 - [ ] Setup registrations so that organisers can see who has regirsterd to their events `created: 2026-05-17`
