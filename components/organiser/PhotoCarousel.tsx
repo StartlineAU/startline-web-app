@@ -4,12 +4,15 @@ import { useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
 
 interface Props {
-  photos: string[];
+  photos:       string[];
   isOrganiser?: boolean;
+  onUpload?:    (file: File) => void;
+  uploading?:   boolean;
 }
 
-export default function PhotoCarousel({ photos, isOrganiser }: Props) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading }: Props) {
+  const scrollRef  = useRef<HTMLDivElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
 
   const scroll = (dir: "left" | "right") => {
@@ -41,15 +44,21 @@ export default function PhotoCarousel({ photos, isOrganiser }: Props) {
 
         {photos.length === 0 ? (
           /* Empty state — only shown to organiser */
-          <div className="border border-dashed border-dark-lighter rounded-xl p-8 flex flex-col items-center justify-center gap-3 text-center">
-            <ImageIcon className="w-8 h-8 text-muted-dark opacity-50" />
+          <div className="p-8 flex flex-col items-center justify-center gap-3 text-center">
+            <ImageIcon className="w-8 h-8 text-gray-300" />
             <div>
-              <div className="font-headline text-[13px] font-bold text-light">No photos yet</div>
-              <div className="text-[12px] text-muted mt-0.5">Add photos from your past events to showcase your work.</div>
+              <div className="font-headline text-[13px] font-bold text-gray-900">No photos yet</div>
+              <div className="text-[12px] text-gray-400 mt-0.5">Add photos from your past events to showcase your work.</div>
             </div>
-            <button className="font-headline text-[11px] font-bold uppercase tracking-widest text-dark bg-machined shadow-machined px-4 py-2 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform">
-              Upload photos
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="font-headline text-[11px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-4 py-2 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50"
+            >
+              {uploading ? "Uploading…" : "Upload photos"}
             </button>
+            <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only"
+              onChange={e => { const f = e.target.files?.[0]; if (f && onUpload) onUpload(f); }} />
           </div>
         ) : (
           <div
@@ -73,12 +82,22 @@ export default function PhotoCarousel({ photos, isOrganiser }: Props) {
 
             {/* Upload more — organiser only */}
             {isOrganiser && (
-              <button className="flex-none w-[320px] h-[220px] rounded-lg border border-dashed border-dark-lighter hover:border-primary/50 flex flex-col items-center justify-center gap-2 transition-colors group">
-                <div className="w-9 h-9 rounded-full bg-dark-lighter group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-                  <ImageIcon className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
-                </div>
-                <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted group-hover:text-primary transition-colors">Add photo</span>
-              </button>
+              <>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="flex-none w-[320px] h-[220px] rounded-lg border border-dashed border-gray-200 hover:border-lime-400 flex flex-col items-center justify-center gap-2 transition-colors group disabled:opacity-50"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gray-100 group-hover:bg-lime-50 flex items-center justify-center transition-colors">
+                    <ImageIcon className="w-4 h-4 text-gray-400 group-hover:text-lime-600 transition-colors" />
+                  </div>
+                  <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400 group-hover:text-lime-600 transition-colors">
+                    {uploading ? "Uploading…" : "Add photo"}
+                  </span>
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only"
+                  onChange={e => { const f = e.target.files?.[0]; if (f && onUpload) onUpload(f); }} />
+              </>
             )}
           </div>
         )}

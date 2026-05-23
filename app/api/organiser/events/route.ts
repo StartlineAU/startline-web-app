@@ -15,7 +15,7 @@ export async function GET() {
       select: {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, startTime: true, status: true, createdAt: true,
-        waves: true, registrationUrl: true, cap: true, isPinned: true,
+        waves: true, registrationType: true, feeStructure: true, registrationUrl: true, cap: true, isPinned: true,
         coverImageUrl: true, registrationCount: true,
       },
     });
@@ -33,9 +33,12 @@ export async function POST(req: NextRequest) {
   const { submit } = body;
 
   if (submit) {
-    const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level", "registrationUrl"];
+    const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level"];
     for (const field of required) {
       if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+    }
+    if (body.registrationType === "external" && !body.registrationUrl) {
+      return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
     }
   } else {
     if (!body.title?.trim()) {
@@ -70,6 +73,8 @@ export async function POST(req: NextRequest) {
         extras:           body.extras            ?? null,
         activations:      body.activations       ?? null,
         refundPolicy:     body.refundPolicy      ?? null,
+        registrationType: body.registrationType  ?? "startline",
+        feeStructure:     body.feeStructure      ?? "athlete",
         registrationUrl:  body.registrationUrl   ?? null,
         accessibilityInfo: body.accessibilityInfo ?? null,
         coverImageUrl:    body.coverImageUrl      ?? null,

@@ -351,3 +351,44 @@ input[type="radio"] {
 }
 .step-forward { animation: stepForward .3s cubic-bezier(.2,.8,.2,1) both; }
 .step-back    { animation: stepBack    .3s cubic-bezier(.2,.8,.2,1) both; }
+
+/* ── Google Maps Places Autocomplete ────────────────────── */
+.pac-container {
+  margin-top: 4px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px 0 rgba(0,0,0,0.08);
+  font-family: 'Chakra Petch', sans-serif;
+  overflow: hidden;
+  padding: 4px;
+}
+.pac-container::after { display: none; }
+.pac-item {
+  border: none;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: 'Chakra Petch', sans-serif;
+  color: #374151;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.pac-item:hover,
+.pac-item-selected {
+  background: #f0fdf4;
+  color: #3f6212;
+}
+.pac-item-query {
+  font-size: 15px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 600;
+  color: #111827;
+  padding-right: 4px;
+}
+.pac-item:hover .pac-item-query,
+.pac-item-selected .pac-item-query {
+  color: #3f6212;
+}
+.pac-matched { font-weight: 700; }
+.pac-icon { display: none; }
