@@ -35,8 +35,11 @@ model Organiser {
   website      String?
   instagram    String?
   facebook     String?
-  bio          String?
-  logoUrl      String?
+  bio            String?
+  logoUrl        String?
+  coverImageUrl  String?
+  coverPosition  String?  @default("50% 50%")
+  photos         String[]
 
   events    Event[]
   reviews   Review[]
@@ -85,6 +88,8 @@ model Event {
   extras            String?
   activations       String?
   refundPolicy      String?
+  registrationType  String  @default("startline")
+  feeStructure      String  @default("athlete")
   registrationCount Int     @default(0)
 
   // Step 5 — media & logistics
@@ -150,7 +155,7 @@ model WaitlistSubscriber {
   @@map("waitlist_subscribers")
 }
 
-model Event {
+model LegacyEvent {
   id              Int      @id @default(autoincrement())
   title           String
   description     String

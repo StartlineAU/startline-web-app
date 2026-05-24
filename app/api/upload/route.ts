@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const type = formData.get("type") as string;
 
   if (!file) return NextResponse.json({ error: "No file provided." }, { status: 400 });
-  if (!["logo", "cover"].includes(type)) return NextResponse.json({ error: "Invalid upload type." }, { status: 400 });
+  if (!["logo", "cover", "photo"].includes(type)) return NextResponse.json({ error: "Invalid upload type." }, { status: 400 });
 
   const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowed.includes(file.type)) return NextResponse.json({ error: "File type not allowed." }, { status: 400 });

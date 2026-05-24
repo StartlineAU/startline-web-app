@@ -15,7 +15,7 @@ export async function GET() {
         id: true, email: true, status: true,
         orgName: true, contactName: true, contactEmail: true, phone: true,
         abn: true, website: true, instagram: true, facebook: true,
-        bio: true, logoUrl: true,
+        bio: true, logoUrl: true, coverImageUrl: true, coverPosition: true, photos: true,
       },
     });
 
@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   const body = await req.json();
-  const { orgName, contactName, contactEmail, phone, abn, website, instagram, facebook, bio, logoUrl } = body;
+  const { orgName, contactName, contactEmail, phone, abn, website, instagram, facebook, bio, logoUrl, coverImageUrl, coverPosition, photos } = body;
 
   if (!orgName || !contactName || !phone || !contactEmail) {
     return NextResponse.json(
@@ -57,10 +57,14 @@ export async function PUT(req: NextRequest) {
     );
   }
 
+  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
+    return NextResponse.json({ ok: true });
+  }
+
   try {
     await prisma.organiser.update({
       where: { id: session.sub },
-      data:  { orgName, contactName, contactEmail, phone, abn, website, instagram, facebook, bio, logoUrl },
+      data:  { orgName, contactName, contactEmail, phone, abn, website, instagram, facebook, bio, logoUrl, coverImageUrl, coverPosition, photos },
     });
 
     return NextResponse.json({ ok: true });

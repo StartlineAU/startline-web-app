@@ -7,8 +7,13 @@
 - [ ] Dashboard
 - [ ] Finish the testing setup on branch "feat/test-setup"
   - [ ] Might need to redo the tests to work on "mvp-clean"
+<<<<<<< HEAD
 - [ ] Switch MVP work back to dark theme
 - [ ] Integrate google maps address API into event submission
+=======
+- [ ] Switch MVP work back to dark theme `created: 2026-05-17`
+- [x] Integrate google maps address API into event submission `created: 2026-05-17` `completed: 2026-05-23`
+>>>>>>> mvp-clean
 
 ## Medium-term
 - [ ] Setup registrations so that organisers can see who has regirsterd to their events
