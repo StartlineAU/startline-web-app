@@ -36,12 +36,12 @@ locals {
       phases:
         preBuild:
           commands:
-            - npm ci
+            - corepack enable && pnpm install --frozen-lockfile
             - env | grep -E '^(DATABASE_URL|RESEND_API_KEY)=' >> .env.production
             - npx prisma migrate deploy
         build:
           commands:
-            - npm run build
+            - pnpm run build
       artifacts:
         baseDirectory: .next
         files:
