@@ -8,7 +8,8 @@ import {
   ChevronDown, ChevronLeft, ChevronRight, Clock, Eye,
   Ticket, Package, ShoppingBag, Tag, ExternalLink,
 } from "lucide-react";
-import OrganiserTopBar  from "@/components/organiser/TopBar";
+import OrganiserTopBar     from "@/components/organiser/TopBar";
+import AddressAutocomplete from "@/components/ui/AddressAutocomplete";
 
 /* ── Step definitions ───────────────────────────────────────── */
 const STEPS = [
@@ -21,8 +22,8 @@ const STEPS = [
 ] as const;
 
 const STEP_ERRORS: Record<number, string> = {
-  0: "Event name and short description (tagline) are required.",
-  1: "Date, venue name, street address, city and state are required.",
+  0: "Event name is required.",
+  1: "Date, street address, city and state are required.",
   2: "Discipline, competition format, level and minimum age are required.",
   3: "At least one ticket category with a price is required.",
   4: "A registration URL is required.",
@@ -36,17 +37,19 @@ type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "
 interface Wave { label: string; price: string; closes: string; }
 
 interface FormState {
-  title: string; discipline: Discipline; tagline: string; description: string;
+  title: string; discipline: Discipline; description: string;
   date: string; endDate: string; startTime: string; endTime: string;
   venue: string; address: string; city: string; state: AusState;
   format: Format; level: Level; categories: string[]; cap: string; minAge: string;
   waves: Wave[];
   inclusions: string; extras: string; activations: string; refundPolicy: string;
+  registrationType: 'startline' | 'external';
+  feeStructure: 'athlete' | 'organiser';
   coverImage: File | null; coverImageUrl: string; registrationUrl: string; accessibilityInfo: string;
 }
 
 const INITIAL: FormState = {
-  title: "", discipline: "", tagline: "", description: "",
+  title: "", discipline: "", description: "",
   date: "", endDate: "", startTime: "", endTime: "",
   venue: "", address: "", city: "", state: "",
   format: "", level: "",
@@ -56,6 +59,8 @@ const INITIAL: FormState = {
     { label: "", price: "", closes: "" },
   ],
   inclusions: "", extras: "", activations: "", refundPolicy: "",
+  registrationType: "startline",
+  feeStructure: "athlete",
   coverImage: null, coverImageUrl: "", registrationUrl: "", accessibilityInfo: "",
 };
 
@@ -498,11 +503,6 @@ function BasicsStep({ form, update }: { form: FormState; update: (p: Partial<For
           placeholder="e.g. Functional Fitness Championship Sydney 2026" className={inputCls} />
       </Field>
 
-      <Field label="Tagline" required hint={`${form.tagline.length}/80 · shown in cards`}>
-        <input maxLength={80} value={form.tagline} onChange={(e) => update({ tagline: e.target.value })}
-          placeholder="One sentence that sells it. e.g. 'The World Series of Fitness Racing returns to Sydney.'"
-          className={inputCls} />
-      </Field>
 
       <Field label="Full description" hint={`${form.description.length}/1000`}>
         <textarea rows={6} maxLength={1000} value={form.description}
@@ -556,30 +556,38 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
 
       <div className="my-6 border-t border-gray-200" />
 
-      <Field label="Venue name" required>
+      <Field label="Street address" required>
+        <AddressAutocomplete
+          value={form.address}
+          onChange={(raw) => update({ address: raw })}
+          onSelect={({ address, city, state, venue }) => {
+            update({
+              ...(address && { address }),
+              ...(city    && { city    }),
+              ...(state   && { state: state as typeof form.state }),
+              ...(venue   && { venue  }),
+            });
+          }}
+          apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+          placeholder="Start typing an address…"
+          className={inputCls}
+        />
+      </Field>
+
+      <Field label="Venue name">
         <input value={form.venue} onChange={(e) => update({ venue: e.target.value })}
           placeholder="Sydney Olympic Park" className={inputCls} />
       </Field>
 
-      <Field label="Street address" required>
-        <input value={form.address} onChange={(e) => update({ address: e.target.value })}
-          placeholder="Olympic Boulevard, Sydney Olympic Park" className={inputCls} />
-      </Field>
-
-      <div className="grid grid-cols-[1fr_auto] gap-5">
+      <div className="grid grid-cols-2 gap-5">
         <Field label="City" required>
-          <input value={form.city} onChange={(e) => update({ city: e.target.value })}
-            placeholder="Sydney" className={inputCls} />
+          <div className={`${inputCls} ${form.city ? "text-gray-900" : "text-gray-400"}`}>
+            {form.city || "—"}
+          </div>
         </Field>
         <Field label="State" required>
-          <div className="flex flex-wrap gap-2 pt-0.5">
-            {AUS_STATES.map(([v, l]) => (
-              <button key={v} type="button" onClick={() => update({ state: v })}
-                className={`font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2.5 rounded-md border transition-all
-                  ${form.state === v ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}>
-                {l}
-              </button>
-            ))}
+          <div className={`${inputCls} ${form.state ? "text-gray-900" : "text-gray-400"}`}>
+            {form.state ? form.state.toUpperCase() : "—"}
           </div>
         </Field>
       </div>
@@ -839,6 +847,11 @@ function refundPresetToText(v: string): string {
   return REFUND_PRESETS.find(r => r.v === v)?.l ?? v;
 }
 
+const STARTLINE_PCT  = 0.0395;
+const STARTLINE_FLAT = 1.45;
+const STRIPE_PCT     = 0.0175;
+const STRIPE_FLAT    = 0.30;
+
 function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
   const updateWave = (i: number, patch: Partial<Wave>) => {
     const waves = [...form.waves];
@@ -906,6 +919,88 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
 
   return (
     <div>
+      {/* Registration type selector */}
+      <Field label="Registration platform" required>
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            { value: "startline", title: "Startline",        sub: "Managed on this platform"      },
+            { value: "external",  title: "External website", sub: "Link to your own registration" },
+          ] as const).map(({ value, title, sub }) => {
+            const active = form.registrationType === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => update({ registrationType: value })}
+                className={`flex flex-col items-start gap-1 rounded-xl border-2 px-5 py-4 text-left transition-colors
+                  ${active
+                    ? "border-lime-500 bg-lime-50"
+                    : "border-gray-200 bg-white hover:border-gray-300"}`}
+              >
+                <div className={`font-headline text-[13px] font-bold uppercase tracking-widest ${active ? "text-lime-700" : "text-gray-900"}`}>
+                  {active && <span className="mr-1.5">✓</span>}{title}
+                </div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">{sub}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {form.registrationType === "startline" && (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between mt-1">
+              <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Fee structure</div>
+              <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Startline fee: 3.95% + A$1.45 per ticket</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                {
+                  value: "athlete",
+                  title: "Athlete pays the fee",
+                  sub: "Startline's fee added on top at checkout",
+                },
+                {
+                  value: "organiser",
+                  title: "Organiser absorbs the fee",
+                  sub: "Fee deducted from your payout",
+                },
+              ] as const).map(({ value, title, sub }) => {
+                const active = form.feeStructure === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => update({ feeStructure: value })}
+                    className={`flex flex-col items-start gap-1 rounded-xl border-2 px-5 py-4 text-left transition-colors
+                      ${active
+                        ? "border-lime-500 bg-lime-50"
+                        : "border-gray-200 bg-white hover:border-gray-300"}`}
+                  >
+                    <div className={`font-headline text-[13px] font-bold uppercase tracking-widest ${active ? "text-lime-700" : "text-gray-900"}`}>
+                      {active && <span className="mr-1.5">✓</span>}{title}
+                    </div>
+                    <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">{sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {form.registrationType === "external" && (
+          <div className="mt-5">
+            <Field label="Registration URL" required>
+              <input
+                value={form.registrationUrl}
+                onChange={(e) => update({ registrationUrl: e.target.value })}
+                placeholder="https://yourorg.com/events/sydney-2026"
+                className={inputCls}
+              />
+            </Field>
+          </div>
+        )}
+      </Field>
+
       <Field label="Ticket categories">
         <div className="space-y-3">
           {form.waves.map((w, i) => (
@@ -948,6 +1043,35 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                         placeholder="129" className={`${inputCls} pl-9`} />
                     </div>
                   )}
+                  {form.registrationType === "startline" && (() => {
+                    const p = parseFloat(w.price);
+                    if (!w.price || w.price === "0" || isNaN(p) || p <= 0) return null;
+                    const startlineFee = p * STARTLINE_PCT + STARTLINE_FLAT;
+                    const stripeFee    = p * STRIPE_PCT    + STRIPE_FLAT;
+                    const athletePays  = form.feeStructure === "athlete" ? p + startlineFee : p;
+                    const youReceive   = form.feeStructure === "athlete"
+                      ? p - stripeFee
+                      : p - startlineFee - stripeFee;
+                    const fmt = (n: number) => `A$${n.toFixed(2)}`;
+                    return (
+                      <div className="mt-2 rounded-md bg-gray-100 px-3 py-2.5 space-y-1">
+                        {([
+                          { label: "Athlete pays",  value: fmt(athletePays),   muted: false, sub: null              },
+                          { label: "You receive",   value: fmt(youReceive),    muted: false, sub: "after Stripe fee" },
+                          { label: "Startline fee", value: fmt(startlineFee),  muted: true,  sub: null              },
+                        ] as const).map(r => (
+                          <div key={r.label} className="flex items-baseline justify-between">
+                            <span className="font-headline text-[13px] uppercase tracking-widest text-gray-900">
+                              {r.label}{r.sub && <span className="ml-1.5 normal-case text-[11px] text-gray-500">({r.sub})</span>}
+                            </span>
+                            <span className={`font-headline text-[14px] font-bold ${r.muted ? "text-gray-500" : "text-gray-900"}`}>
+                              {r.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Category closes</div>
@@ -969,7 +1093,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
       </Field>
 
       {/* Inclusions — preset chips + custom input */}
-      <Field label="What's included" hint="Shown on the event page">
+      <Field label="What's included">
         <div className="flex flex-wrap gap-2">
           {INCLUSION_PRESETS.map(item => {
             const active = activeInclusions.includes(item);
@@ -1159,11 +1283,6 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
         </label>
       </Field>
 
-      <Field label="Registration URL" required hint="Where athletes sign up">
-        <input value={form.registrationUrl} onChange={(e) => update({ registrationUrl: e.target.value })}
-          placeholder="https://yourorg.com/events/sydney-2026" className={inputCls} />
-      </Field>
-
       <div className="grid grid-cols-2 gap-5">
         <Field label="Bag drop info">
           <textarea rows={3} placeholder="Complimentary, opens 06:00 at the event village…" className={textareaCls} />
@@ -1190,11 +1309,10 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
 /* ═══════════════════════════════════════════════════════════════
    STEP 6 — REVIEW
    ══════════════════════════════════════════════════════════════ */
-function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) => void }) {
+function ReviewStep({ form, setStep, confirmed, onConfirm }: { form: FormState; setStep: (n: number) => void; confirmed: boolean; onConfirm: (v: boolean) => void }) {
   const rows: { k: string; v: string; step: number }[] = [
     { k: "Title",         v: form.title || "—",                                                              step: 0 },
     { k: "Discipline",    v: form.discipline ? form.discipline.toUpperCase() : "—",                          step: 0 },
-    { k: "Tagline",       v: form.tagline || "—",                                                            step: 0 },
     { k: "Date",          v: form.date
         ? form.endDate && form.endDate !== form.date
           ? `${new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })} — ${new Date(form.endDate + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })}`
@@ -1208,7 +1326,8 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
     { k: "Cap / Min age", v: `${form.cap ? parseInt(form.cap).toLocaleString() : "∞"} · ${form.minAge === "0" ? "Open to all" : form.minAge ? `${form.minAge}+` : "—"}`,   step: 2 },
     { k: "Ticket categories", v: `${form.waves.length} categor${form.waves.length !== 1 ? "ies" : "y"}, from ${form.waves[0]?.price === "0" ? "Free" : form.waves[0]?.price ? `A$${form.waves[0].price}` : "—"}`, step: 3 },
     { k: "Cover image",   v: form.coverImage ? "Uploaded" : "Using placeholder",                             step: 4 },
-    { k: "Reg. URL",      v: form.registrationUrl || "—",                                                    step: 4 },
+    { k: "Registration",  v: form.registrationType === "startline" ? "Startline" : form.registrationUrl || "—", step: 3 },
+    { k: "Fee structure", v: form.registrationType === "startline" ? (form.feeStructure === "athlete" ? "Athlete pays fee" : "Organiser absorbs fee") : "N/A (external)", step: 3 },
   ];
 
   return (
@@ -1244,7 +1363,12 @@ function ReviewStep({ form, setStep }: { form: FormState; setStep: (n: number) =
       </div>
 
       <label className="flex items-start gap-3 cursor-pointer">
-        <input type="checkbox" defaultChecked className="accent-primary w-4 h-4 mt-1" />
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(e) => onConfirm(e.target.checked)}
+          className="accent-primary w-4 h-4 mt-1 cursor-pointer"
+        />
         <span className="text-[13px] text-gray-600 leading-relaxed">
           I confirm I have the rights to host this event and the information provided is accurate.
           I agree to the{" "}
@@ -1287,7 +1411,6 @@ function LivePreview({ form }: { form: FormState }) {
           Live preview
         </span>
         <span className="font-headline text-[10px] uppercase tracking-widest text-gray-400">
-          How it appears in search
         </span>
       </div>
 
@@ -1334,11 +1457,6 @@ function LivePreview({ form }: { form: FormState }) {
 
         {/* Body */}
         <div className="p-5">
-          {/* Tagline */}
-          <p className="text-[13px] text-muted leading-relaxed mb-5 border-l-2 border-primary/40 pl-3 line-clamp-2">
-            {form.tagline || <span className="text-muted-dark italic text-[12px]">Your tagline will appear here…</span>}
-          </p>
-
           {/* Meta rows */}
           <div className="space-y-3">
             <div className="flex items-start gap-3">
@@ -1460,9 +1578,6 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
                     : <span key={i}>{i > 0 ? " " : ""}{word}</span>
                 )}
               </h1>
-              <p className="font-headline font-medium text-muted max-w-xl text-[14px] leading-relaxed mb-5">
-                {form.tagline || "Your event tagline will appear here."}
-              </p>
               <span className="inline-flex items-center gap-3 bg-primary/20 border border-primary/30 text-primary font-headline text-[12px] font-black uppercase tracking-widest px-6 py-3 rounded-xl cursor-default">
                 Register Now <ExternalLink className="w-4 h-4" />
               </span>
@@ -1578,6 +1693,20 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
                     </div>
                   ))}
                 </div>
+                {/* Registration platform badge */}
+                <div className="mt-4 flex items-center gap-3">
+                  {form.registrationType === "startline" ? (
+                    <div className="inline-flex items-center gap-2 bg-lime-500/10 border border-lime-500/30 rounded-full px-4 py-2">
+                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Register on Startline</span>
+                    </div>
+                  ) : form.registrationUrl ? (
+                    <div className="inline-flex items-center gap-2 bg-dark rounded-full px-4 py-2 border border-gray-700">
+                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">External registration</span>
+                      <span className="font-headline text-[11px] text-muted truncate max-w-[200px]">{form.registrationUrl}</span>
+                    </div>
+                  ) : null}
+                </div>
+
                 {form.refundPolicy && (
                   <div className="bg-dark rounded-xl p-5 mt-4">
                     <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-2 block">Refund Policy</span>
@@ -1650,6 +1779,7 @@ export default function NewListingPage() {
   const [apiError,      setApiError]      = useState("");
   const [submitErrors,  setSubmitErrors]  = useState<number[]>([]);
   const [visited,       setVisited]       = useState<Set<number>>(new Set());
+  const [confirmed,         setConfirmed]         = useState(false);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
   const [showFullPreview,   setShowFullPreview]   = useState(false);
   const [direction,          setDirection]          = useState<"forward" | "back">("forward");
@@ -1671,7 +1801,6 @@ export default function NewListingPage() {
         setForm({
           title:             e.title        ?? "",
           discipline:        e.discipline   ?? "",
-          tagline:           e.tagline      ?? "",
           description:       e.description  ?? "",
           date:              e.eventDate    ?? "",
           endDate:           e.endDate      ?? "",
@@ -1691,6 +1820,8 @@ export default function NewListingPage() {
           extras:            e.extras       ?? "",
           activations:       e.activations  ?? "",
           refundPolicy:      e.refundPolicy ?? "",
+          registrationType:  (e.registrationType === "external" ? "external" : "startline") as 'startline' | 'external',
+          feeStructure:      (e.feeStructure === "organiser" ? "organiser" : "athlete") as 'athlete' | 'organiser',
           registrationUrl:   e.registrationUrl   ?? "",
           accessibilityInfo: e.accessibilityInfo ?? "",
           coverImage:        null,
@@ -1702,17 +1833,22 @@ export default function NewListingPage() {
   }, []);
 
   const stepHasErrors = (s: number): boolean => {
-    if (s === 0) return !(form.title.trim().length > 2 && form.tagline.trim().length > 2);
-    if (s === 1) return !(form.date && form.venue.trim() && form.address.trim() && form.city.trim() && form.state);
+    if (s === 0) return !(form.title.trim().length > 2);
+    if (s === 1) return !(form.date && form.address.trim() && form.city.trim() && form.state);
     if (s === 2) return !(form.format && form.level && form.minAge !== "" && form.discipline);
-    if (s === 3) return !(form.waves.length > 0 && (form.waves[0]?.price === "0" || !!form.waves[0]?.price));
-    if (s === 4) return !form.registrationUrl.trim();
+    if (s === 3) return !(
+      form.waves.length > 0 && (form.waves[0]?.price === "0" || !!form.waves[0]?.price) &&
+      (form.registrationType === "startline" || !!form.registrationUrl.trim())
+    );
+    if (s === 4) return !(form.coverImage || form.coverImageUrl);
+    if (s === 5) return !confirmed;
     return false;
   };
 
   const goTo = (target: number) => {
     setVisited(prev => new Set([...prev, step]));
     setDirection(target > step ? "forward" : "back");
+    if (target !== 5) setConfirmed(false);
     setStep(target);
   };
 
@@ -1732,14 +1868,16 @@ export default function NewListingPage() {
       }
 
       const payload = {
-        title: overrideTitle ?? form.title, discipline: form.discipline, tagline: form.tagline,
+        title: overrideTitle ?? form.title, discipline: form.discipline,
         description: form.description, eventDate: form.date, endDate: form.endDate || null,
         startTime: form.startTime, endTime: form.endTime,
         venue: form.venue, address: form.address, city: form.city, state: form.state,
         format: form.format, level: form.level, categories: form.categories,
         cap: form.cap ? parseInt(form.cap) : null, minAge: form.minAge ? parseInt(form.minAge) : null,
         waves: form.waves, inclusions: form.inclusions, extras: form.extras, activations: form.activations,
-        refundPolicy: form.refundPolicy, registrationUrl: form.registrationUrl,
+        refundPolicy: form.refundPolicy, registrationType: form.registrationType,
+        feeStructure: form.feeStructure,
+        registrationUrl: form.registrationType === 'external' ? form.registrationUrl : null,
         accessibilityInfo: form.accessibilityInfo, submit: !asDraft,
         coverImageUrl: coverImageUrl ?? form.coverImageUrl ?? null,
       };
@@ -1776,7 +1914,7 @@ export default function NewListingPage() {
       goTo(step + 1);
     } else {
       // Pre-validate all steps before hitting the API
-      const errs = [0, 1, 2, 3, 4].filter(i => stepHasErrors(i));
+      const errs = [0, 1, 2, 3, 4, 5].filter(i => stepHasErrors(i));
       if (errs.length > 0) {
         setVisited(new Set([0, 1, 2, 3, 4, 5]));
         setSubmitErrors(errs);
@@ -1819,7 +1957,6 @@ export default function NewListingPage() {
                   >
                     <Eye className="w-3.5 h-3.5" /> Preview
                   </button>
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-gray-400 hidden sm:block">Draft</span>
                 </div>
               </div>
 
@@ -1830,10 +1967,10 @@ export default function NewListingPage() {
                   const cur     = i === step;
                   const hasErr  = visited.has(i) && stepHasErrors(i) && !cur;
                   return (
-                    <div key={s.k} className="flex items-center flex-1 last:flex-none">
+                    <div key={s.k} className="flex items-center flex-1 min-w-0">
                       <button
                         onClick={() => goTo(i)}
-                        className={`flex items-center gap-2.5 text-left transition-opacity ${cur ? "opacity-100" : "opacity-70 hover:opacity-100"}`}
+                        className={`flex items-center gap-2.5 text-left transition-opacity min-w-0 ${cur ? "opacity-100" : "opacity-70 hover:opacity-100"}`}
                       >
                         {/* Circle — hasErr takes priority over done */}
                         <div className={`relative w-8 h-8 rounded-md border flex items-center justify-center font-headline font-black italic text-[13px] flex-shrink-0
@@ -1848,11 +1985,11 @@ export default function NewListingPage() {
                             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400 border border-white animate-pulse-dot" />
                           )}
                         </div>
-                        <div className="hidden xl:block">
-                          <div className={`font-headline text-[11px] font-bold uppercase tracking-widest whitespace-nowrap ${cur ? "text-gray-900" : hasErr ? "text-orange-500" : "text-gray-500"}`}>
+                        <div className="hidden xl:block min-w-0">
+                          <div className={`font-headline text-[11px] font-bold uppercase tracking-widest truncate ${cur ? "text-gray-900" : hasErr ? "text-orange-500" : "text-gray-500"}`}>
                             {s.label}
                           </div>
-                          <div className={`font-headline text-[10px] uppercase tracking-widest whitespace-nowrap ${hasErr ? "text-orange-400" : "text-gray-400"}`}>
+                          <div className={`font-headline text-[10px] uppercase tracking-widest truncate ${hasErr ? "text-orange-400" : "text-gray-400"}`}>
                             {hasErr ? "Missing required fields" : s.sub}
                           </div>
                         </div>
@@ -1898,7 +2035,7 @@ export default function NewListingPage() {
                 {step === 2 && <FormatStep  form={form} update={update} />}
                 {step === 3 && <TicketsStep form={form} update={update} />}
                 {step === 4 && <ExtrasStep  form={form} update={update} />}
-                {step === 5 && <ReviewStep  form={form} setStep={goTo} />}
+                {step === 5 && <ReviewStep form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} />}
 
                 {apiError && (
                   <div className="mt-4 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-600 font-headline text-[13px]">
@@ -1964,7 +2101,7 @@ export default function NewListingPage() {
                   >
                     Save draft
                   </button>
-                  <button onClick={next} disabled={saving}
+                  <button onClick={next} disabled={saving || (step === STEPS.length - 1 && !confirmed)}
                     className="bg-machined shadow-machined disabled:opacity-40 disabled:cursor-not-allowed text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform">
                     {saving
                       ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Saving…</>
