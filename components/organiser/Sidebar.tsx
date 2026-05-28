@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarDays, User, LogOut, CheckCircle } from "lucide-react";
+import { LayoutDashboard, CalendarDays, User, LogOut, CheckCircle, CreditCard } from "lucide-react";
 
 const NAV = [
   { href: "/organiser/dashboard", label: "Dashboard",      icon: LayoutDashboard },
   { href: "/organiser/listings",  label: "Event Listings", icon: CalendarDays    },
   { href: "/organiser/profile",   label: "My Profile",     icon: User            },
+  { href: "/organiser/payments",  label: "Payments",       icon: CreditCard      },
 ];
 
 export default function OrganiserSidebar() {

@@ -15,6 +15,8 @@ const ORGANISER_PROTECTED = [
   "/organiser/profile",
   "/organiser/new-listing",
   "/organiser/onboarding",
+  "/organiser/payments",
+  "/organiser/events",
 ];
 
 const ADMIN_PROTECTED = [
@@ -82,6 +84,8 @@ export const config = {
     "/organiser/profile/:path*",
     "/organiser/new-listing/:path*",
     "/organiser/onboarding/:path*",
+    "/organiser/payments/:path*",
+    "/organiser/events/:path*",
     "/admin/dashboard/:path*",
     "/admin/events/:path*",
     "/admin/organisers/:path*",

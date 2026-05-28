@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, MapPin, RefreshCw, Search } from "lucide-react";
+import { Plus, Trash2, MapPin, RefreshCw, Search, MoreHorizontal, Pencil, LayoutDashboard } from "lucide-react";
 import OrganiserTopBar from "@/components/organiser/TopBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,8 @@ interface EventRow {
 
 function formatEventDate(dateStr: string, startTime: string) {
   try {
-    const d = new Date(dateStr + "T00:00:00");
-    const day = d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+    const d    = new Date(dateStr + "T00:00:00");
+    const day  = d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
     const time = startTime
       ? new Date(`1970-01-01T${startTime}`).toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()
       : null;
@@ -32,11 +32,11 @@ function formatEventDate(dateStr: string, startTime: string) {
 }
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string; pulse?: boolean }> = {
-  DRAFT:    { bg: "bg-gray-100",  text: "text-gray-500",  dot: "bg-gray-400",  label: "Draft"    },
-  PENDING:  { bg: "bg-blue-50",   text: "text-blue-600",  dot: "bg-blue-500",  label: "Pending"  },
-  APPROVED: { bg: "bg-lime-50",   text: "text-lime-700",  dot: "bg-lime-500",  label: "Live",    pulse: true },
-  REJECTED: { bg: "bg-red-50",    text: "text-red-600",   dot: "bg-red-500",   label: "Rejected" },
-  ARCHIVED: { bg: "bg-gray-100",  text: "text-gray-400",  dot: "bg-gray-300",  label: "Archived" },
+  DRAFT:    { bg: "bg-gray-100", text: "text-gray-500",  dot: "bg-gray-400",  label: "Draft"    },
+  PENDING:  { bg: "bg-blue-50",  text: "text-blue-600",  dot: "bg-blue-500",  label: "Pending"  },
+  APPROVED: { bg: "bg-lime-50",  text: "text-lime-700",  dot: "bg-lime-500",  label: "Live",    pulse: true },
+  REJECTED: { bg: "bg-red-50",   text: "text-red-600",   dot: "bg-red-500",   label: "Rejected" },
+  ARCHIVED: { bg: "bg-gray-100", text: "text-gray-400",  dot: "bg-gray-300",  label: "Archived" },
 };
 
 type Filter = EventStatus | "all";
@@ -50,6 +50,71 @@ const FILTERS: { k: Filter; l: string }[] = [
   { k: "ARCHIVED", l: "Archived" },
 ];
 
+// ── Actions dropdown ────────────────────────────────────────────────────────
+function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref             = useRef<HTMLDivElement>(null);
+  const router          = useRouter();
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const isLive = event.status === "APPROVED";
+
+  return (
+    <div ref={ref} className="relative">
+      <Button
+        size="icon" variant="ghost"
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className="text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </Button>
+
+      {open && (
+        <div className="absolute right-0 top-9 z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden">
+
+          {/* Dashboard — only for LIVE events */}
+          {isLive && (
+            <button
+              onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/events/${event.id}/dashboard`); }}
+              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-lime-50 hover:text-lime-700 transition-colors font-headline font-bold uppercase tracking-widest"
+            >
+              <LayoutDashboard className="w-4 h-4" /> View dashboard
+            </button>
+          )}
+
+          {/* Edit */}
+          <button
+            onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/new-listing?id=${event.id}`); }}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors font-headline font-bold uppercase tracking-widest"
+          >
+            <Pencil className="w-4 h-4" /> Edit event
+          </button>
+
+          <div className="my-1 border-t border-gray-100" />
+
+          {/* Delete */}
+          <button
+            onClick={e => { e.stopPropagation(); setOpen(false); onDelete(); }}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-red-600 hover:bg-red-50 transition-colors font-headline font-bold uppercase tracking-widest"
+          >
+            <Trash2 className="w-4 h-4" /> Delete event
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ───────────────────────────────────────────────────────────────
 export default function ListingsPage() {
   const router = useRouter();
   const [events,     setEvents]     = useState<EventRow[]>([]);
@@ -73,7 +138,7 @@ export default function ListingsPage() {
 
   const filtered = useMemo(() =>
     events.filter(e => filter === "all" || e.status === filter),
-    [events, filter]
+    [events, filter],
   );
 
   const counts = useMemo(() => {
@@ -93,6 +158,15 @@ export default function ListingsPage() {
       }
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Row click — live events go to dashboard, others go to editor
+  const handleRowClick = (e: EventRow) => {
+    if (e.status === "APPROVED") {
+      router.push(`/organiser/events/${e.id}/dashboard`);
+    } else {
+      router.push(`/organiser/new-listing?id=${e.id}`);
     }
   };
 
@@ -157,11 +231,17 @@ export default function ListingsPage() {
             {!loading && filtered.map((e, i) => {
               const s     = STATUS_STYLE[e.status];
               const price = (e.waves as { price: string }[])?.[0]?.price;
+              const isLive = e.status === "APPROVED";
               return (
                 <div key={e.id}
-                  onClick={() => router.push(`/organiser/new-listing?id=${e.id}`)}
-                  className={`grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400 transition-all ${i < filtered.length - 1 ? "border-b border-gray-100" : ""}`}>
+                  onClick={() => handleRowClick(e)}
+                  className={`grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer transition-all
+                    ${isLive
+                      ? "hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400"
+                      : "hover:bg-gray-50 hover:border-l-2 hover:border-l-gray-300"}
+                    ${i < filtered.length - 1 ? "border-b border-gray-100" : ""}`}>
 
+                  {/* Event info */}
                   <div className="col-span-5 flex items-center gap-4 min-w-0">
                     <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
                       {e.coverImageUrl
@@ -173,13 +253,20 @@ export default function ListingsPage() {
                       <div className="flex items-center gap-1 font-headline text-[11px] text-gray-400 uppercase tracking-widest mt-0.5">
                         <MapPin className="w-3 h-3 text-lime-500" /> {e.city}, {e.state.toUpperCase()}
                       </div>
+                      {isLive && (
+                        <div className="font-headline text-[10px] uppercase tracking-widest text-lime-600 mt-0.5">
+                          Click to view dashboard →
+                        </div>
+                      )}
                     </div>
                   </div>
 
+                  {/* Date */}
                   <div className="col-span-2 text-center">
                     <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(e.eventDate, e.startTime)}</div>
                   </div>
 
+                  {/* Status */}
                   <div className="col-span-2 flex justify-center">
                     <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? "animate-pulse-dot" : ""}`} />
@@ -187,20 +274,20 @@ export default function ListingsPage() {
                     </Badge>
                   </div>
 
+                  {/* Registrations */}
                   <div className="col-span-2">
                     <div className="font-headline text-sm font-bold text-gray-900">
                       {(e.registrationCount ?? 0).toLocaleString()}
-                      {e.cap ? <span className="text-gray-400 font-normal"> / {e.cap.toLocaleString()}</span> : <span className="text-gray-400 font-normal"> / —</span>}
+                      {e.cap
+                        ? <span className="text-gray-400 font-normal"> / {e.cap.toLocaleString()}</span>
+                        : <span className="text-gray-400 font-normal"> / —</span>}
                     </div>
                     {price && <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mt-0.5">from A${price}</div>}
                   </div>
 
+                  {/* Actions */}
                   <div className="col-span-1 flex items-center justify-end">
-                    <Button size="icon" variant="ghost" title="Delete"
-                      onClick={(evt) => { evt.stopPropagation(); setConfirmDel(e); }}
-                      className="text-gray-400 hover:text-red-500 hover:bg-red-50">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <ActionsMenu event={e} onDelete={() => setConfirmDel(e)} />
                   </div>
                 </div>
               );
@@ -240,7 +327,8 @@ export default function ListingsPage() {
               <DialogTitle>Delete this event?</DialogTitle>
             </div>
             <DialogDescription>
-              You&apos;re about to delete <span className="text-gray-900 font-semibold">{confirmDel?.title}</span>. This will hide it from athletes and cannot be undone.
+              You&apos;re about to delete <span className="text-gray-900 font-semibold">{confirmDel?.title}</span>.
+              This will remove it from the platform and cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -254,4 +342,3 @@ export default function ListingsPage() {
     </div>
   );
 }
-
