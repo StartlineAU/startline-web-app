@@ -41,10 +41,22 @@ model Organiser {
   coverPosition  String?  @default("50% 50%")
   photos         String[]
 
-  events    Event[]
-  reviews   Review[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Legal & compliance — required for ATO SERR reporting (ToS §3.2, Privacy Policy §2.1)
+  legalName String?
+  // Insurance self-declaration only — no documents collected (ToS §5.3, Privacy Policy §4.4)
+  insuranceDeclared Boolean @default(false)
+
+  // Stripe Express Connect — Startline stores only the account reference ID.
+  // Stripe holds DOB and bank account details directly (ToS §3.3, Privacy Policy §4.2).
+  stripeAccountId          String?  @unique
+  stripeOnboardingComplete Boolean  @default(false)
+
+  events        Event[]
+  reviews       Review[]
+  announcements Announcement[]
+  notifications Notification[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 enum OrganiserStatus {
@@ -107,8 +119,9 @@ model Event {
   reviewedBy      Admin?    @relation("EventReviewedBy", fields: [reviewedById], references: [id])
   reviewedAt      DateTime?
 
-  isPinned Boolean @default(false)
-  reviews  Review[]
+  isPinned      Boolean        @default(false)
+  reviews       Review[]
+  announcements Announcement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,6 +158,37 @@ model Review {
   isPublished Boolean  @default(true)
 
   createdAt DateTime @default(now())
+}
+
+// ─── Organiser notifications ──────────────────────────────────────────────────
+model Notification {
+  id          String           @id @default(uuid())
+  organiserId String
+  organiser   Organiser        @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  body        String
+  eventId     String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+}
+
+enum NotificationType {
+  EVENT_APPROVED
+  EVENT_REJECTED
+  NEW_REGISTRATION
+}
+
+// ─── Organiser announcements (per-event) ─────────────────────────────────────
+model Announcement {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  createdAt   DateTime  @default(now())
 }
 
 model WaitlistSubscriber {

@@ -16,6 +16,9 @@ export async function GET() {
         orgName: true, contactName: true, contactEmail: true, phone: true,
         abn: true, website: true, instagram: true, facebook: true,
         bio: true, logoUrl: true, coverImageUrl: true, coverPosition: true, photos: true,
+        // Compliance & Stripe Connect fields
+        legalName: true, insuranceDeclared: true,
+        stripeAccountId: true, stripeOnboardingComplete: true,
       },
     });
 
@@ -25,6 +28,8 @@ export async function GET() {
           id: session.sub, email: session.email, status: "APPROVED",
           orgName: null, contactName: null, contactEmail: null, phone: null,
           abn: null, website: null, instagram: null, facebook: null, bio: null, logoUrl: null,
+          legalName: null, insuranceDeclared: false,
+          stripeAccountId: null, stripeOnboardingComplete: false,
         });
       }
       return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -37,6 +42,8 @@ export async function GET() {
         id: session.sub, email: session.email, status: "APPROVED",
         orgName: null, contactName: null, contactEmail: null, phone: null,
         abn: null, website: null, instagram: null, facebook: null, bio: null, logoUrl: null,
+        legalName: null, insuranceDeclared: false,
+        stripeAccountId: null, stripeOnboardingComplete: false,
       });
     }
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
@@ -48,7 +55,13 @@ export async function PUT(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   const body = await req.json();
-  const { orgName, contactName, contactEmail, phone, abn, website, instagram, facebook, bio, logoUrl, coverImageUrl, coverPosition, photos } = body;
+  const {
+    orgName, contactName, contactEmail, phone,
+    abn, website, instagram, facebook, bio,
+    logoUrl, coverImageUrl, coverPosition, photos,
+    // Compliance fields — optional, no extra validation
+    legalName, insuranceDeclared,
+  } = body;
 
   if (!orgName || !contactName || !phone || !contactEmail) {
     return NextResponse.json(
@@ -64,7 +77,13 @@ export async function PUT(req: NextRequest) {
   try {
     await prisma.organiser.update({
       where: { id: session.sub },
-      data:  { orgName, contactName, contactEmail, phone, abn, website, instagram, facebook, bio, logoUrl, coverImageUrl, coverPosition, photos },
+      data: {
+        orgName, contactName, contactEmail, phone,
+        abn, website, instagram, facebook, bio,
+        logoUrl, coverImageUrl, coverPosition, photos,
+        ...(legalName !== undefined    ? { legalName }         : {}),
+        ...(insuranceDeclared !== undefined ? { insuranceDeclared } : {}),
+      },
     });
 
     return NextResponse.json({ ok: true });

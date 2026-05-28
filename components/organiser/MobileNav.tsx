@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarDays, User, Plus } from "lucide-react";
+import { LayoutDashboard, CalendarDays, User, Plus, CreditCard } from "lucide-react";
 
 const NAV = [
   { href: "/organiser/dashboard", label: "Home",     icon: LayoutDashboard },
   { href: "/organiser/listings",  label: "Listings", icon: CalendarDays    },
   null, // placeholder for the FAB
+  { href: "/organiser/payments",  label: "Payments", icon: CreditCard      },
   { href: "/organiser/profile",   label: "Profile",  icon: User            },
 ];
 

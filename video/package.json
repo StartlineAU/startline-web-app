@@ -1,0 +1,25 @@
+{
+  "name": "startline-video",
+  "version": "1.0.0",
+  "description": "Startline MVP product demo video",
+  "scripts": {
+    "dev": "npx remotion studio",
+    "render": "npx remotion render StartlineDemo out/startline-demo.mp4 --codec h264",
+    "still": "npx remotion still StartlineDemo --frame 30"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/google-fonts": "^4.0.0",
+    "remotion": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "typescript": "^5.0.0"
+  },
+  "remotion": {
+    "entryPoint": "./src/index.ts"
+  }
+}
