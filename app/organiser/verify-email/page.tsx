@@ -61,7 +61,7 @@ function VerifyEmailForm() {
 
   return (
     <main className="min-h-screen bg-dark-darker flex items-center justify-center px-6">
-      <div className="w-full max-w-[480px]">
+      <div className="w-full max-w-[480px] page-in">
         <Link href="/organiser">
           <Image src="/images/logo-title.svg" alt="Startline" width={160} height={40} className="h-10 w-auto mx-auto mb-12 opacity-80" />
         </Link>

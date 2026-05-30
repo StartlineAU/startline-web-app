@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
-
-const prisma = new PrismaClient();
-
 export async function POST() {
   const session = await getServerSession();
 

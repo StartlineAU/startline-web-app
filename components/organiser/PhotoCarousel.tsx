@@ -1,13 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ImageIcon, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageIcon, X, Play } from "lucide-react";
 
 interface Props {
   photos:       string[];
   isOrganiser?: boolean;
   onUpload?:    (file: File) => void;
   uploading?:   boolean;
+}
+
+function isVideo(src: string) {
+  return /\.(mp4|webm|mov|avi|ogv)(\?.*)?$/i.test(src);
 }
 
 export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading }: Props) {
@@ -47,17 +51,17 @@ export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading
           <div className="p-8 flex flex-col items-center justify-center gap-3 text-center">
             <ImageIcon className="w-8 h-8 text-gray-300" />
             <div>
-              <div className="font-headline text-[13px] font-bold text-gray-900">No photos yet</div>
-              <div className="text-[12px] text-gray-400 mt-0.5">Add photos from your past events to showcase your work.</div>
+              <div className="font-headline text-[13px] font-bold text-gray-900">No photos or videos yet</div>
+              <div className="text-[12px] text-gray-400 mt-0.5">Add photos and videos from your past events to showcase your work.</div>
             </div>
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
               className="font-headline text-[11px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-4 py-2 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50"
             >
-              {uploading ? "Uploading…" : "Upload photos"}
+              {uploading ? "Uploading…" : "Upload photo / video"}
             </button>
-            <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only"
+            <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="sr-only"
               onChange={e => { const f = e.target.files?.[0]; if (f && onUpload) onUpload(f); }} />
           </div>
         ) : (
@@ -70,13 +74,30 @@ export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading
               <button
                 key={i}
                 onClick={() => setLightbox(src)}
-                className="flex-none w-[320px] h-[220px] rounded-lg overflow-hidden border border-dark-lighter hover:border-primary/50 transition-all group/photo card-hover"
+                className="relative flex-none w-[320px] h-[220px] rounded-lg overflow-hidden border border-dark-lighter hover:border-primary/50 transition-all group/photo card-hover"
               >
-                <img
-                  src={src}
-                  alt={`Photo ${i + 1}`}
-                  className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-300"
-                />
+                {isVideo(src) ? (
+                  <>
+                    <video
+                      src={src}
+                      className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-300"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/photo:bg-black/30 transition-colors">
+                      <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center">
+                        <Play className="w-5 h-5 text-gray-900 ml-0.5" />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <img
+                    src={src}
+                    alt={`Photo ${i + 1}`}
+                    className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-300"
+                  />
+                )}
               </button>
             ))}
 
@@ -92,10 +113,10 @@ export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading
                     <ImageIcon className="w-4 h-4 text-gray-400 group-hover:text-lime-600 transition-colors" />
                   </div>
                   <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400 group-hover:text-lime-600 transition-colors">
-                    {uploading ? "Uploading…" : "Add photo"}
+                    {uploading ? "Uploading…" : "Add photo / video"}
                   </span>
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only"
+                <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="sr-only"
                   onChange={e => { const f = e.target.files?.[0]; if (f && onUpload) onUpload(f); }} />
               </>
             )}
@@ -115,12 +136,22 @@ export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading
           >
             <X className="w-5 h-5" />
           </button>
-          <img
-            src={lightbox}
-            alt="Event photo"
-            className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          />
+          {isVideo(lightbox) ? (
+            <video
+              src={lightbox}
+              controls
+              autoPlay
+              className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={lightbox}
+              alt="Event photo"
+              className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            />
+          )}
         </div>
       )}
     </>

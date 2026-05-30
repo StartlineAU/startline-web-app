@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
-
-const prisma = new PrismaClient();
-
+import { archivePastEvents } from "@/lib/archive-events";
 export async function GET() {
+  await archivePastEvents();
   const session = await getOrganiserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
@@ -16,10 +15,13 @@ export async function GET() {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, startTime: true, status: true, createdAt: true,
         waves: true, registrationType: true, feeStructure: true, registrationUrl: true, cap: true, isPinned: true,
-        coverImageUrl: true, registrationCount: true,
+        coverImageUrl: true,
+        _count: { select: { registrations: true } },
       },
     });
-    return NextResponse.json(events);
+    return NextResponse.json(
+      events.map(({ _count, ...rest }) => ({ ...rest, registrationCount: _count.registrations }))
+    );
   } catch {
     return NextResponse.json([]);
   }
