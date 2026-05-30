@@ -156,17 +156,17 @@ function PaymentsContent() {
       <OrganiserTopBar />
 
       <main className="pt-16">
-        <div className="max-w-[760px] mx-auto px-6 py-10 pb-24 lg:pb-12 page-in">
+        <div className="max-w-[760px] mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 lg:pb-12 page-in">
 
           {/* Header */}
-          <div className="mb-8">
-            <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-3">
+          <div className="mb-6 sm:mb-8">
+            <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
               Payments
             </div>
-            <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-gray-900 mb-3">
+            <h1 className="font-headline text-[32px] sm:text-[44px] font-black italic tracking-tighter leading-none text-gray-900 mb-3">
               Get paid for<br /><span className="text-lime-500">your events.</span>
             </h1>
-            <p className="text-gray-500 text-[15px] max-w-lg">
+            <p className="text-gray-500 text-[14px] sm:text-[15px] max-w-lg">
               To accept registrations and receive payouts through Startline, you need to connect a Stripe Express account. This is only required for marketplace listings — directory listings linking to an external platform don't need this.
             </p>
           </div>
@@ -275,7 +275,7 @@ function PaymentsContent() {
           {/* ── Form: Legal name, ABN, Insurance + Connect button ── */}
           {/* Always shown so organiser can update details even if connected */}
           <Card>
-            <CardContent className="p-6 lg:p-8">
+            <CardContent className="p-4 sm:p-6 lg:p-8">
               <h2 className="font-headline text-xl font-black italic tracking-tighter text-gray-900 mb-1">
                 {isConnected ? "Your details" : "Step 1 — Your details"}
               </h2>
@@ -362,7 +362,7 @@ function PaymentsContent() {
                   <button
                     onClick={saveAndConnect}
                     disabled={saving || connecting}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 font-headline text-[13px] font-bold uppercase tracking-widest bg-gray-900 text-white px-8 py-4 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full inline-flex items-center justify-center gap-2 font-headline text-[13px] font-bold uppercase tracking-widest bg-gray-900 text-white px-8 py-4 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {saving || connecting
                       ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {saving ? "Saving…" : "Opening Stripe…"}</>
@@ -372,41 +372,6 @@ function PaymentsContent() {
               )}
             </CardContent>
           </Card>
-
-          {/* What Stripe holds — transparency note */}
-          <div className="mt-6 px-5 py-4 bg-white border border-gray-200 rounded-xl">
-            <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">
-              What Startline stores vs. what Stripe holds
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <div className="font-headline text-[11px] uppercase tracking-widest text-gray-700 font-bold mb-2">Startline stores</div>
-                <ul className="text-[12px] text-gray-600 space-y-1">
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-lime-500 shrink-0" /> Legal name</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-lime-500 shrink-0" /> Email address</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-lime-500 shrink-0" /> ABN or ACN</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-lime-500 shrink-0" /> Stripe account reference ID</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-lime-500 shrink-0" /> Insurance self-declaration (boolean)</li>
-                </ul>
-              </div>
-              <div>
-                <div className="font-headline text-[11px] uppercase tracking-widest text-gray-700 font-bold mb-2">Stripe holds (not Startline)</div>
-                <ul className="text-[12px] text-gray-600 space-y-1">
-                  <li className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3 text-blue-400 shrink-0" /> Date of birth (KYC)</li>
-                  <li className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3 text-blue-400 shrink-0" /> Bank account BSB + account number</li>
-                  <li className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3 text-blue-400 shrink-0" /> Identity verification documents</li>
-                  <li className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3 text-blue-400 shrink-0" /> Full card payment credentials</li>
-                </ul>
-              </div>
-            </div>
-            <p className="text-[11px] text-gray-400 mt-3">
-              See{" "}
-              <a href="https://stripe.com/au/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">stripe.com/au/privacy</a>
-              {" "}and{" "}
-              <a href="https://stripe.com/au/legal/connect-account" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">Stripe Connected Account Agreement</a>
-              {" "}for full details on how Stripe handles your information.
-            </p>
-          </div>
 
         </div>
       </main>

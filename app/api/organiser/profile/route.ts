@@ -12,7 +12,7 @@ export async function GET() {
         id: true, email: true, status: true,
         orgName: true, contactName: true, contactEmail: true, phone: true,
         abn: true, website: true, instagram: true, facebook: true,
-        bio: true, logoUrl: true, coverImageUrl: true, coverPosition: true, photos: true,
+        bio: true, logoUrl: true, logoPosition: true, coverImageUrl: true, coverPosition: true, photos: true,
         // Compliance & Stripe Connect fields
         legalName: true, insuranceDeclared: true,
         stripeAccountId: true, stripeOnboardingComplete: true,
@@ -55,7 +55,7 @@ export async function PUT(req: NextRequest) {
   const {
     orgName, contactName, contactEmail, phone,
     abn, website, instagram, facebook, bio,
-    logoUrl, coverImageUrl, coverPosition, photos,
+    logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
     // Compliance fields — optional, no extra validation
     legalName, insuranceDeclared,
   } = body;
@@ -77,7 +77,7 @@ export async function PUT(req: NextRequest) {
       data: {
         orgName, contactName, contactEmail, phone,
         abn, website, instagram, facebook, bio,
-        logoUrl, coverImageUrl, coverPosition, photos,
+        logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
         ...(legalName !== undefined    ? { legalName }         : {}),
         ...(insuranceDeclared !== undefined ? { insuranceDeclared } : {}),
       },

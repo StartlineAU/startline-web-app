@@ -213,13 +213,13 @@ export default function EventStatusPage({
               <h1 className="font-headline text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-tight text-gray-900 mb-3">
                 {event.title}
               </h1>
-              <div className="flex items-center gap-4 text-[13px] text-gray-500">
+              <div className="flex flex-col gap-1 text-[13px] text-gray-500">
                 <span className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-lime-500" />
+                  <Calendar className="w-3.5 h-3.5 text-lime-500 shrink-0" />
                   {formatDate(event.eventDate, event.startTime)}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-lime-500" />
+                  <MapPin className="w-3.5 h-3.5 text-lime-500 shrink-0" />
                   {event.venue}, {event.city} {event.state.toUpperCase()}
                 </span>
               </div>
@@ -243,12 +243,14 @@ export default function EventStatusPage({
                   <Pencil className="w-3.5 h-3.5" /> Edit &amp; resubmit
                 </Link>
               )}
-              <Link
-                href={`/organiser/new-listing?id=${event.id}`}
-                className="inline-flex items-center gap-2 border border-gray-200 bg-white text-gray-700 font-headline text-[11px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all"
-              >
-                <Pencil className="w-3.5 h-3.5" /> Edit event
-              </Link>
+              {!isRejected && (
+                <Link
+                  href={`/organiser/new-listing?id=${event.id}`}
+                  className="inline-flex items-center gap-2 border border-gray-200 bg-white text-gray-700 font-headline text-[11px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit event
+                </Link>
+              )}
             </div>
           </div>
 

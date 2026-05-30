@@ -170,7 +170,7 @@ export default function EventDashboardPage({
       <OrganiserTopBar />
 
       <main className="pt-16">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-24 lg:pb-12 page-in">
+        <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-12 page-in">
 
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-widest text-gray-400 mb-6">
@@ -190,8 +190,7 @@ export default function EventDashboardPage({
             )}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <Badge className="gap-1.5 bg-lime-50 text-lime-700 border-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-lime-500 animate-pulse-dot" />
+                <Badge className="bg-lime-50 text-lime-700 border-0">
                   Live
                 </Badge>
                 <span className="font-headline text-[11px] uppercase tracking-widest text-gray-400">
@@ -201,13 +200,13 @@ export default function EventDashboardPage({
               <h1 className="font-headline text-[36px] lg:text-[44px] font-black italic tracking-tighter leading-none text-gray-900 mb-3">
                 {event.title}
               </h1>
-              <div className="flex flex-wrap gap-4 text-[13px] text-gray-500">
+              <div className="flex flex-col gap-1 text-[13px] text-gray-500">
                 <span className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-lime-500" />
+                  <Calendar className="w-3.5 h-3.5 text-lime-500 shrink-0" />
                   {formatDate(event.eventDate, event.startTime)}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-lime-500" />
+                  <MapPin className="w-3.5 h-3.5 text-lime-500 shrink-0" />
                   {event.venue}, {event.city} {event.state.toUpperCase()}
                 </span>
               </div>
@@ -275,30 +274,16 @@ export default function EventDashboardPage({
                   </span>
                 </div>
 
-                {/* Header row */}
-                <div className="grid grid-cols-12 gap-4 pb-2 mb-1 border-b border-gray-100">
-                  <div className="col-span-4 font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">Tier</div>
-                  <div className="col-span-3 font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">Price</div>
-                  <div className="col-span-2 font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">Capacity</div>
-                  <div className="col-span-3 font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400 text-right">Sold</div>
-                </div>
-
-                <div className="divide-y divide-gray-50">
+                <div className="divide-y divide-gray-100">
                   {event.waves.map((w, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-4 py-3.5 items-center">
-                      <div className="col-span-4">
-                        <div className="font-headline text-[14px] font-bold text-gray-800">{w.label}</div>
-                      </div>
-                      <div className="col-span-3">
+                    <div key={i} className="flex items-center justify-between py-3 gap-4">
+                      <div className="font-headline text-[14px] font-bold text-gray-800 min-w-0 truncate">{w.label}</div>
+                      <div className="flex items-center gap-4 sm:gap-6 shrink-0">
                         <div className="font-headline text-[14px] font-black italic text-gray-900">A${w.price}</div>
-                      </div>
-                      <div className="col-span-2 text-right">
-                        <div className="font-headline text-[13px] text-gray-500">
-                          {w.qty ? w.qty.toLocaleString() : "—"}
+                        <div className="text-right">
+                          <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Cap</div>
+                          <div className="font-headline text-[13px] text-gray-600">{w.qty ? w.qty.toLocaleString() : "—"}</div>
                         </div>
-                      </div>
-                      <div className="col-span-3 text-right">
-                        <div className="font-headline text-[13px] text-gray-400 italic">—</div>
                       </div>
                     </div>
                   ))}
@@ -348,16 +333,16 @@ export default function EventDashboardPage({
           {/* Announcements */}
           <Card>
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
                 <div>
                   <h2 className="font-headline text-lg font-black italic tracking-tighter text-gray-900">
                     Announcements
                   </h2>
-                  <p className="text-[13px] text-gray-400 mt-0.5">
+                  <p className="text-[13px] text-gray-400 mt-0.5 max-w-sm">
                     Keep registered athletes in the loop about schedule changes, logistics, or event updates.
                   </p>
                 </div>
-                <Button onClick={() => setShowCompose(true)} className="shrink-0">
+                <Button onClick={() => setShowCompose(true)} className="shrink-0 self-start">
                   <Plus className="w-4 h-4" /> New announcement
                 </Button>
               </div>

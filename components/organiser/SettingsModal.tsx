@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   X, ChevronRight, Upload, Camera, Move, Mail, Phone,
-  CheckCircle, User, Lock, Bell, CreditCard, Cookie,
+  CheckCircle, User, Lock, Bell, CreditCard, Cookie, Trash2,
 } from "lucide-react";
 import { useSettings, type SettingsSection } from "@/context/SettingsContext";
 
@@ -26,10 +26,11 @@ function FieldLabel({ label, hint, required }: { label: string; hint?: string; r
 // ── CoverEditor ─────────────────────────────────────────────────────────────
 
 function CoverEditor({
-  imageUrl, position, uploading, onUpload, onPositionChange, fileRef,
+  imageUrl, position, uploading, onUpload, onPositionChange, onRemove, fileRef,
 }: {
   imageUrl: string; position: string; uploading: boolean;
   onUpload: (f: File) => void; onPositionChange: (p: string) => void;
+  onRemove: () => void;
   fileRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,17 +117,109 @@ function CoverEditor({
   );
 }
 
+// ── LogoEditor ──────────────────────────────────────────────────────────────
+
+function LogoEditor({
+  imageUrl, position, initial, uploading, onUpload, onPositionChange, fileRef,
+}: {
+  imageUrl: string; position: string; initial: string; uploading: boolean;
+  onUpload: (f: File) => void; onPositionChange: (p: string) => void;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [reposition, setReposition] = useState(false);
+  const [dragging,   setDragging]   = useState(false);
+  const dragStart = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+
+  const parsePos = (pos: string) => {
+    const [x, y] = pos.split(" ").map(v => parseFloat(v));
+    return { x: isNaN(x) ? 50 : x, y: isNaN(y) ? 50 : y };
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (!reposition || !imageUrl) return;
+    e.preventDefault();
+    const { x, y } = parsePos(position);
+    dragStart.current = { x: e.clientX, y: e.clientY, px: x, py: y };
+    setDragging(true);
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging || !dragStart.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const dx   = ((e.clientX - dragStart.current.x) / rect.width)  * -100;
+    const dy   = ((e.clientY - dragStart.current.y) / rect.height) * -100;
+    const newX = Math.min(100, Math.max(0, dragStart.current.px + dx));
+    const newY = Math.min(100, Math.max(0, dragStart.current.py + dy));
+    onPositionChange(`${newX.toFixed(1)}% ${newY.toFixed(1)}%`);
+  };
+  const onMouseUp = () => setDragging(false);
+
+  return (
+    <div className="flex items-start gap-4">
+      <div
+        ref={containerRef}
+        className={`relative w-24 h-24 rounded-2xl overflow-hidden bg-lime-400 border border-gray-200 shrink-0 select-none
+          ${reposition && imageUrl ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+      >
+        {imageUrl
+          ? <img src={imageUrl} alt="Logo" className="w-full h-full object-cover pointer-events-none"
+              style={{ objectPosition: position }} draggable={false} />
+          : <span className="font-headline font-black italic text-2xl text-gray-900 flex items-center justify-center w-full h-full">{initial}</span>}
+        {reposition && imageUrl && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+            <Move className="w-4 h-4 text-white" />
+          </div>
+        )}
+        {!reposition && (
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center"
+            onClick={() => !imageUrl && fileRef.current?.click()}>
+            {uploading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => { setReposition(false); fileRef.current?.click(); }} disabled={uploading}
+            className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-700 hover:text-lime-600 transition-colors disabled:opacity-40 flex items-center gap-1.5">
+            <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Upload new photo"}
+          </button>
+          {imageUrl && (
+            <>
+              <span className="text-gray-300 text-xs">·</span>
+              {reposition ? (
+                <button onClick={() => setReposition(false)}
+                  className="font-headline text-[12px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-2.5 py-1 rounded-md hover:bg-lime-500 transition-colors">
+                  Done
+                </button>
+              ) : (
+                <button onClick={() => setReposition(true)}
+                  className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors">
+                  <Move className="w-3 h-3" /> Reposition
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <p className="text-[11px] text-gray-400 mt-0.5">PNG or JPG, square recommended.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Personal information form ────────────────────────────────────────────────
 
 interface ProfileForm {
   orgName: string; bio: string; contactName: string;
   contactEmail: string; phone: string; facebook: string;
-  logoUrl: string; coverImageUrl: string; coverPosition: string;
+  logoUrl: string; logoPosition: string; coverImageUrl: string; coverPosition: string;
 }
 
 const EMPTY_FORM: ProfileForm = {
   orgName: "", bio: "", contactName: "", contactEmail: "",
-  phone: "", facebook: "", logoUrl: "", coverImageUrl: "", coverPosition: "50% 50%",
+  phone: "", facebook: "", logoUrl: "", logoPosition: "50% 50%", coverImageUrl: "", coverPosition: "50% 50%",
 };
 
 function PersonalInfoForm() {
@@ -155,6 +248,7 @@ function PersonalInfoForm() {
           phone:         data.phone         ?? "",
           facebook:      data.facebook      ?? "",
           logoUrl:       data.logoUrl       ?? "",
+          logoPosition:  data.logoPosition  ?? "50% 50%",
           coverImageUrl: data.coverImageUrl ?? "",
           coverPosition: data.coverPosition ?? "50% 50%",
         });
@@ -236,30 +330,13 @@ function PersonalInfoForm() {
         </div>
         <div>
           <FieldLabel label="Profile photo" />
-          <div className="flex items-center gap-4">
-            <div
-              className="relative w-16 h-16 rounded-xl overflow-hidden bg-lime-400 flex items-center justify-center cursor-pointer group border border-gray-200 shrink-0"
-              onClick={() => logoRef.current?.click()}
-            >
-              {form.logoUrl
-                ? <img src={form.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-                : <span className="font-headline font-black italic text-2xl text-gray-900">{initial}</span>}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
-                {logoUploading
-                  ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  : <Camera className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />}
-              </div>
-            </div>
-            <div>
-              <button onClick={() => logoRef.current?.click()} disabled={logoUploading}
-                className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-700 hover:text-lime-600 transition-colors disabled:opacity-40 flex items-center gap-1.5">
-                <Upload className="w-3.5 h-3.5" /> {logoUploading ? "Uploading…" : "Upload new photo"}
-              </button>
-              <p className="text-[11px] text-gray-400 mt-0.5">PNG or JPG, square recommended.</p>
-            </div>
-            <input ref={logoRef} type="file" accept="image/*" className="sr-only"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }} />
-          </div>
+          <LogoEditor
+            imageUrl={form.logoUrl} position={form.logoPosition} initial={initial}
+            uploading={logoUploading} onUpload={handleLogoUpload}
+            onPositionChange={pos => patch({ logoPosition: pos })} fileRef={logoRef}
+          />
+          <input ref={logoRef} type="file" accept="image/*" className="sr-only"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }} />
         </div>
       </div>
 

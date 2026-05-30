@@ -37,6 +37,7 @@ model Organiser {
   facebook     String?
   bio            String?
   logoUrl        String?
+  logoPosition   String?  @default("50% 50%")
   coverImageUrl  String?
   coverPosition  String?  @default("50% 50%")
   photos         String[]
