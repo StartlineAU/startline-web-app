@@ -116,10 +116,15 @@ export default function OrganiserTopBar() {
     }
   };
 
+  const isDevBypass = !process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
+
   const handleLogout = async () => {
     setOpen(false);
-    const { signOut } = await import("aws-amplify/auth");
-    await signOut();
+    document.cookie = "DEV_USER_EMAIL=; path=/; max-age=0";
+    if (!isDevBypass) {
+      const { signOut } = await import("aws-amplify/auth");
+      await signOut();
+    }
     router.push("/organiser");
   };
 
