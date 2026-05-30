@@ -13,10 +13,13 @@ export async function GET() {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, startTime: true, status: true, createdAt: true,
         waves: true, registrationType: true, feeStructure: true, registrationUrl: true, cap: true, isPinned: true,
-        coverImageUrl: true, registrationCount: true,
+        coverImageUrl: true,
+        _count: { select: { registrations: true } },
       },
     });
-    return NextResponse.json(events);
+    return NextResponse.json(
+      events.map(({ _count, ...rest }) => ({ ...rest, registrationCount: _count.registrations }))
+    );
   } catch {
     return NextResponse.json([]);
   }
