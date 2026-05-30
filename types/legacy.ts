@@ -1,0 +1,61 @@
+// Kept for backward compatibility with lib/utils.ts filtering logic.
+// Customer-facing code uses CustomerEvent from index.ts instead.
+
+export interface FitnessEvent {
+  id: string;
+  title: string;
+  description: string;
+  fullDescription?: string;
+  date: string;
+  time: string;
+  endTime?: string;
+  cutOffTime?: string;
+  dates?: string[];
+  location: string;
+  streetAddress?: string;
+  city: string;
+  state: string;
+  country?: string;
+  courseMapUrl?: string;
+  type: string;
+  format: string;
+  level: string;
+  image: string;
+  registrationUrl: string;
+  registrationCloseDate?: string;
+  organizer?: string;
+  distance?: string;
+  isOfficial?: boolean;
+  categories?: string[];
+  workoutDescription?: string;
+  soloAvailable?: boolean;
+  partnerAvailable?: boolean;
+  teamAvailable?: boolean;
+  ticketDrops?: { label: string; date?: string; price?: string; qty?: number }[];
+  transferPolicy?: string;
+  refundPolicy?: string;
+  waitlistAvailable?: boolean;
+  entryFeeInclusions?: string;
+  optionalExtras?: string;
+  groupDiscount?: string;
+  charityComponent?: string;
+  prizeStructure?: string;
+  prizePoolTotal?: string;
+  ageGroupCategories?: string;
+  ceremonyDate?: string;
+  ceremonyLocation?: string;
+  specialAwards?: string;
+  hasExpo?: boolean;
+  expoDetails?: string;
+  vendorOpportunities?: boolean;
+  bibCollectionInfo?: string;
+  athleteBriefing?: string;
+  participantCap?: string;
+  minAge?: string;
+  accessibilityInfo?: string;
+  parkingInfo?: string;
+  bagDropInfo?: string;
+  resultsProvider?: string;
+  resultsLink?: string;
+  additionalNotes?: string;
+}
