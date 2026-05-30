@@ -29,7 +29,7 @@ function loadMapsScript(apiKey: string): Promise<void> {
   }
   scriptPromise = new Promise((resolve, reject) => {
     const cb = "__gmapsLoaded";
-    (window as Record<string, unknown>)[cb] = resolve;
+    (window as unknown as Record<string, unknown>)[cb] = resolve;
     const s = document.createElement("script");
     s.src     = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${cb}`;
     s.async   = true;

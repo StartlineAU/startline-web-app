@@ -1,11 +1,17 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = "Startline <events@startlineau.com>";
-const SITE   = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const getResend = () => {
+  if (!process.env.RESEND_API_KEY) return null;
+  return new Resend(process.env.RESEND_API_KEY);
+};
+
+const FROM = "Startline <events@startlineau.com>";
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 // ── Email verification ────────────────────────────────────────────────────────
 export async function sendVerificationEmail(email: string, token: string) {
+  const resend = getResend();
+  if (!resend) return;
   const link = `${SITE}/organiser/verify-email?token=${token}`;
   await resend.emails.send({
     from:    FROM,
@@ -26,6 +32,8 @@ export async function sendVerificationEmail(email: string, token: string) {
 
 // ── Event approved ────────────────────────────────────────────────────────────
 export async function sendEventApprovedEmail(email: string, eventTitle: string) {
+  const resend = getResend();
+  if (!resend) return;
   await resend.emails.send({
     from:    FROM,
     to:      email,
@@ -44,6 +52,8 @@ export async function sendEventApprovedEmail(email: string, eventTitle: string) 
 
 // ── Event rejected ────────────────────────────────────────────────────────────
 export async function sendEventRejectedEmail(email: string, eventTitle: string, reason?: string) {
+  const resend = getResend();
+  if (!resend) return;
   await resend.emails.send({
     from:    FROM,
     to:      email,
