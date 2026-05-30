@@ -156,7 +156,7 @@ function PaymentsContent() {
       <OrganiserTopBar />
 
       <main className="pt-16">
-        <div className="max-w-[760px] mx-auto px-6 py-10 pb-24 lg:pb-12">
+        <div className="max-w-[760px] mx-auto px-6 py-10 pb-24 lg:pb-12 page-in">
 
           {/* Header */}
           <div className="mb-8">

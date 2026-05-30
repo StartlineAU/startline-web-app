@@ -340,7 +340,7 @@ function AdminEventsContent() {
       <AdminNav />
 
       <main className="pt-16">
-        <div className="max-w-[1200px] mx-auto px-6 py-10">
+        <div className="max-w-[1200px] mx-auto px-6 py-10 page-in">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">

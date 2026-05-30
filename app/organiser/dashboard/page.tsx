@@ -32,12 +32,12 @@ function formatEventDate(dateStr: string, startTime: string) {
   }
 }
 
-const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string; pulse?: boolean }> = {
-  DRAFT:    { bg: "bg-gray-100",  text: "text-gray-500",  dot: "bg-gray-400",  label: "Draft"    },
-  PENDING:  { bg: "bg-blue-50",   text: "text-blue-600",  dot: "bg-blue-500",  label: "Pending"  },
-  APPROVED: { bg: "bg-lime-50",   text: "text-lime-700",  dot: "bg-lime-500",  label: "Live",    pulse: true },
-  REJECTED: { bg: "bg-red-50",    text: "text-red-600",   dot: "bg-red-500",   label: "Rejected" },
-  ARCHIVED: { bg: "bg-gray-100",  text: "text-gray-400",  dot: "bg-gray-300",  label: "Archived" },
+const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: string }> = {
+  DRAFT:    { bg: "bg-gray-200",  text: "text-gray-700",  label: "Draft"    },
+  PENDING:  { bg: "bg-blue-200",  text: "text-blue-900",  label: "Pending"  },
+  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Live"     },
+  REJECTED: { bg: "bg-red-200",   text: "text-red-900",   label: "Rejected" },
+  ARCHIVED: { bg: "bg-gray-200",  text: "text-gray-500",  label: "Archived" },
 };
 
 function StatCard({
@@ -166,7 +166,7 @@ export default function DashboardPage() {
                 const price = (e.waves as { price: string }[])?.[0]?.price;
                 return (
                   <div key={e.id}
-                    onClick={() => router.push(`/organiser/new-listing?id=${e.id}`)}
+                    onClick={() => router.push(e.status === "APPROVED" ? `/organiser/events/${e.id}/dashboard` : `/organiser/events/${e.id}`)}
                     className={`grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400 transition-all ${i < recent.length - 1 ? "border-b border-gray-100" : ""}`}>
 
                     <div className="col-span-5 flex items-center gap-4 min-w-0">
@@ -188,8 +188,7 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="col-span-2 flex justify-center">
-                      <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? "animate-pulse-dot" : ""}`} />
+                      <Badge className={`${s.bg} ${s.text} border-0`}>
                         {s.label}
                       </Badge>
                     </div>

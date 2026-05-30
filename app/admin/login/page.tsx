@@ -94,7 +94,7 @@ export default function AdminLoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-dark-darker px-6">
-      <div className="w-full max-w-[400px]">
+      <div className="w-full max-w-[400px] page-in">
         <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-8">
           Admin Portal
         </span>

@@ -52,7 +52,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="min-h-screen grid lg:grid-cols-2">
+    <main className="min-h-screen grid lg:grid-cols-2 page-in">
       {/* ── LEFT — form ── */}
       <section className="flex items-center justify-center px-6 py-16 lg:py-24 bg-dark-darker">
         <div className="w-full max-w-[440px]">
