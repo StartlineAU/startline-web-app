@@ -172,7 +172,7 @@ interface EventRowProps {
 }
 
 const STATUS: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  APPROVED: { bg: '#F0FDF4', text: '#15803D', dot: '#22C55E', label: 'Live'    },
+  APPROVED: { bg: '#F0FDF4', text: '#15803D', dot: '#22C55E', label: 'Published'    },
   PENDING:  { bg: '#EFF6FF', text: '#1D4ED8', dot: '#3B82F6', label: 'Pending' },
   DRAFT:    { bg: '#F9FAFB', text: '#6B7280', dot: '#9CA3AF', label: 'Draft'   },
 };

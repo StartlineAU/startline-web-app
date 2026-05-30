@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { archivePastEvents } from "@/lib/archive-events";
 
 export interface PublicWave {
   label: string;
@@ -47,6 +48,7 @@ function lowestPrice(waves: unknown): number | null {
  * Used by the public events feed (`/api/events`).
  */
 export async function getAllEvents(): Promise<PublicEvent[]> {
+  await archivePastEvents();
   const events = await prisma.event.findMany({
     where: { status: "APPROVED" },
     orderBy: { eventDate: "asc" },

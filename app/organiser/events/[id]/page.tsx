@@ -67,7 +67,7 @@ const STATUS_META: Record<EventStatus, {
     description: "The Startline team will review your submission and approve or provide feedback. This usually takes 1–2 business days.",
   },
   APPROVED: {
-    label:       "Live",
+    label:       "Published",
     color:       "text-lime-700",
     bg:          "bg-lime-50",
     border:      "border-lime-200",

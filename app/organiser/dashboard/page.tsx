@@ -35,7 +35,7 @@ function formatEventDate(dateStr: string, startTime: string) {
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: string }> = {
   DRAFT:    { bg: "bg-gray-200",  text: "text-gray-700",  label: "Draft"    },
   PENDING:  { bg: "bg-blue-200",  text: "text-blue-900",  label: "Pending"  },
-  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Live"     },
+  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Published"     },
   REJECTED: { bg: "bg-red-200",   text: "text-red-900",   label: "Rejected" },
   ARCHIVED: { bg: "bg-gray-200",  text: "text-gray-500",  label: "Archived" },
 };
@@ -121,7 +121,7 @@ export default function DashboardPage() {
           {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
             <StatCard label="Events live now"  value={loading ? "—" : stats.live}          sub={`of ${stats.total} total`} good trend={stats.live > 0 ? "Taking sign-ups" : undefined} delay={0}   />
-            <StatCard label="Registrations"    value={loading ? "—" : stats.registrations} sub="across all events"          good={stats.registrations > 0}                         delay={80}  />
+            <StatCard label="Total registrations"    value={loading ? "—" : stats.registrations} sub="athletes across all your events"          good={stats.registrations > 0}                         delay={80}  />
             <StatCard label="Total events"     value={loading ? "—" : stats.total}         sub="all time"                                                                           delay={160} />
           </div>
 

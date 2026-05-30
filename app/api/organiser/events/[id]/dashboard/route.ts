@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
+import { archivePastEvents } from "@/lib/archive-events";
 // Startline platform fee: 3% + $1 per registration
 const PLATFORM_FEE_PERCENT = 0.03;
 const PLATFORM_FEE_FIXED   = 1.00;
@@ -15,6 +16,7 @@ export async function GET(
   const { id } = await params;
 
   try {
+    await archivePastEvents();
     const event = await prisma.event.findUnique({
       where: { id },
     });
