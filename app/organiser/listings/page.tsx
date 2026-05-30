@@ -31,12 +31,12 @@ function formatEventDate(dateStr: string, startTime: string) {
   }
 }
 
-const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string; pulse?: boolean }> = {
-  DRAFT:    { bg: "bg-gray-100", text: "text-gray-500",  dot: "bg-gray-400",  label: "Draft"    },
-  PENDING:  { bg: "bg-blue-50",  text: "text-blue-600",  dot: "bg-blue-500",  label: "Pending"  },
-  APPROVED: { bg: "bg-lime-50",  text: "text-lime-700",  dot: "bg-lime-500",  label: "Live",    pulse: true },
-  REJECTED: { bg: "bg-red-50",   text: "text-red-600",   dot: "bg-red-500",   label: "Rejected" },
-  ARCHIVED: { bg: "bg-gray-100", text: "text-gray-400",  dot: "bg-gray-300",  label: "Archived" },
+const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: string }> = {
+  DRAFT:    { bg: "bg-gray-200",  text: "text-gray-700",  label: "Draft"    },
+  PENDING:  { bg: "bg-blue-200",  text: "text-blue-900",  label: "Pending"  },
+  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Live"     },
+  REJECTED: { bg: "bg-red-200",   text: "text-red-900",   label: "Rejected" },
+  ARCHIVED: { bg: "bg-gray-200",  text: "text-gray-500",  label: "Archived" },
 };
 
 type Filter = EventStatus | "all";
@@ -161,12 +161,11 @@ export default function ListingsPage() {
     }
   };
 
-  // Row click — live events go to dashboard, others go to editor
   const handleRowClick = (e: EventRow) => {
     if (e.status === "APPROVED") {
       router.push(`/organiser/events/${e.id}/dashboard`);
     } else {
-      router.push(`/organiser/new-listing?id=${e.id}`);
+      router.push(`/organiser/events/${e.id}`);
     }
   };
 
@@ -253,11 +252,6 @@ export default function ListingsPage() {
                       <div className="flex items-center gap-1 font-headline text-[11px] text-gray-400 uppercase tracking-widest mt-0.5">
                         <MapPin className="w-3 h-3 text-lime-500" /> {e.city}, {e.state.toUpperCase()}
                       </div>
-                      {isLive && (
-                        <div className="font-headline text-[10px] uppercase tracking-widest text-lime-600 mt-0.5">
-                          Click to view dashboard →
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -268,8 +262,7 @@ export default function ListingsPage() {
 
                   {/* Status */}
                   <div className="col-span-2 flex justify-center">
-                    <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${s.pulse ? "animate-pulse-dot" : ""}`} />
+                    <Badge className={`${s.bg} ${s.text} border-0`}>
                       {s.label}
                     </Badge>
                   </div>

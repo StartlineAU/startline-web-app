@@ -170,7 +170,7 @@ export default function EventDashboardPage({
       <OrganiserTopBar />
 
       <main className="pt-16">
-        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-24 lg:pb-12">
+        <div className="max-w-[1100px] mx-auto px-6 py-8 pb-24 lg:pb-12 page-in">
 
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-widest text-gray-400 mb-6">

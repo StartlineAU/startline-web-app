@@ -138,7 +138,7 @@ export default function OnboardingPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="relative z-10 pt-16 min-h-screen flex items-start justify-center px-6 py-12">
+      <div className="relative z-10 pt-16 min-h-screen flex items-start justify-center px-6 py-12 page-in">
         <div className="w-full max-w-[600px]">
 
           {/* ── Step indicators ── */}

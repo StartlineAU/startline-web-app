@@ -63,7 +63,7 @@ export default async function AdminDashboardPage() {
       <AdminNav />
 
       <main className="pt-16">
-        <div className="max-w-[1200px] mx-auto px-6 py-10">
+        <div className="max-w-[1200px] mx-auto px-6 py-10 page-in">
 
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-10">
