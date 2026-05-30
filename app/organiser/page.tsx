@@ -15,6 +15,8 @@ function SignInForm() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
+  const isDevBypass = !process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
+
   // Force-change-password challenge (admin-created accounts)
   const [needsNewPassword, setNeedsNewPassword] = useState(false);
   const [newPassword,      setNewPassword]      = useState("");
@@ -40,6 +42,13 @@ function SignInForm() {
     setLoading(true);
 
     try {
+      if (isDevBypass) {
+        document.cookie = `DEV_USER_EMAIL=${email}; path=/; max-age=86400`;
+        await fetch("/api/organiser/auth/session", { method: "POST" });
+        router.push("/organiser/dashboard");
+        return;
+      }
+
       await signOut({ global: false }).catch(() => {});
 
       const result = await signIn({ username: email, password });

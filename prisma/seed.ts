@@ -1,11 +1,10 @@
 /**
  * Seed script — creates realistic test data for local / staging testing.
  *
- * Run with:  npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/seed.ts
- * Or:        npm run prisma:seed   (if configured in package.json)
+ * Run with:  npx prisma db seed
  *
- * IMPORTANT: This is destructive for the seeded organiser and their events.
- * It uses upsert so running it multiple times is safe.
+ * IMPORTANT: This is destructive — it wipes then recreates all seed data.
+ * Uses upsert so running it multiple times is safe.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -16,28 +15,46 @@ const prisma = new PrismaClient();
 const SEED_ORGANISER_SUB   = "seed-organiser-cognito-sub-001";
 const SEED_ORGANISER_EMAIL = "test.organiser@startlineau.com";
 
+const COASTAL_ORG_SUB   = "coastal-trail-sub";
+const COASTAL_ORG_EMAIL = "hello@coastaltrailrunning.com.au";
+
+const URBAN_ORG_SUB   = "urban-fitness-sub";
+const URBAN_ORG_EMAIL = "info@urbanfitnessevents.com.au";
+
 async function main() {
   console.log("🌱 Seeding database…\n");
 
-  // ── 1. Organiser ─────────────────────────────────────────────────────────
-  // Look up by email first: an account with this email may already exist under
-  // a different cognitoSub (e.g. from an earlier seed), which would otherwise
-  // trip the unique-email constraint on insert.
-  const existingOrganiser = await prisma.organiser.findUnique({
-    where: { email: SEED_ORGANISER_EMAIL },
-    select: { cognitoSub: true },
-  });
-  const organiserKey = existingOrganiser?.cognitoSub ?? SEED_ORGANISER_SUB;
+  // ── Wipe existing seed data (FK order) ──────────────────────────────────
+  await prisma.registration.deleteMany();
+  await prisma.review.deleteMany();
+  await prisma.announcement.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.event.deleteMany();
+  await prisma.admin.deleteMany();
+  await prisma.organiser.deleteMany();
+  console.log("  Cleared existing data");
 
-  const organiser = await prisma.organiser.upsert({
-    where:  { cognitoSub: organiserKey },
+  // ── Admin (cognitoSub matches dev bypass) ────────────────────────────────
+  const admin = await prisma.admin.create({
+    data: {
+      cognitoSub: SEED_ORGANISER_SUB,
+      email: SEED_ORGANISER_EMAIL,
+      name: "Platform Admin",
+    },
+  });
+  console.log(`  Admin: ${admin.email}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 1. Organiser — Apex Endurance Events
+  // ─────────────────────────────────────────────────────────────────────────
+  const apexOrg = await prisma.organiser.upsert({
+    where:  { cognitoSub: SEED_ORGANISER_SUB },
     update: {},
     create: {
       cognitoSub:   SEED_ORGANISER_SUB,
       email:        SEED_ORGANISER_EMAIL,
       status:       "APPROVED",
 
-      // Profile
       orgName:      "Apex Endurance Events",
       contactName:  "James Hartley",
       contactEmail: "james@apexendurance.com.au",
@@ -47,7 +64,6 @@ async function main() {
       instagram:    "apexenduranceevents",
       bio:          "Apex Endurance Events has been running community-first fitness competitions across Victoria and New South Wales since 2019. We specialise in functional fitness throwdowns, hybrid obstacle races, and team-based challenges that welcome athletes of all levels.",
 
-      // Compliance & Stripe
       legalName:               "James Robert Hartley",
       insuranceDeclared:       true,
       stripeAccountId:         "acct_seed_test_1234xyz",
@@ -55,12 +71,56 @@ async function main() {
     },
   });
 
-  console.log(`✓ Organiser: ${organiser.orgName} (${organiser.id})`);
+  // ─────────────────────────────────────────────────────────────────────────
+  // 2. Organiser — Coastal Trail Running
+  // ─────────────────────────────────────────────────────────────────────────
+  const coastalOrg = await prisma.organiser.create({
+    data: {
+      cognitoSub:   COASTAL_ORG_SUB,
+      email:        COASTAL_ORG_EMAIL,
+      status:       "APPROVED",
 
-  // ── 2. Events ─────────────────────────────────────────────────────────────
+      orgName:      "Coastal Trail Running",
+      contactName:  "Sarah Mitchell",
+      contactEmail: "sarah@coastaltrailrunning.com.au",
+      phone:        "0411 222 333",
+      abn:          "98 765 432 109",
+      website:      "https://coastaltrailrunning.com.au",
+      instagram:    "@coastal_trail",
+      facebook:     "coastaltrailrunning",
+      bio:          "Australia's premier trail running event organisers. From coastal paths to mountain peaks, we bring you the best trail running experiences on the east coast.",
+    },
+  });
 
-  // ── Event 1: APPROVED — "The Apex Throwdown 2026" ────────────────────────
-  const event1 = await prisma.event.upsert({
+  // ─────────────────────────────────────────────────────────────────────────
+  // 3. Organiser — Urban Fitness Events
+  // ─────────────────────────────────────────────────────────────────────────
+  const urbanOrg = await prisma.organiser.create({
+    data: {
+      cognitoSub:   URBAN_ORG_SUB,
+      email:        URBAN_ORG_EMAIL,
+      status:       "APPROVED",
+
+      orgName:      "Urban Fitness Events",
+      contactName:  "Mike Chen",
+      contactEmail: "mike@urbanfitnessevents.com.au",
+      phone:        "0422 333 444",
+      abn:          "45 678 901 234",
+      website:      "https://urbanfitnessevents.com.au",
+      instagram:    "@urban_fitness_events",
+      facebook:     "urbanfitnessevents",
+      bio:          "Bringing fitness to the city. We organise urban running events, park runs, and community fitness challenges across Australia's major cities.",
+    },
+  });
+
+  console.log(`  Organisers: ${apexOrg.orgName}, ${coastalOrg.orgName}, ${urbanOrg.orgName}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Apex Events
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Apex Event 1: APPROVED — "The Apex Throwdown 2026"
+  const apexEvent1 = await prisma.event.upsert({
     where:  { id: "seed-event-001-apex-throwdown" },
     update: {
       status:            "APPROVED",
@@ -68,16 +128,14 @@ async function main() {
     },
     create: {
       id:           "seed-event-001-apex-throwdown",
-      organiserId:  organiser.id,
+      organiserId:  apexOrg.id,
       status:       "APPROVED",
 
-      // Step 1 — basics
       title:       "The Apex Throwdown 2026",
       discipline:  "functional_fitness",
       tagline:     "Two days. One leaderboard. Every rep counts.",
       description: "The Apex Throwdown is Victoria's premier functional fitness competition, drawing over 300 athletes from across Australia. Three workouts across two days test your strength, conditioning, and mental grit. Scaled, RX, and Elite divisions. Team and individual options available.\n\nPrize pool of $8,000 across all divisions. Online workouts release 6 weeks prior for qualifier selection.",
 
-      // Step 2 — date & location
       eventDate: "2026-08-15",
       endDate:   "2026-08-16",
       startTime: "07:30",
@@ -87,50 +145,43 @@ async function main() {
       city:      "Melbourne",
       state:     "vic",
 
-      // Step 3 — format & categories
       format:     "both",
       level:      "open",
-      categories: ["Individual Scaled", "Individual RX", "Individual Elite", "Team of 2 Scaled", "Team of 2 RX", "Masters 35–44", "Masters 45+"],
+      categories: ["Individual Scaled", "Individual RX", "Individual Elite", "Team of 2 Scaled", "Team of 2 RX", "Masters 35\u201344", "Masters 45+"],
       cap:        320,
       minAge:     16,
 
-      // Step 4 — tickets
       waves: [
         { label: "Early Bird",  date: "2026-05-01", price: "95",  qty: 80  },
         { label: "General",     date: "2026-06-15", price: "115", qty: 150 },
         { label: "Late Entry",  date: "2026-07-31", price: "135", qty: 90  },
       ],
       inclusions:       "Event t-shirt, finisher medal, post-event athlete party, online score tracking, professional photography package",
-      extras:           "Spectator tickets available at the door — $15/day. Parking at MSAC: $12/day.",
+      extras:           "Spectator tickets available at the door \u2014 $15/day. Parking at MSAC: $12/day.",
       activations:      "Vendor expo Friday evening. Supplement samples, apparel pop-ups, nutrition talks 9am Saturday.",
       refundPolicy:     "Moderate",
       registrationType: "startline",
       feeStructure:     "athlete",
       registrationCount: 24,
 
-      // Step 5 — media
       coverImageUrl:    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
-      bagDrop:          "Bag drop available at Gate 3 from 6:45am both days. Bags must be tagged — tags provided at registration desk.",
+      bagDrop:          "Bag drop available at Gate 3 from 6:45am both days. Bags must be tagged \u2014 tags provided at registration desk.",
       parking:          "MSAC car park: $12/day (Albert Road entrance). Street parking available on Aughtie Drive (free, limited).",
       accessibilityInfo: "Fully wheelchair accessible venue. Accessible toilets on all levels. Service animals welcome. Contact us for specific requirements.",
       additionalNotes:  "Athletes must check in at the registration desk before 8:00am on their competition day. Photo ID required.",
-
-      isPinned: true,
     },
   });
 
-  console.log(`✓ Event 1 (APPROVED): ${event1.title}`);
-
-  // ── Event 2: PENDING — "Hybrid Hustle Series — Round 3" ──────────────────
-  const event2 = await prisma.event.upsert({
+  // Apex Event 2: PENDING — "Hybrid Hustle Series \u2014 Round 3"
+  const apexEvent2 = await prisma.event.upsert({
     where:  { id: "seed-event-002-hybrid-hustle" },
     update: {},
     create: {
       id:          "seed-event-002-hybrid-hustle",
-      organiserId: organiser.id,
+      organiserId: apexOrg.id,
       status:      "PENDING",
 
-      title:       "Hybrid Hustle Series — Round 3",
+      title:       "Hybrid Hustle Series \u2014 Round 3",
       discipline:  "hybrid",
       tagline:     "Run. Lift. Repeat. The full package.",
       description: "Round 3 of the Hybrid Hustle Series hits the Dandenong Ranges. Expect trail running, loaded carries, obstacle crawls, and a surprise finale workout. Suitable for athletes comfortable with both running and functional fitness.",
@@ -161,15 +212,13 @@ async function main() {
     },
   });
 
-  console.log(`✓ Event 2 (PENDING):  ${event2.title}`);
-
-  // ── Event 3: PENDING — "Coastline CrossFit Classic" ──────────────────────
-  const event3 = await prisma.event.upsert({
+  // Apex Event 3: PENDING — "Coastline CrossFit Classic"
+  const apexEvent3 = await prisma.event.upsert({
     where:  { id: "seed-event-003-coastline-crossfit" },
     update: {},
     create: {
       id:          "seed-event-003-coastline-crossfit",
-      organiserId: organiser.id,
+      organiserId: apexOrg.id,
       status:      "PENDING",
 
       title:       "Coastline CrossFit Classic",
@@ -204,21 +253,19 @@ async function main() {
     },
   });
 
-  console.log(`✓ Event 3 (PENDING):  ${event3.title}`);
-
-  // ── Event 4: DRAFT — "Team Throwdown Summer Series" ──────────────────────
-  const event4 = await prisma.event.upsert({
+  // Apex Event 4: DRAFT — "Team Throwdown Summer Series"
+  const apexEvent4 = await prisma.event.upsert({
     where:  { id: "seed-event-004-team-throwdown" },
     update: {},
     create: {
       id:          "seed-event-004-team-throwdown",
-      organiserId: organiser.id,
+      organiserId: apexOrg.id,
       status:      "DRAFT",
 
       title:       "Team Throwdown Summer Series",
       discipline:  "functional_fitness",
       tagline:     "",
-      description: "Draft — details TBC",
+      description: "Draft \u2014 details TBC",
 
       eventDate: "2026-12-05",
       startTime: "09:00",
@@ -236,15 +283,13 @@ async function main() {
     },
   });
 
-  console.log(`✓ Event 4 (DRAFT):    ${event4.title}`);
-
-  // ── Event 5: REJECTED ─────────────────────────────────────────────────────
-  const event5 = await prisma.event.upsert({
+  // Apex Event 5: REJECTED — "Autumn Run Festival"
+  const apexEvent5 = await prisma.event.upsert({
     where:  { id: "seed-event-005-rejected" },
     update: {},
     create: {
       id:          "seed-event-005-rejected",
-      organiserId: organiser.id,
+      organiserId: apexOrg.id,
       status:      "REJECTED",
 
       title:       "Autumn Run Festival",
@@ -277,91 +322,250 @@ async function main() {
     },
   });
 
-  console.log(`✓ Event 5 (REJECTED): ${event5.title}`);
+  console.log(`  Events (Apex): ${apexEvent1.title.split(" ")[0]}… (5 total)`);
 
-  // ── 3. Reviews on the approved event ─────────────────────────────────────
-  const reviewsData = [
-    {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Coastal Trail Events
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const coastalEvent1 = await prisma.event.create({
+    data: {
+      organiserId: coastalOrg.id,
+      status: "APPROVED",
+      title: "Byron Bay Trail Run",
+      discipline: "trail",
+      tagline: "Run the stunning Byron Bay hinterland trails",
+      description: "A scenic 10km and 21km trail run through the Byron Bay hinterland. Experience breathtaking coastal views, lush rainforest sections, and finish on the iconic Byron Bay beach.",
+      eventDate: "2026-04-15",
+      startTime: "07:00",
+      endTime: "12:00",
+      venue: "Byron Bay Regional Park",
+      address: "25 Broken Head Rd",
+      city: "Byron Bay",
+      state: "NSW",
+      format: "point-to-point",
+      level: "intermediate",
+      categories: ["10km", "21km half marathon"],
+      cap: 500,
+      waves: [
+        { label: "Early Bird", date: "2026-02-01", price: "65", qty: 100 },
+        { label: "Standard",   date: "2026-03-01", price: "85", qty: 300 },
+      ],
+      inclusions: "Race bib, timing chip, finisher medal, post-race breakfast",
+      registrationType: "startline",
+      feeStructure: "athlete",
+      registrationCount: 234,
+    },
+  });
+
+  const coastalEvent2 = await prisma.event.create({
+    data: {
+      organiserId: coastalOrg.id,
+      status: "PENDING",
+      title: "Sydney Harbour 10K",
+      discipline: "road",
+      tagline: "Run past the Sydney Opera House at sunrise",
+      description: "A flat, fast 10km course along Sydney Harbour. Start at Mrs Macquaries Point, run past the Opera House, under the Harbour Bridge.",
+      eventDate: "2026-08-20",
+      startTime: "06:30",
+      endTime: "09:00",
+      venue: "Mrs Macquaries Point",
+      city: "Sydney",
+      state: "NSW",
+      format: "loop",
+      level: "beginner",
+      categories: ["10km"],
+      cap: 1000,
+      waves: [
+        { label: "Early Bird", date: "2026-06-01", price: "45", qty: 300 },
+        { label: "Standard",   date: "2026-07-15", price: "65", qty: 500 },
+      ],
+      inclusions: "Race bib, timing chip, finisher medal",
+      registrationType: "startline",
+      feeStructure: "athlete",
+    },
+  });
+
+  const coastalEvent3 = await prisma.event.create({
+    data: {
+      organiserId: coastalOrg.id,
+      status: "DRAFT",
+      title: "Blue Mountains Marathon",
+      discipline: "trail",
+      tagline: "Conquer the iconic Blue Mountains trails",
+      description: "A challenging marathon distance trail run through the Blue Mountains National Park.",
+      eventDate: "2026-10-10",
+      startTime: "05:00",
+      endTime: "17:00",
+      venue: "Katoomba Showground",
+      city: "Katoomba",
+      state: "NSW",
+      format: "point-to-point",
+      level: "advanced",
+      categories: ["Full marathon 42.2km", "Ultra 50km"],
+      cap: 300,
+      minAge: 18,
+      waves: [
+        { label: "Early Bird", date: "2026-07-01", price: "150", qty: 150 },
+        { label: "Standard",   date: "2026-09-15", price: "180", qty: 150 },
+      ],
+      inclusions: "Race bib, timing chip, finisher medal, finisher jacket",
+      registrationType: "startline",
+      feeStructure: "athlete",
+    },
+  });
+
+  console.log(`  Events (Coastal): 3 created`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Urban Fitness Events
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const urbanEvent1 = await prisma.event.create({
+    data: {
+      organiserId: urbanOrg.id,
+      status: "APPROVED",
+      title: "Melbourne City Park Run",
+      discipline: "road",
+      tagline: "Run through Melbourne's iconic parklands",
+      description: "A 5km and 10km course through the Royal Botanic Gardens and Kings Domain.",
+      eventDate: "2026-06-14",
+      startTime: "08:00",
+      endTime: "11:00",
+      venue: "Shrine of Remembrance",
+      city: "Melbourne",
+      state: "VIC",
+      format: "loop",
+      level: "beginner",
+      categories: ["5km", "10km", "Kids dash 1km"],
+      cap: 800,
+      minAge: 4,
+      waves: [
+        { label: "Early Bird", date: "2026-04-01", price: "35", qty: 300 },
+        { label: "Standard",   date: "2026-05-15", price: "50", qty: 400 },
+      ],
+      inclusions: "Race bib, finisher medal",
+      registrationType: "startline",
+      feeStructure: "athlete",
+      registrationCount: 312,
+    },
+  });
+
+  const urbanEvent2 = await prisma.event.create({
+    data: {
+      organiserId: urbanOrg.id,
+      status: "DRAFT",
+      title: "Brisbane River Run",
+      discipline: "road",
+      tagline: "Follow the Brisbane River from South Bank to New Farm",
+      description: "A scenic riverside run through the heart of Brisbane.",
+      eventDate: "2026-09-20",
+      startTime: "06:30",
+      endTime: "10:00",
+      venue: "South Bank Parklands",
+      city: "Brisbane",
+      state: "QLD",
+      format: "out-and-back",
+      level: "beginner",
+      categories: ["5km", "10km", "Half marathon 21.1km"],
+      cap: 600,
+      waves: [
+        { label: "Standard", date: "2026-08-15", price: "55", qty: 400 },
+        { label: "Late",     date: "2026-09-15", price: "70", qty: 200 },
+      ],
+      inclusions: "Race bib, timing chip, finisher medal, post-race BBQ",
+      registrationType: "startline",
+      feeStructure: "athlete",
+    },
+  });
+
+  console.log(`  Events (Urban): 2 created`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Reviews
+  // ─────────────────────────────────────────────────────────────────────────
+
+  await prisma.review.upsert({
+    where:  { id: "seed-review-001" },
+    update: {},
+    create: {
       id:           "seed-review-001",
+      organiserId:  apexOrg.id,
+      eventId:      apexEvent1.id,
+      eventTitle:   apexEvent1.title,
       reviewerName: "Sarah K.",
       title:        "Best competition I've done all year",
-      body:         "Incredibly well run from start to finish. The workouts were tough but fair, the venue was brilliant, and the team vibe was unreal. Already registered for next year.",
+      body:         "Incredibly well run from start to finish. The workouts were tough but fair, the venue was brilliant, and the team vibe was unreal.",
       overallRating:       5,
       communicationRating: 5,
       organisationRating:  5,
       experienceRating:    5,
-      eventTitle:   event1.title,
       isVerified:   true,
-      isPublished:  true,
     },
-    {
+  });
+
+  await prisma.review.upsert({
+    where:  { id: "seed-review-002" },
+    update: {},
+    create: {
       id:           "seed-review-002",
+      organiserId:  apexOrg.id,
+      eventId:      apexEvent1.id,
+      eventTitle:   apexEvent1.title,
       reviewerName: "Tom R.",
       title:        "Great event, minor timing hiccups",
-      body:         "Really enjoyed the event overall. Workouts were programming were spot on and the venue couldn't have been better. Had a 20 minute delay in the afternoon session but James and the team handled it professionally and kept everyone updated.",
+      body:         "Really enjoyed the event overall. Had a 20 minute delay but the team handled it professionally.",
       overallRating:       4,
       communicationRating: 5,
       organisationRating:  4,
       experienceRating:    4,
-      eventTitle:   event1.title,
       isVerified:   true,
-      isPublished:  true,
     },
-    {
+  });
+
+  await prisma.review.upsert({
+    where:  { id: "seed-review-003" },
+    update: {},
+    create: {
       id:           "seed-review-003",
-      reviewerName: "Brooke M.",
-      title:        "Absolutely worth the trip from Brisbane",
-      body:         "Flew down just for this one and zero regrets. The Masters division is really well supported here — not an afterthought like at some other comps. The athlete party on Saturday night was a bonus I didn't expect.",
+      organiserId:  coastalOrg.id,
+      eventId:      coastalEvent1.id,
+      eventTitle:   coastalEvent1.title,
+      reviewerName: "Alex T.",
+      title:        "Absolutely stunning course!",
+      body:         "The Byron Bay Trail Run was incredible. The course was well marked, the views breathtaking.",
       overallRating:       5,
-      communicationRating: 4,
+      communicationRating: 5,
       organisationRating:  5,
-      experienceRating:    5,
-      eventTitle:   event1.title,
-      isVerified:   false,
-      isPublished:  true,
+      experienceRating:    4,
+      isVerified:   true,
     },
-    {
+  });
+
+  await prisma.review.upsert({
+    where:  { id: "seed-review-004" },
+    update: {},
+    create: {
       id:           "seed-review-004",
-      reviewerName: "Liam O.",
-      title:        "Solid community comp",
-      body:         "Good event. Workouts were fun, judges were consistent, and the merch was a step up from last year. Would prefer earlier heat times for the scaled division — we didn't finish until nearly 5pm.",
+      organiserId:  urbanOrg.id,
+      eventId:      urbanEvent1.id,
+      eventTitle:   urbanEvent1.title,
+      reviewerName: "David P.",
+      title:        "Lovely morning run in the park",
+      body:         "A well-organised community event. Great for families.",
       overallRating:       4,
-      communicationRating: 3,
+      communicationRating: 4,
       organisationRating:  4,
       experienceRating:    4,
-      eventTitle:   event1.title,
       isVerified:   true,
-      isPublished:  true,
     },
-  ];
+  });
 
-  for (const r of reviewsData) {
-    await prisma.review.upsert({
-      where:  { id: r.id },
-      update: {},
-      create: {
-        id:          r.id,
-        organiserId: organiser.id,
-        eventId:     event1.id,
-        eventTitle:  r.eventTitle,
-        reviewerName:        r.reviewerName,
-        title:               r.title,
-        body:                r.body,
-        overallRating:       r.overallRating,
-        communicationRating: r.communicationRating,
-        organisationRating:  r.organisationRating,
-        experienceRating:    r.experienceRating,
-        isVerified:          r.isVerified,
-        isPublished:         r.isPublished,
-      },
-    });
-    console.log(`  ✓ Review: "${r.title}" by ${r.reviewerName}`);
-  }
+  console.log(`  Reviews: 4 created`);
 
-  // ── 4. Registrations on the approved event ───────────────────────────────
-  // Startline fee per entry: 3% + $1, stored in integer cents.
-  const platformFeeCents = (amountCents: number) =>
-    Math.round(amountCents * 0.03) + 100;
+  // ─────────────────────────────────────────────────────────────────────────
+  // Registrations on the approved Apex event
+  // ─────────────────────────────────────────────────────────────────────────
 
   const athleteNames = [
     "Sarah Kovac", "Tom Rendell", "Brooke Mitchell", "Liam O'Connor",
@@ -376,15 +580,14 @@ async function main() {
     { label: "General",    price: 115 },
     { label: "Late Entry", price: 135 },
   ];
-  const categories: string[] = Array.isArray(event1.categories)
-    ? (event1.categories as string[])
-    : ["Individual RX"];
+
+  const platformFeeCents = (amountCents: number) =>
+    Math.round(amountCents * 0.03) + 100;
 
   let regCount = 0;
   for (let i = 0; i < athleteNames.length; i++) {
     const name = athleteNames[i];
     const wave = waveOptions[i % waveOptions.length];
-    const category = categories[i % categories.length];
     const amountCents = wave.price * 100;
     const email = name.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com";
 
@@ -393,11 +596,10 @@ async function main() {
       update: {},
       create: {
         id:               `seed-reg-${String(i + 1).padStart(3, "0")}`,
-        eventId:          event1.id,
-        organiserId:      organiser.id,
+        eventId:          apexEvent1.id,
+        organiserId:      apexOrg.id,
         athleteName:      name,
         athleteEmail:     email,
-        category,
         waveLabel:        wave.label,
         amountCents,
         platformFeeCents: platformFeeCents(amountCents),
@@ -408,31 +610,24 @@ async function main() {
     regCount++;
   }
 
-  // Keep the denormalised counter in sync with the seeded registrations.
   await prisma.event.update({
-    where: { id: event1.id },
+    where: { id: apexEvent1.id },
     data:  { registrationCount: regCount },
   });
-  console.log(`  ✓ Registrations: ${regCount} confirmed entries on ${event1.title}`);
 
-  // ── Summary ───────────────────────────────────────────────────────────────
+  console.log(`  Registrations: ${regCount} on ${apexEvent1.title}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Summary
+  // ─────────────────────────────────────────────────────────────────────────
+
   console.log(`
 ✅ Seed complete.
 
-Test organiser login:
-  Email:         ${SEED_ORGANISER_EMAIL}
-  Cognito sub:   ${SEED_ORGANISER_SUB}
-  (Create this user in your Cognito User Pool to log in via the UI)
-
-Events created:
-  APPROVED  (24 registrations) — The Apex Throwdown 2026       [id: seed-event-001-apex-throwdown]
-  PENDING                      — Hybrid Hustle Series Round 3   [id: seed-event-002-hybrid-hustle]
-  PENDING                      — Coastline CrossFit Classic      [id: seed-event-003-coastline-crossfit]
-  DRAFT                        — Team Throwdown Summer Series   [id: seed-event-004-team-throwdown]
-  REJECTED                     — Autumn Run Festival             [id: seed-event-005-rejected]
-
-Reviews:        4 reviews on the approved event (average 4.5★)
-Registrations:  24 confirmed entries on the approved event
+Dev bypass login emails:
+  ${SEED_ORGANISER_EMAIL}  (Apex Endurance Events — 5 events, 24 registrations)
+  ${COASTAL_ORG_EMAIL}     (Coastal Trail Running — 3 events)
+  ${URBAN_ORG_EMAIL}       (Urban Fitness Events — 2 events)
 `);
 }
 

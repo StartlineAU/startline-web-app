@@ -28,9 +28,25 @@ export type AdminSession = {
   name:  string | null;
 };
 
+// Map seeded organiser emails to their cognitoSub values
+// so dev bypass can log in as any seeded user.
+const DEV_USERS_BY_EMAIL: Record<string, string> = {
+  "test.organiser@startlineau.com": "seed-organiser-cognito-sub-001",
+  "hello@coastaltrailrunning.com.au": "coastal-trail-sub",
+  "info@urbanfitnessevents.com.au": "urban-fitness-sub",
+};
+
 export async function getServerSession(): Promise<ServerSession | null> {
   if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
-    return { sub: "dev-organiser-sub", email: "dev@example.com", groups: [] };
+    try {
+      const cookieStore = await cookies();
+      const email = cookieStore.get("DEV_USER_EMAIL")?.value ?? "dev@example.com";
+      const sub = DEV_USERS_BY_EMAIL[email] ?? `dev-${email.replace(/[@.]/g, "-")}`;
+      return { sub, email, groups: ["admin-nonprod-users"] };
+    } catch {
+      // fallback if cookies() isn't available (e.g. during build)
+      return { sub: "dev-organiser-sub", email: "dev@example.com", groups: ["admin-nonprod-users"] };
+    }
   }
 
   try {
@@ -64,10 +80,6 @@ export async function getServerSession(): Promise<ServerSession | null> {
 }
 
 export async function getOrganiserSession(): Promise<OrganiserSession | null> {
-  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
-    return { sub: "dev-organiser-id", email: "dev@example.com", status: "APPROVED" };
-  }
-
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
 
@@ -85,10 +97,6 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
 }
 
 export async function getAdminSession(): Promise<AdminSession | null> {
-  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
-    return { sub: "dev-admin-id", email: "admin@startlineau.com", name: "Dev Admin" };
-  }
-
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
   if (!cognitoSession.groups.includes("admin-nonprod-users")) return null;
