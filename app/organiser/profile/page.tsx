@@ -18,7 +18,7 @@ type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 interface EventRow {
   id: string; title: string; discipline: string; city: string; state: string;
   eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null; coverImageUrl?: string | null; isPinned?: boolean; registrationCount?: number | null;
+  cap?: number | null; coverImageUrl?: string | null; isPinned?: boolean; registrationCount: number;
 }
 
 interface Profile {

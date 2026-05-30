@@ -103,7 +103,6 @@ model Event {
   refundPolicy      String?
   registrationType  String  @default("startline")
   feeStructure      String  @default("athlete")
-  registrationCount Int     @default(0)
 
   // Step 5 — media & logistics
   coverImageUrl     String?

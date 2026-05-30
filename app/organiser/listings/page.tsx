@@ -15,7 +15,7 @@ type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 interface EventRow {
   id: string; title: string; discipline: string; city: string; state: string;
   eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null; coverImageUrl?: string | null; registrationCount?: number;
+  cap?: number | null; coverImageUrl?: string | null; registrationCount: number;
 }
 
 function formatEventDate(dateStr: string, startTime: string) {

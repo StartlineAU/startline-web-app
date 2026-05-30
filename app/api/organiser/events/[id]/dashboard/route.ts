@@ -41,8 +41,8 @@ export async function GET(
       prisma.registration.count({ where: { eventId: id, status: "CONFIRMED" } }),
     ]);
 
-    const hasRealData = registrationCount > 0;
-    const count = hasRealData ? registrationCount : (event.registrationCount ?? 0);
+    const count = registrationCount;
+    const hasRealData = count > 0;
 
     let gross: number;
     let fees: number;
@@ -84,7 +84,7 @@ export async function GET(
         city:              event.city,
         state:             event.state,
         cap:               event.cap,
-        registrationCount: event.registrationCount,
+        registrationCount: count,
         coverImageUrl:     event.coverImageUrl,
         waves,
         feeStructure:      event.feeStructure,

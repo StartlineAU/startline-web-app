@@ -123,8 +123,7 @@ async function main() {
   const apexEvent1 = await prisma.event.upsert({
     where:  { id: "seed-event-001-apex-throwdown" },
     update: {
-      status:            "APPROVED",
-      registrationCount: 24,
+      status: "APPROVED",
     },
     create: {
       id:           "seed-event-001-apex-throwdown",
@@ -162,8 +161,6 @@ async function main() {
       refundPolicy:     "Moderate",
       registrationType: "startline",
       feeStructure:     "athlete",
-      registrationCount: 24,
-
       coverImageUrl:    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
       bagDrop:          "Bag drop available at Gate 3 from 6:45am both days. Bags must be tagged \u2014 tags provided at registration desk.",
       parking:          "MSAC car park: $12/day (Albert Road entrance). Street parking available on Aughtie Drive (free, limited).",
@@ -354,7 +351,6 @@ async function main() {
       inclusions: "Race bib, timing chip, finisher medal, post-race breakfast",
       registrationType: "startline",
       feeStructure: "athlete",
-      registrationCount: 234,
     },
   });
 
@@ -447,7 +443,6 @@ async function main() {
       inclusions: "Race bib, finisher medal",
       registrationType: "startline",
       feeStructure: "athlete",
-      registrationCount: 312,
     },
   });
 
@@ -609,11 +604,6 @@ async function main() {
     });
     regCount++;
   }
-
-  await prisma.event.update({
-    where: { id: apexEvent1.id },
-    data:  { registrationCount: regCount },
-  });
 
   console.log(`  Registrations: ${regCount} on ${apexEvent1.title}`);
 
