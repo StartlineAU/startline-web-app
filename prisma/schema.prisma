@@ -37,14 +37,28 @@ model Organiser {
   facebook     String?
   bio            String?
   logoUrl        String?
+  logoPosition   String?  @default("50% 50%")
   coverImageUrl  String?
   coverPosition  String?  @default("50% 50%")
   photos         String[]
 
-  events    Event[]
-  reviews   Review[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Legal & compliance — required for ATO SERR reporting (ToS §3.2, Privacy Policy §2.1)
+  legalName String?
+  // Insurance self-declaration only — no documents collected (ToS §5.3, Privacy Policy §4.4)
+  insuranceDeclared Boolean @default(false)
+
+  // Stripe Express Connect — Startline stores only the account reference ID.
+  // Stripe holds DOB and bank account details directly (ToS §3.3, Privacy Policy §4.2).
+  stripeAccountId          String?  @unique
+  stripeOnboardingComplete Boolean  @default(false)
+
+  events        Event[]
+  reviews       Review[]
+  announcements Announcement[]
+  notifications Notification[]
+  registrations Registration[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 enum OrganiserStatus {
@@ -90,7 +104,6 @@ model Event {
   refundPolicy      String?
   registrationType  String  @default("startline")
   feeStructure      String  @default("athlete")
-  registrationCount Int     @default(0)
 
   // Step 5 — media & logistics
   coverImageUrl     String?
@@ -107,8 +120,10 @@ model Event {
   reviewedBy      Admin?    @relation("EventReviewedBy", fields: [reviewedById], references: [id])
   reviewedAt      DateTime?
 
-  isPinned Boolean @default(false)
-  reviews  Review[]
+  isPinned      Boolean        @default(false)
+  reviews       Review[]
+  announcements Announcement[]
+  registrations Registration[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,6 +160,72 @@ model Review {
   isPublished Boolean  @default(true)
 
   createdAt DateTime @default(now())
+}
+
+// ─── Organiser notifications ──────────────────────────────────────────────────
+model Notification {
+  id          String           @id @default(uuid())
+  organiserId String
+  organiser   Organiser        @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  body        String
+  eventId     String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+}
+
+enum NotificationType {
+  EVENT_APPROVED
+  EVENT_REJECTED
+  NEW_REGISTRATION
+}
+
+// ─── Organiser announcements (per-event) ─────────────────────────────────────
+model Announcement {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  createdAt   DateTime  @default(now())
+}
+
+// ─── Athlete registrations ────────────────────────────────────────────────────
+// One row per athlete entry into an event. organiserId is denormalised from the
+// event so organisers can query their entire registrant base efficiently.
+model Registration {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+
+  athleteName  String
+  athleteEmail String
+  category     String?
+  waveLabel    String?
+
+  // Money is stored in integer cents (AUD) to avoid float rounding.
+  amountCents      Int @default(0) // ticket price paid by the athlete
+  platformFeeCents Int @default(0) // Startline fee (3% + $1) on this entry
+  feeStructure     String @default("athlete") // "athlete" | "organiser"
+
+  status                RegistrationStatus @default(CONFIRMED)
+  stripePaymentIntentId String?            @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+  @@index([organiserId])
+}
+
+enum RegistrationStatus {
+  CONFIRMED
+  CANCELLED
+  REFUNDED
 }
 
 model WaitlistSubscriber {

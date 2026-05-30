@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { signIn, signOut } from "aws-amplify/auth";
+import { signIn, signOut, confirmSignIn } from "aws-amplify/auth";
 
 function SignInForm() {
   const router = useRouter();
@@ -15,43 +15,65 @@ function SignInForm() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
+  const isDevBypass = !process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
+
+  // Force-change-password challenge (admin-created accounts)
+  const [needsNewPassword, setNeedsNewPassword] = useState(false);
+  const [newPassword,      setNewPassword]      = useState("");
+  const [showNewPw,        setShowNewPw]        = useState(false);
+
+  const completeSignIn = async () => {
+    let sessionOk = false;
+    for (let attempt = 0; attempt < 2 && !sessionOk; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 400));
+      try {
+        const r = await fetch("/api/organiser/auth/session", { method: "POST" });
+        if (r.ok) sessionOk = true;
+      } catch { /* network error, continue */ }
+    }
+    const profileRes = await fetch("/api/organiser/profile").catch(() => null);
+    const profile    = profileRes?.ok ? await profileRes.json().catch(() => null) : null;
+    router.push(!profile?.orgName ? "/organiser/onboarding" : "/organiser/dashboard");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      // Clear any stale session before signing in
+      if (isDevBypass) {
+        document.cookie = `DEV_USER_EMAIL=${email}; path=/; max-age=86400`;
+        await fetch("/api/organiser/auth/session", { method: "POST" });
+        router.push("/organiser/dashboard");
+        return;
+      }
+
       await signOut({ global: false }).catch(() => {});
 
-      // 1. Sign in via Cognito — tokens are stored in Amplify cookies (ssr:true)
       const result = await signIn({ username: email, password });
 
+      if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+        setNeedsNewPassword(true);
+        return;
+      }
+
+      if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
+        router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
+        return;
+      }
+
+      if (result.nextStep.signInStep === "RESET_PASSWORD") {
+        router.push("/organiser/forgot-password?email=" + encodeURIComponent(email));
+        return;
+      }
+
       if (result.nextStep.signInStep !== "DONE") {
-        // Handle edge cases: e.g. user must confirm email first
-        if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
-          router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
-          return;
-        }
         setError("Additional verification required. Please contact support.");
         return;
       }
 
-      // Upsert organiser record — retry once if the first attempt fails (cookie timing)
-      let sessionOk = false;
-      for (let attempt = 0; attempt < 2 && !sessionOk; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 400));
-        try {
-          const r = await fetch("/api/organiser/auth/session", { method: "POST" });
-          if (r.ok) sessionOk = true;
-        } catch { /* network error, continue */ }
-      }
-
-      const profileRes = await fetch("/api/organiser/profile").catch(() => null);
-      const profile    = profileRes?.ok ? await profileRes.json().catch(() => null) : null;
-      const needsOnboarding = !profile || !profile.orgName;
-
-      router.push(needsOnboarding ? "/organiser/onboarding" : "/organiser/dashboard");
+      await completeSignIn();
     } catch (err: unknown) {
       const name = (err as { name?: string })?.name ?? "";
       const msg  = err instanceof Error ? err.message : "";
@@ -61,9 +83,35 @@ function SignInForm() {
         router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
       } else if (name === "UserNotFoundException" || msg.includes("UserNotFoundException")) {
         setError("No account found with that email.");
+      } else if (name === "PasswordResetRequiredException" || msg.includes("PasswordResetRequiredException")) {
+        router.push("/organiser/forgot-password?email=" + encodeURIComponent(email));
       } else {
         setError(msg || "Something went wrong. Please check your connection and try again.");
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const result = await confirmSignIn({ challengeResponse: newPassword });
+      if (result.nextStep.signInStep !== "DONE") {
+        setError("Something went wrong. Please try signing in again.");
+        setNeedsNewPassword(false);
+        return;
+      }
+      await completeSignIn();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setError(msg || "Failed to set new password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -94,6 +142,35 @@ function SignInForm() {
             </div>
           )}
 
+          {/* ── Force-change-password challenge ── */}
+          {needsNewPassword ? (
+            <form onSubmit={handleSetNewPassword} className="space-y-5">
+              <div className="mb-6 px-4 py-3 rounded-md bg-primary/10 border border-primary/30 text-primary font-headline text-[13px]">
+                Your account requires a new password before you can sign in.
+              </div>
+              <div>
+                <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">New password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                  <input
+                    type={showNewPw ? "text" : "password"} required
+                    value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Choose a strong password"
+                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                  />
+                  <button type="button" onClick={() => setShowNewPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
+                    {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mt-1.5">Minimum 8 characters</p>
+              </div>
+              <button type="submit" disabled={loading}
+                className="bg-machined shadow-machined w-full text-dark font-headline text-sm font-bold uppercase tracking-widest py-4 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
+                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Setting password…</> : <>Set password & sign in <ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </form>
+          ) : (
+          <>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">Email</label>
@@ -133,6 +210,8 @@ function SignInForm() {
             New organiser?{" "}
             <Link href="/organiser/register" className="text-primary hover:underline">Apply for an account</Link>
           </p>
+          </>
+          )}
         </div>
       </section>
 

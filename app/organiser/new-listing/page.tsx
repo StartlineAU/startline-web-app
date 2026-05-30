@@ -650,14 +650,15 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
   return (
     <div>
       <Field label="Competition format" required>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
           {FORMATS.map((f) => {
             const on = form.format === f.v;
             return (
               <button key={f.v} type="button" onClick={() => update({ format: f.v })}
-                className={`text-left p-4 rounded-md border transition-all ${on ? "border-lime-500 bg-lime-50" : "border-gray-200 hover:border-gray-300"}`}>
+                className={`flex sm:flex-col items-center sm:items-start gap-3 sm:gap-1 text-left p-3 sm:p-4 rounded-md border transition-all min-h-[44px]
+                  ${on ? "border-lime-500 bg-lime-50" : "border-gray-200 hover:border-gray-300"}`}>
                 <div className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-lime-700" : "text-gray-900"}`}>{f.l}</div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-500 mt-1">{f.d}</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-500">{f.d}</div>
               </button>
             );
           })}
@@ -938,7 +939,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                     : "border-gray-200 bg-white hover:border-gray-300"}`}
               >
                 <div className={`font-headline text-[13px] font-bold uppercase tracking-widest ${active ? "text-lime-700" : "text-gray-900"}`}>
-                  {active && <span className="mr-1.5">✓</span>}{title}
+                  {title}
                 </div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">{sub}</div>
               </button>
@@ -977,7 +978,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                         : "border-gray-200 bg-white hover:border-gray-300"}`}
                   >
                     <div className={`font-headline text-[13px] font-bold uppercase tracking-widest ${active ? "text-lime-700" : "text-gray-900"}`}>
-                      {active && <span className="mr-1.5">✓</span>}{title}
+                      {title}
                     </div>
                     <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">{sub}</div>
                   </button>
@@ -2006,7 +2007,7 @@ export default function NewListingPage() {
 
           {/* Two-column layout */}
           <div className="max-w-[1280px] mx-auto grid lg:grid-cols-[1fr_360px]">
-            <div className="p-6 lg:p-8 pb-24 lg:pb-10">
+            <div className="p-4 sm:p-6 lg:p-8 pb-32 lg:pb-10">
               <div key={step} className={direction === "forward" ? "step-forward" : "step-back"}>
                 <div className="mb-6">
                   <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">

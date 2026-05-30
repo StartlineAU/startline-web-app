@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import OrganiserMobileNav from "@/components/organiser/MobileNav";
 import AmplifyProvider from "./AmplifyProvider";
 import { AuthProvider } from "@/context/AuthContext";
+import { SettingsProvider } from "@/context/SettingsContext";
+import SettingsModal from "@/components/organiser/SettingsModal";
 
 // ── Portal-wide SEO directives ────────────────────────────────────────────────
 // Every /organiser/** route inherits noindex so the login-protected portal
@@ -22,8 +24,11 @@ export default function OrganiserLayout({ children }: { children: React.ReactNod
   return (
     <AmplifyProvider>
       <AuthProvider>
-        {children}
-        <OrganiserMobileNav />
+        <SettingsProvider>
+          {children}
+          <OrganiserMobileNav />
+          <SettingsModal />
+        </SettingsProvider>
       </AuthProvider>
     </AmplifyProvider>
   );

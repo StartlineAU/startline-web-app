@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
-
-const prisma = new PrismaClient();
-
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
