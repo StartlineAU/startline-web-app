@@ -1,10 +1,10 @@
 import { createServerRunner } from "@aws-amplify/adapter-nextjs";
 import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth/server";
+import type { AuthSession } from "aws-amplify/auth";
+import type { GetCurrentUserOutput } from "aws-amplify/auth";
 import { cookies } from "next/headers";
-import { PrismaClient } from "@prisma/client";
 import { amplifyConfig } from "./amplify-config";
-
-const prisma = new PrismaClient();
+import prisma from "./prisma";
 
 export const { runWithAmplifyServerContext } = createServerRunner({
   config: amplifyConfig,
@@ -36,12 +36,12 @@ export async function getServerSession(): Promise<ServerSession | null> {
   try {
     // Next.js 15: cookies() is async — await it before passing to Amplify
     const cookieStore = await cookies();
-    const cookieFn = () => cookieStore;
+    const cookieFn = () => Promise.resolve(cookieStore);
 
     const session = await runWithAmplifyServerContext({
       nextServerContext: { cookies: cookieFn },
       operation: (contextSpec) => fetchAuthSession(contextSpec),
-    });
+    }) as AuthSession;
 
     if (!session.tokens?.accessToken) return null;
 
@@ -51,7 +51,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
     const user = await runWithAmplifyServerContext({
       nextServerContext: { cookies: cookieFn },
       operation: (contextSpec) => getCurrentUser(contextSpec),
-    });
+    }) as GetCurrentUserOutput;
 
     return {
       sub:    user.userId,

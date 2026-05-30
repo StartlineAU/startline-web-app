@@ -1,14 +1,12 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Clock, CheckCircle, XCircle, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-
-const prisma = new PrismaClient();
 
 async function getStats() {
   const [pending, approved, rejected, organisers] = await Promise.all([
@@ -127,6 +125,7 @@ export default async function AdminDashboardPage() {
               value={stats.organisers}
               sub="registered accounts"
               icon={<Users className="w-5 h-5" />}
+              href="/admin/organisers"
             />
           </div>
 
@@ -163,6 +162,36 @@ export default async function AdminDashboardPage() {
                   </div>
                   <div className="text-[13px] text-gray-500">
                     Browse and manage every event
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
+              </Link>
+
+              <Link
+                href="/admin/organisers"
+                className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
+              >
+                <div>
+                  <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
+                    Organisers
+                  </div>
+                  <div className="text-[13px] text-gray-500">
+                    View accounts, payout and listing activity
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
+              </Link>
+
+              <Link
+                href="/admin/reviews"
+                className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
+              >
+                <div>
+                  <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
+                    Moderate reviews
+                  </div>
+                  <div className="text-[13px] text-gray-500">
+                    Publish, verify or remove athlete reviews
                   </div>
                 </div>
                 <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />

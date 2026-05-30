@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, KeyRound } from "lucide-react";
@@ -9,10 +9,11 @@ import { resetPassword, confirmResetPassword } from "aws-amplify/auth";
 
 type Step = "request" | "confirm";
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step,        setStep]        = useState<Step>("request");
-  const [email,       setEmail]       = useState("");
+  const [email,       setEmail]       = useState(searchParams.get("email") ?? "");
   const [code,        setCode]        = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm,     setConfirm]     = useState("");
@@ -185,5 +186,13 @@ export default function ForgotPasswordPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense>
+      <ForgotPasswordForm />
+    </Suspense>
   );
 }

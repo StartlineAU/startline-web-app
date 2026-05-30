@@ -4,11 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, CalendarDays, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Users, Star, LogOut, ShieldCheck } from "lucide-react";
 
 const NAV = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/events",    label: "Events",    icon: CalendarDays    },
+  { href: "/admin/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
+  { href: "/admin/events",     label: "Events",     icon: CalendarDays    },
+  { href: "/admin/organisers", label: "Organisers", icon: Users           },
+  { href: "/admin/reviews",    label: "Reviews",    icon: Star            },
 ];
 
 export default function AdminNav() {

@@ -55,6 +55,7 @@ model Organiser {
   reviews       Review[]
   announcements Announcement[]
   notifications Notification[]
+  registrations Registration[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -122,6 +123,7 @@ model Event {
   isPinned      Boolean        @default(false)
   reviews       Review[]
   announcements Announcement[]
+  registrations Registration[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -189,6 +191,41 @@ model Announcement {
   title       String
   body        String
   createdAt   DateTime  @default(now())
+}
+
+// ─── Athlete registrations ────────────────────────────────────────────────────
+// One row per athlete entry into an event. organiserId is denormalised from the
+// event so organisers can query their entire registrant base efficiently.
+model Registration {
+  id          String    @id @default(uuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+
+  athleteName  String
+  athleteEmail String
+  category     String?
+  waveLabel    String?
+
+  // Money is stored in integer cents (AUD) to avoid float rounding.
+  amountCents      Int @default(0) // ticket price paid by the athlete
+  platformFeeCents Int @default(0) // Startline fee (3% + $1) on this entry
+  feeStructure     String @default("athlete") // "athlete" | "organiser"
+
+  status                RegistrationStatus @default(CONFIRMED)
+  stripePaymentIntentId String?            @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+  @@index([organiserId])
+}
+
+enum RegistrationStatus {
+  CONFIRMED
+  CANCELLED
+  REFUNDED
 }
 
 model WaitlistSubscriber {

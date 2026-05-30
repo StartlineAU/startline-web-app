@@ -54,6 +54,11 @@ function SignInForm() {
         return;
       }
 
+      if (result.nextStep.signInStep === "RESET_PASSWORD") {
+        router.push("/organiser/forgot-password?email=" + encodeURIComponent(email));
+        return;
+      }
+
       if (result.nextStep.signInStep !== "DONE") {
         setError("Additional verification required. Please contact support.");
         return;
@@ -69,6 +74,8 @@ function SignInForm() {
         router.push("/organiser/verify-email?email=" + encodeURIComponent(email));
       } else if (name === "UserNotFoundException" || msg.includes("UserNotFoundException")) {
         setError("No account found with that email.");
+      } else if (name === "PasswordResetRequiredException" || msg.includes("PasswordResetRequiredException")) {
+        router.push("/organiser/forgot-password?email=" + encodeURIComponent(email));
       } else {
         setError(msg || "Something went wrong. Please check your connection and try again.");
       }
