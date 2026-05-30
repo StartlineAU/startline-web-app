@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { sendEventApprovedEmail, sendEventRejectedEmail } from "@/lib/email";
-
-const prisma = new PrismaClient();
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

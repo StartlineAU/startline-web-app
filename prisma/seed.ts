@@ -20,8 +20,17 @@ async function main() {
   console.log("🌱 Seeding database…\n");
 
   // ── 1. Organiser ─────────────────────────────────────────────────────────
+  // Look up by email first: an account with this email may already exist under
+  // a different cognitoSub (e.g. from an earlier seed), which would otherwise
+  // trip the unique-email constraint on insert.
+  const existingOrganiser = await prisma.organiser.findUnique({
+    where: { email: SEED_ORGANISER_EMAIL },
+    select: { cognitoSub: true },
+  });
+  const organiserKey = existingOrganiser?.cognitoSub ?? SEED_ORGANISER_SUB;
+
   const organiser = await prisma.organiser.upsert({
-    where:  { cognitoSub: SEED_ORGANISER_SUB },
+    where:  { cognitoSub: organiserKey },
     update: {},
     create: {
       cognitoSub:   SEED_ORGANISER_SUB,
@@ -55,7 +64,7 @@ async function main() {
     where:  { id: "seed-event-001-apex-throwdown" },
     update: {
       status:            "APPROVED",
-      registrationCount: 87,
+      registrationCount: 24,
     },
     create: {
       id:           "seed-event-001-apex-throwdown",
@@ -97,7 +106,7 @@ async function main() {
       refundPolicy:     "Moderate",
       registrationType: "startline",
       feeStructure:     "athlete",
-      registrationCount: 87,
+      registrationCount: 24,
 
       // Step 5 — media
       coverImageUrl:    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
@@ -349,6 +358,63 @@ async function main() {
     console.log(`  ✓ Review: "${r.title}" by ${r.reviewerName}`);
   }
 
+  // ── 4. Registrations on the approved event ───────────────────────────────
+  // Startline fee per entry: 3% + $1, stored in integer cents.
+  const platformFeeCents = (amountCents: number) =>
+    Math.round(amountCents * 0.03) + 100;
+
+  const athleteNames = [
+    "Sarah Kovac", "Tom Rendell", "Brooke Mitchell", "Liam O'Connor",
+    "Priya Nair", "Daniel Cho", "Emma Whitfield", "Jack Donovan",
+    "Mia Fontaine", "Noah Pereira", "Chloe Bennett", "Ethan Walsh",
+    "Ava Lindqvist", "Lucas Romano", "Grace Ferguson", "Oliver Tan",
+    "Zoe Castellano", "Harry Maddox", "Isla Petrova", "Ben Castle",
+    "Ruby Hayashi", "Marcus Webb", "Layla Ahmadi", "Finn Gallagher",
+  ];
+  const waveOptions = [
+    { label: "Early Bird", price: 95 },
+    { label: "General",    price: 115 },
+    { label: "Late Entry", price: 135 },
+  ];
+  const categories: string[] = Array.isArray(event1.categories)
+    ? (event1.categories as string[])
+    : ["Individual RX"];
+
+  let regCount = 0;
+  for (let i = 0; i < athleteNames.length; i++) {
+    const name = athleteNames[i];
+    const wave = waveOptions[i % waveOptions.length];
+    const category = categories[i % categories.length];
+    const amountCents = wave.price * 100;
+    const email = name.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com";
+
+    await prisma.registration.upsert({
+      where:  { id: `seed-reg-${String(i + 1).padStart(3, "0")}` },
+      update: {},
+      create: {
+        id:               `seed-reg-${String(i + 1).padStart(3, "0")}`,
+        eventId:          event1.id,
+        organiserId:      organiser.id,
+        athleteName:      name,
+        athleteEmail:     email,
+        category,
+        waveLabel:        wave.label,
+        amountCents,
+        platformFeeCents: platformFeeCents(amountCents),
+        feeStructure:     "athlete",
+        status:           "CONFIRMED",
+      },
+    });
+    regCount++;
+  }
+
+  // Keep the denormalised counter in sync with the seeded registrations.
+  await prisma.event.update({
+    where: { id: event1.id },
+    data:  { registrationCount: regCount },
+  });
+  console.log(`  ✓ Registrations: ${regCount} confirmed entries on ${event1.title}`);
+
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`
 ✅ Seed complete.
@@ -359,16 +425,14 @@ Test organiser login:
   (Create this user in your Cognito User Pool to log in via the UI)
 
 Events created:
-  APPROVED  (87 registrations) — The Apex Throwdown 2026       [id: seed-event-001-apex-throwdown]
+  APPROVED  (24 registrations) — The Apex Throwdown 2026       [id: seed-event-001-apex-throwdown]
   PENDING                      — Hybrid Hustle Series Round 3   [id: seed-event-002-hybrid-hustle]
   PENDING                      — Coastline CrossFit Classic      [id: seed-event-003-coastline-crossfit]
   DRAFT                        — Team Throwdown Summer Series   [id: seed-event-004-team-throwdown]
   REJECTED                     — Autumn Run Festival             [id: seed-event-005-rejected]
 
-Reviews: 4 reviews on the approved event (average 4.5★)
-
-Note: Registration records require a Registration model (Phase 2).
-      registrationCount on the approved event is set to 87 as a placeholder.
+Reviews:        4 reviews on the approved event (average 4.5★)
+Registrations:  24 confirmed entries on the approved event
 `);
 }
 

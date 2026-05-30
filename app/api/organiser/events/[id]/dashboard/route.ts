@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
-
-const prisma = new PrismaClient();
-
 // Startline platform fee: 3% + $1 per registration
 const PLATFORM_FEE_PERCENT = 0.03;
 const PLATFORM_FEE_FIXED   = 1.00;
@@ -26,17 +23,47 @@ export async function GET(
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     if (event.status !== "APPROVED")       return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
 
-    // Estimate payout using lowest wave price × registrationCount
-    // Real registration breakdowns require the Registration model (Phase 2)
     const waves = (event.waves as { label: string; price: string; qty?: number }[]) ?? [];
     const lowestPrice = waves.length
       ? Math.min(...waves.map(w => parseFloat(w.price || "0")))
       : 0;
 
-    const count    = event.registrationCount ?? 0;
-    const gross    = lowestPrice * count;
-    const fees     = count > 0 ? (gross * PLATFORM_FEE_PERCENT) + (count * PLATFORM_FEE_FIXED) : 0;
+    // Prefer real registration data when it exists, fall back to the estimate.
+    const [registrations, registrationCount] = await Promise.all([
+      prisma.registration.findMany({
+        where:   { eventId: id, status: "CONFIRMED" },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true, athleteName: true, athleteEmail: true, category: true,
+          waveLabel: true, amountCents: true, platformFeeCents: true, createdAt: true,
+        },
+      }),
+      prisma.registration.count({ where: { eventId: id, status: "CONFIRMED" } }),
+    ]);
+
+    const hasRealData = registrationCount > 0;
+    const count = hasRealData ? registrationCount : (event.registrationCount ?? 0);
+
+    let gross: number;
+    let fees: number;
+    if (hasRealData) {
+      gross = registrations.reduce((sum, r) => sum + r.amountCents, 0) / 100;
+      fees  = registrations.reduce((sum, r) => sum + r.platformFeeCents, 0) / 100;
+    } else {
+      gross = lowestPrice * count;
+      fees  = count > 0 ? (gross * PLATFORM_FEE_PERCENT) + (count * PLATFORM_FEE_FIXED) : 0;
+    }
     const netPayout = Math.max(0, gross - fees);
+
+    const recentRegistrations = registrations.slice(0, 20).map(r => ({
+      id:         r.id,
+      name:       r.athleteName,
+      email:      r.athleteEmail,
+      category:   r.category,
+      wave:       r.waveLabel,
+      amount:     r.amountCents / 100,
+      createdAt:  r.createdAt,
+    }));
 
     const announcements = await prisma.announcement.findMany({
       where:   { eventId: id },
@@ -70,8 +97,12 @@ export async function GET(
         platformFees:      fees,
         estimatedPayout:   netPayout,
         feeStructure:      event.feeStructure, // "athlete" | "organiser"
-        note: "Estimates based on lowest ticket price × registration count. Actual amounts depend on ticket tier mix.",
+        isEstimate:        !hasRealData,
+        note: hasRealData
+          ? "Based on confirmed registrations."
+          : "Estimate based on lowest ticket price × registration count. Actual amounts depend on ticket tier mix.",
       },
+      recentRegistrations,
       announcements,
     });
   } catch (err) {

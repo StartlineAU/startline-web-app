@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
-
-const prisma = new PrismaClient();
-
 // GET /api/organiser/notifications
 // Returns the 30 most recent notifications; includes unread count in header
 export async function GET() {
