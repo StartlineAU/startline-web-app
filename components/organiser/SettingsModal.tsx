@@ -323,7 +323,9 @@ function PersonalInfoForm() {
           <CoverEditor
             imageUrl={form.coverImageUrl} position={form.coverPosition}
             uploading={coverUploading} onUpload={handleCoverUpload}
-            onPositionChange={pos => patch({ coverPosition: pos })} fileRef={coverRef}
+            onPositionChange={pos => patch({ coverPosition: pos })}
+            onRemove={() => patch({ coverImageUrl: "" })}
+            fileRef={coverRef}
           />
           <input ref={coverRef} type="file" accept="image/*" className="sr-only"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleCoverUpload(f); }} />

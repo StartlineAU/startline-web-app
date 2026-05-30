@@ -26,6 +26,9 @@ const ADMIN_PROTECTED = [
   "/admin/reviews",
 ];
 
+const CUSTOMER_DOMAIN = "startlineau.com";
+const ORGANISER_DOMAIN = "organiser.startlineau.com";
+
 async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> {
   const lastAuthUser = req.cookies.get(
     `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
@@ -56,10 +59,63 @@ function isAdmin(payload: JWTPayload): boolean {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // ── Dev mode: skip domain routing, skip auth ─────────────────────────
   if (process.env.NODE_ENV === "development") {
     return NextResponse.next();
   }
 
+  // ── Domain-based routing (production only) ───────────────────────────
+  const host = req.headers.get("host") ?? "";
+
+  // Organiser subdomain: serve organiser portal
+  if (host === ORGANISER_DOMAIN) {
+    // Rewrite root to organiser login
+    if (pathname === "/") {
+      return NextResponse.rewrite(new URL("/organiser", req.url));
+    }
+
+    // Protect organiser routes
+    if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
+      const payload = await getVerifiedPayload(req);
+      if (!payload) return NextResponse.redirect(new URL("/organiser", req.url));
+      return NextResponse.next();
+    }
+
+    if (ADMIN_PROTECTED.some((p) => pathname.startsWith(p))) {
+      const payload = await getVerifiedPayload(req);
+      if (!payload || !isAdmin(payload)) {
+        return NextResponse.redirect(new URL("/admin/login", req.url));
+      }
+      return NextResponse.next();
+    }
+
+    // Everything else on organiser subdomain → organiser login
+    if (
+      !pathname.startsWith("/organiser") &&
+      !pathname.startsWith("/admin") &&
+      !pathname.startsWith("/_next") &&
+      !pathname.startsWith("/api") &&
+      !pathname.startsWith("/images") &&
+      !pathname.startsWith("/favicon")
+    ) {
+      return NextResponse.redirect(new URL("/organiser", req.url));
+    }
+
+    return NextResponse.next();
+  }
+
+  // Customer domain: redirect organiser/admin paths to organiser subdomain
+  if (host === CUSTOMER_DOMAIN || host === `www.${CUSTOMER_DOMAIN}`) {
+    if (pathname.startsWith("/organiser") || pathname.startsWith("/admin")) {
+      return NextResponse.redirect(
+        `https://${ORGANISER_DOMAIN}${pathname}${req.nextUrl.search}`
+      );
+    }
+    return NextResponse.next();
+  }
+
+  // ── Fallback (any other domain / Amplify preview) ────────────────────
+  // Serve customer site by default, protect organiser/admin routes
   if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
     const payload = await getVerifiedPayload(req);
     if (!payload) return NextResponse.redirect(new URL("/organiser", req.url));
@@ -79,16 +135,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/organiser/dashboard/:path*",
-    "/organiser/listings/:path*",
-    "/organiser/profile/:path*",
-    "/organiser/new-listing/:path*",
-    "/organiser/onboarding/:path*",
-    "/organiser/payments/:path*",
-    "/organiser/events/:path*",
-    "/admin/dashboard/:path*",
-    "/admin/events/:path*",
-    "/admin/organisers/:path*",
-    "/admin/reviews/:path*",
+    "/((?!_next/static|_next/image|images/|favicon.ico).*)",
   ],
 };

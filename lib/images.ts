@@ -1,11 +1,5 @@
-/**
- * Centralised Unsplash image pools for each event discipline.
- *
- * URLs are stored without size params so every consumer can request the
- * resolution it actually needs (thumbnails vs. full-bleed hero).
- */
 const IMAGE_POOLS: Record<string, string[]> = {
-  functional_fitness: [
+  hyrox: [
     "https://images.unsplash.com/photo-1571008887538-b36bb32f4571",
     "https://images.unsplash.com/photo-1549060279-7e168fcee0c2",
     "https://images.unsplash.com/photo-1517963879433-6ad2b056d712",
@@ -31,10 +25,6 @@ function buildUrl(base: string, width: number, quality: number): string {
   return `${base}?w=${width}&q=${quality}`;
 }
 
-/**
- * Deterministic image for an event card. Cycles through the pool using the
- * last character of the event ID so the same event always gets the same image.
- */
 export function getEventImage(
   type: string,
   id: string,
@@ -46,10 +36,6 @@ export function getEventImage(
   return buildUrl(pool[idx], width, quality);
 }
 
-/**
- * Alternate image for the same event (e.g. related-events rail).
- * Uses a different hash so it picks a different photo from the pool.
- */
 export function getAlternateEventImage(
   type: string,
   id: string,
@@ -61,7 +47,6 @@ export function getAlternateEventImage(
   return buildUrl(pool[idx], width, quality);
 }
 
-/** Representative image for a discipline category tile. */
 export function getCategoryImage(
   type: string,
   width = 600,
@@ -71,7 +56,6 @@ export function getCategoryImage(
   return buildUrl(pool[0], width, quality);
 }
 
-/** All images for a discipline — used for hero carousels on the detail page. */
 export function getTypeImageArray(
   type: string,
   width = 1920,

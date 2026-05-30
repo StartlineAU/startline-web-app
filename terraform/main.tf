@@ -158,4 +158,9 @@ resource "aws_amplify_domain_association" "this" {
     branch_name = module.env["prod"].branch_name
     prefix      = "www"
   }
+
+  sub_domain {
+    branch_name = module.env["prod"].branch_name
+    prefix      = "organiser"
+  }
 }

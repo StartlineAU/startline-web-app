@@ -137,8 +137,9 @@ locals {
     s.prefix => regex("([a-z0-9-]+\\.cloudfront\\.net)", s.dns_record)[0]
   }
 
-  amplify_apex_target = local.amplify_sub_domains_by_prefix[""]
-  amplify_www_target  = local.amplify_sub_domains_by_prefix["www"]
+  amplify_apex_target      = local.amplify_sub_domains_by_prefix[""]
+  amplify_www_target       = local.amplify_sub_domains_by_prefix["www"]
+  amplify_organiser_target = local.amplify_sub_domains_by_prefix["organiser"]
 
   # certificate_verification_dns_record looks like
   # "_xxx.startlineau.com. CNAME _yyy.acm-validations.aws."
@@ -173,5 +174,14 @@ resource "aws_route53_record" "www_cname" {
   type            = "CNAME"
   ttl             = 300
   records         = [local.amplify_www_target]
+  allow_overwrite = true
+}
+
+resource "aws_route53_record" "organiser_cname" {
+  zone_id         = aws_route53_zone.primary.zone_id
+  name            = "organiser.startlineau.com"
+  type            = "CNAME"
+  ttl             = 300
+  records         = [local.amplify_organiser_target]
   allow_overwrite = true
 }
