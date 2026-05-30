@@ -20,12 +20,15 @@ const buttonVariants = cva(
           "bg-red-500 text-white hover:bg-red-600 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
         lime:
           "border border-lime-400 bg-lime-50 text-lime-700 hover:bg-lime-100 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
+        machined:
+          "bg-machined text-dark machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-x-0 active:translate-y-0",
         link: "text-lime-600 underline-offset-4 hover:underline",
       },
       size: {
         sm: "text-[11px] px-3 py-2 rounded-lg",
         default: "text-[13px] px-5 py-3 rounded-xl",
         lg: "text-sm px-6 py-4 rounded-xl",
+        ctaLg: "text-sm px-8 py-4 rounded-xl",
         icon: "w-9 h-9 rounded-lg text-[11px]",
       },
     },

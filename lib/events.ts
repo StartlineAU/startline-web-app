@@ -24,6 +24,7 @@ export interface PublicEvent {
   format: string;
   level: string;
   categories: unknown;
+  waves: unknown;
   coverImageUrl: string | null;
   registrationType: string;
   registrationUrl: string | null;
@@ -43,10 +44,6 @@ function lowestPrice(waves: unknown): number | null {
   return prices.length ? Math.min(...prices) : null;
 }
 
-/**
- * Returns all APPROVED (publicly visible) events, ordered by soonest first.
- * Used by the public events feed (`/api/events`).
- */
 export async function getAllEvents(): Promise<PublicEvent[]> {
   await archivePastEvents();
   const events = await prisma.event.findMany({
@@ -78,8 +75,8 @@ export async function getAllEvents(): Promise<PublicEvent[]> {
     },
   });
 
-  return events.map(({ waves, ...e }) => ({
+  return events.map((e) => ({
     ...e,
-    fromPrice: lowestPrice(waves),
+    fromPrice: lowestPrice(e.waves),
   }));
 }
