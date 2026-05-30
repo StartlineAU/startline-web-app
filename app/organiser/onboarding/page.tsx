@@ -215,7 +215,7 @@ export default function OnboardingPage() {
 
                 {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
 
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-4 sm:gap-5">
                   <Field label="First name" required>
                     <input value={form.firstName} onChange={(e) => u({ firstName: e.target.value })}
                       placeholder="Jane" className={inputCls} />
@@ -302,31 +302,29 @@ export default function OnboardingPage() {
           </div>
 
           {/* ── Navigation buttons ── */}
-          <div className="flex items-center justify-between pt-6 border-t border-dark-lighter mt-8">
-            <button
-              onClick={() => step > 0 ? goTo(step - 1) : router.push("/organiser")}
-              className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-2 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Back to sign in" : "Back"}
-            </button>
-
-            <div className="flex items-center gap-3">
+          <div className="pt-6 border-t border-dark-lighter mt-8 space-y-3">
+            {step < STEPS.length - 1 ? (
+              <button onClick={handleNext} disabled={animating}
+                className="w-full bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-4 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50">
+                Continue <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button onClick={() => save(true)} disabled={saving || !form.agreedToTerms || !form.agreedToCommunity}
+                className="w-full bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-4 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
+                {saving ? "Saving…" : <>Complete setup <ArrowRight className="w-4 h-4" /></>}
+              </button>
+            )}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => step > 0 ? goTo(step - 1) : router.push("/organiser")}
+                className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-2 transition-colors py-2"
+              >
+                <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Back to sign in" : "Back"}
+              </button>
               {step < STEPS.length - 1 && (
                 <button onClick={() => save(false)} disabled={saving}
-                  className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light px-5 py-3 transition-colors disabled:opacity-40">
+                  className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted hover:text-light px-4 py-2 transition-colors disabled:opacity-40">
                   Save draft
-                </button>
-              )}
-
-              {step < STEPS.length - 1 ? (
-                <button onClick={handleNext} disabled={animating}
-                  className="bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50">
-                  Continue <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button onClick={() => save(true)} disabled={saving || !form.agreedToTerms || !form.agreedToCommunity}
-                  className="bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:cursor-not-allowed">
-                  {saving ? "Saving…" : <>Complete setup <ArrowRight className="w-4 h-4" /></>}
                 </button>
               )}
             </div>

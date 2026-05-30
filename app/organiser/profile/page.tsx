@@ -24,7 +24,7 @@ interface EventRow {
 interface Profile {
   orgName: string; contactName: string; phone: string; contactEmail: string;
   facebook: string; bio: string; abn: string;
-  logoUrl: string; coverImageUrl: string; coverPosition: string;
+  logoUrl: string; logoPosition: string; coverImageUrl: string; coverPosition: string;
 }
 
 interface ReviewData {
@@ -37,7 +37,7 @@ interface ReviewData {
 
 const EMPTY: Profile = {
   orgName: "", contactName: "", phone: "", contactEmail: "",
-  facebook: "", bio: "", abn: "", logoUrl: "", coverImageUrl: "", coverPosition: "50% 50%",
+  facebook: "", bio: "", abn: "", logoUrl: "", logoPosition: "50% 50%", coverImageUrl: "", coverPosition: "50% 50%",
 };
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string; pulse?: boolean }> = {
@@ -90,6 +90,7 @@ export default function ProfilePage() {
           bio:           prof.bio           ?? "",
           abn:           prof.abn           ?? "",
           logoUrl:       prof.logoUrl        ?? "",
+          logoPosition:  prof.logoPosition   ?? "50% 50%",
           coverImageUrl: prof.coverImageUrl  ?? "",
           coverPosition: prof.coverPosition  ?? "50% 50%",
         });
@@ -168,7 +169,8 @@ export default function ProfilePage() {
   const handlePhotoUpload = async (file: File) => {
     setPhotoUploading(true);
     try {
-      const fileUrl = await uploadImage(file, "photo");
+      const uploadType = file.type.startsWith("video/") ? "video" : "photo";
+      const fileUrl = await uploadImage(file, uploadType);
       const updated = [...profilePhotos, fileUrl];
       await fetch("/api/organiser/profile", {
         method: "PUT", headers: { "Content-Type": "application/json" },
@@ -189,75 +191,71 @@ export default function ProfilePage() {
       <main className="pt-16 page-in pb-24 lg:pb-0">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10">
 
-          {/* Banner — contained */}
-          <div className="relative h-36 sm:h-44 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 mt-6">
+          {/* Banner */}
+          <div className="relative h-36 sm:h-48 rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 mt-4 sm:mt-6">
             {profile.coverImageUrl
               ? <img src={profile.coverImageUrl} alt="Cover" className="w-full h-full object-cover" style={{ objectPosition: profile.coverPosition || "50% 50%" }} />
               : <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #b3e153 0%, transparent 50%), radial-gradient(circle at 80% 20%, #86efac 0%, transparent 40%)" }} />
             }
           </div>
 
-          {/* Avatar + Name row — avatar overlaps bottom of banner, name sits beside it */}
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10 mb-6 relative z-10">
-            <div className="flex items-end gap-4">
-              <div className="relative shrink-0">
-                <div className="w-20 h-20 rounded-xl bg-lime-400 text-gray-900 font-headline font-black italic text-4xl flex items-center justify-center border-4 border-white shadow-md overflow-hidden">
-                  {profile.logoUrl
-                    ? <img src={profile.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-                    : initial}
-                </div>
-              </div>
-              <div className="pb-1">
-                <h1 className="font-headline text-4xl lg:text-5xl font-black italic tracking-tighter text-gray-900 leading-none">
-                  {loading ? "Loading…" : (profile.orgName || "Your Organisation")}
-                </h1>
-                {profile.facebook && (
-                  <a href={profile.facebook} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1 mt-2 font-headline text-[11px] uppercase tracking-widest text-gray-400 hover:text-gray-700 transition-colors">
-                    <Facebook className="w-3 h-3" /> {profile.facebook.replace(/https?:\/\/(www\.)?/, "")}
-                  </a>
-                )}
-              </div>
+          {/* Avatar + name row — avatar overlaps banner, name sits beside it below the cover */}
+          <div className="flex items-end gap-4 -mt-[72px] mb-5 relative z-10">
+            <div className="w-[144px] h-[144px] rounded-2xl bg-lime-400 text-gray-900 font-headline font-black italic text-5xl flex items-center justify-center border-4 border-white shadow-lg overflow-hidden shrink-0">
+              {profile.logoUrl
+                ? <img src={profile.logoUrl} alt="Logo" className="w-full h-full object-cover" style={{ objectPosition: profile.logoPosition || "50% 50%" }} />
+                : initial}
             </div>
-            <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
-              <div className="flex items-center gap-3">
+
+            {/* Name + actions sit below the cover line (at the avatar's bottom) */}
+            <div className="min-w-0 pb-1">
+              <h1 className="font-headline text-2xl sm:text-3xl lg:text-4xl font-black italic tracking-tighter text-gray-900 leading-tight">
+                {loading ? "Loading…" : (profile.orgName || "Your Organisation")}
+              </h1>
+              {profile.facebook && (
+                <a href={profile.facebook} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1 mt-1 font-headline text-[11px] uppercase tracking-widest text-gray-400 hover:text-gray-700 transition-colors">
+                  <Facebook className="w-3 h-3" /> {profile.facebook.replace(/https?:\/\/(www\.)?/, "")}
+                </a>
+              )}
+              <div className="flex items-center gap-2 mt-2.5">
                 <Button variant="outline" size="sm" onClick={() => openSettings("personal")}>
                   <Edit2 className="w-4 h-4" /> Edit Profile
                 </Button>
                 <Button asChild size="sm">
                   <Link href="/organiser/new-listing">
-                    <Plus className="w-4 h-4" /> Post a new event
+                    <Plus className="w-4 h-4" /> Post event
                   </Link>
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* About + Metrics row */}
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6 mb-8 pb-6 border-b border-gray-200">
-            <div className="flex-1">
-              {profile.bio
-                ? <p className="text-[14px] text-gray-700 leading-relaxed">{profile.bio}</p>
-                : <p className="text-[14px] text-gray-400 italic">No bio yet — add one in Edit Profile.</p>}
+          {/* Metrics row */}
+          <div className="grid grid-cols-3 gap-3 mb-5 pb-5 border-b border-gray-200">
+            <div className="text-center">
+              <div className="font-headline text-xl sm:text-2xl font-black italic tracking-tighter text-gray-900">
+                {loading ? "—" : events.filter(e => e.status === "APPROVED").length}
+              </div>
+              <div className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">Events</div>
             </div>
-            <div className="flex flex-row gap-8 shrink-0 items-start">
-              <div>
-                <div className="font-headline text-xl font-black italic tracking-tighter text-gray-900">
-                  {loading ? "—" : events.filter(e => e.status === "APPROVED").length}
-                </div>
-                <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">Events hosted</div>
+            <div className="text-center">
+              <div className="font-headline text-xl sm:text-2xl font-black italic tracking-tighter text-gray-900">
+                {avgRating !== null ? avgRating.toFixed(1) : "—"}
               </div>
-              <div>
-                <div className="font-headline text-xl font-black italic tracking-tighter text-gray-900">
-                  {avgRating !== null ? avgRating.toFixed(1) : "—"}
-                </div>
-                <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">Avg rating</div>
-              </div>
-              <div>
-                <div className="font-headline text-xl font-black italic tracking-tighter text-gray-900">0</div>
-                <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">Followers</div>
-              </div>
+              <div className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">Rating</div>
             </div>
+            <div className="text-center">
+              <div className="font-headline text-xl sm:text-2xl font-black italic tracking-tighter text-gray-900">0</div>
+              <div className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">Followers</div>
+            </div>
+          </div>
+
+          {/* Bio */}
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            {profile.bio
+              ? <p className="text-[14px] text-gray-700 leading-relaxed">{profile.bio}</p>
+              : <p className="text-[14px] text-gray-400 italic">No bio yet — add one in Edit Profile.</p>}
           </div>
 
           {/* Main content */}
@@ -311,7 +309,7 @@ export default function ProfilePage() {
                               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                               {/* Discipline badge */}
                               <span className="absolute top-3 left-3 font-headline text-[10px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-2 py-1 rounded">
-                                {e.discipline}
+                                {e.discipline.replace(/_/g, " ")}
                               </span>
                               {/* Date overlay */}
                               <div className="absolute bottom-3 right-3 text-right">
@@ -413,14 +411,6 @@ export default function ProfilePage() {
                             <div className="font-headline text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-1">{label}</div>
                           </div>
                         ))}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-headline text-[36px] font-black italic tracking-tighter text-gray-900 leading-none">
-                          {reviewStats.recommend}%
-                        </span>
-                        <span className="font-headline text-[11px] uppercase tracking-widest text-gray-500">
-                          of athletes would attend again
-                        </span>
                       </div>
                     </div>
                   </div>
