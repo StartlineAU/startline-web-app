@@ -34,7 +34,7 @@ function formatEventDate(dateStr: string, startTime: string) {
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: string }> = {
   DRAFT:    { bg: "bg-gray-200",  text: "text-gray-700",  label: "Draft"    },
   PENDING:  { bg: "bg-blue-200",  text: "text-blue-900",  label: "Pending"  },
-  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Live"     },
+  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Published"     },
   REJECTED: { bg: "bg-red-200",   text: "text-red-900",   label: "Rejected" },
   ARCHIVED: { bg: "bg-gray-200",  text: "text-gray-500",  label: "Archived" },
 };
@@ -43,7 +43,7 @@ type Filter = EventStatus | "all";
 
 const FILTERS: { k: Filter; l: string }[] = [
   { k: "all",      l: "All"      },
-  { k: "APPROVED", l: "Live"     },
+  { k: "APPROVED", l: "Published"     },
   { k: "PENDING",  l: "Pending"  },
   { k: "DRAFT",    l: "Drafts"   },
   { k: "REJECTED", l: "Rejected" },

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
+import { archivePastEvents } from "@/lib/archive-events";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Clock, CheckCircle, XCircle, Users } from "lucide-react";
@@ -9,6 +10,7 @@ import { ArrowRight, Clock, CheckCircle, XCircle, Users } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 async function getStats() {
+  await archivePastEvents();
   const [pending, approved, rejected, organisers] = await Promise.all([
     prisma.event.count({ where: { status: "PENDING"  } }),
     prisma.event.count({ where: { status: "APPROVED" } }),
@@ -105,7 +107,7 @@ export default async function AdminDashboardPage() {
               href="/admin/events?status=PENDING"
             />
             <StatCard
-              label="Live events"
+              label="Published events"
               value={stats.approved}
               sub="approved and published"
               icon={<CheckCircle className="w-5 h-5" />}
