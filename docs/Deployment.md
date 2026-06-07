@@ -4,31 +4,31 @@ How code and infrastructure changes flow from a feature branch to production.
 
 ## Branches
 
-| Branch | Purpose | What deploys |
-|---|---|---|
-| `main` | Source of truth for app code AND terraform | Terraform applies (no app deploy) |
-| `non-production` | Staging — features tested live | Amplify nonprod environment |
-| `production` | Live — real users | Amplify prod environment (startlineau.com) |
-| `feature/*`, `fix/*`, `claude/*`, etc. | Work branches | Nothing |
+| Branch                                 | Purpose                                    | What deploys                               |
+| -------------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `main`                                 | Source of truth for app code AND terraform | Terraform applies (no app deploy)          |
+| `non-production`                       | Staging — features tested live             | Amplify nonprod environment                |
+| `production`                           | Live — real users                          | Amplify prod environment (startlineau.com) |
+| `feature/*`, `fix/*`, `claude/*`, etc. | Work branches                              | Nothing                                    |
 
-`main` is *not* an Amplify deploy branch. Code on `main` only goes live after it's promoted into `non-production` or `production`. Terraform changes, however, do apply at merge-to-main.
+`main` is _not_ an Amplify deploy branch. Code on `main` only goes live after it's promoted into `non-production` or `production`. Terraform changes, however, do apply at merge-to-main.
 
 ## Environments
 
 Each environment is independently provisioned by terraform via `module.env[*]` (see [`terraform/main.tf`](terraform/main.tf) `local.environments`).
 
-| Resource | prod | nonprod |
-|---|---|---|
-| Amplify branch | `production` | `non-production` |
-| Amplify stage | PRODUCTION | DEVELOPMENT |
-| RDS instance | `startline-prod-postgres` | `startline-nonprod-postgres` |
-| Postgres `db_name` | `startline_prod` | `startline_nonprod` |
-| VPC CIDR | `10.20.0.0/16` | `10.21.0.0/16` |
-| Cognito user pool | `startline-prod-users` | `startline-nonprod-users` |
-| Custom domain | startlineau.com (apex + www) | none — uses default `*.amplifyapp.com` |
-| RDS deletion protection | on | off |
-| Cognito deletion protection | on | off |
-| Final snapshot on destroy | yes | no |
+| Resource                    | prod                         | nonprod                                |
+| --------------------------- | ---------------------------- | -------------------------------------- |
+| Amplify branch              | `production`                 | `non-production`                       |
+| Amplify stage               | PRODUCTION                   | DEVELOPMENT                            |
+| RDS instance                | `startline-prod-postgres`    | `startline-nonprod-postgres`           |
+| Postgres `db_name`          | `startline_prod`             | `startline_nonprod`                    |
+| VPC CIDR                    | `10.20.0.0/16`               | `10.21.0.0/16`                         |
+| Cognito user pool           | `startline-prod-users`       | `startline-nonprod-users`              |
+| Custom domain               | startlineau.com (apex + www) | none — uses default `*.amplifyapp.com` |
+| RDS deletion protection     | on                           | off                                    |
+| Cognito deletion protection | on                           | off                                    |
+| Final snapshot on destroy   | yes                          | no                                     |
 
 Shared singletons (one for the whole project, not per-env):
 
@@ -86,21 +86,21 @@ Two GitHub Actions live in [`.github/workflows/`](.github/workflows/):
 
 Both workflows authenticate via OIDC, assuming the `startline-terraform-ci` IAM role created by [`terraform/github_oidc.tf`](terraform/github_oidc.tf). The role ARN is exposed as a repo variable `vars.AWS_ROLE_ARN`. Sensitive values (Amplify GitHub PAT, Resend API key) come from repo secrets:
 
-| Repo variable / secret | Used for |
-|---|---|
-| `vars.AWS_ROLE_ARN` | Both workflows assume this role |
+| Repo variable / secret                    | Used for                              |
+| ----------------------------------------- | ------------------------------------- |
+| `vars.AWS_ROLE_ARN`                       | Both workflows assume this role       |
 | `secrets.AMPLIFY_REPOSITORY_ACCESS_TOKEN` | Amplify connecting to the GitHub repo |
-| `secrets.RESEND_API_KEY` | Transactional email |
+| `secrets.RESEND_API_KEY`                  | Transactional email                   |
 
 ## What triggers what
 
-| Action | Result |
-|---|---|
+| Action                                     | Result                                  |
+| ------------------------------------------ | --------------------------------------- |
 | Open PR against `main` (terraform changed) | `terraform-plan` runs, posts PR comment |
-| Merge PR to `main` (terraform changed) | `terraform-apply` runs, infra updates |
-| Merge PR to `main` (only app code changed) | Nothing — wait for promotion to deploy |
-| Push to `non-production` | Amplify rebuilds & deploys nonprod |
-| Push to `production` | Amplify rebuilds & deploys prod |
+| Merge PR to `main` (terraform changed)     | `terraform-apply` runs, infra updates   |
+| Merge PR to `main` (only app code changed) | Nothing — wait for promotion to deploy  |
+| Push to `non-production`                   | Amplify rebuilds & deploys nonprod      |
+| Push to `production`                       | Amplify rebuilds & deploys prod         |
 
 Terraform applies on `main` only. Application deploys happen on `non-production` / `production` only. They're decoupled: terraform manages environment shape; Amplify deploys app code into it.
 
@@ -145,10 +145,10 @@ These aren't yet enforced but should be configured in GitHub repo settings:
 
 ## Disaster recovery
 
-| Scenario | Action |
-|---|---|
-| Bad code in prod | Revert the offending commit on `main`, then promote `main` → `non-production` → `production` |
-| Bad nonprod state | `git reset --hard origin/production && git push --force-with-lease` (see above) |
-| Bad terraform apply | Revert the merge commit on `main`; CI applies the revert |
+| Scenario                  | Action                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Bad code in prod          | Revert the offending commit on `main`, then promote `main` → `non-production` → `production`                        |
+| Bad nonprod state         | `git reset --hard origin/production && git push --force-with-lease` (see above)                                     |
+| Bad terraform apply       | Revert the merge commit on `main`; CI applies the revert                                                            |
 | Need to roll forward fast | Push directly to `production` is technically possible if no protection is set, but always prefer the promotion flow |
-| RDS data loss | Restore from RDS automated backup (when `database_backup_retention_period > 0`) or from a manual export |
+| RDS data loss             | Restore from RDS automated backup (when `database_backup_retention_period > 0`) or from a manual export             |
