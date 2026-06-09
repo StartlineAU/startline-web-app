@@ -34,6 +34,12 @@ yarn-error.log*
 .env*
 !.env.example
 
+# MCP config (may contain secrets)
+.mcp.json
+
+# Playwright MCP browser session artifacts
+.playwright-mcp/
+
 # vercel
 .vercel
 
