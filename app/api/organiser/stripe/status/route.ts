@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error("STRIPE_SECRET_KEY is not configured.");
-  return new Stripe(key, { apiVersion: "2026-05-27.dahlia" });
-}
+import { getStripe } from "@/lib/stripe";
 
 export async function GET() {
   const session = await getOrganiserSession();

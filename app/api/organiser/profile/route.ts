@@ -14,12 +14,23 @@ export async function GET() {
         orgName: true, contactName: true, contactEmail: true, phone: true,
         abn: true, website: true, instagram: true, facebook: true,
         bio: true, logoUrl: true, logoPosition: true, coverImageUrl: true, coverPosition: true, photos: true,
-        legalName: true, insuranceDeclared: true,
+        legalName: true, insuranceDeclared: true, dob: true,
         stripeAccountId: true, stripeOnboardingComplete: true,
       },
     });
 
-    if (!organiser) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    if (!organiser) {
+      if (process.env.NODE_ENV === "development") {
+        return NextResponse.json({
+          id: session.sub, email: session.email, status: "APPROVED",
+          orgName: null, contactName: null, contactEmail: null, phone: null,
+          abn: null, website: null, instagram: null, facebook: null, bio: null, logoUrl: null,
+          legalName: null, insuranceDeclared: false, dob: null,
+          stripeAccountId: null, stripeOnboardingComplete: false,
+        });
+      }
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
 
     return NextResponse.json(organiser);
   } catch {
@@ -36,7 +47,7 @@ export async function PUT(req: NextRequest) {
     orgName, contactName, contactEmail, phone,
     abn, website, instagram, facebook, bio,
     logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
-    legalName, insuranceDeclared,
+    legalName, insuranceDeclared, dob,
   } = body;
 
   if (!orgName || !contactName || !phone || !contactEmail) {
@@ -55,6 +66,7 @@ export async function PUT(req: NextRequest) {
         logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
         ...(legalName !== undefined        ? { legalName }         : {}),
         ...(insuranceDeclared !== undefined ? { insuranceDeclared } : {}),
+        ...(dob !== undefined         ? { dob }              : {}),
       },
     });
 

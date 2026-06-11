@@ -147,6 +147,14 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 
             {/* CTAs — visible on desktop in sidebar, hidden on mobile (moved to sticky bar) */}
             <div className="hidden lg:flex flex-col gap-3">
+              {event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0 && (
+                <Button asChild variant="machined" size="ctaLg">
+                  <Link href={`/events/${event.id}/register`}>
+                    Register Now
+                    <ExternalLink className="w-4 h-4" />
+                  </Link>
+                </Button>
+              )}
               {event.registrationUrl && (
                 <Button asChild variant="machined" size="ctaLg">
                   <a href={event.registrationUrl} target="_blank" rel="noopener noreferrer">
@@ -169,7 +177,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       </section>
 
       {/* ── Mobile sticky bottom CTA bar ── */}
-      {event.registrationUrl && (
+      {(event.registrationUrl || (event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0)) && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-darker border-t border-dark-lighter px-4 py-3 safe-area-bottom">
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
@@ -182,21 +190,31 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                 </>
               )}
             </div>
-            <a
-              href={event.registrationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
-            >
-              Register Now
-              <ExternalLink className="w-4 h-4" />
-            </a>
+            {event.registrationType === "startline" ? (
+              <Link
+                href={`/events/${event.id}/register`}
+                className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
+              >
+                Register Now
+                <ExternalLink className="w-4 h-4" />
+              </Link>
+            ) : (
+              <a
+                href={event.registrationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
+              >
+                Register Now
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
           </div>
         </div>
       )}
 
       {/* Spacer so sticky bar doesn't cover content on mobile */}
-      {event.registrationUrl && <div className="lg:hidden h-20" />}
+      {(event.registrationUrl || (event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0)) && <div className="lg:hidden h-20" />}
 
     </main>
   );
