@@ -6,7 +6,6 @@ import { formatMediumDate, formatShortDate, formatTime, formatCompetitionFormat 
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
 import SaveEventButton from "./SaveEventButton";
-import { Card } from "@/components/ui/card";
 
 interface EventCardProps {
   event: CustomerEvent;
@@ -22,9 +21,9 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
   if (variant === "compact") {
     return (
       <Link href={`/events/${event.id}`} className="group block">
-        <Card className="rounded-xl border border-dark-lighter hover:border-primary/40 transition-colors">
-          <div className="relative aspect-[16/9] image-placeholder overflow-hidden transition-all duration-500">
-            <span className="absolute top-2 left-2 text-[10px] font-headline uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
+        <div className="rounded-xl border border-dark-lighter hover:border-primary/40 transition-colors bg-dark overflow-hidden">
+          <div className="relative aspect-[16/9] bg-dark-light overflow-hidden">
+            <span className="absolute top-2 left-2 z-10 text-[9px] font-headline uppercase tracking-widest bg-primary text-dark px-2 py-0.5 rounded-full">
               {typeLabel}
             </span>
           </div>
@@ -32,14 +31,14 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
             <h3 className="font-headline text-sm font-bold italic tracking-tighter text-light line-clamp-1 group-hover:text-primary transition-colors">
               {event.title}
             </h3>
-            <div className="flex items-center gap-2 mt-2 text-xs font-medium font-headline uppercase tracking-widest text-muted">
+            <div className="flex items-center gap-2 mt-1.5 text-[10px] font-medium font-headline uppercase tracking-widest text-muted">
               <Calendar className="w-3 h-3 text-primary" />
               <span>{formatMediumDate(event.date)}</span>
-              <span className="text-dark-lighter">&middot;</span>
+              <span>&middot;</span>
               <span>{stateLabel}</span>
             </div>
           </div>
-        </Card>
+        </div>
       </Link>
     );
   }
@@ -47,37 +46,28 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
   if (variant === "list") {
     return (
       <Link href={`/events/${event.id}`} className="group block">
-        <Card className="rounded-none border-b border-dark-lighter p-4 hover:bg-dark-light transition-colors">
-          <div className="flex gap-4">
-            <div className="flex-shrink-0 w-14 text-center bg-dark-lighter py-2 px-3">
-              <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">{month}</p>
-              <p className="font-headline text-2xl font-black text-light">{day}</p>
+        <div className="border-b border-dark-lighter px-4 py-4 hover:bg-dark transition-colors">
+          <div className="flex gap-3">
+            <div className="flex-shrink-0 w-12 text-center bg-dark-lighter py-2 px-2">
+              <p className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted">{month}</p>
+              <p className="font-headline text-xl font-black text-light">{day}</p>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <span className="font-headline text-[10px] uppercase tracking-widest bg-primary text-dark px-2 py-0.5 inline-block mb-1 rounded-full">
-                    {typeLabel}
-                  </span>
-                  <h3 className="font-headline font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors">
-                    {event.title}
-                  </h3>
-                  <p className="text-sm text-muted line-clamp-1 mt-1">{event.description}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 mt-3 text-xs font-medium font-headline uppercase tracking-widest text-muted">
+              <span className="font-headline text-[9px] uppercase tracking-widest bg-primary text-dark px-2 py-0.5 inline-block mb-1 rounded-full">
+                {typeLabel}
+              </span>
+              <h3 className="font-headline font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors text-sm leading-tight">
+                {event.title}
+              </h3>
+              <div className="flex items-center gap-3 mt-1.5 text-[10px] font-medium font-headline uppercase tracking-widest text-muted">
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-primary" />
+                  <MapPin className="w-2.5 h-2.5 text-primary" />
                   {event.city}, {stateLabel}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-primary" />
-                  {formatTime(event.time)}
                 </span>
               </div>
             </div>
           </div>
-        </Card>
+        </div>
       </Link>
     );
   }
@@ -86,8 +76,8 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
 
   return (
     <Link href={`/events/${event.id}`} className="block group">
-      <Card className="rounded-xl flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200">
-        <div className="relative h-44 overflow-hidden flex-shrink-0">
+      <div className="rounded-xl flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200 bg-dark border border-dark-lighter overflow-hidden">
+        <div className="relative h-36 sm:h-44 overflow-hidden flex-shrink-0">
           <img
             src={bannerUrl}
             alt={event.title}
@@ -95,50 +85,50 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
           />
           <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/40 to-transparent" />
 
-          <div className="absolute inset-x-0 top-0 p-4 flex items-start justify-between">
+          <div className="absolute inset-x-0 top-0 p-3 flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1 rounded-full ${status.style}`}>
+              <span className={`font-headline text-[10px] font-medium uppercase tracking-widest px-2.5 py-1 rounded-full ${status.style}`}>
                 {status.label}
               </span>
               <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm" />
             </div>
-            <div className="bg-dark/80 backdrop-blur-sm px-4 py-2 text-right flex-shrink-0">
-              <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-none mb-1">{month}</p>
-              <p className="font-headline text-2xl font-black text-light leading-none">{day}</p>
+            <div className="bg-dark/80 backdrop-blur-sm px-3 py-1.5 text-right flex-shrink-0">
+              <p className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted leading-none mb-0.5">{month}</p>
+              <p className="font-headline text-xl font-black text-light leading-none">{day}</p>
             </div>
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 p-4">
-            <span className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-1 inline-block">
+          <div className="absolute inset-x-0 bottom-0 p-3">
+            <span className="font-headline text-[10px] font-medium uppercase tracking-widest text-primary mb-1 inline-block">
               {typeLabel}
             </span>
-            <h3 className="font-headline text-2xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors duration-200 leading-tight">
+            <h3 className="font-headline text-xl sm:text-2xl font-black italic tracking-tighter text-light group-hover:text-primary transition-colors duration-200 leading-tight">
               {event.title}
             </h3>
           </div>
         </div>
 
-        <div className="p-5 flex flex-col flex-1">
-          <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted">
-              <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-              <span>{event.location}, {stateLabel}</span>
+        <div className="p-4 flex flex-col flex-1">
+          <div className="space-y-1.5 mb-3">
+            <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
+              <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+              <span className="truncate">{event.location}, {stateLabel}</span>
             </div>
-            <div className="flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted">
-              <Clock className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
+              <Clock className="w-3 h-3 text-primary flex-shrink-0" />
               <span>{formatTime(event.time)}</span>
               {event.endTime && <span>&mdash; {formatTime(event.endTime)}</span>}
             </div>
-            <div className="flex items-center gap-2 font-headline text-xs font-medium uppercase tracking-widest text-muted">
-              <Users className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+            <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
+              <Users className="w-3 h-3 text-primary flex-shrink-0" />
               <span>{formatCompetitionFormat(event.format)}</span>
             </div>
           </div>
-          <p className="text-sm font-medium text-muted border-l-2 border-dark-lighter pl-4 line-clamp-2 flex-1">
+          <p className="text-xs sm:text-sm font-medium text-muted border-l-2 border-dark-lighter pl-3 line-clamp-2 flex-1">
             {event.description}
           </p>
         </div>
-      </Card>
+      </div>
     </Link>
   );
 }

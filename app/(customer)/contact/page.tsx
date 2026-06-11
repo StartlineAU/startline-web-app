@@ -58,25 +58,19 @@ export default function ContactPage() {
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-dark-darker/30 to-dark-darker" />
-        <div
-          className="relative max-w-[1440px] mx-auto px-6 pt-48 pb-12"
-          style={{ paddingBottom: "calc(3rem + 1cm)" }}
-        >
-          <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4 flex items-center gap-3">
-            <span className="w-10 h-px bg-primary inline-block" />
+        <div className="relative max-w-[1440px] mx-auto px-4 sm:px-6 pt-24 sm:pt-36 pb-8 sm:pb-14">
+          <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-3 flex items-center gap-3">
+            <span className="w-8 h-px bg-primary inline-block" />
             Get In Touch
           </p>
-          <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none">
+          <h1 className="font-headline text-[36px] sm:text-5xl lg:text-7xl font-black italic tracking-tighter text-light leading-tight">
             We&apos;d love to<br />
             <span className="text-primary">hear from you.</span>
           </h1>
         </div>
       </section>
 
-      <section
-        className="max-w-[1440px] mx-auto px-6 pb-12"
-        style={{ paddingTop: "calc(3rem - 0.5cm)" }}
-      >
+      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
           <div className="lg:col-span-7 bg-dark rounded-xl p-8 md:p-12">

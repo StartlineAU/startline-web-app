@@ -55,7 +55,7 @@ function StatCard({
     <Card className="hover:shadow-sm transition-shadow stagger-item" style={{ animationDelay: `${delay}ms` }}>
       <CardContent className="p-4 sm:p-6">
         <div className="font-headline text-[10px] uppercase tracking-widest text-gray-500 mb-1.5">{label}</div>
-        <div className="font-headline text-3xl sm:text-5xl font-black italic tracking-tighter text-gray-900 mb-1.5">{value}</div>
+        <div className="font-headline text-2xl sm:text-5xl font-black italic tracking-tighter text-gray-900 mb-1.5">{value}</div>
         <div className="text-[11px] sm:text-[12px] text-gray-500">{sub}</div>
       </CardContent>
     </Card>
@@ -94,7 +94,7 @@ export default function DashboardPage() {
       <OrganiserTopBar />
 
       <main className="pt-16">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 lg:pb-12 page-in">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-5 sm:py-10 pb-24 lg:pb-12 page-in">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-10">
@@ -122,8 +122,8 @@ export default function DashboardPage() {
             </Button>
           </div>
 
-          {/* Stats — always 3 columns, compact on mobile */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6 sm:mb-10">
+          {/* Stats — 2-col on mobile, 3-col on sm+ */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-10">
             <StatCard label="Live now"      value={loading ? "—" : stats.live}          sub={`of ${stats.total} total`} good delay={0}   />
             <StatCard label="Registrations" value={loading ? "—" : stats.registrations} sub="all events"                good={stats.registrations > 0} delay={60}  />
             <StatCard label="Total events"  value={loading ? "—" : stats.total}         sub="all time"                  delay={120} />

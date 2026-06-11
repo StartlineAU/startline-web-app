@@ -22,11 +22,11 @@ export default function AboutPage() {
           <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-dark-darker/55" />
         </div>
 
-        <div className="relative z-10 max-w-[1440px] mx-auto px-6 pt-[calc(6rem+4cm)] sm:pt-[calc(7rem+4cm)] pb-20 sm:pb-28">
-          <h1 className="font-headline text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter text-light leading-none -mt-[2cm] mb-10 sm:mb-12">
+        <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 pt-28 sm:pt-40 pb-12 sm:pb-20">
+          <h1 className="font-headline text-[36px] sm:text-5xl lg:text-7xl font-black italic tracking-tighter text-light leading-tight mb-8 sm:mb-12">
             About <span className="text-primary">us</span>
           </h1>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-start">
             <div>
               <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-6 flex items-center gap-3">
                 <span className="w-10 h-px bg-primary inline-block" />
@@ -72,10 +72,10 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section className="bg-dark py-[3.24rem] sm:py-[4.05rem] border-b border-dark-lighter/50">
-        <div className="max-w-[1440px] mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 lg:items-start">
-            <div className="-mt-[0.85cm] flex flex-col gap-6 sm:gap-8 lg:col-span-7">
+      <section className="bg-dark py-10 sm:py-16 border-b border-dark-lighter/50">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 lg:items-start">
+            <div className="flex flex-col gap-5 sm:gap-8 lg:col-span-7">
               <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary flex items-center gap-3">
                 <span className="hidden sm:inline-block w-10 h-px bg-primary" />
                 02 // Why athletes choose us
@@ -107,7 +107,7 @@ export default function AboutPage() {
       </section>
 
       <section className="bg-dark-darker border-t border-dark-lighter">
-        <div className="max-w-[1440px] mx-auto px-6 py-16 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-10">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-16 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
           <div className="max-w-xl">
             <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary flex items-center gap-3 mb-5">
               <span className="w-10 h-px bg-primary inline-block" />

@@ -4,9 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, MapPin } from "lucide-react";
 
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-
 export default function HeroSearch() {
   const router = useRouter();
   const [what, setWhat] = useState("");
@@ -16,8 +13,7 @@ export default function HeroSearch() {
     const params = new URLSearchParams();
     if (what.trim())  params.set("what", what.trim());
     if (where.trim()) params.set("where", where.trim());
-    const qs = params.toString();
-    router.push(qs ? `/events?${qs}` : "/events");
+    router.push(params.toString() ? `/events?${params.toString()}` : "/events");
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -25,33 +21,81 @@ export default function HeroSearch() {
   }
 
   return (
-    <div className="w-full mt-10">
-      <div className="flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
-
-        <div className="flex-1 bg-dark px-6 py-4 border-r border-dark-lighter min-w-0">
-          <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-1.5">
+    <div className="w-full mt-6 sm:mt-10">
+      {/* Mobile: stacked inputs + full-width button */}
+      <div className="flex flex-col sm:hidden gap-2">
+        <div className="bg-dark rounded-2xl px-4 py-3">
+          <label className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-1.5">
             Event
           </label>
           <div className="flex items-center gap-2">
-            <Input
+            <input
               type="text"
               placeholder="Event name, type or keyword"
               value={what}
               onChange={(e) => setWhat(e.target.value)}
               onKeyDown={handleKey}
-              className="h-auto p-0 font-headline text-xl placeholder:text-muted/40 focus-visible:ring-0"
+              className="flex-1 bg-transparent border-0 rounded-none p-0 text-light font-headline text-base placeholder:text-muted/40 focus:outline-none focus:ring-0"
             />
             {what && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => setWhat("")}
-                className="h-auto w-auto p-0 text-muted hover:text-light hover:bg-transparent"
-                aria-label="Clear event"
-              >
+              <button onClick={() => setWhat("")} className="text-muted hover:text-light p-1" aria-label="Clear">
                 <X className="w-4 h-4" />
-              </Button>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-dark rounded-2xl px-4 py-3">
+          <label className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-1.5">
+            Where
+          </label>
+          <div className="flex items-center gap-2">
+            <MapPin className="w-3.5 h-3.5 text-muted flex-shrink-0" />
+            <input
+              type="text"
+              placeholder="State, city, or suburb"
+              value={where}
+              onChange={(e) => setWhere(e.target.value)}
+              onKeyDown={handleKey}
+              className="flex-1 bg-transparent border-0 rounded-none p-0 text-light font-headline text-base placeholder:text-muted/40 focus:outline-none focus:ring-0"
+            />
+            {where && (
+              <button onClick={() => setWhere("")} className="text-muted hover:text-light p-1" aria-label="Clear">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSearch}
+          className="flex items-center justify-center gap-3 bg-primary hover:bg-primary/90 text-dark font-headline text-sm font-black uppercase tracking-widest h-12 rounded-2xl transition-colors active:scale-[0.98]"
+        >
+          <Search className="w-4 h-4" />
+          Find Events Now
+        </button>
+      </div>
+
+      {/* Desktop: original horizontal layout */}
+      <div className="hidden sm:flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
+        <div className="flex-1 bg-dark px-6 py-4 border-r border-dark-lighter min-w-0">
+          <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-1.5">
+            Event
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Event name, type or keyword"
+              value={what}
+              onChange={(e) => setWhat(e.target.value)}
+              onKeyDown={handleKey}
+              className="flex-1 bg-transparent border-0 rounded-none p-0 text-light font-headline text-xl placeholder:text-muted/40 focus:outline-none focus:ring-0"
+            />
+            {what && (
+              <button onClick={() => setWhat("")} className="text-muted hover:text-light" aria-label="Clear">
+                <X className="w-4 h-4" />
+              </button>
             )}
           </div>
         </div>
@@ -62,38 +106,30 @@ export default function HeroSearch() {
           </label>
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-muted flex-shrink-0" />
-            <Input
+            <input
               type="text"
               placeholder="State, city, or suburb"
               value={where}
               onChange={(e) => setWhere(e.target.value)}
               onKeyDown={handleKey}
-              className="h-auto p-0 font-headline text-xl placeholder:text-muted/40 focus-visible:ring-0"
+              className="flex-1 bg-transparent border-0 rounded-none p-0 text-light font-headline text-xl placeholder:text-muted/40 focus:outline-none focus:ring-0"
             />
             {where && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => setWhere("")}
-                className="h-auto w-auto p-0 text-muted hover:text-light hover:bg-transparent"
-                aria-label="Clear location"
-              >
+              <button onClick={() => setWhere("")} className="text-muted hover:text-light" aria-label="Clear">
                 <X className="w-4 h-4" />
-              </Button>
+              </button>
             )}
           </div>
         </div>
 
-        <Button
+        <button
           type="button"
           onClick={handleSearch}
-          className="flex items-center gap-3 bg-primary hover:bg-primary/90 text-dark font-headline text-base font-black uppercase tracking-widest px-10 h-auto rounded-none flex-shrink-0 hover:-translate-y-0.5 hover:-translate-x-0.5 transition-all duration-100 active:translate-x-0 active:translate-y-0 [&_svg]:size-5"
+          className="flex items-center gap-3 bg-primary hover:bg-primary/90 text-dark font-headline text-base font-black uppercase tracking-widest px-10 h-auto rounded-none flex-shrink-0 transition-colors active:scale-[0.98] [&_svg]:size-5"
         >
           <Search className="w-5 h-5" />
           Find Events Now
-        </Button>
-
+        </button>
       </div>
     </div>
   );

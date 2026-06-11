@@ -4,16 +4,16 @@ import Image from "next/image";
 export default function Footer() {
   return (
     <footer className="bg-dark border-t border-dark-lighter">
-      <div className="max-w-[1440px] mx-auto px-6 py-10">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-10 mb-10">
-          <div className="flex-shrink-0 w-48">
-            <Link href="/" className="inline-flex items-center mb-4">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-10 mb-8">
+          <div className="flex-shrink-0">
+            <Link href="/" className="inline-flex items-center mb-3">
               <Image
                 src="/images/logo-title.svg"
                 alt="StartLine"
-                width={160}
-                height={40}
-                className="h-8 w-auto"
+                width={130}
+                height={34}
+                className="h-7 w-auto"
               />
             </Link>
             <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted leading-relaxed">
@@ -21,9 +21,9 @@ export default function Footer() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-10 sm:gap-16">
+          <div className="flex gap-8 sm:gap-12 lg:gap-16 flex-wrap">
             <div>
-              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+              <h4 className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted mb-3">
                 Events
               </h4>
               <div className="space-y-2">
@@ -37,7 +37,7 @@ export default function Footer() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors py-0.5"
                   >
                     {link.label}
                   </Link>
@@ -46,19 +46,19 @@ export default function Footer() {
             </div>
 
             <div>
-              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+              <h4 className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted mb-3">
                 Platform
               </h4>
               <div className="space-y-2">
                 {[
-                  { href: "/contact", label: "Contact & submissions" },
+                  { href: "/contact", label: "Contact" },
                   { href: "/about", label: "About" },
                   { href: "/organiser", label: "Organiser Login" },
                 ].map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                    className="block font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors py-0.5"
                   >
                     {link.label}
                   </Link>
@@ -67,7 +67,7 @@ export default function Footer() {
             </div>
 
             <div>
-              <h4 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
+              <h4 className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted mb-3">
                 Follow
               </h4>
               <a
@@ -82,8 +82,8 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-dark-lighter pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted">
+        <div className="border-t border-dark-lighter pt-5">
+          <p className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
             &copy; {new Date().getFullYear()} StartLine. All Rights Reserved.
           </p>
         </div>
