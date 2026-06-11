@@ -19,5 +19,19 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: startline-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATA_FILE: /data/mailpit.db
+    volumes:
+      - mailpit_data:/data
+
 volumes:
   postgres_data:
+  mailpit_data:
