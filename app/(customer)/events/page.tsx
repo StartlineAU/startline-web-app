@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, ChevronDown, MapPin, Clock, Users, Calendar,
-  ExternalLink, ArrowRight, X,
+  ExternalLink, ArrowRight, X, SlidersHorizontal,
 } from "lucide-react";
 import type { CustomerEvent, FilterState, EventType, AustralianState, CompetitionFormat } from "@/types";
 import {
@@ -46,10 +46,10 @@ function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }
   const currentLabel = options.find((o) => o.value === value)?.label ?? label;
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative flex-shrink-0">
       <button
         onClick={isOpen ? onClose : onOpen}
-        className={`flex items-center gap-2 px-4 py-2 font-headline text-sm font-medium uppercase tracking-widest border transition-colors duration-100 rounded-full ${
+        className={`flex items-center gap-1.5 px-3 py-2 h-9 font-headline text-xs font-medium uppercase tracking-widest border transition-colors duration-100 rounded-full whitespace-nowrap ${
           active
             ? "border-primary text-primary bg-primary/5"
             : "border-dark-lighter text-muted bg-dark hover:border-primary/50 hover:text-light"
@@ -59,21 +59,21 @@ function FilterChip({ label, value, options, isOpen, onOpen, onClose, onChange }
         {active && (
           <span
             onClick={(e) => { e.stopPropagation(); onChange(""); onClose(); }}
-            className="ml-1 text-primary hover:text-light"
+            className="text-primary hover:text-light"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3 h-3" />
           </span>
         )}
-        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-dark border border-dark-lighter min-w-[200px] shadow-xl rounded-xl overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 z-50 bg-dark border border-dark-lighter min-w-[180px] shadow-xl rounded-xl overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt.value}
               onClick={() => { onChange(opt.value); onClose(); }}
-              className={`w-full text-left px-4 py-3 font-headline text-sm font-medium uppercase tracking-widest transition-colors ${
+              className={`w-full text-left px-4 py-3 font-headline text-xs font-medium uppercase tracking-widest transition-colors ${
                 value === opt.value
                   ? "bg-primary text-dark"
                   : "text-muted hover:bg-dark-light hover:text-light"
@@ -115,25 +115,24 @@ function EventsPageInner() {
     fetch("/api/events")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setAllEvents(toCustomerEvents(data));
-        }
+        if (Array.isArray(data)) setAllEvents(toCustomerEvents(data));
       })
       .catch(() => {});
   }, []);
 
   const searchParams = useSearchParams();
-  const [whatQuery,   setWhatQuery]   = useState(searchParams.get("what")  ?? "");
-  const [whereQuery,  setWhereQuery]  = useState(searchParams.get("where") ?? "");
-  const [typeFilter,  setTypeFilter]  = useState<EventType | "">((searchParams.get("type") as EventType) ?? "");
-  const [stateFilter, setStateFilter] = useState<AustralianState | "">("");
+  const [whatQuery,    setWhatQuery]    = useState(searchParams.get("what")  ?? "");
+  const [whereQuery,   setWhereQuery]   = useState(searchParams.get("where") ?? "");
+  const [typeFilter,   setTypeFilter]   = useState<EventType | "">((searchParams.get("type") as EventType) ?? "");
+  const [stateFilter,  setStateFilter]  = useState<AustralianState | "">("");
   const [formatFilter, setFormatFilter] = useState<CompetitionFormat | "">("");
-  const [dateFilter,  setDateFilter]  = useState<FilterState["dateRange"]>("all");
-  const [selectedId,  setSelectedId]  = useState<string | null>(null);
+  const [dateFilter,   setDateFilter]   = useState<FilterState["dateRange"]>("all");
+  const [selectedId,   setSelectedId]   = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [mobileSearch, setMobileSearch] = useState(false);
 
   const filterState: FilterState = useMemo(() => ({
-    types:       typeFilter   ? [typeFilter as EventType]       : [],
+    types:       typeFilter   ? [typeFilter as EventType]        : [],
     states:      stateFilter  ? [stateFilter as AustralianState] : [],
     format:      formatFilter ? (formatFilter as CompetitionFormat) : null,
     dateRange:   dateFilter,
@@ -172,67 +171,127 @@ function EventsPageInner() {
     setSelectedId(null);
   }
 
+  const hasActiveFilters = !!(typeFilter || stateFilter || formatFilter || dateFilter !== "all" || whatQuery || whereQuery);
+
   const [day, month] = selectedEvent ? formatShortDate(selectedEvent.date).split(" ") : ["", ""];
   const status    = selectedEvent ? getEventStatus(selectedEvent) : null;
   const bannerUrl = selectedEvent ? getEventImage(selectedEvent.type, selectedEvent.id, 1200, 80) : "";
 
-  return (
-    <div className="bg-dark-darker flex flex-col" style={{ height: "100dvh" }}>
+  const activeFilterCount = [typeFilter, stateFilter, formatFilter, dateFilter !== "all" ? dateFilter : ""].filter(Boolean).length;
 
-      <div className="sticky top-0 z-40 bg-dark-darker border-b border-dark-lighter flex-shrink-0 pt-16">
-        <div className="max-w-[1440px] mx-auto px-6 pt-5 pb-4">
+  return (
+    <div className="bg-dark-darker flex flex-col" style={{ minHeight: "100dvh" }}>
+
+      {/* ── Sticky header: search + filter chips ── */}
+      <div className="sticky top-0 z-40 bg-dark-darker border-b border-dark-lighter flex-shrink-0 pt-14">
+
+        {/* Desktop search bar */}
+        <div className="hidden lg:block max-w-[1440px] mx-auto px-6 pt-5 pb-3">
           <div className="flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
             <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
-              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">Event</label>
+              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-1.5">Event</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   placeholder="Event name, type or keyword"
                   value={whatQuery}
                   onChange={(e) => setWhatQuery(e.target.value)}
-                  className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+                  className="w-full bg-transparent text-light font-headline text-lg placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
                 />
                 {whatQuery && (
                   <button onClick={() => setWhatQuery("")} className="text-muted hover:text-light flex-shrink-0">
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
             </div>
             <div className="flex-1 bg-dark px-5 py-3 border-r border-dark-lighter min-w-0">
-              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-2">Where</label>
+              <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-1.5">Where</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   placeholder="State, city, or suburb"
                   value={whereQuery}
                   onChange={(e) => setWhereQuery(e.target.value)}
-                  className="w-full bg-transparent text-light font-headline text-xl placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+                  className="w-full bg-transparent text-light font-headline text-lg placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
                 />
                 {whereQuery && (
                   <button onClick={() => setWhereQuery("")} className="text-muted hover:text-light flex-shrink-0">
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
             </div>
             <button
-              onClick={() => {
-                const params = new URLSearchParams();
-                if (whatQuery.trim()) params.set("what", whatQuery.trim());
-                if (whereQuery.trim()) params.set("where", whereQuery.trim());
-                if (typeFilter) params.set("type", typeFilter);
-                router.replace(params.toString() ? `/events?${params.toString()}` : "/events");
-              }}
-              className="flex items-center gap-2 bg-machined text-dark font-headline text-base font-bold uppercase tracking-widest px-10 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0"
+              onClick={() => {}}
+              className="flex items-center gap-2 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0 flex-shrink-0"
             >
-              <Search className="w-5 h-5" />
+              <Search className="w-4 h-4" />
               Search
             </button>
           </div>
         </div>
 
-        <div className="max-w-[1440px] mx-auto px-6 pb-4 flex items-center gap-2.5 flex-wrap">
+        {/* Mobile search bar — compact single line */}
+        <div className="lg:hidden px-4 pt-3 pb-2">
+          {mobileSearch ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 bg-dark rounded-xl px-4 py-2.5">
+                <Search className="w-4 h-4 text-muted flex-shrink-0" />
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Event name, type or keyword"
+                  value={whatQuery}
+                  onChange={(e) => setWhatQuery(e.target.value)}
+                  className="flex-1 bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:outline-none"
+                />
+                {whatQuery && (
+                  <button onClick={() => setWhatQuery("")} className="text-muted"><X className="w-4 h-4" /></button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 bg-dark rounded-xl px-4 py-2.5">
+                <MapPin className="w-4 h-4 text-muted flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="City or state"
+                  value={whereQuery}
+                  onChange={(e) => setWhereQuery(e.target.value)}
+                  className="flex-1 bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:outline-none"
+                />
+                {whereQuery && (
+                  <button onClick={() => setWhereQuery("")} className="text-muted"><X className="w-4 h-4" /></button>
+                )}
+              </div>
+              <button
+                onClick={() => setMobileSearch(false)}
+                className="text-center font-headline text-xs uppercase tracking-widest text-muted py-1"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setMobileSearch(true)}
+              className="w-full flex items-center gap-3 bg-dark rounded-xl px-4 h-11 text-left"
+            >
+              <Search className="w-4 h-4 text-muted flex-shrink-0" />
+              <span className="flex-1 font-headline text-sm text-muted/60 truncate">
+                {whatQuery || whereQuery
+                  ? [whatQuery, whereQuery].filter(Boolean).join(" · ")
+                  : "Search events…"}
+              </span>
+              {hasActiveFilters && (
+                <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-dark bg-primary px-2 py-0.5 rounded-full">
+                  {activeFilterCount > 0 ? activeFilterCount : ""}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Filter chips — horizontally scrollable on mobile */}
+        <div className="px-4 lg:px-6 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
           <FilterChip
             label="Discipline"
             value={typeFilter}
@@ -269,15 +328,77 @@ function EventsPageInner() {
             onClose={() => setOpenDropdown(null)}
             onChange={(v) => { setDateFilter((v || "all") as FilterState["dateRange"]); setSelectedId(null); }}
           />
-          <span className="ml-auto font-headline text-sm font-medium uppercase tracking-widest text-muted">
+          <span className="flex-shrink-0 ml-auto font-headline text-xs font-medium uppercase tracking-widest text-muted pl-2">
             {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
+      {/* ── Body ── */}
+      <div className="flex flex-1 max-w-[1440px] w-full mx-auto overflow-hidden">
 
-        <div className="w-[420px] flex-shrink-0 overflow-y-auto bg-dark-darker border-r border-dark-lighter">
+        {/* ── Mobile: full-width list (tap → detail page) ── */}
+        <div className="flex-1 overflow-y-auto lg:hidden">
+          {displayEvents.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-2">No events found.</p>
+              <button
+                onClick={clearFilters}
+                className="font-headline text-sm font-medium uppercase tracking-widest border border-primary text-primary px-5 py-2.5 hover:bg-primary hover:text-dark transition-colors rounded-full"
+              >
+                Clear Filters
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 flex flex-col gap-3 pb-8">
+              {displayEvents.map((event) => {
+                const [eDay, eMonth] = formatShortDate(event.date).split(" ");
+                const img = getEventImage(event.type, event.id, 800, 80);
+                return (
+                  <Link
+                    key={event.id}
+                    href={`/events/${event.id}`}
+                    className="block rounded-2xl overflow-hidden ring-1 ring-dark-lighter active:ring-primary transition-all duration-150"
+                  >
+                    <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/6" }}>
+                      <img src={img} alt={event.title} className="w-full h-full object-cover brightness-50" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/30 to-transparent" />
+                      <div className="absolute top-2.5 left-3">
+                        <span className="font-headline text-[9px] font-bold uppercase tracking-widest text-dark bg-primary px-2 py-0.5 rounded-full">
+                          {EVENT_TYPE_LABELS[event.type]}
+                        </span>
+                      </div>
+                      <div className="absolute top-2.5 right-3">
+                        <span className="font-headline text-xs font-medium text-light bg-dark/60 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                          {eDay} {eMonth}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="bg-dark px-4 pt-3 pb-4">
+                      <h3 className="font-headline text-base font-black italic tracking-tighter leading-tight text-light mb-2">
+                        {event.title}
+                      </h3>
+                      <div className="flex items-center justify-between gap-2 font-headline text-[10px] text-muted uppercase tracking-widest">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+                          {event.city}, {STATE_LABELS[event.state]}
+                        </span>
+                        {event.ticketDrops && event.ticketDrops.length > 0 && (
+                          <span className="font-headline text-xs font-bold text-light flex-shrink-0">
+                            From {event.ticketDrops[0].price}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Desktop left panel: event list ── */}
+        <div className="hidden lg:block w-[400px] flex-shrink-0 overflow-y-auto bg-dark-darker border-r border-dark-lighter">
           {displayEvents.length === 0 ? (
             <div className="p-10 text-center">
               <p className="font-headline text-sm font-medium uppercase tracking-widest text-muted mb-3">No Results</p>
@@ -327,10 +448,6 @@ function EventsPageInner() {
                             <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
                             {event.city}, {STATE_LABELS[event.state]}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-primary flex-shrink-0" />
-                            {formatTime(event.time)}
-                          </span>
                         </div>
                         {event.ticketDrops && event.ticketDrops.length > 0 && (
                           <span className="font-headline text-xs font-bold text-light flex-shrink-0">
@@ -346,7 +463,8 @@ function EventsPageInner() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-dark-darker">
+        {/* ── Desktop right panel: event detail ── */}
+        <div className="hidden lg:block flex-1 overflow-y-auto bg-dark-darker">
           {!selectedEvent ? (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-center p-12">
               <ArrowRight className="w-10 h-10 text-muted rotate-180" />
@@ -396,7 +514,7 @@ function EventsPageInner() {
                     <p className="font-headline text-base font-bold uppercase tracking-wider text-light">{month}</p>
                     <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mt-2">
                       {formatTime(selectedEvent.time)}
-                      {selectedEvent.endTime && ` \u2014 ${formatTime(selectedEvent.endTime)}`}
+                      {selectedEvent.endTime && ` — ${formatTime(selectedEvent.endTime)}`}
                     </p>
                   </div>
                   <div>
@@ -478,7 +596,7 @@ function EventsPageInner() {
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <Link
                       href={`/events/${selectedEvent.id}`}
-                      className="inline-flex items-center gap-2 border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:border-primary/50 hover:text-light transition-colors"
+                      className="inline-flex items-center gap-2 border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-primary/50 hover:text-light transition-colors"
                     >
                       More Info
                     </Link>
@@ -487,7 +605,7 @@ function EventsPageInner() {
                         href={selectedEvent.registrationUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-8 py-3 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
+                        className="inline-flex items-center gap-3 bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest px-7 py-3 rounded-xl machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 transition-transform duration-100 active:translate-x-0 active:translate-y-0"
                       >
                         Register Now
                         <ExternalLink className="w-4 h-4" />
@@ -500,6 +618,7 @@ function EventsPageInner() {
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

@@ -545,7 +545,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         )}
       </Field>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
         <Field label="Start time" required>
           <TimePicker value={form.startTime} onChange={v => update({ startTime: v })} />
         </Field>
@@ -579,7 +579,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
           placeholder="Sydney Olympic Park" className={inputCls} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
         <Field label="City" required>
           <div className={`${inputCls} ${form.city ? "text-gray-900" : "text-gray-400"}`}>
             {form.city || "—"}
@@ -666,7 +666,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
       </Field>
 
       <Field label="Discipline" required>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {DISCIPLINES.map((d) => {
             const on = form.discipline === d.v;
             return (
@@ -922,7 +922,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
     <div>
       {/* Registration type selector */}
       <Field label="Registration platform" required>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {([
             { value: "startline", title: "Startline",        sub: "Managed on this platform"      },
             { value: "external",  title: "External website", sub: "Link to your own registration" },
@@ -953,7 +953,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
               <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Fee structure</div>
               <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Startline fee: 3.95% + A$1.45 per ticket</div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {([
                 {
                   value: "athlete",
@@ -1020,7 +1020,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                 </button>
               </div>
               {/* Row 2: price + close date */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400">Price (A$)</div>
@@ -1284,7 +1284,7 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
         </label>
       </Field>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
         <Field label="Bag drop info">
           <textarea rows={3} placeholder="Complimentary, opens 06:00 at the event village…" className={textareaCls} />
         </Field>
@@ -1587,7 +1587,7 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
 
           {/* Quick stats */}
           <div className="px-5 sm:px-10 py-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { icon: <Calendar className="w-4 h-4 text-primary" />, label: "Date", value: dateLabel },
                 { icon: <Clock className="w-4 h-4 text-primary" />, label: "Start time", value: form.startTime ? fmt24to12(form.startTime) : "TBC" },
@@ -1703,7 +1703,7 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
                   ) : form.registrationUrl ? (
                     <div className="inline-flex items-center gap-2 bg-dark rounded-full px-4 py-2 border border-gray-700">
                       <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">External registration</span>
-                      <span className="font-headline text-[11px] text-muted truncate max-w-[200px]">{form.registrationUrl}</span>
+                      <span className="font-headline text-[11px] text-muted truncate max-w-[140px] sm:max-w-[200px]">{form.registrationUrl}</span>
                     </div>
                   ) : null}
                 </div>
