@@ -83,6 +83,10 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
 
+  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
+    return { sub: cognitoSession.sub, email: cognitoSession.email, status: "APPROVED" };
+  }
+
   try {
     const organiser = await prisma.organiser.upsert({
       where:  { cognitoSub: cognitoSession.sub },

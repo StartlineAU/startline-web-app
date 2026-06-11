@@ -18,7 +18,7 @@ export default function Header() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-light border-b border-dark-lighter">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-light/80 backdrop-blur-md border-b border-dark-lighter">
       <div className="flex justify-between items-center w-full px-4 sm:px-6 h-14 max-w-[1440px] mx-auto">
         <Link href="/" className="flex items-center py-1" onClick={() => setIsMenuOpen(false)}>
           <Image

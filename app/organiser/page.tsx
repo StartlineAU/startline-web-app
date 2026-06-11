@@ -129,7 +129,7 @@ function SignInForm() {
           </div>
 
           <h1 className="font-headline text-5xl sm:text-6xl font-black italic tracking-tighter leading-[0.9] mb-4">
-            Welcome<br /><span className="text-primary">back.</span>
+            Let&apos;s get<br /><span className="text-primary">to work.</span>
           </h1>
           <p className="text-muted text-[15px] leading-relaxed mb-10 max-w-sm">
             Manage your listings, track registrations and publish new events to
