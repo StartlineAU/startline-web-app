@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "stripe": {
+      "type": "local",
+      "command": ["npx", "-y", "@stripe/mcp", "--api-key", "{env:STRIPE_SECRET_KEY}"]
+    },
+    "resend": {
+      "type": "local",
+      "command": ["bash", "-c", "export $(grep RESEND_API_KEY .env | xargs) && exec npx -y resend-mcp"]
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@anthropic/mcp-playwright"]
+    }
+  }
+}
