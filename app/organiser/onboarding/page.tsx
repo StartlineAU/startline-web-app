@@ -8,10 +8,19 @@ import dynamic from "next/dynamic";
 
 const Aurora = dynamic(() => import("@/components/ui/Aurora"), { ssr: false });
 
-const inputCls = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
+const inputCls = (err?: string) =>
+  `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:outline-none transition-colors ${
+    err ? "border-orange-500/70 focus:border-orange-500" : "border-dark-lighter focus:border-primary"
+  }`;
 const areaCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none resize-none transition-colors";
 
-function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+const validators = {
+  name:  (v: string) => !v.trim() ? "Required" : v.trim().length < 2 ? "Must be at least 2 characters" : !/^[a-zA-Z\s\-']+$/.test(v.trim()) ? "Letters only" : "",
+  phone: (v: string) => !v.trim() ? "Required" : !/^\+?[\d\s\-().]{8,15}$/.test(v.trim()) ? "Enter a valid phone number" : "",
+  email: (v: string) => !v.trim() ? "Required" : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? "Enter a valid email address" : "",
+};
+
+function Field({ label, required, hint, error, children }: { label: string; required?: boolean; hint?: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
       <div className="flex items-baseline justify-between mb-2">
@@ -21,6 +30,7 @@ function Field({ label, required, hint, children }: { label: string; required?: 
         {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">{hint}</span>}
       </div>
       {children}
+      {error && <p className="mt-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-orange-400">{error}</p>}
     </div>
   );
 }
@@ -38,6 +48,7 @@ export default function OnboardingPage() {
   const [animating, setAnimating] = useState(false);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
@@ -56,8 +67,14 @@ export default function OnboardingPage() {
     setTimeout(() => {
       setStep(next);
       setError("");
+      setFieldErrors({});
       setAnimating(false);
     }, 260);
+  };
+
+  const blurField = (field: string, value: string, type: keyof typeof validators) => {
+    const err = validators[type](value);
+    setFieldErrors((prev) => ({ ...prev, [field]: err }));
   };
 
   // ── Validation ──────────────────────────────────────────────────────────
@@ -66,8 +83,15 @@ export default function OnboardingPage() {
       if (!form.orgName.trim()) { setError("Please fill in all required fields to continue."); return false; }
     }
     if (s === 1) {
-      if (!form.firstName.trim() || !form.lastName.trim() || !form.phone.trim() || !form.contactEmail.trim()) {
-        setError("Please fill in all required fields to continue.");
+      const errs = {
+        firstName:    validators.name(form.firstName),
+        lastName:     validators.name(form.lastName),
+        phone:        validators.phone(form.phone),
+        contactEmail: validators.email(form.contactEmail),
+      };
+      setFieldErrors(errs);
+      if (Object.values(errs).some(Boolean)) {
+        setError("Please fix the errors above before continuing.");
         return false;
       }
     }
@@ -192,7 +216,7 @@ export default function OnboardingPage() {
 
                 <Field label="Organisation / company name" required>
                   <input value={form.orgName} onChange={(e) => u({ orgName: e.target.value })}
-                    placeholder="Endurance Events Australia" className={inputCls} />
+                    placeholder="Endurance Events Australia" className={inputCls()} />
                 </Field>
 
                 <Field label="About your organisation" hint={`${form.bio.length}/500`}>
@@ -216,24 +240,32 @@ export default function OnboardingPage() {
                 {error && <div className="mb-5 px-4 py-3 rounded-md bg-orange-500/5 border border-orange-500/30 text-orange-400 font-headline text-[13px]">{error}</div>}
 
                 <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-4 sm:gap-5">
-                  <Field label="First name" required>
-                    <input value={form.firstName} onChange={(e) => u({ firstName: e.target.value })}
-                      placeholder="Jane" className={inputCls} />
+                  <Field label="First name" required error={fieldErrors.firstName}>
+                    <input value={form.firstName}
+                      onChange={(e) => u({ firstName: e.target.value })}
+                      onBlur={(e) => blurField("firstName", e.target.value, "name")}
+                      placeholder="Jane" className={inputCls(fieldErrors.firstName)} />
                   </Field>
-                  <Field label="Last name" required>
-                    <input value={form.lastName} onChange={(e) => u({ lastName: e.target.value })}
-                      placeholder="Smith" className={inputCls} />
+                  <Field label="Last name" required error={fieldErrors.lastName}>
+                    <input value={form.lastName}
+                      onChange={(e) => u({ lastName: e.target.value })}
+                      onBlur={(e) => blurField("lastName", e.target.value, "name")}
+                      placeholder="Smith" className={inputCls(fieldErrors.lastName)} />
                   </Field>
                 </div>
 
-                <Field label="Contact phone" required>
-                  <input type="tel" value={form.phone} onChange={(e) => u({ phone: e.target.value })}
-                    placeholder="+61 4XX XXX XXX" className={inputCls} />
+                <Field label="Contact phone" required error={fieldErrors.phone}>
+                  <input type="tel" value={form.phone}
+                    onChange={(e) => u({ phone: e.target.value })}
+                    onBlur={(e) => blurField("phone", e.target.value, "phone")}
+                    placeholder="+61 4XX XXX XXX" className={inputCls(fieldErrors.phone)} />
                 </Field>
 
-                <Field label="Contact email" required>
-                  <input type="email" value={form.contactEmail} onChange={(e) => u({ contactEmail: e.target.value })}
-                    placeholder="jane@enduranceevents.com.au" className={inputCls} />
+                <Field label="Contact email" required error={fieldErrors.contactEmail}>
+                  <input type="email" value={form.contactEmail}
+                    onChange={(e) => u({ contactEmail: e.target.value })}
+                    onBlur={(e) => blurField("contactEmail", e.target.value, "email")}
+                    placeholder="jane@enduranceevents.com.au" className={inputCls(fieldErrors.contactEmail)} />
                 </Field>
               </>
             )}
