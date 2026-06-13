@@ -387,10 +387,14 @@ function PersonalInfoForm() {
       </div>
 
       {/* Save footer */}
+      {error && (
+        <div className="mx-0 mb-3 px-4 py-3 rounded-lg bg-orange-500/5 border border-orange-500/30 text-orange-500 font-headline text-[12px] leading-snug">
+          {error}
+        </div>
+      )}
       <div className="pt-2 flex items-center justify-between gap-4 border-t border-gray-100">
         <div className="font-headline text-[11px] uppercase tracking-widest">
           {saved && <span className="text-lime-600 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Saved</span>}
-          {error && <span className="text-red-500 text-[12px]">{error}</span>}
         </div>
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 bg-gray-900 text-white font-headline text-[11px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50">
@@ -508,7 +512,7 @@ export default function SettingsModal() {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
 
       <div className="relative w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-2xl flex overflow-hidden modal-in"
-        style={{ maxHeight: "85vh" }}>
+        style={{ height: "85vh" }}>
 
         {/* Close */}
         <button onClick={close}

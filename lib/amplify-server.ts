@@ -28,29 +28,8 @@ export type AdminSession = {
   name:  string | null;
 };
 
-// Map seeded organiser emails to their cognitoSub values
-// so dev bypass can log in as any seeded user.
-const DEV_USERS_BY_EMAIL: Record<string, string> = {
-  "test.organiser@startlineau.com": "seed-organiser-cognito-sub-001",
-  "hello@coastaltrailrunning.com.au": "coastal-trail-sub",
-  "info@urbanfitnessevents.com.au": "urban-fitness-sub",
-};
-
 export async function getServerSession(): Promise<ServerSession | null> {
-  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
-    try {
-      const cookieStore = await cookies();
-      const email = cookieStore.get("DEV_USER_EMAIL")?.value ?? "dev@example.com";
-      const sub = DEV_USERS_BY_EMAIL[email] ?? `dev-${email.replace(/[@.]/g, "-")}`;
-      return { sub, email, groups: ["admin-nonprod-users"] };
-    } catch {
-      // fallback if cookies() isn't available (e.g. during build)
-      return { sub: "dev-organiser-sub", email: "dev@example.com", groups: ["admin-nonprod-users"] };
-    }
-  }
-
   try {
-    // Next.js 15: cookies() is async — await it before passing to Amplify
     const cookieStore = await cookies();
     const cookieFn = () => Promise.resolve(cookieStore);
 
@@ -70,8 +49,8 @@ export async function getServerSession(): Promise<ServerSession | null> {
     }) as GetCurrentUserOutput;
 
     return {
-      sub:    user.userId,
-      email:  user.signInDetails?.loginId ?? "",
+      sub:   user.userId,
+      email: user.signInDetails?.loginId ?? "",
       groups,
     };
   } catch {
@@ -82,10 +61,6 @@ export async function getServerSession(): Promise<ServerSession | null> {
 export async function getOrganiserSession(): Promise<OrganiserSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
-
-  if (process.env.NODE_ENV === "development" && process.env.DEV_BYPASS === "true") {
-    return { sub: cognitoSession.sub, email: cognitoSession.email, status: "APPROVED" };
-  }
 
   try {
     const organiser = await prisma.organiser.upsert({
