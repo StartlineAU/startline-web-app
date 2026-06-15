@@ -25,9 +25,18 @@ Uses AWS Cognito with JWT verification in middleware via `jose`. Tokens are stor
 
 PostgreSQL 15 via Docker on port **5433** (mapped from container port 5432). Prisma ORM with singleton client in `lib/prisma.ts`.
 
-Start local DB: `docker compose up -d`
-Run migrations: `npx prisma migrate dev`
-Seed: `pnpm prisma:seed`
+Mailpit runs alongside PostgreSQL in Docker (SMTP on **1025**, web UI on **8025**) for local email testing.
+
+The app itself runs in Docker via the `app` service (Next.js standalone on port 3000). Prisma Studio runs on-demand via `docker compose exec app npx prisma studio`.
+
+```bash
+docker compose up -d              # starts PostgreSQL + Mailpit + app
+docker compose exec app npx prisma migrate dev  # apply migrations
+docker compose exec app npx prisma studio        # launch Prisma Studio
+pnpm prisma:seed                  # seed test data (runs locally against port 5433)
+```
+
+For active development with hot reload, run `pnpm dev` locally — it connects to the Docker PostgreSQL and Mailpit services.
 
 ### Stripe Connect
 
@@ -77,7 +86,9 @@ gh pr list --repo StartlineAU/startline
 Configured in `.mcp.json` and `opencode.json`:
 - `stripe` — Stripe API access via `@stripe/mcp`
 - `resend` — Email sending via `resend-mcp`
-- `playwright` — Browser automation via `@anthropic/mcp-playwright`
+- `playwright` — Browser automation via `@playwright/mcp`
+- `aws` — AWS API access via `awslabs.aws-api-mcp-server` (uses `mcp-server` IAM profile, account `829182232071`, region `ap-southeast-2`)
+- `cloudflare` — Cloudflare API access via `@cloudflare/mcp-server-cloudflare` (account `cae4a54688a0a4c53bda4bd62eb37c35`)
 
 ## Idempotency
 

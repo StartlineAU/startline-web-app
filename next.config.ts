@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   // A package-lock.json under C:\Users\<you>\ makes Next pick the wrong workspace
   // root, which can make dev extremely slow or appear to hang on first load.
   outputFileTracingRoot: path.join(__dirname),
+  output: "standalone",
   turbopack: {
     root: path.join(__dirname),
   },
