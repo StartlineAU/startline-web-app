@@ -11,7 +11,22 @@
     },
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@anthropic/mcp-playwright"]
+      "command": ["npx", "-y", "@playwright/mcp"]
+    },
+    "aws": {
+      "type": "local",
+      "command": ["uvx", "awslabs.aws-api-mcp-server@latest"],
+      "env": {
+        "AWS_REGION": "ap-southeast-2",
+        "AWS_PROFILE": "mcp-server"
+      }
+    },
+    "cloudflare": {
+      "type": "local",
+      "command": ["npx", "-y", "@cloudflare/mcp-server-cloudflare", "run", "cae4a54688a0a4c53bda4bd62eb37c35"],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "{env:CLOUDFLARE_API_TOKEN}"
+      }
     }
   }
 }
