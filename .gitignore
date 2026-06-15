@@ -56,3 +56,10 @@ next-env.d.ts
 
 # prisma local database
 /dev.db
+
+# terraform
+terraform/.terraform/
+terraform/terraform.tfvars
+
+# opencode internal state
+.opencode/

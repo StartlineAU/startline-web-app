@@ -2,6 +2,7 @@
 #
 # aws_region   = "ap-southeast-2"
 # project_name = "startline"
+# cloudflare_api_token = "cfat_..."
 #
 # Per-environment values (branch names, DB names, deletion protection, VPC
 # CIDRs) are set in main.tf's local.environments map — no override needed here.

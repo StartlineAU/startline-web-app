@@ -16,6 +16,18 @@ variable "project_name" {
   default     = "startline"
 }
 
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS and cache permissions for startlineau.com."
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID."
+  type        = string
+  default     = "cae4a54688a0a4c53bda4bd62eb37c35"
+}
+
 # --- Amplify ---
 
 variable "amplify_repository_url" {

@@ -12,8 +12,12 @@ import { Button } from "@/components/ui/button";
 export const revalidate = 60;
 
 export async function generateStaticParams() {
-  const events = await getAllEvents();
-  return events.map((e) => ({ id: e.id }));
+  try {
+    const events = await getAllEvents();
+    return events.map((e) => ({ id: e.id }));
+  } catch {
+    return [];
+  }
 }
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
