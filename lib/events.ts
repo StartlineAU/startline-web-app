@@ -45,38 +45,42 @@ function lowestPrice(waves: unknown): number | null {
 }
 
 export async function getAllEvents(): Promise<PublicEvent[]> {
-  await archivePastEvents();
-  const events = await prisma.event.findMany({
-    where: { status: "APPROVED" },
-    orderBy: { eventDate: "asc" },
-    select: {
-      id: true,
-      title: true,
-      discipline: true,
-      tagline: true,
-      description: true,
-      eventDate: true,
-      endDate: true,
-      startTime: true,
-      endTime: true,
-      venue: true,
-      city: true,
-      state: true,
-      format: true,
-      level: true,
-      categories: true,
-      waves: true,
-      coverImageUrl: true,
-      registrationType: true,
-      registrationUrl: true,
-      organiser: {
-        select: { id: true, orgName: true, logoUrl: true },
+  try {
+    await archivePastEvents();
+    const events = await prisma.event.findMany({
+      where: { status: "APPROVED" },
+      orderBy: { eventDate: "asc" },
+      select: {
+        id: true,
+        title: true,
+        discipline: true,
+        tagline: true,
+        description: true,
+        eventDate: true,
+        endDate: true,
+        startTime: true,
+        endTime: true,
+        venue: true,
+        city: true,
+        state: true,
+        format: true,
+        level: true,
+        categories: true,
+        waves: true,
+        coverImageUrl: true,
+        registrationType: true,
+        registrationUrl: true,
+        organiser: {
+          select: { id: true, orgName: true, logoUrl: true },
+        },
       },
-    },
-  });
+    });
 
-  return events.map((e) => ({
-    ...e,
-    fromPrice: lowestPrice(e.waves),
-  }));
+    return events.map((e) => ({
+      ...e,
+      fromPrice: lowestPrice(e.waves),
+    }));
+  } catch {
+    return [];
+  }
 }
