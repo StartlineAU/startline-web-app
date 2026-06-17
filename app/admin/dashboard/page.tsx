@@ -11,13 +11,18 @@ export const dynamic = "force-dynamic";
 
 async function getStats() {
   await archivePastEvents();
-  const [pending, approved, rejected, organisers] = await Promise.all([
-    prisma.event.count({ where: { status: "PENDING"  } }),
-    prisma.event.count({ where: { status: "APPROVED" } }),
-    prisma.event.count({ where: { status: "REJECTED" } }),
-    prisma.organiser.count(),
-  ]);
-  return { pending, approved, rejected, organisers };
+  try {
+    const [pending, approved, rejected, organisers] = await Promise.all([
+      prisma.event.count({ where: { status: "PENDING"  } }),
+      prisma.event.count({ where: { status: "APPROVED" } }),
+      prisma.event.count({ where: { status: "REJECTED" } }),
+      prisma.organiser.count(),
+    ]);
+    return { pending, approved, rejected, organisers };
+  } catch (err) {
+    console.error("Admin dashboard stats error:", err);
+    return { pending: 0, approved: 0, rejected: 0, organisers: 0 };
+  }
 }
 
 interface StatCardProps {

@@ -21,3 +21,14 @@ export async function selectStateFilter(page: Page, state: string): Promise<void
     await page.waitForTimeout(300);
   }
 }
+
+export async function adminLogin(page: Page, email = "test.organiser@startlineau.com"): Promise<void> {
+  await page.goto("/admin/login");
+  await page.waitForLoadState("networkidle");
+
+  await page.getByPlaceholder(/admin@startlineau/i).fill(email);
+  await page.locator('input[type="password"]').first().fill("password123");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await page.waitForURL("**/admin/dashboard**", { timeout: 10000 });
+}
