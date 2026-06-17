@@ -231,6 +231,16 @@ enum RegistrationStatus {
   REFUNDED
 }
 
+// ─── Athlete accounts ─────────────────────────────────────────────────────────
+model Athlete {
+  id         String   @id @default(uuid())
+  cognitoSub String   @unique
+  email      String   @unique
+  name       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model WaitlistSubscriber {
   id        Int      @id @default(autoincrement())
   email     String   @unique

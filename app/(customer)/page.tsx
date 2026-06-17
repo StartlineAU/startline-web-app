@@ -214,7 +214,7 @@ export default async function Home() {
               </Link>
             </Button>
             <Button asChild variant="outline" size="ctaLg" className="w-full sm:w-auto justify-center">
-              <Link href="/contact">List Your Event</Link>
+              <Link href="/organiser/register">List Your Event</Link>
             </Button>
           </div>
         </div>

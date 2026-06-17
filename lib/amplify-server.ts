@@ -16,6 +16,12 @@ export type ServerSession = {
   groups: string[];
 };
 
+export type AthleteSession = {
+  sub:   string; // Prisma Athlete.id
+  email: string;
+  name:  string | null;
+};
+
 export type OrganiserSession = {
   sub:    string; // Prisma Organiser.id
   email:  string;
@@ -53,6 +59,22 @@ export async function getServerSession(): Promise<ServerSession | null> {
       email: user.signInDetails?.loginId ?? "",
       groups,
     };
+  } catch {
+    return null;
+  }
+}
+
+export async function getAthleteSession(): Promise<AthleteSession | null> {
+  const cognitoSession = await getServerSession();
+  if (!cognitoSession) return null;
+
+  try {
+    const athlete = await prisma.athlete.findUnique({
+      where:  { cognitoSub: cognitoSession.sub },
+      select: { id: true, email: true, name: true },
+    });
+    if (!athlete) return null;
+    return { sub: athlete.id, email: athlete.email, name: athlete.name };
   } catch {
     return null;
   }
