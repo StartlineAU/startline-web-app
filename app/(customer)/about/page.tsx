@@ -130,7 +130,7 @@ export default function AboutPage() {
               Browse Events
             </Link>
             <Link
-              href="/contact"
+              href="/organiser/register"
               className="border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-8 py-4 rounded-xl hover:border-primary/50 hover:text-light transition-colors flex items-center gap-2"
             >
               List Your Event
