@@ -49,6 +49,8 @@ export interface CustomerEvent {
   image: string;
   registrationUrl: string | null;
   registrationType: string;
+  feeStructure: string;
+  organiserId: string;
   organizer?: string;
   distance?: string;
   isOfficial?: boolean;

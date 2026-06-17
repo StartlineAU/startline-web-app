@@ -73,6 +73,14 @@ pnpm test:e2e    # Playwright e2e tests (requires Docker PostgreSQL running)
 - Playwright uses Chromium, auto-starts `pnpm dev` if not already running.
 - E2E tests assume `DEV_BYPASS=true` (auth is skipped in dev).
 
+### E2E test conventions
+
+- **Every new feature MUST include E2E tests.** When adding a new page, API route, or user-facing flow, add corresponding Playwright tests in `e2e/`.
+- Use the existing helper functions in `e2e/helpers.ts` when possible; extend them as needed.
+- API endpoint tests use `page.evaluate()` with `fetch()` for direct HTTP assertions (status codes, error messages).
+- E2E tests should cover: page renders, happy path user flow, form validation/error states, and API error responses.
+- Use conditional assertions (`if (await locator.isVisible())`) for tests that depend on seed data to avoid brittle failures when seed data changes.
+
 ## GitHub
 
 The `@modelcontextprotocol/server-github` MCP tool fails for `StartlineAU/startline` (private org repo). Use `gh` CLI commands instead:
