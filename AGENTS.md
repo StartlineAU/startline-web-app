@@ -107,6 +107,7 @@ Custom skills live in `.agents/skills/`. Each skill is a markdown prompt that Cl
 | `caveman` | `/caveman` or "caveman mode" | Ultra-compressed responses — drops filler, articles, and pleasantries while keeping full technical accuracy. Reduces token usage ~75%. Off with "stop caveman" or "normal mode". |
 | `grill-me` | `/grill-me` or "grill me" | Relentless interviewer — stress-tests a plan or design by walking down every branch of the decision tree, one question at a time, with a recommended answer per question. |
 | `tdd` | `/tdd` or "use TDD" | Red-green-refactor loop. Enforces vertical slicing (one test → one impl at a time), public-interface-only testing, and a planning checklist before any code is written. Supplementary docs in `.agents/skills/tdd/`. |
+| `remotion` | `/remotion` or "the video" | Work with the Startline Remotion product demo in `video/`. Covers Studio preview, scene structure, rendering, shared utilities, and animation conventions. |
 
 ## Idempotency
 
