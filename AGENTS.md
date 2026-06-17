@@ -98,6 +98,16 @@ Configured in `.mcp.json` and `opencode.json`:
 - `aws` — AWS API access via `awslabs.aws-api-mcp-server` (uses `mcp-server` IAM profile, account `829182232071`, region `ap-southeast-2`)
 - `cloudflare` — Cloudflare API access via `@cloudflare/mcp-server-cloudflare` (account `cae4a54688a0a4c53bda4bd62eb37c35`)
 
+## Agent Skills
+
+Custom skills live in `.agents/skills/`. Each skill is a markdown prompt that Claude loads when invoked.
+
+| Skill | Invoke | Description |
+|---|---|---|
+| `caveman` | `/caveman` or "caveman mode" | Ultra-compressed responses — drops filler, articles, and pleasantries while keeping full technical accuracy. Reduces token usage ~75%. Off with "stop caveman" or "normal mode". |
+| `grill-me` | `/grill-me` or "grill me" | Relentless interviewer — stress-tests a plan or design by walking down every branch of the decision tree, one question at a time, with a recommended answer per question. |
+| `tdd` | `/tdd` or "use TDD" | Red-green-refactor loop. Enforces vertical slicing (one test → one impl at a time), public-interface-only testing, and a planning checklist before any code is written. Supplementary docs in `.agents/skills/tdd/`. |
+
 ## Idempotency
 
 - Prisma client is a singleton (`lib/prisma.ts`) — never create multiple instances.
