@@ -157,7 +157,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               )}
               {event.registrationUrl && (
                 <Button asChild variant="machined" size="ctaLg">
-                  <a href={event.registrationUrl} target="_blank" rel="noopener noreferrer">
+                  <a href={event.registrationUrl ?? undefined} target="_blank" rel="noopener noreferrer">
                     Register Now
                     <ExternalLink className="w-4 h-4" />
                   </a>
@@ -200,7 +200,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               </Link>
             ) : (
               <a
-                href={event.registrationUrl}
+                href={event.registrationUrl ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
