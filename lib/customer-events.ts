@@ -60,6 +60,8 @@ export function toCustomerEvent(event: PublicEvent): CustomerEvent {
     image: event.coverImageUrl ?? getEventImage(type, event.id),
     registrationUrl: event.registrationUrl,
     registrationType: event.registrationType,
+    feeStructure: event.feeStructure,
+    organiserId: event.organiserId,
     organizer: event.organiser?.orgName ?? undefined,
     distance: undefined,
     isOfficial: false,

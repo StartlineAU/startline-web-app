@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
 import { archivePastEvents } from "@/lib/archive-events";
-// Startline platform fee: 3% + $1 per registration
-const PLATFORM_FEE_PERCENT = 0.03;
-const PLATFORM_FEE_FIXED   = 1.00;
+import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FIXED_CENTS } from "@/lib/platform-fee";
 
 export async function GET(
   _req: NextRequest,
@@ -53,7 +51,7 @@ export async function GET(
       fees  = registrations.reduce((sum, r) => sum + r.platformFeeCents, 0) / 100;
     } else {
       gross = lowestPrice * count;
-      fees  = count > 0 ? (gross * PLATFORM_FEE_PERCENT) + (count * PLATFORM_FEE_FIXED) : 0;
+      fees  = count > 0 ? (gross * PLATFORM_FEE_PERCENT) + (count * PLATFORM_FEE_FIXED_CENTS / 100) : 0;
     }
     const netPayout = Math.max(0, gross - fees);
 

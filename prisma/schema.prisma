@@ -46,9 +46,12 @@ model Organiser {
   legalName String?
   // Insurance self-declaration only — no documents collected (ToS §5.3, Privacy Policy §4.4)
   insuranceDeclared Boolean @default(false)
+  // Date of birth (ISO 8601 yyyy-mm-dd) — used for identity verification and ATO SERR reporting.
+  // Not required for organisers who only list external-link events.
+  dob String?
 
   // Stripe Express Connect — Startline stores only the account reference ID.
-  // Stripe holds DOB and bank account details directly (ToS §3.3, Privacy Policy §4.2).
+  // Bank account details (BSB + account number) are collected and held by Stripe directly (ToS §3.3, Privacy Policy §4.2).
   stripeAccountId          String?  @unique
   stripeOnboardingComplete Boolean  @default(false)
 

@@ -580,7 +580,7 @@ async function main() {
   ];
 
   const platformFeeCents = (amountCents: number) =>
-    Math.round(amountCents * 0.03) + 100;
+    Math.round(amountCents * 0.0395) + 145;
 
   let regCount = 0;
   for (let i = 0; i < athleteNames.length; i++) {

@@ -20,6 +20,7 @@ interface Profile {
   phone: string | null;
   legalName: string | null;
   abn: string | null;
+  dob: string | null;
   insuranceDeclared: boolean;
   stripeAccountId: string | null;
   stripeOnboardingComplete: boolean;
@@ -42,6 +43,7 @@ function PaymentsContent() {
 
   const [legalName,         setLegalName]         = useState("");
   const [abn,               setAbn]               = useState("");
+  const [dob,               setDob]               = useState("");
   const [insuranceDeclared, setInsuranceDeclared] = useState(false);
 
   useEffect(() => {
@@ -52,6 +54,7 @@ function PaymentsContent() {
         setProfile(data);
         setLegalName(data.legalName ?? "");
         setAbn(data.abn ?? "");
+        setDob(data.dob ?? "");
         setInsuranceDeclared(data.insuranceDeclared ?? false);
       })
       .finally(() => setLoading(false));
@@ -93,6 +96,7 @@ function PaymentsContent() {
           phone:        profile?.phone        ?? "",
           legalName,
           abn,
+          dob: dob || undefined,
           insuranceDeclared,
         }),
       });
@@ -312,6 +316,19 @@ function PaymentsContent() {
                   <p className="text-[11px] text-gray-400 mt-1.5">
                     Required under ATO PAYG withholding rules. Without a valid ABN, Startline is legally required to withhold 47% of payouts (ToS §3.2).
                   </p>
+                </div>
+
+                <div>
+                  <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-700 block mb-2">
+                    Date of birth
+                  </label>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    className={inputCls}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1.5">Used for identity verification with Stripe and ATO SERR reporting. Not required if you only list external-link events.</p>
                 </div>
               </div>
 

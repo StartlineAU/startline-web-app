@@ -28,11 +28,15 @@ export interface PublicEvent {
   coverImageUrl: string | null;
   registrationType: string;
   registrationUrl: string | null;
+  feeStructure: string;
   fromPrice: number | null;
+  organiserId: string;
   organiser: {
     id: string;
     orgName: string | null;
     logoUrl: string | null;
+    stripeAccountId: string | null;
+    stripeOnboardingComplete: boolean;
   };
 }
 
@@ -70,8 +74,10 @@ export async function getAllEvents(): Promise<PublicEvent[]> {
         coverImageUrl: true,
         registrationType: true,
         registrationUrl: true,
+        feeStructure: true,
+        organiserId: true,
         organiser: {
-          select: { id: true, orgName: true, logoUrl: true },
+          select: { id: true, orgName: true, logoUrl: true, stripeAccountId: true, stripeOnboardingComplete: true },
         },
       },
     });
