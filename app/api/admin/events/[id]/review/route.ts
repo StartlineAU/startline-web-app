@@ -51,20 +51,9 @@ export async function POST(
 
     const newStatus = action === "approve" ? "APPROVED" : "REJECTED";
 
-    await prisma.event.update({
-      where: { id },
-      data: {
-        status:          newStatus,
-        reviewedById:    session.sub,
-        reviewedAt:      new Date(),
-        rejectionReason: action === "reject" ? reason!.trim() : null,
-      },
-    });
-
     const organiserEmail = event.organiser.email;
     const organiserId    = event.organiser.id;
 
-    // Create in-app notification for the organiser
     const notifData = action === "approve"
       ? {
           type:  "EVENT_APPROVED" as const,
@@ -77,16 +66,27 @@ export async function POST(
           body:  `Your event "${event.title}" was not approved. Reason: ${reason?.trim() ?? "No reason provided."}`,
         };
 
-    await prisma.notification.create({
-      data: { organiserId, eventId: id, ...notifData },
-    }).catch(err => console.error("Failed to create notification:", err));
+    await prisma.$transaction([
+      prisma.event.update({
+        where: { id },
+        data: {
+          status:          newStatus,
+          reviewedById:    session.sub,
+          reviewedAt:      new Date(),
+          rejectionReason: action === "reject" ? reason!.trim() : null,
+        },
+      }),
+      prisma.notification.create({
+        data: { organiserId, eventId: id, ...notifData },
+      }),
+    ]);
 
     if (action === "approve") {
-      await sendEventApprovedEmail(organiserEmail, event.title).catch((err) =>
+      sendEventApprovedEmail(organiserEmail, event.title).catch((err) =>
         console.error("Failed to send approval email:", err),
       );
     } else {
-      await sendEventRejectedEmail(organiserEmail, event.title, reason?.trim()).catch((err) =>
+      sendEventRejectedEmail(organiserEmail, event.title, reason?.trim()).catch((err) =>
         console.error("Failed to send rejection email:", err),
       );
     }

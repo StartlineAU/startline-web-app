@@ -81,12 +81,12 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   if (!cognitoSession.groups.includes("admin-nonprod-users")) return null;
 
   try {
-    const admin = await prisma.admin.findUnique({
+    const admin = await prisma.admin.upsert({
       where:  { cognitoSub: cognitoSession.sub },
+      update: { email: cognitoSession.email },
+      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
       select: { id: true, email: true, name: true },
     });
-    if (!admin) return null;
-
     return { sub: admin.id, email: admin.email, name: admin.name };
   } catch {
     return null;

@@ -68,6 +68,7 @@ async function main() {
       insuranceDeclared:       true,
       stripeAccountId:         "acct_seed_test_1234xyz",
       stripeOnboardingComplete: true,
+      photos:                  [],
     },
   });
 
@@ -89,6 +90,7 @@ async function main() {
       instagram:    "@coastal_trail",
       facebook:     "coastaltrailrunning",
       bio:          "Australia's premier trail running event organisers. From coastal paths to mountain peaks, we bring you the best trail running experiences on the east coast.",
+      photos:       [],
     },
   });
 
@@ -110,6 +112,7 @@ async function main() {
       instagram:    "@urban_fitness_events",
       facebook:     "urbanfitnessevents",
       bio:          "Bringing fitness to the city. We organise urban running events, park runs, and community fitness challenges across Australia's major cities.",
+      photos:       [],
     },
   });
 

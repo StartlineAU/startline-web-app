@@ -308,26 +308,37 @@ function AdminEventsContent() {
   const statusParam  = (searchParams.get("status") ?? "PENDING").toUpperCase() as EventStatus;
   const activeTab    = TABS.find((t) => t.status === statusParam)?.status ?? "PENDING";
 
-  const [events,  setEvents]  = useState<AdminEventRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events,     setEvents]     = useState<AdminEventRow[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [total,      setTotal]      = useState(0);
+  const [page,       setPage]       = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const fetchEvents = useCallback(async (status: EventStatus) => {
+  const fetchEvents = useCallback(async (status: EventStatus, p = 1) => {
     setLoading(true);
     try {
-      const res  = await fetch(`/api/admin/events?status=${status}`);
+      const res  = await fetch(`/api/admin/events?status=${status}&page=${p}&limit=50`);
       const data = await res.json();
-      if (res.ok && Array.isArray(data)) setEvents(data);
-      else setEvents([]);
+      if (res.ok && Array.isArray(data.events)) {
+        setEvents(data.events);
+        setTotal(data.total);
+        setTotalPages(data.totalPages);
+      } else {
+        setEvents([]);
+        setTotal(0);
+        setTotalPages(1);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchEvents(activeTab);
+    fetchEvents(activeTab, 1);
   }, [activeTab, fetchEvents]);
 
   const switchTab = (status: EventStatus) => {
+    setPage(1);
     router.push(`/admin/events?status=${status}`, { scroll: false });
   };
 
@@ -353,7 +364,7 @@ function AdminEventsContent() {
               </h1>
             </div>
             <button
-              onClick={() => fetchEvents(activeTab)}
+              onClick={() => fetchEvents(activeTab, page)}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -409,8 +420,27 @@ function AdminEventsContent() {
           </Card>
 
           {!loading && events.length > 0 && (
-            <div className="mt-4 font-headline text-[12px] uppercase tracking-widest text-gray-400 text-right">
-              {events.length} event{events.length !== 1 ? "s" : ""}
+            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-gray-400">
+              <span>{total} event{total !== 1 ? "s" : ""}</span>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { const p = page - 1; setPage(p); fetchEvents(activeTab, p); }}
+                    disabled={page <= 1}
+                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-gray-500">Page {page} of {totalPages}</span>
+                  <button
+                    onClick={() => { const p = page + 1; setPage(p); fetchEvents(activeTab, p); }}
+                    disabled={page >= totalPages}
+                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
