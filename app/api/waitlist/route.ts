@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
                       <td>
                         <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#F5F7FA;font-family:'Chakra Petch',system-ui,sans-serif;">You're on the list.</h1>
                         <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#8A8F98;font-family:'Chakra Petch',system-ui,sans-serif;">
-                          Thanks for joining the StartLine waitlist. We're building the best way to discover HYROX, CrossFit, running and hybrid fitness events across Australia.
+                          Thanks for joining the StartLine waitlist. We're building the best way to discover fitness racing, CrossFit, running and hybrid fitness events across Australia.
                         </p>
                         <p style="margin:0 0 40px;font-size:16px;line-height:1.6;color:#8A8F98;font-family:'Chakra Petch',system-ui,sans-serif;">
                           We'll let you know the moment we launch.

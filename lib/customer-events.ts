@@ -4,11 +4,11 @@ import { getEventImage } from "@/lib/images";
 
 function mapDiscipline(discipline: string): EventType {
   const d = discipline.toLowerCase();
-  if (d === "hyrox")        return "hyrox";
+  if (d === "fitness-racing") return "fitness-racing";
   if (d === "crossfit")     return "crossfit";
   if (d === "running")      return "running";
   if (d === "hybrid")       return "hybrid";
-  if (d === "functionalfitness" || d === "functional_fitness") return "hyrox";
+  if (d === "functionalfitness" || d === "functional_fitness") return "fitness-racing";
   return "running";
 }
 
