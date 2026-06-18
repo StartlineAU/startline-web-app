@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo, useEffect, useRef, Suspense, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -127,9 +127,32 @@ function EventsPageInner() {
   const [stateFilter,  setStateFilter]  = useState<AustralianState | "">("");
   const [formatFilter, setFormatFilter] = useState<CompetitionFormat | "">("");
   const [dateFilter,   setDateFilter]   = useState<FilterState["dateRange"]>("all");
-  const [selectedId,   setSelectedId]   = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [mobileSearch, setMobileSearch] = useState(false);
+  const [selectedId,        setSelectedId]        = useState<string | null>(null);
+  const [openDropdown,      setOpenDropdown]      = useState<string | null>(null);
+  const [mobileSearch,      setMobileSearch]      = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [sheetDragY, setSheetDragY] = useState(0);
+  const sheetDragStart = useRef(0);
+  const sheetIsDragging = useRef(false);
+
+  function onSheetTouchStart(e: React.TouchEvent) {
+    sheetDragStart.current = e.touches[0].clientY;
+    sheetIsDragging.current = true;
+  }
+  function onSheetTouchMove(e: React.TouchEvent) {
+    if (!sheetIsDragging.current) return;
+    const delta = e.touches[0].clientY - sheetDragStart.current;
+    if (delta > 0) setSheetDragY(delta);
+  }
+  function onSheetTouchEnd() {
+    if (sheetDragY > 120) {
+      setMobileFiltersOpen(false);
+      setSheetDragY(0);
+    } else {
+      setSheetDragY(0);
+    }
+    sheetIsDragging.current = false;
+  }
 
   const filterState: FilterState = useMemo(() => ({
     types:       typeFilter   ? [typeFilter as EventType]        : [],
@@ -232,7 +255,7 @@ function EventsPageInner() {
           </div>
         </div>
 
-        {/* Mobile search bar — compact single line */}
+        {/* Mobile search bar - compact single line */}
         <div className="lg:hidden px-4 pt-3 pb-2">
           {mobileSearch ? (
             <div className="flex flex-col gap-2">
@@ -290,8 +313,8 @@ function EventsPageInner() {
           )}
         </div>
 
-        {/* Filter chips — horizontally scrollable on mobile */}
-        <div className="px-4 lg:px-6 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        {/* Desktop filter chips */}
+        <div className="hidden lg:flex px-6 pb-3 items-center gap-2">
           <FilterChip
             label="Discipline"
             value={typeFilter}
@@ -329,6 +352,30 @@ function EventsPageInner() {
             onChange={(v) => { setDateFilter((v || "all") as FilterState["dateRange"]); setSelectedId(null); }}
           />
           <span className="flex-shrink-0 ml-auto font-headline text-xs font-medium uppercase tracking-widest text-muted pl-2">
+            {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {/* Mobile: single Filters button */}
+        <div className="lg:hidden px-4 pb-3 flex items-center gap-2">
+          <button
+            onClick={() => setMobileFiltersOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-2 h-9 font-headline text-xs font-medium uppercase tracking-widest border transition-colors rounded-full ${
+              activeFilterCount > 0
+                ? "border-primary text-primary bg-primary/5"
+                : "border-dark-lighter text-muted bg-dark hover:border-primary/50 hover:text-light"
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="font-headline text-[10px] font-bold text-dark bg-primary rounded-full w-4 h-4 flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+          <span className="ml-auto font-headline text-xs font-medium uppercase tracking-widest text-muted">
             {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -514,7 +561,7 @@ function EventsPageInner() {
                     <p className="font-headline text-base font-bold uppercase tracking-wider text-light">{month}</p>
                     <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mt-2">
                       {formatTime(selectedEvent.time)}
-                      {selectedEvent.endTime && ` — ${formatTime(selectedEvent.endTime)}`}
+                      {selectedEvent.endTime && ` - ${formatTime(selectedEvent.endTime)}`}
                     </p>
                   </div>
                   <div>
@@ -620,6 +667,139 @@ function EventsPageInner() {
         </div>
 
       </div>
+
+      {/* Mobile filters bottom sheet */}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="absolute inset-0 bg-dark-darker/80 backdrop-blur-sm"
+            onClick={() => setMobileFiltersOpen(false)}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-dark rounded-t-2xl max-h-[85dvh] flex flex-col"
+            style={{
+              transform: `translateY(${sheetDragY}px)`,
+              transition: sheetDragY === 0 ? "transform 0.3s ease" : "none",
+            }}
+          >
+            <div
+              className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
+              onTouchStart={onSheetTouchStart}
+              onTouchMove={onSheetTouchMove}
+              onTouchEnd={onSheetTouchEnd}
+            >
+              <div className="w-10 h-1 rounded-full bg-dark-lighter" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-dark-lighter flex-shrink-0">
+              <h2 className="font-headline text-sm font-black uppercase tracking-widest text-light">Filters</h2>
+              <div className="flex items-center gap-4">
+                {hasActiveFilters && (
+                  <button
+                    onClick={() => { clearFilters(); }}
+                    className="font-headline text-xs font-medium uppercase tracking-widest text-primary"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button onClick={() => setMobileFiltersOpen(false)}>
+                  <X className="w-5 h-5 text-muted" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-5 py-5 space-y-7">
+              <div>
+                <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Discipline</p>
+                <div className="flex flex-wrap gap-2">
+                  {DISCIPLINE_OPTIONS.filter((o) => o.value !== "").map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setTypeFilter(typeFilter === opt.value ? "" : opt.value as EventType); setSelectedId(null); }}
+                      className={`px-4 py-2 rounded-full font-headline text-xs font-medium uppercase tracking-widest border transition-colors ${
+                        typeFilter === opt.value
+                          ? "border-primary bg-primary text-dark"
+                          : "border-dark-lighter text-muted hover:border-primary/50 hover:text-light"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted mb-3">State</p>
+                <div className="flex flex-wrap gap-2">
+                  {STATE_CHIP_OPTIONS.filter((o) => o.value !== "").map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setStateFilter(stateFilter === opt.value ? "" : opt.value as AustralianState); setSelectedId(null); }}
+                      className={`px-4 py-2 rounded-full font-headline text-xs font-medium uppercase tracking-widest border transition-colors ${
+                        stateFilter === opt.value
+                          ? "border-primary bg-primary text-dark"
+                          : "border-dark-lighter text-muted hover:border-primary/50 hover:text-light"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Format</p>
+                <div className="flex flex-wrap gap-2">
+                  {FORMAT_CHIP_OPTIONS.filter((o) => o.value !== "").map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setFormatFilter(formatFilter === opt.value ? "" : opt.value as CompetitionFormat); setSelectedId(null); }}
+                      className={`px-4 py-2 rounded-full font-headline text-xs font-medium uppercase tracking-widest border transition-colors ${
+                        formatFilter === opt.value
+                          ? "border-primary bg-primary text-dark"
+                          : "border-dark-lighter text-muted hover:border-primary/50 hover:text-light"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Date</p>
+                <div className="flex flex-wrap gap-2">
+                  {DATE_CHIP_OPTIONS.map((opt) => {
+                    const isActive = opt.value === "" ? dateFilter === "all" : dateFilter === opt.value;
+                    return (
+                      <button
+                        key={opt.value || "all"}
+                        onClick={() => { setDateFilter((opt.value || "all") as FilterState["dateRange"]); setSelectedId(null); }}
+                        className={`px-4 py-2 rounded-full font-headline text-xs font-medium uppercase tracking-widest border transition-colors ${
+                          isActive
+                            ? "border-primary bg-primary text-dark"
+                            : "border-dark-lighter text-muted hover:border-primary/50 hover:text-light"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 px-5 pb-8 pt-4 border-t border-dark-lighter">
+              <button
+                onClick={() => setMobileFiltersOpen(false)}
+                className="w-full bg-machined text-dark font-headline text-sm font-bold uppercase tracking-widest py-4 rounded-xl machined-button-shadow hover:-translate-y-0.5 transition-transform duration-100"
+              >
+                Show {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

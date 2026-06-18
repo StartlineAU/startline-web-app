@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, formatExperienceLevel, truncateTitle, filterEvents, sortEventsByDate, getUpcomingEvents, getTotalUpcomingEvents } from "@/lib/utils";
 import type { CustomerEvent, FilterState } from "@/types";
 
@@ -11,7 +11,7 @@ describe("cn", () => {
     expect(cn("foo", false, undefined, null, "", "bar")).toBe("foo bar");
   });
 
-  it("resolves Tailwind conflicts — later classes win", () => {
+  it("resolves Tailwind conflicts - later classes win", () => {
     expect(cn("p-4", "p-8")).toBe("p-8");
   });
 
