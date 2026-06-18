@@ -29,7 +29,7 @@ export default function Footer() {
               <div className="space-y-2">
                 {[
                   { href: "/events", label: "All Events" },
-                  { href: "/events?type=hyrox", label: "HYROX" },
+                  { href: "/events?type=fitness-racing", label: "Fitness Racing" },
                   { href: "/events?type=crossfit", label: "CrossFit" },
                   { href: "/events?type=running", label: "Running" },
                   { href: "/events?type=hybrid", label: "Hybrid" },

@@ -2,7 +2,7 @@
 
 ## Overview
 
-StartLine helps performance-driven fitness individuals discover competitive events across Australia. Find HYROX, CrossFit competitions, running races, and hybrid fitness events in one place.
+StartLine helps performance-driven fitness individuals discover competitive events across Australia. Find fitness racing, CrossFit competitions, running races, and hybrid fitness events in one place.
 
 ## Features
 
@@ -14,7 +14,7 @@ StartLine helps performance-driven fitness individuals discover competitive even
 
 ## Event Types
 
-- **HYROX** - The World Series of Fitness Racing
+- **Fitness Racing** - Functional fitness racing events
 - **CrossFit** - CrossFit competitions and throwdowns
 - **Running** - 5K to marathon distance races
 - **Hybrid** - Functional fitness and obstacle course events
@@ -79,7 +79,7 @@ Edit `data/events.json` to add competitions:
   "location": "Venue, City",
   "city": "Sydney",
   "state": "nsw",
-  "type": "hyrox",
+  "type": "fitness-racing",
   "format": "both",
   "level": "open",
   "image": "/images/event.jpg",

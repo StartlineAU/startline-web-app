@@ -1,5 +1,5 @@
 export type EventType =
-  | "hyrox"
+  | "fitness-racing"
   | "crossfit"
   | "running"
   | "hybrid";
@@ -80,17 +80,17 @@ export interface EventTypeOption {
 }
 
 export const EVENT_TYPE_OPTIONS: EventTypeOption[] = [
-  { value: "hyrox",    label: "HYROX",                    shortLabel: "HYROX" },
-  { value: "crossfit", label: "CrossFit Competitions",    shortLabel: "CrossFit" },
-  { value: "running",  label: "Running (5K–Marathon)",    shortLabel: "Running" },
-  { value: "hybrid",   label: "Hybrid / Obstacle",       shortLabel: "Hybrid" },
+  { value: "fitness-racing", label: "Fitness Racing",             shortLabel: "Fitness Racing" },
+  { value: "crossfit",       label: "CrossFit Competitions",      shortLabel: "CrossFit" },
+  { value: "running",        label: "Running (5K–Marathon)",      shortLabel: "Running" },
+  { value: "hybrid",         label: "Hybrid / Obstacle",         shortLabel: "Hybrid" },
 ];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
-  hyrox:    "HYROX",
-  crossfit: "CrossFit",
-  running:  "Running",
-  hybrid:   "Hybrid",
+  "fitness-racing": "Fitness Racing",
+  crossfit:         "CrossFit",
+  running:          "Running",
+  hybrid:           "Hybrid",
 };
 
 export interface StateOption {

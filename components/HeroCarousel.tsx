@@ -7,7 +7,7 @@ const SLIDES = [
   { url: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920&q=80", alt: "CrossFit competition" },
   { url: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1920&q=80", alt: "Fitness athletes" },
   { url: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1920&q=80", alt: "Road race" },
-  { url: "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=1920&q=80", alt: "HYROX event" },
+  { url: "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=1920&q=80", alt: "Fitness race event" },
 ];
 
 const INTERVAL_MS = 5000;

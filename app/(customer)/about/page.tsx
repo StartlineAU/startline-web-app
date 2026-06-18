@@ -118,7 +118,7 @@ export default function AboutPage() {
               <span className="text-primary">next start line?</span>
             </h2>
             <p className="text-muted text-sm leading-relaxed">
-              HYROX, CrossFit, running and hybrid events across Australia &mdash; all in one place.
+              Fitness racing, CrossFit, running and hybrid events across Australia &mdash; all in one place.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">

@@ -9,9 +9,9 @@ describe("event status labels", () => {
 
 describe("competition types", () => {
   it("includes all supported disciplines", () => {
-    const types = ["hyrox", "crossfit", "running", "hybrid"];
+    const types = ["fitness-racing", "crossfit", "running", "hybrid"];
     types.forEach((t) => {
-      expect(["hyrox", "crossfit", "running", "hybrid"]).toContain(t);
+      expect(["fitness-racing", "crossfit", "running", "hybrid"]).toContain(t);
     });
   });
 });

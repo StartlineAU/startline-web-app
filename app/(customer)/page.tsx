@@ -13,13 +13,13 @@ import { Button } from "@/components/ui/button";
 export const revalidate = 60;
 
 const CATEGORIES = [
-  { type: "hyrox",    label: "HYROX",    description: "The World Series of Fitness Racing" },
-  { type: "running",  label: "Running",  description: "5K to Ultramarathon" },
-  { type: "crossfit", label: "CrossFit", description: "Functional Fitness Competitions" },
-  { type: "hybrid",   label: "Hybrid",   description: "Multi-Discipline & OCR Events" },
+  { type: "fitness-racing", label: "Fitness Racing", description: "Functional Fitness Racing Events" },
+  { type: "running",        label: "Running",        description: "5K to Ultramarathon" },
+  { type: "crossfit",       label: "CrossFit",       description: "Functional Fitness Competitions" },
+  { type: "hybrid",         label: "Hybrid",         description: "Multi-Discipline & OCR Events" },
 ] as const;
 
-const EVENT_TYPE_ORDER = ["hyrox", "running", "crossfit", "hybrid"] as const;
+const EVENT_TYPE_ORDER = ["fitness-racing", "running", "crossfit", "hybrid"] as const;
 
 export default async function Home() {
   const raw = await getAllEvents();
@@ -203,7 +203,7 @@ export default async function Home() {
               <span className="text-primary">next start line?</span>
             </h2>
             <p className="text-muted text-sm leading-relaxed">
-              HYROX, CrossFit, running and hybrid events across Australia &mdash; all in one place.
+              Fitness racing, CrossFit, running and hybrid events across Australia &mdash; all in one place.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
