@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -32,8 +32,8 @@ export default function Header() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-light/80 backdrop-blur-md border-b border-dark-lighter">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center w-full px-4 sm:px-6 h-14 max-w-[1440px] mx-auto">
-        {/* Left — logo */}
+      <div className="flex justify-between items-center md:grid md:grid-cols-[1fr_auto_1fr] w-full px-4 sm:px-6 h-14 max-w-[1440px] mx-auto">
+        {/* Left - logo */}
         <Link href="/" className="flex items-center py-1" onClick={() => setIsMenuOpen(false)}>
           <Image
             src="/images/logo-title.svg"
@@ -45,7 +45,7 @@ export default function Header() {
           />
         </Link>
 
-        {/* Centre — desktop nav */}
+        {/* Centre - desktop nav */}
         <div className="hidden md:flex gap-8 items-center">
           {[...navItems, ...(status === "authenticated" ? [{ href: "/profile", label: "PROFILE" }] : [])].map((item) => {
             const isActive =
@@ -66,7 +66,7 @@ export default function Header() {
           })}
         </div>
 
-        {/* Right — auth / hamburger */}
+        {/* Right - auth / hamburger */}
         <div className="flex items-center justify-end gap-3">
 
           {/* Desktop: unauthenticated */}
@@ -110,7 +110,7 @@ export default function Header() {
             </div>
           )}
 
-          {/* Hamburger — mobile only */}
+          {/* Hamburger - mobile only */}
           <button
             className="md:hidden flex items-center justify-center w-11 h-11 text-light hover:text-primary transition-colors -mr-1.5"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
