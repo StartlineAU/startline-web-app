@@ -51,8 +51,8 @@ function RegisterContent() {
   const [event, setEvent] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [athleteName, setAthleteName] = useState("");
-  const [athleteEmail, setAthleteEmail] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [category, setCategory] = useState("");
   const [selectedWave, setSelectedWave] = useState(preselectedWave);
   const [clientSecret, setClientSecret] = useState("");
@@ -82,7 +82,7 @@ function RegisterContent() {
     : ticketPrice;
 
   const handleGoToPayment = useCallback(async () => {
-    if (!athleteName || !athleteEmail || !selectedWave) {
+    if (!customerName || !customerEmail || !selectedWave) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -96,8 +96,8 @@ function RegisterContent() {
         body: JSON.stringify({
           eventId,
           waveLabel: selectedWave,
-          athleteName,
-          athleteEmail,
+          customerName,
+          customerEmail,
           category,
         }),
       });
@@ -113,7 +113,7 @@ function RegisterContent() {
       setError("Something went wrong. Please try again.");
     }
     setProcessing(false);
-  }, [eventId, selectedWave, athleteName, athleteEmail, category]);
+  }, [eventId, selectedWave, customerName, customerEmail, category]);
 
   if (loading) {
     return (
@@ -180,12 +180,12 @@ function RegisterContent() {
 
               <div>
                 <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1">Full name *</label>
-                <input type="text" value={athleteName} onChange={(e) => setAthleteName(e.target.value)} placeholder="Alex Rossi" className={inputCls} />
+                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Alex Rossi" className={inputCls} />
               </div>
 
               <div>
                 <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1">Email *</label>
-                <input type="email" value={athleteEmail} onChange={(e) => setAthleteEmail(e.target.value)} placeholder="alex@example.com" className={inputCls} />
+                <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="alex@example.com" className={inputCls} />
               </div>
 
               <div>

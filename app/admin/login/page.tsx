@@ -13,9 +13,6 @@ export default function AdminLoginPage() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
-const isLocalCognito = !!process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
-
-
   // Force-change-password challenge (admin-created accounts)
   const [needsNewPassword, setNeedsNewPassword] = useState(false);
   const [newPassword,      setNewPassword]      = useState("");
@@ -25,7 +22,7 @@ const isLocalCognito = !!process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
     const session = await fetchAuthSession();
     const groups  = (session.tokens?.accessToken?.payload?.["cognito:groups"] as string[] | undefined) ?? [];
 
-    if (!groups.includes("admin-nonprod-users")) {
+    if (!groups.includes("admins")) {
       await signOut({ global: false }).catch(() => {});
       setError("Your account does not have admin access.");
       return;
@@ -46,7 +43,6 @@ const isLocalCognito = !!process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
       const result = await signIn({
         username: email,
         password,
-        options: isLocalCognito ? { authFlowType: "USER_PASSWORD_AUTH" } : undefined,
       });
 
       if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
@@ -110,7 +106,7 @@ const isLocalCognito = !!process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
           Admin<br /><span className="text-primary">sign in.</span>
         </h1>
         <p className="text-muted text-[15px] leading-relaxed mb-10">
-          Access is restricted to members of the admin-nonprod-users group in Cognito.
+          Access is restricted to members of the admins group in Cognito.
         </p>
 
         {error && (

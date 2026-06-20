@@ -2,7 +2,8 @@ import { createServerRunner } from "@aws-amplify/adapter-nextjs";
 import { fetchAuthSession } from "aws-amplify/auth/server";
 import type { AuthSession } from "aws-amplify/auth";
 import { cookies } from "next/headers";
-import { jwtVerify, createRemoteJWKSet } from "jose";
+import jwt from "jsonwebtoken";
+import JwksClientModule from "jwks-rsa";
 import { amplifyConfig } from "./amplify-config";
 import prisma from "./prisma";
 
@@ -16,8 +17,8 @@ export type ServerSession = {
   groups: string[];
 };
 
-export type AthleteSession = {
-  sub:   string; // Prisma Athlete.id
+export type CustomerSession = {
+  sub:   string; // Prisma Customer.id
   email: string;
   name:  string | null;
 };
@@ -34,29 +35,36 @@ export type AdminSession = {
   name:  string | null;
 };
 
-// ── JWKS setup (same as middleware) ──────────────────────────────────────────
-
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
 const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
-const cognitoEndpoint = process.env.COGNITO_SERVER_ENDPOINT
-  ?? process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
 
-const isLocalCognito = !!cognitoEndpoint;
+const cognitoDomain = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
 
-const jwksBase = isLocalCognito
-  ? `${cognitoEndpoint}/${userPoolId}`
-  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+const jwksClient = new JwksClientModule.JwksClient({
+  jwksUri: `${cognitoDomain}/.well-known/jwks.json`,
+  requestHeaders: {},
+  timeout: 10000,
+});
 
-const issuer = isLocalCognito
-  ? `${cognitoEndpoint}/${userPoolId}`
-  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
-
-const JWKS = createRemoteJWKSet(
-  new URL(`${jwksBase}/.well-known/jwks.json`)
-);
-
-// ── Server session (direct JWT verification, bypasses Amplify server-side) ───
+function verifyToken(token: string): Promise<jwt.JwtPayload> {
+  return new Promise((resolve, reject) => {
+    jwt.verify(
+      token,
+      function getKey(header: any, callback: (err: Error | null, key?: string) => void) {
+        jwksClient.getSigningKey(header.kid as string, (err: any, key: any) => {
+          if (err) return callback(err);
+          callback(null, key.getPublicKey());
+        });
+      },
+      { issuer: cognitoDomain, algorithms: ["RS256"] },
+      (err, decoded) => {
+        if (err) return reject(err);
+        resolve(decoded as jwt.JwtPayload);
+      }
+    );
+  });
+}
 
 export async function getServerSession(): Promise<ServerSession | null> {
   try {
@@ -72,14 +80,11 @@ export async function getServerSession(): Promise<ServerSession | null> {
     )?.value;
     if (!accessToken) return null;
 
-    const { payload } = await jwtVerify(accessToken, JWKS, {
-      issuer,
-      audience: undefined,
-    });
+    const payload = await verifyToken(accessToken);
 
     const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
     const sub   = payload.sub as string;
-    const email = lastAuthUser; // from the LastAuthUser cookie (set by Amplify to the user's email)
+    const email = lastAuthUser;
 
     return { sub, email, groups };
   } catch {
@@ -87,19 +92,17 @@ export async function getServerSession(): Promise<ServerSession | null> {
   }
 }
 
-// ── Specialised sessions ─────────────────────────────────────────────────────
-
-export async function getAthleteSession(): Promise<AthleteSession | null> {
+export async function getCustomerSession(): Promise<CustomerSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
 
   try {
-    const athlete = await prisma.athlete.findUnique({
+    const customer = await prisma.customer.findUnique({
       where:  { cognitoSub: cognitoSession.sub },
       select: { id: true, email: true, name: true },
     });
-    if (!athlete) return null;
-    return { sub: athlete.id, email: athlete.email, name: athlete.name };
+    if (!customer) return null;
+    return { sub: customer.id, email: customer.email, name: customer.name };
   } catch {
     return null;
   }
@@ -125,7 +128,7 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
 export async function getAdminSession(): Promise<AdminSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
-  if (!cognitoSession.groups.includes("admin-nonprod-users")) return null;
+  if (!cognitoSession.groups.includes("admins")) return null;
 
   try {
     const admin = await prisma.admin.upsert({

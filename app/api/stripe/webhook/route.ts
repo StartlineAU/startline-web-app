@@ -62,8 +62,8 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     data: {
       eventId,
       organiserId,
-      athleteName: meta.athleteName ?? "Unknown",
-      athleteEmail: meta.athleteEmail ?? "",
+      athleteName: meta.customerName ?? "Unknown",
+      athleteEmail: meta.customerEmail ?? "",
       category: meta.category || null,
       waveLabel: meta.waveLabel || null,
       amountCents: parseInt(meta.ticketPriceCents ?? "0", 10),
@@ -85,7 +85,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       eventId,
       type: "NEW_REGISTRATION",
       title: "New registration",
-      body: `${meta.athleteName} registered for ${event?.title ?? "your event"}`,
+      body: `${meta.customerName} registered for ${event?.title ?? "your event"}`,
     },
   }).catch(err => console.error("Failed to create notification:", err));
 }

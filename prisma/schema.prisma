@@ -244,8 +244,8 @@ enum RegistrationStatus {
   REFUNDED
 }
 
-// ─── Athlete accounts ─────────────────────────────────────────────────────────
-model Athlete {
+// ─── Customer accounts ────────────────────────────────────────────────────────
+model Customer {
   id         String   @id @default(uuid())
   cognitoSub String   @unique
   email      String   @unique
@@ -253,7 +253,7 @@ model Athlete {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@map("athletes")
+  @@map("customers")
 }
 
 model WaitlistSubscriber {

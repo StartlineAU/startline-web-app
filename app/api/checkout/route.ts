@@ -8,13 +8,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       eventId: string;
       waveLabel: string;
-      athleteName: string;
-      athleteEmail: string;
+      customerName: string;
+      customerEmail: string;
       category: string;
     };
-    const { eventId, waveLabel, athleteName, athleteEmail, category } = body;
+    const { eventId, waveLabel, customerName, customerEmail, category } = body;
 
-    if (!eventId || !waveLabel || !athleteName || !athleteEmail) {
+    if (!eventId || !waveLabel || !customerName || !customerEmail) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
       metadata: {
         eventId,
         waveLabel,
-        athleteName,
-        athleteEmail,
+        customerName,
+        customerEmail,
         category: category || "",
         organiserId: event.organiser.id,
         ticketPriceCents: String(ticketPriceCents),

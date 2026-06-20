@@ -15,8 +15,6 @@ function SignInForm() {
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
 
-const isLocalCognito = !!process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
-
   // Force-change-password challenge (admin-created accounts)
   const [needsNewPassword, setNeedsNewPassword] = useState(false);
   const [newPassword,      setNewPassword]      = useState("");
@@ -47,7 +45,6 @@ const isLocalCognito = !!process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
       const result = await signIn({
         username: email,
         password,
-        options: isLocalCognito ? { authFlowType: "USER_PASSWORD_AUTH" } : undefined,
       });
 
       if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {

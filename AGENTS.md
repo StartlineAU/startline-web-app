@@ -17,13 +17,24 @@ Startline is a Next.js 15 (App Router) fitness event discovery platform with thr
 
 ### Auth (Cognito)
 
-Uses AWS Cognito with JWT verification in middleware via `jose`. Tokens are stored in Cognito-managed cookies. Admin users are identified by presence of `admin-nonprod-users` Cognito group.
+Uses AWS Cognito with JWT verification in middleware via `jose`. Tokens are stored in Cognito-managed cookies. User roles are determined by Cognito groups: `admins`, `organisers`, `customers`.
 
-In local dev, a **[cognito-local](https://github.com/jagregory/cognito-local)** Docker container emulates Cognito on port **9229**. Seed users are created automatically in `.cognito/db/`. All seed users share password `Password123!`.
+The non-production user pool (`ap-southeast-2_KBqIYXOWT`) is managed via Terraform in `terraform/modules/environment/main.tf`. Users are created/confirmed by `prisma/seed.ts` — it calls `AdminCreateUser` + `AdminSetUserPassword` + `AdminAddUserToGroup` for each seed user, then fetches their `sub` UUIDs dynamically via `ListUsers` + `ListUsersInGroup`.
 
-- Admin: `admin@startlineau.com` (in `admin-nonprod-users` group)
-- Organisers: `test.organiser@startlineau.com`, `hello@coastaltrailrunning.com.au`, `info@urbanfitnessevents.com.au`
-- Athletes: `sarah.kovac@example.com`, `tom.rendell@example.com`, etc.
+All seed users share password `Password123!`.
+
+| Email | Group |
+|---|---|
+| `admin@startlineau.com` | `admins` |
+| `test.organiser@startlineau.com` | `organisers` |
+| `hello@coastaltrailrunning.com.au` | `organisers` |
+| `info@urbanfitnessevents.com.au` | `organisers` |
+| `sarah.kovac@example.com` | `customers` |
+| `tom.rendell@example.com` | `customers` |
+| `brooke.mitchell@example.com` | `customers` |
+| `liam.oconnor@example.com` | `customers` |
+
+Run `pnpm prisma:seed` to set up Cognito users + database seed data. Idempotent — safe to re-run.
 
 ### Database
 
@@ -75,7 +86,7 @@ pnpm test:e2e    # Playwright e2e tests (requires Docker PostgreSQL running)
 
 - Unit tests in `src/__tests__/`, e2e in `e2e/`.
 - Playwright uses Chromium, auto-starts `pnpm dev -p 3002` if not already running.
-- E2E tests authenticate via cognito-local (password `Password123!`).
+- E2E tests authenticate via the non-production Cognito pool (password `Password123!`).
 
 ### E2E test conventions
 

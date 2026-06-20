@@ -173,7 +173,7 @@ function ForgotPasswordForm() {
   );
 }
 
-export default function AthleteForgotPasswordPage() {
+export default function CustomerForgotPasswordPage() {
   return (
     <Suspense>
       <ForgotPasswordForm />

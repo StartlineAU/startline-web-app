@@ -133,7 +133,7 @@ function VerifyEmailForm() {
   );
 }
 
-export default function AthleteVerifyEmailPage() {
+export default function CustomerVerifyEmailPage() {
   return (
     <Suspense>
       <VerifyEmailForm />
