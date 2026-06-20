@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: startline
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,12 +16,22 @@ services:
       timeout: 5s
       retries: 5
 
+  cognito:
+    image: jagregory/cognito-local:latest
+    restart: unless-stopped
+    ports:
+      - "9229:9229"
+    volumes:
+      - ./.cognito:/app/.cognito
+    environment:
+      - CODE=123456
+
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "1026:1025"
+      - "8026:8025"
     environment:
       MP_MAX_MESSAGES: 5000
       MP_DATA_FILE: /data/mailpit.db
@@ -32,17 +42,35 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3002:3000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/startline?schema=public
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
-      - DEV_BYPASS=true
-      - NEXT_PUBLIC_SITE_URL=http://localhost:3000
+      - NEXT_PUBLIC_SITE_URL=http://localhost:3002
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - NEXT_PUBLIC_AWS_REGION=${NEXT_PUBLIC_AWS_REGION:-ap-southeast-2}
+      - NEXT_PUBLIC_COGNITO_USER_POOL_ID=${NEXT_PUBLIC_COGNITO_USER_POOL_ID:-}
+      - NEXT_PUBLIC_COGNITO_CLIENT_ID=${NEXT_PUBLIC_COGNITO_CLIENT_ID:-}
+      - NEXT_PUBLIC_COGNITO_ENDPOINT=${NEXT_PUBLIC_COGNITO_ENDPOINT:-}
+      - COGNITO_SERVER_ENDPOINT=http://cognito:9229
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cognito:
+        condition: service_started
+
+  prisma-studio:
+    image: startline-app
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "5555:5555"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/startline?schema=public
+    command: sh -c "npx prisma studio --port 5555 --browser none --url=\"postgresql://postgres:postgres@postgres:5432/startline?schema=public\""
     depends_on:
       postgres:
         condition: service_healthy

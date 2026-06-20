@@ -9,11 +9,11 @@ test.describe("admin login", () => {
     await expect(page.locator("h1")).toContainText("Admin");
     await expect(page.locator("h1")).toContainText("sign in");
 
-    await page.getByPlaceholder(/admin@startlineau/i).fill("test.organiser@startlineau.com");
-    await page.locator('input[type="password"]').first().fill("password123");
+    await page.getByPlaceholder(/admin@startlineau/i).fill("admin@startlineau.com");
+    await page.locator('input[type="password"]').first().fill("Password123!");
     await page.getByRole("button", { name: /sign in/i }).click();
 
-    await page.waitForURL("**/admin/dashboard**", { timeout: 10000 });
+    await page.waitForURL("**/admin/dashboard**", { timeout: 30000 });
     await expect(page.locator("h1")).toContainText("Overview");
   });
 

@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify, createRemoteJWKSet, JWTPayload } from "jose";
 
-const region     = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
+const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
 const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
+const cognitoEndpoint = process.env.COGNITO_SERVER_ENDPOINT
+  ?? process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
+
+const isLocalCognito = !!cognitoEndpoint;
+
+const jwksBase = isLocalCognito
+  ? `${cognitoEndpoint}/${userPoolId}`
+  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+
+const issuer = isLocalCognito
+  ? `${cognitoEndpoint}/${userPoolId}`
+  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
 
 const JWKS = createRemoteJWKSet(
-  new URL(`https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`)
+  new URL(`${jwksBase}/.well-known/jwks.json`)
 );
 
 const ORGANISER_PROTECTED = [
@@ -36,13 +48,13 @@ async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> 
   if (!lastAuthUser) return null;
 
   const accessToken = req.cookies.get(
-    `CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`
+    `CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`
   )?.value;
   if (!accessToken) return null;
 
   try {
     const { payload } = await jwtVerify(accessToken, JWKS, {
-      issuer:   `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+      issuer,
       audience: undefined,
     });
     return payload;
@@ -58,11 +70,6 @@ function isAdmin(payload: JWTPayload): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-
-  // ── Dev mode: skip domain routing, skip auth ─────────────────────────
-  if (process.env.NODE_ENV === "development") {
-    return NextResponse.next();
-  }
 
   // ── Domain-based routing (production only) ───────────────────────────
   const host = req.headers.get("host") ?? "";

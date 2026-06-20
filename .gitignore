@@ -63,3 +63,4 @@ terraform/terraform.tfvars
 
 # opencode internal state
 .opencode/
+skills-lock.json
