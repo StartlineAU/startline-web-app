@@ -38,24 +38,24 @@ Run `pnpm prisma:seed` to set up Cognito users + database seed data. Idempotent 
 
 ### Database
 
-PostgreSQL 15 via Docker on port **5434** (mapped from container port 5432). Prisma ORM with singleton client in `lib/prisma.ts`.
+PostgreSQL 15 via Docker on port **5434** (mapped from container port 5432). Prisma ORM with singleton client in `lib/prisma.ts`. Prisma schema targets `rhel-openssl-3.0.x` for Lambda/RHEL compatibility.
 
-Mailpit runs alongside PostgreSQL in Docker (SMTP on **1025**, web UI on **8025**) for local email testing.
+Mailpit runs alongside PostgreSQL in Docker (SMTP on **1026**, web UI on **8026** — host ports) for local email testing.
 
 The app itself runs in Docker via the `app` service (Next.js standalone on port 3000). Prisma Studio runs on-demand via `docker compose exec app npx prisma studio`.
 
 ```bash
 docker compose up -d              # starts PostgreSQL + Mailpit + app
-docker compose exec app npx prisma migrate dev  # apply migrations
-docker compose exec app npx prisma studio        # launch Prisma Studio
+pnpm prisma:migrate               # apply migrations (via prisma migrate dev)
+docker compose exec app npx prisma studio        # launch Prisma Studio (or `pnpm prisma:studio` if defined)
 pnpm prisma:seed                  # seed test data (runs locally against port 5434)
 ```
 
-For active development with hot reload, run `pnpm dev` locally — it connects to the Docker PostgreSQL and Mailpit services.
+For active development with hot reload, run `bash scripts/dev.sh` (auto-starts Docker, generates Prisma client, starts Next.js) or `pnpm dev` directly — both connect to the Docker PostgreSQL and Mailpit services.
 
 ### Stripe Connect
 
-Uses Stripe Connect Express for organiser payouts. Organisers onboard via Stripe OAuth. Payments flow through `api/organiser/stripe/`. Money is stored in integer cents.
+Uses Stripe Connect Express for organiser payouts. Organisers onboard via Stripe OAuth. Payments flow through `api/organiser/stripe/`. Money is stored in integer cents. Platform fee formula (in `lib/platform-fee.ts`): 3.95% + $1.45; `feeStructure` determines whether athlete or organiser absorbs it.
 
 ### Terraform + Amplify CI/CD
 
@@ -79,12 +79,15 @@ Infrastructure is managed via Terraform in `terraform/`:
 ## Testing
 
 ```bash
-pnpm test        # Vitest unit tests
-pnpm test:watch  # Vitest in watch mode
-pnpm test:e2e    # Playwright e2e tests (requires Docker PostgreSQL running)
+pnpm lint         # ESLint (next lint)
+pnpm test         # Vitest unit tests
+pnpm test:watch   # Vitest in watch mode
+pnpm test:e2e     # Playwright e2e tests (requires Docker PostgreSQL running)
 ```
 
 - Unit tests in `src/__tests__/`, e2e in `e2e/`.
+- Vitest has `globals: true` — `describe`/`it`/`expect` available without imports.
+- Vitest config defaults `DATABASE_URL` to port **5433**, but local Docker uses port **5434** — tests connecting to DB may need `DATABASE_URL` set explicitly.
 - Playwright uses Chromium, auto-starts `pnpm dev -p 3002` if not already running.
 - E2E tests authenticate via the non-production Cognito pool (password `Password123!`).
 
@@ -153,7 +156,7 @@ gh pr list --repo StartlineAU/startline
 
 ## MCP servers
 
-Configured in `.mcp.json` and `opencode.json`:
+Configured in `opencode.json`:
 - `stripe` — Stripe API access via `@stripe/mcp`
 - `resend` — Email sending via `resend-mcp`
 - `aws` — AWS API access via `awslabs.aws-api-mcp-server` (uses `mcp-server` IAM profile, account `829182232071`, region `ap-southeast-2`)
