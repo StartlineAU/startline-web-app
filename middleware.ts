@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify, createRemoteJWKSet, JWTPayload } from "jose";
+import { jwtVerify, createRemoteJWKSet } from "jose";
+import type { JWTPayload } from "jose";
 
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
 const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
-const cognitoEndpoint = process.env.COGNITO_SERVER_ENDPOINT
-  ?? process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
 
-const isLocalCognito = !!cognitoEndpoint;
-
-const jwksBase = isLocalCognito
-  ? `${cognitoEndpoint}/${userPoolId}`
-  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
-
-const issuer = isLocalCognito
-  ? `${cognitoEndpoint}/${userPoolId}`
-  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+const cognitoDomain = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
 
 const JWKS = createRemoteJWKSet(
-  new URL(`${jwksBase}/.well-known/jwks.json`)
+  new URL(`${cognitoDomain}/.well-known/jwks.json`)
 );
 
 const ORGANISER_PROTECTED = [
@@ -54,7 +45,7 @@ async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> 
 
   try {
     const { payload } = await jwtVerify(accessToken, JWKS, {
-      issuer,
+      issuer: cognitoDomain,
       audience: undefined,
     });
     return payload;
@@ -65,23 +56,18 @@ async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> 
 
 function isAdmin(payload: JWTPayload): boolean {
   const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
-  return groups.includes("admin-nonprod-users");
+  return groups.includes("admins");
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-
-  // ── Domain-based routing (production only) ───────────────────────────
   const host = req.headers.get("host") ?? "";
 
-  // Organiser subdomain: serve organiser portal
   if (host === ORGANISER_DOMAIN) {
-    // Rewrite root to organiser login
     if (pathname === "/") {
       return NextResponse.rewrite(new URL("/organiser", req.url));
     }
 
-    // Protect organiser routes
     if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
       const payload = await getVerifiedPayload(req);
       if (!payload) return NextResponse.redirect(new URL("/organiser", req.url));
@@ -96,7 +82,6 @@ export async function middleware(req: NextRequest) {
       return NextResponse.next();
     }
 
-    // Everything else on organiser subdomain → organiser login
     if (
       !pathname.startsWith("/organiser") &&
       !pathname.startsWith("/admin") &&
@@ -111,7 +96,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Customer domain: redirect organiser/admin paths to organiser subdomain
   if (host === CUSTOMER_DOMAIN || host === `www.${CUSTOMER_DOMAIN}`) {
     if (pathname.startsWith("/organiser") || pathname.startsWith("/admin")) {
       return NextResponse.redirect(
@@ -121,8 +105,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Fallback (any other domain / Amplify preview) ────────────────────
-  // Serve customer site by default, protect organiser/admin routes
   if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
     const payload = await getVerifiedPayload(req);
     if (!payload) return NextResponse.redirect(new URL("/organiser", req.url));

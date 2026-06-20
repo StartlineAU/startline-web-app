@@ -4,7 +4,7 @@ import { getServerSession } from "@/lib/amplify-server";
 export async function POST() {
   const session = await getServerSession();
 
-  if (!session || !session.groups.includes("admin-nonprod-users")) {
+  if (!session || !session.groups.includes("admins")) {
     return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
   }
 

@@ -225,7 +225,7 @@ resource "aws_cognito_user_pool_client" "web" {
   name         = "${var.project_name}-${var.name}-web"
   user_pool_id = aws_cognito_user_pool.this.id
 
-  generate_secret = true
+  generate_secret = false
 
   explicit_auth_flows = [
     "ALLOW_USER_SRP_AUTH",
@@ -244,6 +244,12 @@ resource "aws_cognito_user_pool_client" "web" {
     id_token      = "minutes"
     refresh_token = "days"
   }
+}
+
+resource "aws_cognito_user_group" "this" {
+  for_each     = toset(["admins", "organisers", "customers"])
+  user_pool_id = aws_cognito_user_pool.this.id
+  name         = each.key
 }
 
 # ===== Amplify branch =====

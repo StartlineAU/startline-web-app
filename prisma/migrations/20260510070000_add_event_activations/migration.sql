@@ -1,1 +1,0 @@
-ALTER TABLE "Event" ADD COLUMN IF NOT EXISTS "activations" TEXT;

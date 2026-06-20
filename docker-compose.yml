@@ -16,16 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  cognito:
-    image: jagregory/cognito-local:latest
-    restart: unless-stopped
-    ports:
-      - "9229:9229"
-    volumes:
-      - ./.cognito:/app/.cognito
-    environment:
-      - CODE=123456
-
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
@@ -54,13 +44,9 @@ services:
       - NEXT_PUBLIC_AWS_REGION=${NEXT_PUBLIC_AWS_REGION:-ap-southeast-2}
       - NEXT_PUBLIC_COGNITO_USER_POOL_ID=${NEXT_PUBLIC_COGNITO_USER_POOL_ID:-}
       - NEXT_PUBLIC_COGNITO_CLIENT_ID=${NEXT_PUBLIC_COGNITO_CLIENT_ID:-}
-      - NEXT_PUBLIC_COGNITO_ENDPOINT=${NEXT_PUBLIC_COGNITO_ENDPOINT:-}
-      - COGNITO_SERVER_ENDPOINT=http://cognito:9229
     depends_on:
       postgres:
         condition: service_healthy
-      cognito:
-        condition: service_started
 
   prisma-studio:
     image: startline-app

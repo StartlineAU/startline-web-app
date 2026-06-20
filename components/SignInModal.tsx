@@ -77,21 +77,21 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       const result = await signIn({ username: email, password });
 
       if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
-        onClose(); router.push("/athlete/verify-email?email=" + encodeURIComponent(email)); return;
+        onClose(); router.push("/customer/verify-email?email=" + encodeURIComponent(email)); return;
       }
       if (result.nextStep.signInStep === "RESET_PASSWORD") {
-        onClose(); router.push("/athlete/forgot-password?email=" + encodeURIComponent(email)); return;
+        onClose(); router.push("/customer/forgot-password?email=" + encodeURIComponent(email)); return;
       }
       if (result.nextStep.signInStep !== "DONE") {
         setError("Additional verification required. Please contact support."); return;
       }
 
-      await fetch("/api/athlete/auth/session", { method: "POST" });
+      await fetch("/api/customer/auth/session", { method: "POST" });
 
       try {
         const pendingName = sessionStorage.getItem("startline_pending_name");
         if (pendingName) {
-          await fetch("/api/athlete/profile", {
+          await fetch("/api/customer/profile", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: pendingName }),
@@ -110,7 +110,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       if (errName === "NotAuthorizedException" || msg.includes("Incorrect username or password")) {
         setError("Incorrect email or password.");
       } else if (errName === "UserNotConfirmedException") {
-        onClose(); router.push("/athlete/verify-email?email=" + encodeURIComponent(email));
+        onClose(); router.push("/customer/verify-email?email=" + encodeURIComponent(email));
       } else if (errName === "UserNotFoundException") {
         setError("No account found with that email.");
       } else {
@@ -192,7 +192,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
         sessionStorage.setItem("startline_pending_phone", e164Phone);
       } catch {}
       onClose();
-      router.push("/athlete/verify-email?email=" + encodeURIComponent(email));
+      router.push("/customer/verify-email?email=" + encodeURIComponent(email));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("UsernameExistsException")) {
@@ -259,7 +259,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
         {view === "signin" && (
           <>
             <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Athlete Portal</span>
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Customer Portal</span>
               <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
                 Welcome<br /><span className="text-primary">back.</span>
               </h2>
@@ -279,7 +279,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">Password</label>
-                  <Link href="/athlete/forgot-password" onClick={onClose} className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">Forgot?</Link>
+                  <Link href="/customer/forgot-password" onClick={onClose} className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">Forgot?</Link>
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
@@ -300,7 +300,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
         {view === "signup" && (
           <>
             <div className="mb-4">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Athlete Portal</span>
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Customer Portal</span>
               <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
                 Join<br /><span className="text-primary">Startline.</span>
               </h2>
