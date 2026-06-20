@@ -1,0 +1,16 @@
+{
+  "Clients": {
+    "5um8ef5csarhmsyqi8jbkug94": {
+      "ClientId": "5um8ef5csarhmsyqi8jbkug94",
+      "ClientName": "startline-app",
+      "CreationDate": "2026-06-20T08:07:58.811Z",
+      "LastModifiedDate": "2026-06-20T08:07:58.811Z",
+      "TokenValidityUnits": {
+        "AccessToken": "hours",
+        "IdToken": "minutes",
+        "RefreshToken": "days"
+      },
+      "UserPoolId": "local_1zg1VuY1"
+    }
+  }
+}

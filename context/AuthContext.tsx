@@ -26,18 +26,11 @@ const AuthContext = createContext<AuthContextValue>({
   logout:  async () => {},
 });
 
-const isDevBypass = !process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,   setUser]   = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
 
   const hydrate = useCallback(async () => {
-    if (isDevBypass) {
-      setStatus("unauthenticated");
-      return;
-    }
-
     try {
       const session = await fetchAuthSession();
       if (!session.tokens?.accessToken) {
@@ -63,10 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [hydrate]);
 
   const logout = useCallback(async () => {
-    document.cookie = "DEV_USER_EMAIL=; path=/; max-age=0";
-    if (!isDevBypass) {
-      await signOut();
-    }
+    await signOut();
     setUser(null);
     setStatus("unauthenticated");
   }, []);

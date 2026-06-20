@@ -17,6 +17,8 @@ model Admin {
   createdAt  DateTime @default(now())
 
   eventReviews Event[] @relation("EventReviewedBy")
+
+  @@map("admins")
 }
 
 // ─── Organiser accounts ───────────────────────────────────────────────────────
@@ -62,6 +64,8 @@ model Organiser {
   registrations Registration[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@map("organisers")
 }
 
 enum OrganiserStatus {
@@ -130,6 +134,8 @@ model Event {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("events")
 }
 
 enum EventStatus {
@@ -163,6 +169,8 @@ model Review {
   isPublished Boolean  @default(true)
 
   createdAt DateTime @default(now())
+
+  @@map("reviews")
 }
 
 // ─── Organiser notifications ──────────────────────────────────────────────────
@@ -176,6 +184,8 @@ model Notification {
   eventId     String?
   read        Boolean          @default(false)
   createdAt   DateTime         @default(now())
+
+  @@map("notifications")
 }
 
 enum NotificationType {
@@ -194,6 +204,8 @@ model Announcement {
   title       String
   body        String
   createdAt   DateTime  @default(now())
+
+  @@map("announcements")
 }
 
 // ─── Athlete registrations ────────────────────────────────────────────────────
@@ -223,6 +235,7 @@ model Registration {
 
   @@index([eventId])
   @@index([organiserId])
+  @@map("registrations")
 }
 
 enum RegistrationStatus {
@@ -239,6 +252,8 @@ model Athlete {
   name       String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@map("athletes")
 }
 
 model WaitlistSubscriber {
@@ -247,27 +262,4 @@ model WaitlistSubscriber {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("waitlist_subscribers")
-}
-
-model LegacyEvent {
-  id              Int      @id @default(autoincrement())
-  title           String
-  description     String
-  date            DateTime @db.Date
-  time            String
-  endTime         String?  @map("end_time")
-  location        String
-  city            String
-  state           String
-  type            String
-  format          String
-  level           String
-  image           String
-  registrationUrl String   @map("registration_url")
-  organizer       String?
-  distance        String?
-  isOfficial      Boolean  @default(false) @map("is_official")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  @@map("events")
 }

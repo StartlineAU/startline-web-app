@@ -16,6 +16,9 @@ export async function POST() {
         cognitoSub: session.sub,
         email:      session.email,
         status:     "APPROVED",
+        orgName:    session.email,
+        abn:        "",
+        photos:     [],
       },
       select: { id: true },
     });

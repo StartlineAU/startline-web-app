@@ -19,11 +19,15 @@ Startline is a Next.js 15 (App Router) fitness event discovery platform with thr
 
 Uses AWS Cognito with JWT verification in middleware via `jose`. Tokens are stored in Cognito-managed cookies. Admin users are identified by presence of `admin-nonprod-users` Cognito group.
 
-`DEV_BYPASS=true` in `.env` skips all Cognito verification in local dev.
+In local dev, a **[cognito-local](https://github.com/jagregory/cognito-local)** Docker container emulates Cognito on port **9229**. Seed users are created automatically in `.cognito/db/`. All seed users share password `Password123!`.
+
+- Admin: `admin@startlineau.com` (in `admin-nonprod-users` group)
+- Organisers: `test.organiser@startlineau.com`, `hello@coastaltrailrunning.com.au`, `info@urbanfitnessevents.com.au`
+- Athletes: `sarah.kovac@example.com`, `tom.rendell@example.com`, etc.
 
 ### Database
 
-PostgreSQL 15 via Docker on port **5433** (mapped from container port 5432). Prisma ORM with singleton client in `lib/prisma.ts`.
+PostgreSQL 15 via Docker on port **5434** (mapped from container port 5432). Prisma ORM with singleton client in `lib/prisma.ts`.
 
 Mailpit runs alongside PostgreSQL in Docker (SMTP on **1025**, web UI on **8025**) for local email testing.
 
@@ -33,7 +37,7 @@ The app itself runs in Docker via the `app` service (Next.js standalone on port 
 docker compose up -d              # starts PostgreSQL + Mailpit + app
 docker compose exec app npx prisma migrate dev  # apply migrations
 docker compose exec app npx prisma studio        # launch Prisma Studio
-pnpm prisma:seed                  # seed test data (runs locally against port 5433)
+pnpm prisma:seed                  # seed test data (runs locally against port 5434)
 ```
 
 For active development with hot reload, run `pnpm dev` locally — it connects to the Docker PostgreSQL and Mailpit services.
@@ -70,8 +74,8 @@ pnpm test:e2e    # Playwright e2e tests (requires Docker PostgreSQL running)
 ```
 
 - Unit tests in `src/__tests__/`, e2e in `e2e/`.
-- Playwright uses Chromium, auto-starts `pnpm dev` if not already running.
-- E2E tests assume `DEV_BYPASS=true` (auth is skipped in dev).
+- Playwright uses Chromium, auto-starts `pnpm dev -p 3002` if not already running.
+- E2E tests authenticate via cognito-local (password `Password123!`).
 
 ### E2E test conventions
 
@@ -80,6 +84,53 @@ pnpm test:e2e    # Playwright e2e tests (requires Docker PostgreSQL running)
 - API endpoint tests use `page.evaluate()` with `fetch()` for direct HTTP assertions (status codes, error messages).
 - E2E tests should cover: page renders, happy path user flow, form validation/error states, and API error responses.
 - Use conditional assertions (`if (await locator.isVisible())`) for tests that depend on seed data to avoid brittle failures when seed data changes.
+
+## Playwright CLI (for AI browser automation)
+
+Use `playwright-cli` instead of MCP for browser automation — it saves ~76% tokens by storing state on disk.
+
+### Setup
+
+```bash
+npm install -g @playwright/cli@latest
+playwright-cli install --skills    # installs skill pack for AI discovery
+```
+
+### Workflow
+
+After each command, the CLI outputs a compact page summary and a reference to a snapshot file on disk. Read the snapshot file to get element refs for subsequent commands.
+
+```bash
+playwright-cli open [url]            # open browser, optionally navigate
+playwright-cli goto <url>            # navigate to a url
+playwright-cli snapshot              # capture accessibility snapshot (read the .yml file for refs)
+playwright-cli click <ref>           # click element by ref from snapshot
+playwright-cli type <text>           # type text into focused element
+playwright-cli fill <ref> <text>     # fill text into specific element
+playwright-cli select <ref> <val>    # select dropdown option
+playwright-cli check/uncheck <ref>   # toggle checkbox/radio
+playwright-cli screenshot            # take screenshot
+playwright-cli close                 # close browser
+```
+
+Full command reference at `playwright-cli --help` or the `playwright-cli` skill in `.agents/skills/playwright-cli/SKILL.md`.
+
+### Headed mode
+
+CLI is headless by default. Pass `--headed` to `open` to see the browser:
+```bash
+playwright-cli open https://localhost:3000 --headed
+```
+
+### Sessions
+
+Use `-s=<name>` for isolated browser instances (e.g., one per portal):
+```bash
+playwright-cli -s=customer open https://localhost:3000
+playwright-cli -s=organiser open https://organiser.localhost:3000
+playwright-cli list                  # list all sessions
+playwright-cli close-all             # close all browsers
+```
 
 ## GitHub
 
@@ -94,20 +145,49 @@ gh pr list --repo StartlineAU/startline
 Configured in `.mcp.json` and `opencode.json`:
 - `stripe` — Stripe API access via `@stripe/mcp`
 - `resend` — Email sending via `resend-mcp`
-- `playwright` — Browser automation via `@playwright/mcp`
 - `aws` — AWS API access via `awslabs.aws-api-mcp-server` (uses `mcp-server` IAM profile, account `829182232071`, region `ap-southeast-2`)
 - `cloudflare` — Cloudflare API access via `@cloudflare/mcp-server-cloudflare` (account `cae4a54688a0a4c53bda4bd62eb37c35`)
 
-## Agent Skills
-
-Custom skills live in `.agents/skills/`. Each skill is a markdown prompt that Claude loads when invoked.
-
-| Skill | Invoke | Description |
-|---|---|---|
-| `caveman` | `/caveman` or "caveman mode" | Ultra-compressed responses — drops filler, articles, and pleasantries while keeping full technical accuracy. Reduces token usage ~75%. Off with "stop caveman" or "normal mode". |
-| `grill-me` | `/grill-me` or "grill me" | Relentless interviewer — stress-tests a plan or design by walking down every branch of the decision tree, one question at a time, with a recommended answer per question. |
-| `tdd` | `/tdd` or "use TDD" | Red-green-refactor loop. Enforces vertical slicing (one test → one impl at a time), public-interface-only testing, and a planning checklist before any code is written. Supplementary docs in `.agents/skills/tdd/`. |
-| `remotion` | `/remotion` or "the video" | Work with the Startline Remotion product demo in `video/`. Covers Studio preview, scene structure, rendering, shared utilities, and animation conventions. |
+Skills provide specialized instructions and workflows for specific tasks.
+Use the skill tool to load a skill when a task matches its description.
+<available_skills>
+  <skill>
+    <name>caveman</name>
+    <description>Ultra-compressed communication mode. Cuts token usage ~75% by dropping filler, articles, and pleasantries while keeping full technical accuracy. Use when user says "caveman mode", "talk like caveman", "use caveman", "less tokens", "be brief", or invokes /caveman.
+</description>
+    <location>file:///Users/Lachlan/.claude/skills/caveman/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>customize-opencode</name>
+    <description>Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself.</description>
+    <location>file:///Users/Lachlan/Developer/startline/%3Cbuilt-in%3E</location>
+  </skill>
+  <skill>
+    <name>find-skills</name>
+    <description>Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.</description>
+    <location>file:///Users/Lachlan/.agents/skills/find-skills/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>grill-me</name>
+    <description>Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each branch of the decision tree. Use when user wants to stress-test a plan, get grilled on their design, or mentions "grill me".</description>
+    <location>file:///Users/Lachlan/Developer/startline/.agents/skills/grill-me/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>playwright-cli</name>
+    <description>Automate browser interactions, test web pages and work with Playwright tests.</description>
+    <location>file:///Users/Lachlan/Developer/startline/.claude/skills/playwright-cli/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>read-pdf</name>
+    <description>Extract text from PDF files using pdftotext and tesseract OCR for scanned PDFs. Use when the user asks to read a PDF, mentions a .pdf file, or pastes PDF content that needs text extraction.</description>
+    <location>file:///Users/Lachlan/.agents/skills/read-pdf/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>tdd</name>
+    <description>Test-driven development with red-green-refactor loop. Use when user wants to build features or fix bugs using TDD, mentions "red-green-refactor", wants integration tests, or asks for test-first development.</description>
+    <location>file:///Users/Lachlan/.claude/skills/tdd/SKILL.md</location>
+  </skill>
+</available_skills>
 
 ## Idempotency
 

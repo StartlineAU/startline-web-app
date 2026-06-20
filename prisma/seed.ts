@@ -11,14 +11,14 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// ── Seed identifiers ─────────────────────────────────────────────────────────
-const SEED_ORGANISER_SUB   = "seed-organiser-cognito-sub-001";
+// ── Seed identifiers (match cognito-local users in .cognito/db/) ──────────
+const SEED_ORGANISER_SUB   = "a2cc24ed-ae74-42be-85f6-bb70fb7842c6";
 const SEED_ORGANISER_EMAIL = "test.organiser@startlineau.com";
 
-const COASTAL_ORG_SUB   = "coastal-trail-sub";
+const COASTAL_ORG_SUB   = "69e22fea-cd74-45f8-803a-6cc02acc9b6c";
 const COASTAL_ORG_EMAIL = "hello@coastaltrailrunning.com.au";
 
-const URBAN_ORG_SUB   = "urban-fitness-sub";
+const URBAN_ORG_SUB   = "e77bee72-3ca7-4a14-822d-60cbfef83832";
 const URBAN_ORG_EMAIL = "info@urbanfitnessevents.com.au";
 
 async function main() {
@@ -31,14 +31,16 @@ async function main() {
   await prisma.notification.deleteMany();
   await prisma.event.deleteMany();
   await prisma.admin.deleteMany();
+  await prisma.athlete.deleteMany();
+  await prisma.waitlistSubscriber.deleteMany();
   await prisma.organiser.deleteMany();
   console.log("  Cleared existing data");
 
-  // ── Admin (cognitoSub matches dev bypass) ────────────────────────────────
+  // ── Admin (cognitoSub matches cognito-local admin user) ──────────────────
   const admin = await prisma.admin.create({
     data: {
-      cognitoSub: SEED_ORGANISER_SUB,
-      email: SEED_ORGANISER_EMAIL,
+      cognitoSub: "c07e356d-e2d0-49bb-8930-e6fc31f46aa1",
+      email: "admin@startlineau.com",
       name: "Platform Admin",
     },
   });
@@ -611,16 +613,384 @@ async function main() {
   console.log(`  Registrations: ${regCount} on ${apexEvent1.title}`);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // More registrations on other approved events
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const byronAthletes = [
+    "Sam Fletcher", "Jade O'Reilly", "Rory McIntyre", "Tessa Nguyen",
+    "Haruki Sato", "Maya Patel", "Josh Blackwood", "Freya Johansson",
+  ];
+
+  for (let i = 0; i < byronAthletes.length; i++) {
+    const name = byronAthletes[i];
+    const wave = (coastalEvent1.waves as unknown as Array<{label: string; price: string}>)[i % 2];
+    const amountCents = parseInt(wave.price) * 100;
+    const email = name.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com";
+    await prisma.registration.create({
+      data: {
+        eventId:          coastalEvent1.id,
+        organiserId:      coastalOrg.id,
+        athleteName:      name,
+        athleteEmail:     email,
+        category:         ((coastalEvent1.categories as string[] | null) ?? [])[i % 2],
+        waveLabel:        wave.label,
+        amountCents,
+        platformFeeCents: platformFeeCents(amountCents),
+        feeStructure:     "athlete",
+        status:           i < 6 ? "CONFIRMED" : "CANCELLED",
+        stripePaymentIntentId: i < 6 ? `pi_byron_001_${i}` : undefined,
+      },
+    });
+  }
+  let otherRegCount = byronAthletes.length;
+
+  const melbAthletes = [
+    "Angus McDonald", "Sophie Laurent", "Raj Kapoor", "Isabella Torres",
+    "Connor Blake", "Hannah Yilmaz", "Leo Fitzgerald", "Amara Obi",
+  ];
+
+  for (let i = 0; i < melbAthletes.length; i++) {
+    const name = melbAthletes[i];
+    const wave = (urbanEvent1.waves as unknown as Array<{label: string; price: string}>)[i % 2];
+    const amountCents = parseInt(wave.price) * 100;
+    const email = name.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com";
+    await prisma.registration.create({
+      data: {
+        eventId:          urbanEvent1.id,
+        organiserId:      urbanOrg.id,
+        athleteName:      name,
+        athleteEmail:     email,
+        category:         ((urbanEvent1.categories as string[] | null) ?? [])[i % 3],
+        waveLabel:        wave.label,
+        amountCents,
+        platformFeeCents: platformFeeCents(amountCents),
+        feeStructure:     "athlete",
+        status:           "CONFIRMED",
+        stripePaymentIntentId: `pi_melb_001_${i}`,
+      },
+    });
+  }
+  otherRegCount += melbAthletes.length;
+
+  // A few cancelled/refunded registrations on Apex Throwdown
+  const extraApexRegs = [
+    { name: "Nina Vasquez", email: "nina.vasquez@example.com", wave: "Early Bird", price: 95, status: "CANCELLED" as const },
+    { name: "Dylan Cross", email: "dylan.cross@example.com", wave: "General", price: 115, status: "REFUNDED" as const },
+    { name: "Aisha Kazemi", email: "aisha.kazemi@example.com", wave: "Late Entry", price: 135, status: "CONFIRMED" as const },
+    { name: "Oscar De Luca", email: "oscar.deluca@example.com", wave: "Early Bird", price: 95, status: "CONFIRMED" as const },
+  ];
+
+  for (let i = 0; i < extraApexRegs.length; i++) {
+    const r = extraApexRegs[i];
+    const amountCents = r.price * 100;
+    await prisma.registration.create({
+      data: {
+        eventId:          apexEvent1.id,
+        organiserId:      apexOrg.id,
+        athleteName:      r.name,
+        athleteEmail:     r.email,
+        waveLabel:        r.wave,
+        amountCents,
+        platformFeeCents: platformFeeCents(amountCents),
+        feeStructure:     "athlete",
+        status:           r.status,
+        stripePaymentIntentId: `pi_apex_extra_${i}`,
+      },
+    });
+  }
+  otherRegCount += extraApexRegs.length;
+
+  console.log(`  More registrations: ${otherRegCount} (Byron Bay, Melbourne Park Run, extra Apex)`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Athletes
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const athleteRecords = [
+    ...athleteNames.filter(n => !["Sarah Kovac", "Tom Rendell", "Brooke Mitchell", "Liam O'Connor"].includes(n)).map((n, i) => ({
+      cognitoSub: `seed-athlete-${String(i + 1).padStart(3, "0")}`,
+      email: n.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com",
+      name: n,
+    })),
+    ...byronAthletes.map((n, i) => ({
+      cognitoSub: `seed-byr-athlete-${String(i + 1).padStart(3, "0")}`,
+      email: n.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com",
+      name: n,
+    })),
+    ...melbAthletes.map((n, i) => ({
+      cognitoSub: `seed-mel-athlete-${String(i + 1).padStart(3, "0")}`,
+      email: n.toLowerCase().replace(/[^a-z]+/g, ".") + "@example.com",
+      name: n,
+    })),
+    {
+      cognitoSub: "50ea49ec-c112-4030-89aa-3b3b7c0f7184",
+      email: "sarah.kovac@example.com",
+      name: "Sarah Kovac",
+    },
+    {
+      cognitoSub: "9838910d-3f7d-4fa1-8298-f07edbb383b5",
+      email: "tom.rendell@example.com",
+      name: "Tom Rendell",
+    },
+    {
+      cognitoSub: "2139c6f4-1eb3-4334-ba46-08625e060d47",
+      email: "brooke.mitchell@example.com",
+      name: "Brooke Mitchell",
+    },
+    {
+      cognitoSub: "8e7e1ce2-7b91-4a59-97de-8f65a1bc0f90",
+      email: "liam.oconnor@example.com",
+      name: "Liam O'Connor",
+    },
+  ];
+
+  let athleteCount = 0;
+  for (const a of athleteRecords) {
+    await prisma.athlete.upsert({
+      where: { cognitoSub: a.cognitoSub },
+      update: {},
+      create: a,
+    });
+    athleteCount++;
+  }
+  console.log(`  Athletes: ${athleteCount}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Waitlist Subscribers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const waitlistEmails = [
+    "alex.turner@example.com", "bree.collins@example.com", "cameron.nguyen@example.com",
+    "dana.wilson@example.com", "eli.patel@example.com", "fatima.hassan@example.com",
+    "george.kim@example.com", "hannah.jones@example.com", "ivy.martin@example.com",
+    "jack.thompson@example.com", "kara.adams@example.com", "leo.robinson@example.com",
+    "maya.clarke@example.com", "nathan.wright@example.com", "olivia.lee@example.com",
+    "peter.silva@example.com", "quincy.ng@example.com", "rose.taylor@example.com",
+    "sam.anderson@example.com", "tara.murphy@example.com", "uma.jain@example.com",
+    "vince.costa@example.com", "willow.hall@example.com", "xander.ford@example.com",
+    "yuki.tanaka@example.com",
+  ];
+
+  let waitlistCount = 0;
+  for (const email of waitlistEmails) {
+    await prisma.waitlistSubscriber.upsert({
+      where: { email },
+      update: {},
+      create: { email },
+    });
+    waitlistCount++;
+  }
+  console.log(`  Waitlist subscribers: ${waitlistCount}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Notifications
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const apexNotifications = [
+    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"${apexEvent1.title}" has been approved and is now live on Startline.`, eventId: apexEvent1.id },
+    { type: "EVENT_REJECTED" as const, title: "Event rejected", body: `"${apexEvent5.title}" has been rejected: ${apexEvent5.rejectionReason}`, eventId: apexEvent5.id },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[0]} registered for "${apexEvent1.title}" — Early Bird.`, eventId: apexEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[1]} registered for "${apexEvent1.title}" — General.`, eventId: apexEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[2]} registered for "${apexEvent1.title}" — Late Entry.`, eventId: apexEvent1.id, read: true },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[3]} registered for "${apexEvent1.title}" — Early Bird.`, eventId: apexEvent1.id, read: true },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `Nina Vasquez cancelled their registration for "${apexEvent1.title}".`, eventId: apexEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "Registration refunded", body: `Dylan Cross was refunded for "${apexEvent1.title}".`, eventId: apexEvent1.id, read: true },
+  ];
+
+  const coastalNotifications = [
+    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"${coastalEvent1.title}" has been approved and is now live on Startline.`, eventId: coastalEvent1.id },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${byronAthletes[0]} registered for "${coastalEvent1.title}" — Early Bird.`, eventId: coastalEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${byronAthletes[1]} registered for "${coastalEvent1.title}" — Standard.`, eventId: coastalEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${byronAthletes[2]} registered for "${coastalEvent1.title}" — Early Bird.`, eventId: coastalEvent1.id, read: true },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${byronAthletes[3]} registered for "${coastalEvent1.title}" — Standard.`, eventId: coastalEvent1.id, read: true },
+    { type: "NEW_REGISTRATION" as const, title: "Registration cancelled", body: `${byronAthletes[6]} cancelled their registration for "${coastalEvent1.title}".`, eventId: coastalEvent1.id, read: false },
+  ];
+
+  const urbanNotifications = [
+    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"${urbanEvent1.title}" has been approved and is now live on Startline.`, eventId: urbanEvent1.id },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${melbAthletes[0]} registered for "${urbanEvent1.title}" — Early Bird.`, eventId: urbanEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${melbAthletes[1]} registered for "${urbanEvent1.title}" — Standard.`, eventId: urbanEvent1.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${melbAthletes[2]} registered for "${urbanEvent1.title}" — Early Bird.`, eventId: urbanEvent1.id, read: true },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${melbAthletes[3]} registered for "${urbanEvent1.title}" — Standard.`, eventId: urbanEvent1.id, read: true },
+  ];
+
+  const generalApexNotifications = [
+    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"${apexEvent2.title}" has been reviewed — still pending final approval.`, eventId: apexEvent2.id },
+    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"${apexEvent3.title}" has been reviewed — still pending final approval.`, eventId: apexEvent3.id },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[4]} registered for "${apexEvent2.title}" — General Entry.`, eventId: apexEvent2.id, read: false },
+    { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[5]} registered for "${apexEvent3.title}" — Early Bird.`, eventId: apexEvent3.id, read: false },
+  ];
+
+  let notifCount = 0;
+  const allNotifications = [
+    ...apexNotifications.map(n => ({ ...n, organiserId: apexOrg.id })),
+    ...coastalNotifications.map(n => ({ ...n, organiserId: coastalOrg.id })),
+    ...urbanNotifications.map(n => ({ ...n, organiserId: urbanOrg.id })),
+    ...generalApexNotifications.map(n => ({ ...n, organiserId: apexOrg.id })),
+  ];
+
+  for (let i = 0; i < allNotifications.length; i++) {
+    const n = allNotifications[i];
+    await prisma.notification.create({
+      data: {
+        organiserId: n.organiserId,
+        type:        n.type,
+        title:       n.title,
+        body:        n.body,
+        eventId:     n.eventId,
+        read:        "read" in n ? n.read : true,
+        createdAt:   new Date(Date.now() - (allNotifications.length - i) * 3600000),
+      },
+    });
+    notifCount++;
+  }
+  console.log(`  Notifications: ${notifCount}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Announcements
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const apexAnnouncements = [
+    { title: "Workout 1 released!", body: "Check your athlete portal — Workout 1 details are now live. 3 rounds for time: 400m run, 21 KB swings (24/16kg), 12 pull-ups." },
+    { title: "Vendor expo lineup confirmed", body: "We're excited to announce our vendor partners: Primal Supplements, FITAID Australia, and WIT Fitness will all have pop-up stores at the event." },
+    { title: "Parking update", body: "Additional parking has been secured at Albert Park College (5 min walk). Look for the Startline signage on Danks Street." },
+    { title: "Heat assignments posted", body: "Heat assignments for Saturday are now available. Log in to your athlete dashboard to see your start times." },
+    { title: "Volunteer callout", body: "We still need 8 more volunteers for Sunday. Free event merch + lunch included. Reply to this announcement if you can help!" },
+    { title: "Live stream confirmed", body: "We're live streaming the Elite division finals on YouTube. Link will be shared 24 hours before the event. Tell your friends and family!" },
+  ];
+
+  const coastalAnnouncements = [
+    { title: "Course preview video", body: "Drive through of the 21km course is now up on our Instagram. Check the highlights for key sections and aid station locations." },
+    { title: "Bib pickup locations", body: "Early bib pickup available Friday 2-6pm at Byron Bay Surf Club. Race day pickup opens at 5:30am at the start line." },
+    { title: "Weather update", body: "Forecast is looking great — 18°C and partly cloudy. Perfect running conditions. Remember to still bring a rain jacket just in case!" },
+  ];
+
+  const urbanAnnouncements = [
+    { title: "Road closure notice", body: "Please note: St Kilda Road will be partially closed between 7am-11am. Plan your route to the venue accordingly. Check the event page for a detour map." },
+    { title: "Kids dash registration", body: "Free registration is now open for the Kids 1km Dash. Limited to 150 spots. Parents must accompany children under 6." },
+    { title: "Post-run recovery zone", body: "New this year: a recovery zone with foam rollers, stretching mats, and free electrolyte refills courtesy of our partners." },
+    { title: "Volunteer shout-out", body: "Huge thanks to our 45 volunteers who've signed up so far. We still need 10 more course marshals — free event entry for next year if you volunteer!" },
+  ];
+
+  const hybridAnnouncements = [
+    { title: "Athlete guide now available", body: "The full athlete guide for Hybrid Hustle Round 3 has been published. Download it from the event page or your registration confirmation email." },
+    { title: "Gear checklist", body: "Reminder: you'll need trail shoes, gloves for obstacle sections, and a hydration vest. No aid stations on the trail section (km 3-7)." },
+  ];
+
+  const crossfitAnnouncements = [
+    { title: "Affiliate Cup format", body: "Affiliate Cup teams are M-M-F format. All athletes must have current CrossFit membership. Registration closes 2 weeks before the event." },
+    { title: "Early bird extended", body: "Early bird pricing has been extended until August 1st due to popular demand. Lock in your spot at the lower rate!" },
+  ];
+
+  const teamThrowdownAnnouncements = [
+    { title: "Venue shortlist", body: "We're currently evaluating two venues in Western Sydney. Decision expected within 2 weeks — watch this space." },
+  ];
+
+  const sydneyHarbourAnnouncements = [
+    { title: "Course certification pending", body: "The 10km course is currently being measured and certified by Athletics Australia. We expect confirmation within 3 weeks." },
+    { title: "Race day schedule", body: "Proposed schedule: 6:00am bib pickup, 6:45am warm-up, 7:00am race start. Waves will be released in 5-minute intervals by predicted pace." },
+  ];
+
+  const announcementGroups: { eventId: string; organiserId: string; items: { title: string; body: string }[] }[] = [
+    { eventId: apexEvent1.id, organiserId: apexOrg.id, items: apexAnnouncements },
+    { eventId: coastalEvent1.id, organiserId: coastalOrg.id, items: coastalAnnouncements },
+    { eventId: urbanEvent1.id, organiserId: urbanOrg.id, items: urbanAnnouncements },
+    { eventId: apexEvent2.id, organiserId: apexOrg.id, items: hybridAnnouncements },
+    { eventId: apexEvent3.id, organiserId: apexOrg.id, items: crossfitAnnouncements },
+    { eventId: apexEvent4.id, organiserId: apexOrg.id, items: teamThrowdownAnnouncements },
+    { eventId: coastalEvent2.id, organiserId: coastalOrg.id, items: sydneyHarbourAnnouncements },
+  ];
+
+  let announcementCount = 0;
+  for (const group of announcementGroups) {
+    for (let i = 0; i < group.items.length; i++) {
+      await prisma.announcement.create({
+        data: {
+          eventId:     group.eventId,
+          organiserId: group.organiserId,
+          title:       group.items[i].title,
+          body:        group.items[i].body,
+          createdAt:   new Date(Date.now() - (group.items.length - i) * 86400000),
+        },
+      });
+      announcementCount++;
+    }
+  }
+  console.log(`  Announcements: ${announcementCount}`);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // More reviews (spread across organisers and events)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const newReviews = [
+    { organisers: apexOrg, event: apexEvent1, reviewerName: "Mia Fontaine", title: "Brilliant event, will be back", body: "Third year doing Apex Throwdown and this was the best one yet. Heat assignments were smooth, judging was consistent, and the after-party was a blast.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: apexOrg, event: apexEvent1, reviewerName: "Jack Donovan", title: "Great comp, tough workouts", body: "Workouts were brutal but fair. Only complaint: the warm-up area was a bit cramped. Otherwise top notch.", overallRating: 4, communicationRating: 5, organisationRating: 4, experienceRating: 4, isVerified: true },
+    { organisers: coastalOrg, event: coastalEvent1, reviewerName: "Rory McIntyre", title: "Best trail event on the east coast", body: "The Byron Bay course was breathtaking. Well marked, great aid stations, and the post-race breakfast was delicious.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: coastalOrg, event: coastalEvent1, reviewerName: "Tessa Nguyen", title: "Perfect morning on the trails", body: "Great organisation from start to finish. The volunteers were so encouraging. Already signed up for next year.", overallRating: 5, communicationRating: 4, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: coastalOrg, event: coastalEvent1, reviewerName: "Haruki Sato", title: "Beautiful but challenging", body: "The half marathon course was tougher than expected with those hills in the middle section. Still a fantastic event.", overallRating: 4, communicationRating: 5, organisationRating: 4, experienceRating: 4, isVerified: true },
+    { organisers: urbanOrg, event: urbanEvent1, reviewerName: "Angus McDonald", title: "Great family event", body: "Brought the whole family. Kids did the 1km dash, wife and I did the 10k. Well organised, great atmosphere, love the post-race recovery zone.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: urbanOrg, event: urbanEvent1, reviewerName: "Isabella Torres", title: "Loved the city course", body: "Running through the Royal Botanic Gardens at sunrise was magical. Organisation was smooth and the medal is gorgeous.", overallRating: 5, communicationRating: 4, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: urbanOrg, event: urbanEvent1, reviewerName: "Raj Kapoor", title: "Solid event, minor suggestions", body: "Good event overall. Would love to see more drink stations on the 10k course (only 2 felt insufficient). Otherwise excellent.", overallRating: 4, communicationRating: 4, organisationRating: 4, experienceRating: 4, isVerified: true },
+    { organisers: apexOrg, event: apexEvent2, reviewerName: "Liam O'Connor", title: "Hybrid Hustle keeps getting better", body: "Round 3 delivered. The trail section through the Dandenongs was epic. The surprise workout at the end was a killer but loved every minute.", overallRating: 5, communicationRating: 5, organisationRating: 4, experienceRating: 5, isVerified: true },
+    { organisers: apexOrg, event: apexEvent2, reviewerName: "Noah Pereira", title: "Perfect blend of running and fitness", body: "As someone who does both CrossFit and trail running, this event was basically made for me. Highly recommend to hybrid athletes.", overallRating: 4, communicationRating: 4, organisationRating: 4, experienceRating: 5, isVerified: true },
+    { organisers: apexOrg, event: apexEvent2, reviewerName: "Chloe Bennett", title: "Challenging but rewarding", body: "The obstacle crawls were way harder than they looked. Great community vibe throughout. Only docking a point for the limited parking.", overallRating: 4, communicationRating: 5, organisationRating: 3, experienceRating: 4, isVerified: true },
+    { organisers: apexOrg, event: apexEvent3, reviewerName: "Ethan Walsh", title: "Beach CrossFit at its best", body: "The Broadbeach location was incredible. Workouts were well programmed and the live DJ kept the energy up all day.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: apexOrg, event: apexEvent3, reviewerName: "Brooke Mitchell", title: "Great comp, amazing community", body: "First time at Coastline CrossFit Classic and it exceeded expectations. The affiliate cup format was a ton of fun. Definitely coming back.", overallRating: 5, communicationRating: 4, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: apexOrg, event: apexEvent3, reviewerName: "Daniel Cho", title: "Solid programming", body: "Workouts were well balanced across modalities. Judging was fair across all heats. The post-event drinks were a nice touch.", overallRating: 4, communicationRating: 4, organisationRating: 4, experienceRating: 4, isVerified: true },
+    { organisers: apexOrg, reviewerName: "Emma Whitfield", title: "Great organiser, consistently excellent events", body: "I've done three Apex events now and they never disappoint. James and his team really know how to run a comp.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, isVerified: true },
+    { organisers: coastalOrg, reviewerName: "Maya Patel", title: "Coastal Trail Running sets the standard", body: "Sarah's events are always impeccably organised. The course markings are clear, volunteers are friendly, and the scenery is always stunning.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, isVerified: true },
+  ];
+
+  const existingReviewCount = 4;
+  for (let i = 0; i < newReviews.length; i++) {
+    const r = newReviews[i];
+    await prisma.review.upsert({
+      where:  { id: `seed-review-${String(existingReviewCount + i + 1).padStart(3, "0")}` },
+      update: {},
+      create: {
+        id:              `seed-review-${String(existingReviewCount + i + 1).padStart(3, "0")}`,
+        organiserId:     r.organisers.id,
+        eventId:         "event" in r ? r.event?.id : undefined,
+        eventTitle:      "event" in r ? r.event?.title : undefined,
+        reviewerName:    r.reviewerName,
+        title:           r.title,
+        body:            r.body,
+        overallRating:   r.overallRating,
+        communicationRating: r.communicationRating,
+        organisationRating:  r.organisationRating,
+        experienceRating:    r.experienceRating,
+        isVerified:      r.isVerified,
+      },
+    });
+  }
+  const newReviewCount = newReviews.length;
+  console.log(`  More reviews: ${newReviewCount} (${newReviewCount + 4} total)`);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Summary
   // ─────────────────────────────────────────────────────────────────────────
 
   console.log(`
 ✅ Seed complete.
 
-Dev bypass login emails:
-  ${SEED_ORGANISER_EMAIL}  (Apex Endurance Events — 5 events, 24 registrations)
-  ${COASTAL_ORG_EMAIL}     (Coastal Trail Running — 3 events)
-  ${URBAN_ORG_EMAIL}       (Urban Fitness Events — 2 events)
+  Organisers:          3
+  Events:             10
+  Registrations:     ~44  (across 3 events)
+  Reviews:           ~20
+  Athletes:          ${athleteCount}
+  Waitlist subscribers: ${waitlistCount}
+  Notifications:     ${notifCount}
+  Announcements:     ${announcementCount}
+
+Dev login emails (password: Password123!):
+  test.organiser@startlineau.com     (Apex Endurance Events — 5 events)
+  hello@coastaltrailrunning.com.au   (Coastal Trail Running — 3 events)
+  info@urbanfitnessevents.com.au     (Urban Fitness Events — 2 events)
+  admin@startlineau.com              (Admin)
+  sarah.kovac@example.com            (Athlete)
+  tom.rendell@example.com            (Athlete)
+  brooke.mitchell@example.com        (Athlete)
+  liam.oconnor@example.com           (Athlete)
 `);
 }
 

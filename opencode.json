@@ -9,10 +9,6 @@
       "type": "local",
       "command": ["bash", "-c", "export $(grep RESEND_API_KEY .env | xargs) && exec npx -y resend-mcp"]
     },
-    "playwright": {
-      "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp"]
-    },
     "aws": {
       "type": "local",
       "command": ["uvx", "awslabs.aws-api-mcp-server@latest"],

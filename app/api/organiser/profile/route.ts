@@ -20,15 +20,6 @@ export async function GET() {
     });
 
     if (!organiser) {
-      if (process.env.NODE_ENV === "development") {
-        return NextResponse.json({
-          id: session.sub, email: session.email, status: "APPROVED",
-          orgName: null, contactName: null, contactEmail: null, phone: null,
-          abn: null, website: null, instagram: null, facebook: null, bio: null, logoUrl: null,
-          legalName: null, insuranceDeclared: false, dob: null,
-          stripeAccountId: null, stripeOnboardingComplete: false,
-        });
-      }
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
 

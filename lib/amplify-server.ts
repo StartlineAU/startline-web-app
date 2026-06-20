@@ -1,8 +1,8 @@
 import { createServerRunner } from "@aws-amplify/adapter-nextjs";
-import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth/server";
+import { fetchAuthSession } from "aws-amplify/auth/server";
 import type { AuthSession } from "aws-amplify/auth";
-import type { GetCurrentUserOutput } from "aws-amplify/auth";
 import { cookies } from "next/headers";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 import { amplifyConfig } from "./amplify-config";
 import prisma from "./prisma";
 
@@ -34,35 +34,60 @@ export type AdminSession = {
   name:  string | null;
 };
 
+// ── JWKS setup (same as middleware) ──────────────────────────────────────────
+
+const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
+const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
+const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
+const cognitoEndpoint = process.env.COGNITO_SERVER_ENDPOINT
+  ?? process.env.NEXT_PUBLIC_COGNITO_ENDPOINT;
+
+const isLocalCognito = !!cognitoEndpoint;
+
+const jwksBase = isLocalCognito
+  ? `${cognitoEndpoint}/${userPoolId}`
+  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+
+const issuer = isLocalCognito
+  ? `${cognitoEndpoint}/${userPoolId}`
+  : `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${jwksBase}/.well-known/jwks.json`)
+);
+
+// ── Server session (direct JWT verification, bypasses Amplify server-side) ───
+
 export async function getServerSession(): Promise<ServerSession | null> {
   try {
     const cookieStore = await cookies();
-    const cookieFn = () => Promise.resolve(cookieStore);
 
-    const session = await runWithAmplifyServerContext({
-      nextServerContext: { cookies: cookieFn },
-      operation: (contextSpec) => fetchAuthSession(contextSpec),
-    }) as AuthSession;
+    const lastAuthUser = cookieStore.get(
+      `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
+    )?.value;
+    if (!lastAuthUser) return null;
 
-    if (!session.tokens?.accessToken) return null;
+    const accessToken = cookieStore.get(
+      `CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`
+    )?.value;
+    if (!accessToken) return null;
 
-    const groups =
-      (session.tokens.accessToken.payload["cognito:groups"] as string[] | undefined) ?? [];
+    const { payload } = await jwtVerify(accessToken, JWKS, {
+      issuer,
+      audience: undefined,
+    });
 
-    const user = await runWithAmplifyServerContext({
-      nextServerContext: { cookies: cookieFn },
-      operation: (contextSpec) => getCurrentUser(contextSpec),
-    }) as GetCurrentUserOutput;
+    const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
+    const sub   = payload.sub as string;
+    const email = lastAuthUser; // from the LastAuthUser cookie (set by Amplify to the user's email)
 
-    return {
-      sub:   user.userId,
-      email: user.signInDetails?.loginId ?? "",
-      groups,
-    };
+    return { sub, email, groups };
   } catch {
     return null;
   }
 }
+
+// ── Specialised sessions ─────────────────────────────────────────────────────
 
 export async function getAthleteSession(): Promise<AthleteSession | null> {
   const cognitoSession = await getServerSession();
@@ -88,7 +113,7 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
     const organiser = await prisma.organiser.upsert({
       where:  { cognitoSub: cognitoSession.sub },
       update: {},
-      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email, status: "APPROVED" },
+      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email, status: "APPROVED", orgName: cognitoSession.email, abn: "", photos: [] },
       select: { id: true, email: true, status: true },
     });
     return { sub: organiser.id, email: organiser.email, status: String(organiser.status) };

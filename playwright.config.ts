@@ -10,7 +10,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://localhost:3002",
     trace: "on-first-retry",
   },
   projects: [
@@ -22,9 +22,9 @@ export default defineConfig({
   webServer: process.env.CI
     ? undefined
     : {
-        command: "pnpm dev",
-        url: "http://localhost:3000",
+        command: "pnpm dev -p 3002",
+        url: "http://localhost:3002/admin/login",
         reuseExistingServer: true,
-        timeout: 60000,
+        timeout: 90000,
       },
 });

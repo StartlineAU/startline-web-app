@@ -4,11 +4,7 @@ import { useEffect } from "react";
 import { Amplify } from "aws-amplify";
 import { amplifyConfig } from "@/lib/amplify-config";
 
-const hasCognitoConfig = !!process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
-
-if (hasCognitoConfig) {
-  Amplify.configure(amplifyConfig, { ssr: true });
-}
+Amplify.configure(amplifyConfig, { ssr: true });
 
 const CURRENT_CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? "";
 
