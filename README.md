@@ -4,94 +4,64 @@
 
 StartLine helps performance-driven fitness individuals discover competitive events across Australia. Find fitness racing, CrossFit competitions, running races, and hybrid fitness events in one place.
 
-## Features
-
-- **Event Discovery**: Browse upcoming competitions sorted by date
-- **Smart Filtering**: Filter by event type, state, date range, and format (individual/team)
-- **Australia-Wide Coverage**: Events across NSW, VIC, QLD, WA, SA, TAS, ACT, NT
-- **Direct Registration**: Links directly to official event registration pages
-- **Dark Theme**: Clean, athletic design optimised for serious competitors
-
-## Event Types
-
-- **Fitness Racing** - Functional fitness racing events
-- **CrossFit** - CrossFit competitions and throwdowns
-- **Running** - 5K to marathon distance races
-- **Hybrid** - Functional fitness and obstacle course events
-
 ## Tech Stack
 
-- **Framework**: Next.js 15 with App Router
+- **Framework**: Next.js 15 (App Router) with Turbopack
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
+- **Database**: PostgreSQL 15 + Prisma ORM
+- **Auth**: AWS Cognito with JWT (jose)
+- **Payments**: Stripe Connect Express
+- **Email**: Resend (transactional) + Mailpit (local dev)
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Hosting**: AWS Amplify
+- **Infrastructure**: Terraform
+
+## Architecture
+
+Three portals, domain-routed in production:
+- **startlineau.com** — public event browsing
+- **organiser.startlineau.com** — event management
+- **Admin** — approval workflow, organiser management
 
 ## Getting Started
 
+**Prerequisites:** Docker, pnpm
+
 ```bash
+# Start infrastructure (PostgreSQL + Mailpit)
+docker compose up -d postgres mailpit
+
 # Install dependencies
 pnpm install
 
+# Apply database migrations
+pnpm prisma:migrate
+
+# Seed test data (creates Cognito users + DB records)
+pnpm prisma:seed
+
 # Run development server
 pnpm dev
-
-# Build for production
-pnpm build
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to view the site.
 
-## Project Structure
+## Scripts
 
-```
-startingline/
-├── app/
-│   ├── layout.tsx       # Root layout
-│   ├── page.tsx         # Home page
-│   └── events/
-│       └── page.tsx     # Events listing
-├── components/
-│   ├── Header.tsx       # Navigation
-│   ├── Footer.tsx       # Footer
-│   ├── Hero.tsx         # Hero section
-│   ├── FilterSidebar.tsx # Filters
-│   ├── EventCard.tsx    # Event cards
-│   └── EventList.tsx    # Event grid/list
-├── data/
-│   └── events.json      # Event data
-├── types/
-│   └── index.ts         # TypeScript types
-└── lib/
-    └── utils.ts         # Helper functions
-```
+| Command | Description |
+|---|---|
+| `pnpm dev` | Start Next.js dev server (Turbopack) |
+| `pnpm build` | Production build (standalone output) |
+| `pnpm lint` | ESLint |
+| `pnpm test` | Vitest unit tests |
+| `pnpm test:e2e` | Playwright e2e tests |
+| `pnpm prisma:migrate` | Apply Prisma migrations |
+| `pnpm prisma:seed` | Seed Cognito + database |
 
-## Adding Events
+## Deployment
 
-Edit `data/events.json` to add competitions:
-
-```json
-{
-  "id": "unique-id",
-  "title": "Event Name",
-  "description": "Event description",
-  "date": "2026-03-15",
-  "time": "07:00",
-  "location": "Venue, City",
-  "city": "Sydney",
-  "state": "nsw",
-  "type": "fitness-racing",
-  "format": "both",
-  "level": "open",
-  "image": "/images/event.jpg",
-  "registrationUrl": "https://...",
-  "organizer": "Organizer Name",
-  "isOfficial": true
-}
-```
+See [docs/Deployment.md](docs/Deployment.md) for CI/CD, branch strategy, and environments.
 
 ## License
 
 MIT
-
-
-
