@@ -28,7 +28,7 @@ type SeedUser = {
 const SEED_USERS: SeedUser[] = [
   { email: "admin@startline.test",     isAdmin: true,  displayName: "Admin User" },
   { email: "organiser@startline.test",  isAdmin: false, displayName: "Test Organiser" },
-  { email: "customer@startline.test",   isAdmin: false, displayName: "Test Customer" },
+  { email: "user@startline.test",   isAdmin: false, displayName: "Test User" },
 ];
 
 async function ensureCognitoUsers(): Promise<void> {
@@ -108,7 +108,7 @@ async function main() {
   await prisma.notification.deleteMany();
   await prisma.event.deleteMany();
   await prisma.admin.deleteMany();
-  await prisma.customer.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.waitlistSubscriber.deleteMany();
   await prisma.organiser.deleteMany();
   console.log("  Cleared existing data");
@@ -126,15 +126,15 @@ async function main() {
   }
   console.log(`  Admins: ${adminRecords.length}`);
 
-  // ── Customers ────────────────────────────────────────────────────────
-  const customerBySub: Record<string, string> = {};
+  // ── Users ────────────────────────────────────────────────────────
+  const userBySub: Record<string, string> = {};
   for (const user of SEED_USERS) {
     const sub = subsByEmail[user.email];
     if (!sub) {
       console.warn(`  WARN: Cognito user not found for ${user.email} — skipping`);
       continue;
     }
-    const customer = await prisma.customer.upsert({
+    const record = await prisma.user.upsert({
       where: { cognitoSub: sub },
       update: {},
       create: {
@@ -144,20 +144,20 @@ async function main() {
         username: user.email.split("@")[0].replace(/[^a-z0-9_]/gi, "_").toLowerCase(),
       },
     });
-    customerBySub[sub] = customer.id;
+    userBySub[sub] = record.id;
   }
-  console.log(`  Customers: ${SEED_USERS.length}`);
+  console.log(`  Users: ${SEED_USERS.length}`);
 
   // ── Organiser ────────────────────────────────────────────────────────
   const orgSub = subsByEmail["organiser@startline.test"];
   let orgRecord: { id: string; email: string; orgName: string | null; instagram: string | null; facebook: string | null } | null = null;
 
   if (orgSub) {
-    const customerId = customerBySub[orgSub];
-    if (customerId) {
+    const userId = userBySub[orgSub];
+    if (userId) {
       orgRecord = await prisma.organiser.create({
         data: {
-          customerId,
+          userId,
           email: "organiser@startline.test",
           verified: true,
           status: "APPROVED",
@@ -518,7 +518,7 @@ async function main() {
 
   console.log("\n✅ Database seeding complete!");
   console.log(`   Password for all users: ${PASSWORD}`);
-  console.log("   Users: admin@startline.test, organiser@startline.test, customer@startline.test");
+  console.log("   Users: admin@startline.test, organiser@startline.test, user@startline.test");
 }
 
 main()

@@ -7,7 +7,7 @@ import {
   Search, ChevronDown, MapPin, Clock, Users, Calendar,
   ExternalLink, ArrowRight, X, SlidersHorizontal,
 } from "lucide-react";
-import type { CustomerEvent, FilterState, EventType, AustralianState, CompetitionFormat } from "@/types";
+import type { UserEvent, FilterState, EventType, AustralianState, CompetitionFormat } from "@/types";
 import {
   EVENT_TYPE_LABELS, STATE_LABELS, STATE_OPTIONS, EVENT_TYPE_OPTIONS,
   FORMAT_OPTIONS, DATE_RANGE_OPTIONS,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/utils";
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
-import { toCustomerEvents } from "@/lib/customer-events";
+import { toUserEvents } from "@/lib/user-events";
 
 interface FilterChipProps {
   label: string;
@@ -109,13 +109,13 @@ const DATE_CHIP_OPTIONS = [
 
 function EventsPageInner() {
   const router = useRouter();
-  const [allEvents, setAllEvents] = useState<CustomerEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<UserEvent[]>([]);
 
   useEffect(() => {
     fetch("/api/events")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setAllEvents(toCustomerEvents(data));
+        if (Array.isArray(data)) setAllEvents(toUserEvents(data));
       })
       .catch(() => {});
   }, []);

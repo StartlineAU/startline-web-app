@@ -188,7 +188,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
 
-      <main className="pt-16 page-in pb-24 lg:pb-0">
+      <main className="pt-14 page-in pb-24 lg:pb-0">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10">
 
           {/* Banner */}

@@ -173,7 +173,7 @@ function ForgotPasswordForm() {
   );
 }
 
-export default function CustomerForgotPasswordPage() {
+export default function UserForgotPasswordPage() {
   return (
     <Suspense>
       <ForgotPasswordForm />

@@ -3,17 +3,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Save, Heart, Calendar, MapPin, Clock, RefreshCw, Settings, Globe, Lock, Check, X, AlertCircle } from "lucide-react";
-import type { CustomerEvent } from "@/types";
+import type { UserEvent } from "@/types";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatMediumDate, formatTime } from "@/lib/utils";
 import { getSavedEventIds, getRegisteredEventIds } from "@/lib/client-lists";
-import { toCustomerEvents } from "@/lib/customer-events";
+import { toUserEvents } from "@/lib/user-events";
 import { useAuthContext } from "@/context/AuthContext";
 
 export default function ProfilePage() {
   const { user, status } = useAuthContext();
 
-  const [customerData, setCustomerData] = useState<{
+  const [userData, setUserData] = useState<{
     id: string; email: string; name: string | null;
     username: string | null; bio: string | null;
     profilePicUrl: string | null; isPublic: boolean;
@@ -39,7 +39,7 @@ export default function ProfilePage() {
 
     const val = editUsername.trim().toLowerCase();
 
-    if (!val || val === customerData?.username) {
+    if (!val || val === userData?.username) {
       setUsernameStatus("idle");
       setUsernameError("");
       return;
@@ -67,7 +67,7 @@ export default function ProfilePage() {
 
     checkTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/customer/profile/check-username?username=${encodeURIComponent(val)}`);
+        const res = await fetch(`/api/user/profile/check-username?username=${encodeURIComponent(val)}`);
         const data = await res.json();
         if (data.available) {
           setUsernameStatus("valid");
@@ -83,21 +83,21 @@ export default function ProfilePage() {
     }, 400);
 
     return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
-  }, [editUsername, customerData?.username]);
+  }, [editUsername, userData?.username]);
 
   // Saved/registered events (localStorage)
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [registeredIds, setRegisteredIds] = useState<string[]>([]);
-  const [events, setEvents] = useState<CustomerEvent[]>([]);
+  const [events, setEvents] = useState<UserEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
 
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
     try {
-      const res = await fetch("/api/customer/profile");
+      const res = await fetch("/api/user/profile");
       if (res.ok) {
         const data = await res.json();
-        setCustomerData(data);
+        setUserData(data);
         setEditName(data.name ?? "");
         setEditUsername(data.username ?? "");
         setEditBio(data.bio ?? "");
@@ -117,7 +117,7 @@ export default function ProfilePage() {
       setRegisteredIds(getRegisteredEventIds());
       const eventsRes = await fetch("/api/events");
       const eventsData = eventsRes.ok ? await eventsRes.json() : [];
-      setEvents(Array.isArray(eventsData) ? toCustomerEvents(eventsData) : []);
+      setEvents(Array.isArray(eventsData) ? toUserEvents(eventsData) : []);
     } catch {
       // silent
     } finally {
@@ -150,7 +150,7 @@ export default function ProfilePage() {
   const handleSaveProfile = async () => {
     setEditSaving(true);
     try {
-      const res = await fetch("/api/customer/profile", {
+      const res = await fetch("/api/user/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -162,7 +162,7 @@ export default function ProfilePage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setCustomerData((prev) => prev ? { ...prev, ...data } : prev);
+        setUserData((prev) => prev ? { ...prev, ...data } : prev);
         setEditing(false);
       }
     } catch {
@@ -173,7 +173,7 @@ export default function ProfilePage() {
   };
 
   const loading = profileLoading || eventsLoading;
-  const initial = customerData?.name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "A";
+  const initial = userData?.name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "A";
   const savedEvents = events.filter((e) => savedIds.includes(String(e.id)));
   const registeredEvents = events.filter((e) => registeredIds.includes(String(e.id)));
 
@@ -205,28 +205,28 @@ export default function ProfilePage() {
               ) : (
                 <>
                   <h1 className="font-headline text-2xl font-black italic tracking-tighter text-light">
-                    {customerData?.name ?? user?.email}
+                    {userData?.name ?? user?.email}
                   </h1>
-                  {customerData?.username && (
+                  {userData?.username && (
                     <p className="font-headline text-xs uppercase tracking-widest text-muted mt-0.5">
-                      @{customerData.username}
+                      @{userData.username}
                     </p>
                   )}
-                  {customerData?.bio && (
-                    <p className="text-muted text-sm mt-2 max-w-xl leading-relaxed">{customerData.bio}</p>
+                  {userData?.bio && (
+                    <p className="text-muted text-sm mt-2 max-w-xl leading-relaxed">{userData.bio}</p>
                   )}
                   <div className="flex items-center gap-4 mt-3">
                     <span className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted">
-                      {customerData?.isPublic ? (
+                      {userData?.isPublic ? (
                         <><Globe className="w-3 h-3 text-primary" /> Public profile</>
                       ) : (
                         <><Lock className="w-3 h-3 text-muted-dark" /> Private profile</>
                       )}
                     </span>
-                    {customerData?.organiser && (
+                    {userData?.organiser && (
                       <Link href="/organiser/dashboard"
                         className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-primary hover:underline">
-                        {customerData.organiser.orgName ?? "Organiser Dashboard"}
+                        {userData.organiser.orgName ?? "Organiser Dashboard"}
                       </Link>
                     )}
                   </div>
@@ -320,10 +320,10 @@ export default function ProfilePage() {
               <label className="font-headline text-[10px] uppercase tracking-widest text-muted-dark block mb-1">User ID</label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 font-mono text-[12px] text-muted bg-dark px-3 py-2 rounded-md truncate">
-                  {customerData?.id ?? ""}
+                  {userData?.id ?? ""}
                 </code>
                 <button
-                  onClick={() => navigator.clipboard.writeText(customerData?.id ?? "")}
+                  onClick={() => navigator.clipboard.writeText(userData?.id ?? "")}
                   className="font-headline text-[10px] uppercase tracking-widest text-primary hover:underline flex-shrink-0"
                 >
                   Copy

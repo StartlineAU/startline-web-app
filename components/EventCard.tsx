@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MapPin, Clock, Users, Calendar } from "lucide-react";
-import type { CustomerEvent } from "@/types";
+import type { UserEvent } from "@/types";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatMediumDate, formatShortDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
 import { getEventImage } from "@/lib/images";
@@ -8,7 +8,7 @@ import { getEventStatus } from "@/lib/event-status";
 import SaveEventButton from "./SaveEventButton";
 
 interface EventCardProps {
-  event: CustomerEvent;
+  event: UserEvent;
   variant?: "default" | "compact" | "list";
 }
 

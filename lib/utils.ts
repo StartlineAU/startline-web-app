@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
-import type { CustomerEvent, FilterState, AustralianState } from "@/types";
+import type { UserEvent, FilterState, AustralianState } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -46,9 +46,9 @@ function isOnOrAfterToday(dateString: string, today: Date): boolean {
 }
 
 export function filterEvents(
-  events: CustomerEvent[],
+  events: UserEvent[],
   filters: FilterState
-): CustomerEvent[] {
+): UserEvent[] {
   const today = startOfDay(new Date());
 
   return events.filter((event) => {
@@ -84,19 +84,19 @@ export function filterEvents(
   });
 }
 
-export function sortEventsByDate(events: CustomerEvent[]): CustomerEvent[] {
+export function sortEventsByDate(events: UserEvent[]): UserEvent[] {
   return [...events].sort(
     (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
   );
 }
 
-export function getUpcomingEvents(events: CustomerEvent[], limit = 10): CustomerEvent[] {
+export function getUpcomingEvents(events: UserEvent[], limit = 10): UserEvent[] {
   const today = startOfDay(new Date());
   const upcoming = events.filter((e) => isOnOrAfterToday(e.date, today));
   return sortEventsByDate(upcoming).slice(0, limit);
 }
 
-export function getEventsByState(events: CustomerEvent[]): Record<AustralianState, number> {
+export function getEventsByState(events: UserEvent[]): Record<AustralianState, number> {
   const today = startOfDay(new Date());
   const counts: Record<AustralianState, number> = {
     nsw: 0, vic: 0, qld: 0, wa: 0, sa: 0, tas: 0, act: 0, nt: 0,
@@ -107,7 +107,7 @@ export function getEventsByState(events: CustomerEvent[]): Record<AustralianStat
   return counts;
 }
 
-export function getEventsByType(events: CustomerEvent[]): Record<string, number> {
+export function getEventsByType(events: UserEvent[]): Record<string, number> {
   const today = startOfDay(new Date());
   const counts: Record<string, number> = { "fitness-racing": 0, crossfit: 0, running: 0, hybrid: 0 };
   for (const event of events) {
@@ -116,7 +116,7 @@ export function getEventsByType(events: CustomerEvent[]): Record<string, number>
   return counts;
 }
 
-export function getTotalUpcomingEvents(events: CustomerEvent[]): number {
+export function getTotalUpcomingEvents(events: UserEvent[]): number {
   const today = startOfDay(new Date());
   return events.filter((e) => isOnOrAfterToday(e.date, today)).length;
 }

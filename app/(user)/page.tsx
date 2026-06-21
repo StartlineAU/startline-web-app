@@ -4,7 +4,7 @@ import { EVENT_TYPE_LABELS } from "@/types";
 import { formatShortDate, truncateTitle } from "@/lib/utils";
 import { getEventImage, getCategoryImage } from "@/lib/images";
 import { getAllEvents } from "@/lib/events";
-import { toCustomerEvents } from "@/lib/customer-events";
+import { toUserEvents } from "@/lib/user-events";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
@@ -23,7 +23,7 @@ const EVENT_TYPE_ORDER = ["fitness-racing", "running", "crossfit", "hybrid"] as 
 
 export default async function Home() {
   const raw = await getAllEvents();
-  const events = toCustomerEvents(raw);
+  const events = toUserEvents(raw);
 
   const categories = CATEGORIES.map((c) => ({
     ...c,

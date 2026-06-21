@@ -143,7 +143,7 @@ function PaymentsContent() {
     return (
       <div className="min-h-screen bg-gray-50">
         <OrganiserTopBar />
-        <main className="pt-16">
+        <main className="pt-14">
           <div className="max-w-[760px] mx-auto px-6 py-16 text-center">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto" />
           </div>
@@ -159,7 +159,7 @@ function PaymentsContent() {
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
 
-      <main className="pt-16">
+      <main className="pt-14">
         <div className="max-w-[760px] mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 lg:pb-12 page-in">
 
           {/* Header */}

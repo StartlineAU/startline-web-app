@@ -215,7 +215,7 @@ export default function ListingsPage() {
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
 
-      <main className="pt-16">
+      <main className="pt-14">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 lg:pb-12 page-in">
 
           {/* Header */}

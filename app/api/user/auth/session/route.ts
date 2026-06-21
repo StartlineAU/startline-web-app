@@ -9,7 +9,7 @@ export async function POST() {
   }
 
   try {
-    await prisma.customer.upsert({
+    await prisma.user.upsert({
       where:  { cognitoSub: session.sub },
       update: { email: session.email },
       create: { cognitoSub: session.sub, email: session.email },
@@ -17,7 +17,7 @@ export async function POST() {
     });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("Customer session upsert error:", err);
+    console.error("User session upsert error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 }
