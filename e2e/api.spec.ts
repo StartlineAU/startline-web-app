@@ -15,8 +15,8 @@ test.describe("checkout API", () => {
       data: {
         eventId: "non-existent-id",
         waveLabel: "General",
-        customerName: "Test User",
-        customerEmail: "test@example.com",
+        userName: "Test User",
+        userEmail: "test@example.com",
         category: "Open",
       },
     });

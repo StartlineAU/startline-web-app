@@ -1,5 +1,5 @@
 // Kept for backward compatibility with lib/utils.ts filtering logic.
-// Customer-facing code uses CustomerEvent from index.ts instead.
+// User-facing code uses UserEvent from index.ts instead.
 
 export interface FitnessEvent {
   id: string;

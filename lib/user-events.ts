@@ -1,5 +1,5 @@
 import type { PublicEvent } from "@/lib/events";
-import type { CustomerEvent, TicketDrop, EventType, AustralianState } from "@/types";
+import type { UserEvent, TicketDrop, EventType, AustralianState } from "@/types";
 import { getEventImage } from "@/lib/images";
 
 function mapDiscipline(discipline: string): EventType {
@@ -38,7 +38,7 @@ function lowestPrice(waves: unknown): number | null {
   return prices.length ? Math.min(...prices) : null;
 }
 
-export function toCustomerEvent(event: PublicEvent): CustomerEvent {
+export function toUserEvent(event: PublicEvent): UserEvent {
   const type = mapDiscipline(event.discipline);
   const waves = event.waves ?? [];
   const ticketDrops = parseWaves(waves);
@@ -73,6 +73,6 @@ export function toCustomerEvent(event: PublicEvent): CustomerEvent {
   };
 }
 
-export function toCustomerEvents(events: PublicEvent[]): CustomerEvent[] {
-  return events.map(toCustomerEvent);
+export function toUserEvents(events: PublicEvent[]): UserEvent[] {
+  return events.map(toUserEvent);
 }

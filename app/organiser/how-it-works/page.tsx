@@ -149,7 +149,7 @@ export default function HowItWorksPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
-      <main className="pt-16 page-in">
+      <main className="pt-14 page-in">
 
         {/* ── HERO ──────────────────────────────────────────────────────── */}
         <div className="bg-white border-b border-gray-200">

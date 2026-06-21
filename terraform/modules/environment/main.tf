@@ -247,7 +247,7 @@ resource "aws_cognito_user_pool_client" "web" {
 }
 
 resource "aws_cognito_user_group" "this" {
-  for_each     = toset(["admins", "customers"])
+  for_each     = toset(["admins", "users"])
   user_pool_id = aws_cognito_user_pool.this.id
   name         = each.key
 }

@@ -1,4 +1,4 @@
-import type { CustomerEvent } from "@/types";
+import type { UserEvent } from "@/types";
 
 export interface EventStatus {
   label: string;
@@ -7,7 +7,7 @@ export interface EventStatus {
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
-export function getEventStatus(event: CustomerEvent): EventStatus {
+export function getEventStatus(event: UserEvent): EventStatus {
   const daysUntil = Math.ceil(
     (new Date(event.date).getTime() - Date.now()) / MS_PER_DAY
   );

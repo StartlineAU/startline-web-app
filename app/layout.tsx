@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next";
 import { Inter, Chakra_Petch } from "next/font/google";
 import "./globals.css";
+import { NAVBAR_PATTERN } from "@/lib/navbar-pattern";
 
 const inter = Inter({
   subsets:  ["latin"],
@@ -91,6 +92,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body
         className={`${inter.variable} ${chakraPetch.variable} bg-dark-darker text-light font-sans antialiased`}
+        style={{
+          backgroundImage: `url("${NAVBAR_PATTERN}")`,
+          backgroundRepeat: "repeat",
+          backgroundSize: "400px 120px",
+          backgroundBlendMode: "overlay",
+        }}
       >
         {children}
       </body>

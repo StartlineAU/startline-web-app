@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCustomerSession } from "@/lib/amplify-server";
+import { getUserSession } from "@/lib/amplify-server";
 
 export async function POST(req: Request) {
-  const session = await getCustomerSession();
+  const session = await getUserSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
   }
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   }
 
   const existing = await prisma.organiser.findUnique({
-    where: { customerId: session.sub },
+    where: { userId: session.sub },
   });
   if (existing) {
     return NextResponse.json({ error: "You already have an organiser profile." }, { status: 409 });
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   try {
     const organiser = await prisma.organiser.create({
       data: {
-        customerId: session.sub,
+        userId: session.sub,
         email: session.email,
         orgName: orgName.trim(),
         verified: false,

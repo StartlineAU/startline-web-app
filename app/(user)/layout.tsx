@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import AmplifyProvider from "@/components/AmplifyProvider";
 import { AuthProvider } from "@/context/AuthContext";
 
-export default function CustomerLayout({ children }: { children: React.ReactNode }) {
+export default function UserLayout({ children }: { children: React.ReactNode }) {
   return (
     <AmplifyProvider>
       <AuthProvider>

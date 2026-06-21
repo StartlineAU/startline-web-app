@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, Clock, Calendar, ExternalLink } from "lucide-react";
 import { getAllEvents } from "@/lib/events";
-import { toCustomerEvent } from "@/lib/customer-events";
+import { toUserEvent } from "@/lib/user-events";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatEventDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
 import { getEventImage } from "@/lib/images";
@@ -26,7 +26,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const found = raw.find((e) => e.id === id);
   if (!found) notFound();
 
-  const event = toCustomerEvent(found);
+  const event = toUserEvent(found);
   const status = getEventStatus(event);
   const bannerUrl = getEventImage(event.type, event.id, 1200);
 

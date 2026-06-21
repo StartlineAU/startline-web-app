@@ -1937,7 +1937,7 @@ export default function NewListingPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
-      <div className="pt-16">
+      <div className="pt-14">
 
         <div className="anim-fade-slide">
           {/* Sticky header */}

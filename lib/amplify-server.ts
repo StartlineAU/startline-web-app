@@ -17,8 +17,8 @@ export type ServerSession = {
   groups: string[];
 };
 
-export type CustomerSession = {
-  sub:   string; // Prisma Customer.id
+export type UserSession = {
+  sub:   string; // Prisma User.id
   email: string;
   name:  string | null;
 };
@@ -93,18 +93,18 @@ export async function getServerSession(): Promise<ServerSession | null> {
   }
 }
 
-export async function getCustomerSession(): Promise<CustomerSession | null> {
+export async function getUserSession(): Promise<UserSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
 
   try {
-    const customer = await prisma.customer.upsert({
+    const user = await prisma.user.upsert({
       where:  { cognitoSub: cognitoSession.sub },
       update: { email: cognitoSession.email },
       create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
       select: { id: true, email: true, name: true },
     });
-    return { sub: customer.id, email: customer.email, name: customer.name };
+    return { sub: user.id, email: user.email, name: user.name };
   } catch {
     return null;
   }
@@ -115,13 +115,13 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
   if (!cognitoSession) return null;
 
   try {
-    const customer = await prisma.customer.findUnique({
+    const user = await prisma.user.findUnique({
       where: { cognitoSub: cognitoSession.sub },
     });
-    if (!customer) return null;
+    if (!user) return null;
 
     const organiser = await prisma.organiser.findUnique({
-      where:  { customerId: customer.id },
+      where:  { userId: user.id },
       select: { id: true, email: true, status: true, verified: true },
     });
     if (!organiser) return null;

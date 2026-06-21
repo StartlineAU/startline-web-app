@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect } from "vitest";
 import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, formatExperienceLevel, truncateTitle, filterEvents, sortEventsByDate, getUpcomingEvents, getTotalUpcomingEvents } from "@/lib/utils";
-import type { CustomerEvent, FilterState } from "@/types";
+import type { UserEvent, FilterState } from "@/types";
 
 describe("cn", () => {
   it("merges class names", () => {
@@ -89,9 +89,9 @@ describe("truncateTitle", () => {
 describe("sortEventsByDate", () => {
   it("sorts events by date ascending", () => {
     const events = [
-      { date: "2026-07-15" } as CustomerEvent,
-      { date: "2026-05-10" } as CustomerEvent,
-      { date: "2026-09-01" } as CustomerEvent,
+      { date: "2026-07-15" } as UserEvent,
+      { date: "2026-05-10" } as UserEvent,
+      { date: "2026-09-01" } as UserEvent,
     ];
     const sorted = sortEventsByDate(events);
     expect(sorted[0].date).toBe("2026-05-10");
@@ -101,10 +101,10 @@ describe("sortEventsByDate", () => {
 });
 
 describe("filterEvents", () => {
-  const baseEvents: CustomerEvent[] = [
-    { date: "2026-07-15", type: "fitness-racing", state: "nsw", format: "individual", title: "Sydney Fitness Race", city: "Sydney", location: "ICC Sydney" } as CustomerEvent,
-    { date: "2026-08-20", type: "crossfit", state: "vic", format: "team", title: "CrossFit Melbourne", city: "Melbourne", location: "Melbourne Arena" } as CustomerEvent,
-    { date: "2025-01-01", type: "running", state: "qld", format: "individual", title: "Old Event", city: "Brisbane", location: "GABBA" } as CustomerEvent,
+  const baseEvents: UserEvent[] = [
+    { date: "2026-07-15", type: "fitness-racing", state: "nsw", format: "individual", title: "Sydney Fitness Race", city: "Sydney", location: "ICC Sydney" } as UserEvent,
+    { date: "2026-08-20", type: "crossfit", state: "vic", format: "team", title: "CrossFit Melbourne", city: "Melbourne", location: "Melbourne Arena" } as UserEvent,
+    { date: "2025-01-01", type: "running", state: "qld", format: "individual", title: "Old Event", city: "Brisbane", location: "GABBA" } as UserEvent,
   ];
 
   const emptyFilters: FilterState = { types: [], states: [], format: null, dateRange: "all", searchQuery: "" };
@@ -136,10 +136,10 @@ describe("filterEvents", () => {
 
 describe("getUpcomingEvents", () => {
   it("returns events sorted and limited", () => {
-    const events: CustomerEvent[] = [
-      { date: "2026-10-10" } as CustomerEvent,
-      { date: "2026-07-01" } as CustomerEvent,
-      { date: "2026-12-25" } as CustomerEvent,
+    const events: UserEvent[] = [
+      { date: "2026-10-10" } as UserEvent,
+      { date: "2026-07-01" } as UserEvent,
+      { date: "2026-12-25" } as UserEvent,
     ];
     const result = getUpcomingEvents(events, 2);
     expect(result).toHaveLength(2);
@@ -149,9 +149,9 @@ describe("getUpcomingEvents", () => {
 
 describe("getTotalUpcomingEvents", () => {
   it("counts only future events", () => {
-    const events: CustomerEvent[] = [
-      { date: "2026-10-10" } as CustomerEvent,
-      { date: "2020-01-01" } as CustomerEvent,
+    const events: UserEvent[] = [
+      { date: "2026-10-10" } as UserEvent,
+      { date: "2020-01-01" } as UserEvent,
     ];
     expect(getTotalUpcomingEvents(events)).toBe(1);
   });

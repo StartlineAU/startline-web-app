@@ -8,7 +8,7 @@ interface PublicProfilePageProps {
 async function getProfile(username: string) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
   try {
-    const res = await fetch(`${baseUrl}/api/customer/profile/${username}`, {
+    const res = await fetch(`${baseUrl}/api/user/profile/${username}`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
