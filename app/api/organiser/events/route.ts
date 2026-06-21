@@ -48,11 +48,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const eventStatus = submit
+    ? (session.verified ? "APPROVED" : "PENDING")
+    : "DRAFT";
+
   try {
     const event = await prisma.event.create({
       data: {
         organiserId:      session.sub,
-        status:           submit ? "PENDING" : "DRAFT",
+        status:           eventStatus,
         title:            body.title,
         discipline:       body.discipline        ?? "",
         tagline:          body.tagline           ?? null,

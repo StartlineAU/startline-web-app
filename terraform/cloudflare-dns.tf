@@ -11,11 +11,11 @@ resource "cloudflare_zone" "primary" {
 # ===== Microsoft 365 / Outlook =====
 
 resource "cloudflare_record" "mx" {
-  zone_id = cloudflare_zone.primary.id
-  name    = "startlineau.com"
-  type    = "MX"
-  ttl     = 3600
-  content = "startlineau-com.mail.protection.outlook.com"
+  zone_id  = cloudflare_zone.primary.id
+  name     = "startlineau.com"
+  type     = "MX"
+  ttl      = 3600
+  content  = "startlineau-com.mail.protection.outlook.com"
   priority = 0
 }
 

@@ -494,15 +494,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
           </>
         )}
 
-        {/* Organiser link */}
-        {view !== "onboarding" && (
-          <div className="mt-4 pt-4 border-t border-dark-lighter text-center">
-            <p className="font-headline text-[12px] uppercase tracking-widest text-muted">
-              Organiser?{" "}
-              <Link href="/organiser" onClick={onClose} className="text-primary hover:underline">Organisers sign in here</Link>
-            </p>
-          </div>
-        )}
+
       </div>
     </div>,
     document.body

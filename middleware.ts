@@ -64,13 +64,13 @@ export async function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
 
   if (host === ORGANISER_DOMAIN) {
-    if (pathname === "/") {
-      return NextResponse.rewrite(new URL("/organiser", req.url));
+    if (pathname === "/" || pathname === "/organiser") {
+      return NextResponse.rewrite(new URL("/organiser-landing", req.url));
     }
 
     if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
       const payload = await getVerifiedPayload(req);
-      if (!payload) return NextResponse.redirect(new URL("/organiser", req.url));
+      if (!payload) return NextResponse.redirect(new URL("https://startlineau.com"));
       return NextResponse.next();
     }
 
@@ -90,14 +90,19 @@ export async function middleware(req: NextRequest) {
       !pathname.startsWith("/images") &&
       !pathname.startsWith("/favicon")
     ) {
-      return NextResponse.redirect(new URL("/organiser", req.url));
+      return NextResponse.redirect(new URL("https://startlineau.com"));
     }
 
     return NextResponse.next();
   }
 
   if (host === CUSTOMER_DOMAIN || host === `www.${CUSTOMER_DOMAIN}`) {
-    if (pathname.startsWith("/organiser") || pathname.startsWith("/admin")) {
+    if (pathname.startsWith("/admin")) {
+      return NextResponse.redirect(
+        `https://${ORGANISER_DOMAIN}${pathname}${req.nextUrl.search}`
+      );
+    }
+    if (pathname.startsWith("/organiser/") && !pathname.startsWith("/organiser-setup")) {
       return NextResponse.redirect(
         `https://${ORGANISER_DOMAIN}${pathname}${req.nextUrl.search}`
       );
@@ -105,9 +110,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname === "/organiser" || pathname === "/organiser-landing") {
+    return NextResponse.rewrite(new URL("/organiser-landing", req.url));
+  }
+
   if (ORGANISER_PROTECTED.some((p) => pathname.startsWith(p))) {
     const payload = await getVerifiedPayload(req);
-    if (!payload) return NextResponse.redirect(new URL("/organiser", req.url));
+    if (!payload) return NextResponse.redirect(new URL("/", req.url));
     return NextResponse.next();
   }
 

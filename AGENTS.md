@@ -4,8 +4,8 @@
 
 Startline is a Next.js 15 (App Router) fitness event discovery platform with three portals:
 
-- **Customer site** (`(customer)/`) — public event browsing at `startlineau.com`
-- **Organiser portal** (`organiser/`) — event management at `organiser.startlineau.com`
+- **Customer site** (`(customer)/`) — public event browsing at `startlineau.com`. All users sign in here first.
+- **Organiser portal** (`organiser/`) — event management at `organiser.startlineau.com`. Accessed by switching from the customer dropdown (no standalone sign-in).
 - **Admin portal** (`admin/`) — approval workflow, organiser management
 
 ### Domain-based routing
@@ -14,27 +14,34 @@ Startline is a Next.js 15 (App Router) fitness event discovery platform with thr
 - `organiser.startlineau.com` → organiser portal (protects `/organiser/dashboard`, `/organiser/listings`, etc.)
 - `startlineau.com` → customer site (redirects `/organiser/*` and `/admin/*` to organiser subdomain)
 - Dev mode (`NODE_ENV=development`) skips all domain checks — everything runs at `localhost:3000`
+- Dev mode (`NODE_ENV=development`) skips all domain checks — everything runs at `localhost:3000`
 
 ### Auth (Cognito)
 
-Uses AWS Cognito with JWT verification in middleware via `jose`. Tokens are stored in Cognito-managed cookies. User roles are determined by Cognito groups: `admins`, `organisers`, `customers`.
+Uses AWS Cognito with JWT verification in middleware via `jose`. Tokens are stored in Cognito-managed cookies. The only Cognito group used for authorization is `admins` — non-admin users have no special group assignment. Authorisation is handled at the database level (Prisma).
 
-The non-production user pool (`ap-southeast-2_KBqIYXOWT`) is managed via Terraform in `terraform/modules/environment/main.tf`. Users are created/confirmed by `prisma/seed.ts` — it calls `AdminCreateUser` + `AdminSetUserPassword` + `AdminAddUserToGroup` for each seed user, then fetches their `sub` UUIDs dynamically via `ListUsers` + `ListUsersInGroup`.
+The non-production user pool (`ap-southeast-2_KBqIYXOWT`) is managed via Terraform in `terraform/modules/environment/main.tf`. Users are created/confirmed by `prisma/seed.ts` — it calls `AdminCreateUser` + `AdminSetUserPassword` for each seed user, plus `AdminAddUserToGroup` for the admin user only.
+
+### Account model
+
+Every platform user has a **Customer** record (created on first login). Customers can optionally create an **Organiser** profile (1:1 relation). Organiser profiles can be verified (auto-publish events) or unverified (events need admin approval). The organiser record stores business-specific fields (org name, ABN, Stripe Connect, etc.) while the Customer record stores personal profile data (name, bio, username, public/private toggle).
+
+See `lib/amplify-server.ts` for session helpers:
+- `getCustomerSession()` — upserts Customer by cognitoSub, returns `{ sub, email, name }`
+- `getOrganiserSession()` — looks up Customer → Organiser via customerId, returns `{ sub, email, status, verified }`
+- `getAdminSession()` — only if `admins` group, upserts Admin
 
 All seed users share password `Password123!`.
 
-| Email | Group |
+| Email | Notes |
 |---|---|
-| `admin@startlineau.com` | `admins` |
-| `test.organiser@startlineau.com` | `organisers` |
-| `hello@coastaltrailrunning.com.au` | `organisers` |
-| `info@urbanfitnessevents.com.au` | `organisers` |
-| `sarah.kovac@example.com` | `customers` |
-| `tom.rendell@example.com` | `customers` |
-| `brooke.mitchell@example.com` | `customers` |
-| `liam.oconnor@example.com` | `customers` |
+| `admin@startline.test` | Admin (added to `admins` Cognito group) |
+| `organiser@startline.test` | Customer + Organiser (Apex Endurance Events, verified) |
+| `customer@startline.test` | Customer only |
 
 Run `pnpm prisma:seed` to set up Cognito users + database seed data. Idempotent — safe to re-run.
+
+> Note: Old Cognito users from previous seeds are not automatically removed. To clean them up, delete from the Cognito pool manually or reset via Terraform.
 
 ### Database
 
