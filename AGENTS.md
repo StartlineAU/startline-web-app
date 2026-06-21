@@ -161,6 +161,10 @@ gh issue list --repo StartlineAU/startline
 gh pr list --repo StartlineAU/startline
 ```
 
+### PR conventions
+
+When creating a pull request, always scan open GitHub issues and link any that the PR resolves or relates to. Use `Closes #N`, `Fixes #N`, or `Related to #N` in the PR body.
+
 ### Issue conventions
 
 When creating GitHub issues, always:
