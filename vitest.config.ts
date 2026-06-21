@@ -4,7 +4,7 @@ import path from "path";
 export default defineConfig({
   test: {
     globals: true,
-    exclude: ["e2e", "node_modules", "video", ".next"],
+    exclude: ["e2e", "node_modules", "video", ".next", ".opencode"],
     env: {
       DATABASE_URL:
         process.env.DATABASE_URL ||

@@ -146,7 +146,7 @@ export default function EventStatusPage({
     return (
       <div className="min-h-screen bg-gray-50">
         <OrganiserTopBar />
-        <main className="pt-16">
+        <main className="pt-14">
           <div className="max-w-[900px] mx-auto px-6 py-16 text-center">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto" />
           </div>
@@ -159,7 +159,7 @@ export default function EventStatusPage({
     return (
       <div className="min-h-screen bg-gray-50">
         <OrganiserTopBar />
-        <main className="pt-16">
+        <main className="pt-14">
           <div className="max-w-[900px] mx-auto px-6 py-16 text-center">
             <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-3" />
             <div className="font-headline text-sm font-bold uppercase tracking-widest text-gray-500 mb-5">
@@ -184,7 +184,7 @@ export default function EventStatusPage({
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
 
-      <main className="pt-16">
+      <main className="pt-14">
         <div className="max-w-[900px] mx-auto px-6 py-8 pb-24 lg:pb-12 page-in">
 
           {/* ── Breadcrumb ── */}

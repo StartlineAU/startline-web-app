@@ -31,7 +31,7 @@ export interface TicketDrop {
   qty?: number;
 }
 
-export interface CustomerEvent {
+export interface UserEvent {
   id: string;
   title: string;
   description: string;

@@ -4,8 +4,8 @@
 
 Startline is a Next.js 15 (App Router) fitness event discovery platform with three portals:
 
-- **Customer site** (`(customer)/`) — public event browsing at `startlineau.com`. All users sign in here first.
-- **Organiser portal** (`organiser/`) — event management at `organiser.startlineau.com`. Accessed by switching from the customer dropdown (no standalone sign-in).
+- **User site** (`(user)/`) — public event browsing at `startlineau.com`. All users sign in here first.
+- **Organiser portal** (`organiser/`) — event management at `organiser.startlineau.com`. Accessed by switching from the user dropdown (no standalone sign-in).
 - **Admin portal** (`admin/`) — approval workflow, organiser management
 
 ### Domain-based routing
@@ -24,11 +24,11 @@ The non-production user pool (`ap-southeast-2_KBqIYXOWT`) is managed via Terrafo
 
 ### Account model
 
-Every platform user has a **Customer** record (created on first login). Customers can optionally create an **Organiser** profile (1:1 relation). Organiser profiles can be verified (auto-publish events) or unverified (events need admin approval). The organiser record stores business-specific fields (org name, ABN, Stripe Connect, etc.) while the Customer record stores personal profile data (name, bio, username, public/private toggle).
+Every platform user has a **User** record (created on first login). Users can optionally create an **Organiser** profile (1:1 relation). Organiser profiles can be verified (auto-publish events) or unverified (events need admin approval). The organiser record stores business-specific fields (org name, ABN, Stripe Connect, etc.) while the User record stores personal profile data (name, bio, username, public/private toggle).
 
 See `lib/amplify-server.ts` for session helpers:
-- `getCustomerSession()` — upserts Customer by cognitoSub, returns `{ sub, email, name }`
-- `getOrganiserSession()` — looks up Customer → Organiser via customerId, returns `{ sub, email, status, verified }`
+- `getUserSession()` — upserts User by cognitoSub, returns `{ sub, email, name }`
+- `getOrganiserSession()` — looks up User → Organiser via userId, returns `{ sub, email, status, verified }`
 - `getAdminSession()` — only if `admins` group, upserts Admin
 
 All seed users share password `Password123!`.
@@ -36,8 +36,8 @@ All seed users share password `Password123!`.
 | Email | Notes |
 |---|---|
 | `admin@startline.test` | Admin (added to `admins` Cognito group) |
-| `organiser@startline.test` | Customer + Organiser (Apex Endurance Events, verified) |
-| `customer@startline.test` | Customer only |
+| `organiser@startline.test` | User + Organiser (Apex Endurance Events, verified) |
+| `user@startline.test` | User only |
 
 Run `pnpm prisma:seed` to set up Cognito users + database seed data. Idempotent — safe to re-run.
 

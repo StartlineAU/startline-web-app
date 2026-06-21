@@ -29,7 +29,7 @@ const ADMIN_PROTECTED = [
   "/admin/reviews",
 ];
 
-const CUSTOMER_DOMAIN = "startlineau.com";
+const USER_DOMAIN = "startlineau.com";
 const ORGANISER_DOMAIN = "organiser.startlineau.com";
 
 async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> {
@@ -96,7 +96,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (host === CUSTOMER_DOMAIN || host === `www.${CUSTOMER_DOMAIN}`) {
+  if (host === USER_DOMAIN || host === `www.${USER_DOMAIN}`) {
     if (pathname.startsWith("/admin")) {
       return NextResponse.redirect(
         `https://${ORGANISER_DOMAIN}${pathname}${req.nextUrl.search}`

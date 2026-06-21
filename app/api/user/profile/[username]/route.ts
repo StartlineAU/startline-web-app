@@ -10,7 +10,7 @@ export async function GET(
     return NextResponse.json({ error: "Username is required." }, { status: 400 });
   }
 
-  const customer = await prisma.customer.findUnique({
+  const user = await prisma.user.findUnique({
     where:  { username },
     select: {
       id: true, name: true, username: true, bio: true,
@@ -27,13 +27,13 @@ export async function GET(
     },
   });
 
-  if (!customer) {
+  if (!user) {
     return NextResponse.json({ error: "Profile not found." }, { status: 404 });
   }
 
-  if (!customer.isPublic) {
+  if (!user.isPublic) {
     return NextResponse.json({ error: "This profile is private." }, { status: 403 });
   }
 
-  return NextResponse.json(customer);
+  return NextResponse.json(user);
 }

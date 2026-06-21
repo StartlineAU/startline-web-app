@@ -133,7 +133,7 @@ function VerifyEmailForm() {
   );
 }
 
-export default function CustomerVerifyEmailPage() {
+export default function UserVerifyEmailPage() {
   return (
     <Suspense>
       <VerifyEmailForm />

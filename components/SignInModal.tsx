@@ -86,12 +86,12 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
         setError("Additional verification required. Please contact support."); return;
       }
 
-      await fetch("/api/customer/auth/session", { method: "POST" });
+      await fetch("/api/user/auth/session", { method: "POST" });
 
       try {
         const pendingName = sessionStorage.getItem("startline_pending_name");
         if (pendingName) {
-          await fetch("/api/customer/profile", {
+          await fetch("/api/user/profile", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: pendingName }),
@@ -259,7 +259,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
         {view === "signin" && (
           <>
             <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Customer Portal</span>
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
                 Welcome<br /><span className="text-primary">back.</span>
               </h2>
@@ -300,7 +300,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
         {view === "signup" && (
           <>
             <div className="mb-4">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Customer Portal</span>
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
                 Join<br /><span className="text-primary">Startline.</span>
               </h2>

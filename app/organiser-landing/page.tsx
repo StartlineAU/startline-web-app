@@ -12,7 +12,7 @@ export default function OrganiserLandingPage() {
           Organiser<br /><span className="text-primary">Portal</span>
         </h1>
         <p className="text-muted text-[15px] leading-relaxed mb-8">
-          Sign in to your customer account, then switch to your organiser profile from the dropdown menu.
+          Sign in to your user account, then switch to your organiser profile from the dropdown menu.
         </p>
         <Link
           href="https://startlineau.com"

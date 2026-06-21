@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getCustomerSession } from "@/lib/amplify-server";
+import { getUserSession } from "@/lib/amplify-server";
 import { validateUsername } from "@/lib/username-validation";
 
 function badRequest(msg: string) {
@@ -8,12 +8,12 @@ function badRequest(msg: string) {
 }
 
 export async function GET() {
-  const session = await getCustomerSession();
+  const session = await getUserSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
   }
 
-  const customer = await prisma.customer.findUnique({
+  const user = await prisma.user.findUnique({
     where:  { id: session.sub },
     select: {
       id: true, email: true, name: true, username: true,
@@ -21,11 +21,11 @@ export async function GET() {
       organiser: { select: { id: true, orgName: true, logoUrl: true, verified: true } },
     },
   });
-  return NextResponse.json(customer);
+  return NextResponse.json(user);
 }
 
 export async function PUT(req: Request) {
-  const session = await getCustomerSession();
+  const session = await getUserSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
   }
@@ -41,7 +41,7 @@ export async function PUT(req: Request) {
       const validation = validateUsername(username);
       if (!validation.valid) return badRequest(validation.reason);
 
-      const existing = await prisma.customer.findUnique({ where: { username } });
+      const existing = await prisma.user.findUnique({ where: { username } });
       if (existing && existing.id !== session.sub) {
         return badRequest("This username is already taken.");
       }
@@ -53,7 +53,7 @@ export async function PUT(req: Request) {
   if ("profilePicUrl" in body) data.profilePicUrl = body.profilePicUrl || null;
   if ("isPublic" in body) data.isPublic = body.isPublic;
 
-  const customer = await prisma.customer.update({
+  const user = await prisma.user.update({
     where:  { id: session.sub },
     data,
     select: {
@@ -61,5 +61,5 @@ export async function PUT(req: Request) {
       bio: true, profilePicUrl: true, isPublic: true,
     },
   });
-  return NextResponse.json(customer);
+  return NextResponse.json(user);
 }

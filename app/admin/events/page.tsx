@@ -350,7 +350,7 @@ function AdminEventsContent() {
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
 
-      <main className="pt-16">
+      <main className="pt-14">
         <div className="max-w-[1200px] mx-auto px-6 py-10 page-in">
 
           {/* Header */}

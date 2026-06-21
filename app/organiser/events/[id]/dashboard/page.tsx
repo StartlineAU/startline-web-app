@@ -133,7 +133,7 @@ export default function EventDashboardPage({
     return (
       <div className="min-h-screen bg-gray-50">
         <OrganiserTopBar />
-        <main className="pt-16">
+        <main className="pt-14">
           <div className="max-w-[1100px] mx-auto px-6 py-16 text-center">
             <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto" />
           </div>
@@ -146,7 +146,7 @@ export default function EventDashboardPage({
     return (
       <div className="min-h-screen bg-gray-50">
         <OrganiserTopBar />
-        <main className="pt-16">
+        <main className="pt-14">
           <div className="max-w-[1100px] mx-auto px-6 py-16 text-center">
             <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-6 h-6 text-red-500" />
@@ -169,7 +169,7 @@ export default function EventDashboardPage({
     <div className="min-h-screen bg-gray-50">
       <OrganiserTopBar />
 
-      <main className="pt-16">
+      <main className="pt-14">
         <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-12 page-in">
 
           {/* Breadcrumb */}

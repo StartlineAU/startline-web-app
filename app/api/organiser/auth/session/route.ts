@@ -9,16 +9,16 @@ export async function POST() {
   }
 
   try {
-    const customer = await prisma.customer.findUnique({
+    const user = await prisma.user.findUnique({
       where: { cognitoSub: session.sub },
       select: { id: true },
     });
-    if (!customer) {
-      return NextResponse.json({ hasOrganiser: false, error: "No customer record found." }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ hasOrganiser: false, error: "No user record found." }, { status: 404 });
     }
 
     const organiser = await prisma.organiser.findUnique({
-      where:  { customerId: customer.id },
+      where:  { userId: user.id },
       select: { id: true },
     });
 
