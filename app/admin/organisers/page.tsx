@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon } from "lucide-react";
+import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon, ShieldCheck, ShieldX } from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ interface OrganiserRow {
   phone: string | null;
   abn: string | null;
   status: string;
+  verified: boolean;
   stripeOnboardingComplete: boolean;
   insuranceDeclared: boolean;
   createdAt: string;
@@ -35,7 +36,7 @@ function formatDate(iso: string) {
   }
 }
 
-function OrganiserCard({ o }: { o: OrganiserRow }) {
+function OrganiserCard({ o, onToggleVerify }: { o: OrganiserRow; onToggleVerify: (id: string) => void }) {
   const name = o.orgName || o.contactName || o.email;
   const initial = name.charAt(0).toUpperCase();
 
@@ -69,6 +70,14 @@ function OrganiserCard({ o }: { o: OrganiserRow }) {
                 <AlertCircle className="w-3.5 h-3.5" /> Stripe pending
               </span>
             )}
+            <button
+              onClick={() => onToggleVerify(o.id)}
+              className={`inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors hover:underline ${
+                o.verified ? "text-lime-600" : "text-gray-400"
+              }`}
+            >
+              {o.verified ? <><ShieldCheck className="w-3.5 h-3.5" /> Verified</> : <><ShieldX className="w-3.5 h-3.5" /> Not verified</>}
+            </button>
           </div>
 
           <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400 mb-2">
@@ -115,6 +124,20 @@ export default function AdminOrganisersPage() {
     }
   }, []);
 
+  const toggleVerify = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/organisers/${id}/verify`, { method: "PATCH" });
+      if (res.ok) {
+        const updated = await res.json();
+        setOrganisers((prev) =>
+          prev.map((o) => (o.id === id ? { ...o, verified: updated.verified } : o))
+        );
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
   useEffect(() => { fetchOrganisers(); }, [fetchOrganisers]);
 
   return (
@@ -157,7 +180,7 @@ export default function AdminOrganisersPage() {
               </div>
             )}
 
-            {!loading && organisers.map((o) => <OrganiserCard key={o.id} o={o} />)}
+            {!loading && organisers.map((o) => <OrganiserCard key={o.id} o={o} onToggleVerify={toggleVerify} />)}
           </Card>
 
           {!loading && organisers.length > 0 && (

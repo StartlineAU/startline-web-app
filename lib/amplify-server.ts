@@ -24,9 +24,10 @@ export type CustomerSession = {
 };
 
 export type OrganiserSession = {
-  sub:    string; // Prisma Organiser.id
-  email:  string;
-  status: string;
+  sub:      string; // Prisma Organiser.id
+  email:    string;
+  status:   string;
+  verified: boolean;
 };
 
 export type AdminSession = {
@@ -97,11 +98,12 @@ export async function getCustomerSession(): Promise<CustomerSession | null> {
   if (!cognitoSession) return null;
 
   try {
-    const customer = await prisma.customer.findUnique({
+    const customer = await prisma.customer.upsert({
       where:  { cognitoSub: cognitoSession.sub },
+      update: { email: cognitoSession.email },
+      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
       select: { id: true, email: true, name: true },
     });
-    if (!customer) return null;
     return { sub: customer.id, email: customer.email, name: customer.name };
   } catch {
     return null;
@@ -113,13 +115,18 @@ export async function getOrganiserSession(): Promise<OrganiserSession | null> {
   if (!cognitoSession) return null;
 
   try {
-    const organiser = await prisma.organiser.upsert({
-      where:  { cognitoSub: cognitoSession.sub },
-      update: {},
-      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email, status: "APPROVED", orgName: cognitoSession.email, abn: "", photos: [] },
-      select: { id: true, email: true, status: true },
+    const customer = await prisma.customer.findUnique({
+      where: { cognitoSub: cognitoSession.sub },
     });
-    return { sub: organiser.id, email: organiser.email, status: String(organiser.status) };
+    if (!customer) return null;
+
+    const organiser = await prisma.organiser.findUnique({
+      where:  { customerId: customer.id },
+      select: { id: true, email: true, status: true, verified: true },
+    });
+    if (!organiser) return null;
+
+    return { sub: organiser.id, email: organiser.email, status: String(organiser.status), verified: organiser.verified };
   } catch {
     return null;
   }

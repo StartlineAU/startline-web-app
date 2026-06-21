@@ -6,8 +6,8 @@ resource "cloudflare_zone_settings_override" "primary" {
   zone_id = cloudflare_zone.primary.id
 
   settings {
-    always_use_https = "on"
-    ssl              = "full"
+    always_use_https  = "on"
+    ssl               = "full"
     browser_cache_ttl = 14400
   }
 }

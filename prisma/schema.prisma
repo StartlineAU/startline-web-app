@@ -22,10 +22,14 @@ model Admin {
 }
 
 // ─── Organiser accounts ───────────────────────────────────────────────────────
+// An organiser profile is always linked to a Customer (1:1). The Customer's auth
+// credentials are used; the organiser record holds business-specific fields.
 model Organiser {
   id         String          @id @default(uuid())
+  customerId String          @unique
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   email      String          @unique
-  cognitoSub String          @unique
+  verified   Boolean         @default(false)
   status     OrganiserStatus @default(APPROVED)
 
   // Profile — filled during onboarding, editable afterwards
@@ -217,6 +221,8 @@ model Registration {
   event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   organiserId String
   organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id])
 
   athleteName  String
   athleteEmail String
@@ -245,13 +251,22 @@ enum RegistrationStatus {
 }
 
 // ─── Customer accounts ────────────────────────────────────────────────────────
+// Every platform user has a Customer record. Organisers are customers who also
+// have an associated Organiser profile (1:1).
 model Customer {
   id         String   @id @default(uuid())
   cognitoSub String   @unique
   email      String   @unique
-  name       String?
+  name       String?  // full name
+  username   String?  @unique // public handle, chosen during profile setup
+  bio        String?
+  profilePicUrl String?
+  isPublic   Boolean  @default(true) // public profile visible to others
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  organiser     Organiser?
+  registrations Registration[]
 
   @@map("customers")
 }

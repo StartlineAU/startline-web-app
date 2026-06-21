@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { User, LogOut, Plus, Settings, Bell, CheckCircle2, XCircle, Menu, X, LayoutDashboard, CalendarDays, CreditCard, BookOpen } from "lucide-react";
+import { User, LogOut, Plus, Settings, Bell, CheckCircle2, XCircle, Menu, X, LayoutDashboard, CalendarDays, CreditCard, BookOpen, ArrowLeft } from "lucide-react";
 import { useSettings } from "@/context/SettingsContext";
 
 const NAV = [
@@ -268,12 +268,16 @@ export default function OrganiserTopBar() {
                       ))}
                     </div>
 
-                    {/* Settings + Sign out */}
+                    {/* Settings + Switch + Sign out */}
                     <div className="border-t border-white/10 py-1.5">
                       <button onClick={openSettings}
                         className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                         <Settings className="w-4 h-4 shrink-0" /> Settings
                       </button>
+                      <Link href="/"
+                        className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-primary/80 hover:text-primary hover:bg-white/5 transition-colors">
+                        <ArrowLeft className="w-4 h-4 shrink-0" /> Switch to Customer
+                      </Link>
                       <button onClick={handleLogout}
                         className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-red-400/80 hover:text-red-400 hover:bg-white/5 transition-colors">
                         <LogOut className="w-4 h-4 shrink-0" /> Sign out
@@ -325,9 +329,15 @@ export default function OrganiserTopBar() {
                       </button>
                     </div>
                     <div className="border-t border-white/10 py-1.5">
+                      <Link href="/"
+                        onClick={() => setOpen(false)}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 font-headline text-[13px] font-bold uppercase tracking-widest text-primary/80 hover:text-primary hover:bg-white/5 transition-colors">
+                        <ArrowLeft className="w-4 h-4 shrink-0" />
+                        Switch to Customer
+                      </Link>
                       <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 font-headline text-[13px] font-bold uppercase tracking-widest text-red-400/80 hover:text-red-400 hover:bg-white/5 transition-colors">
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 font-headline text-[13px] font-bold uppercase tracking-widest text-red-400/80 hover:text-red-400 hover:bg-white/5 transition-colors">
                         <LogOut className="w-4 h-4 shrink-0" />
                         Sign out
                       </button>

@@ -19,6 +19,7 @@ export async function GET() {
         phone:                    true,
         abn:                      true,
         status:                   true,
+        verified:                 true,
         stripeOnboardingComplete: true,
         insuranceDeclared:        true,
         createdAt:                true,

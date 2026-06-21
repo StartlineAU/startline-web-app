@@ -3,8 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-import { Menu, X, LogOut, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, X, LogOut, ChevronDown, User, Building2, Plus } from "lucide-react";
 import SignInModal from "@/components/SignInModal";
 import { useAuthContext } from "@/context/AuthContext";
 
@@ -18,9 +18,32 @@ export default function Header() {
   const [isMenuOpen,   setIsMenuOpen]   = useState(false);
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [isUserOpen,   setIsUserOpen]   = useState(false);
+  const [hasOrganiser, setHasOrganiser] = useState(false);
+  const [profileName,  setProfileName]  = useState<string | null>(null);
+  const profileFetched = useRef(false);
   const pathname = usePathname();
   const router   = useRouter();
   const { user, status, logout } = useAuthContext();
+
+  useEffect(() => {
+    if (status === "authenticated" && !profileFetched.current) {
+      profileFetched.current = true;
+      fetch("/api/customer/profile")
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            setProfileName(data.name ?? null);
+            setHasOrganiser(!!data.organiser);
+          }
+        })
+        .catch(() => {});
+    }
+    if (status !== "authenticated") {
+      profileFetched.current = false;
+      setProfileName(null);
+      setHasOrganiser(false);
+    }
+  }, [status]);
 
   const handleSignOut = async () => {
     setIsUserOpen(false);
@@ -28,7 +51,8 @@ export default function Header() {
     router.push("/");
   };
 
-  const initial = user?.email?.[0]?.toUpperCase() ?? "A";
+  const displayName = profileName ?? user?.email ?? "";
+  const initial = displayName[0]?.toUpperCase() ?? "A";
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-light/80 backdrop-blur-md border-b border-dark-lighter">
@@ -91,7 +115,7 @@ export default function Header() {
                   {initial}
                 </span>
                 <span className="font-headline text-[12px] font-bold text-muted group-hover:text-primary transition-colors max-w-[120px] truncate">
-                  {user?.email}
+                  {displayName}
                 </span>
                 <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform ${isUserOpen ? "rotate-180" : ""}`} />
               </button>
@@ -99,7 +123,29 @@ export default function Header() {
               {isUserOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setIsUserOpen(false)} />
-                  <div className="absolute right-0 top-11 z-20 w-44 bg-dark border border-dark-lighter rounded-xl shadow-xl overflow-hidden animate-fade-in">
+                  <div className="absolute right-0 top-11 z-20 w-52 bg-dark border border-dark-lighter rounded-xl shadow-xl overflow-hidden animate-fade-in">
+                    <Link href="/profile"
+                      onClick={() => setIsUserOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 font-headline text-[12px] uppercase tracking-widest text-muted hover:text-primary hover:bg-dark-lighter transition-colors">
+                      <User className="w-4 h-4" /> Profile
+                    </Link>
+
+                    {hasOrganiser ? (
+                      <Link href="/organiser/dashboard"
+                        onClick={() => setIsUserOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 font-headline text-[12px] uppercase tracking-widest text-muted hover:text-primary hover:bg-dark-lighter transition-colors">
+                        <Building2 className="w-4 h-4" /> Organiser Dashboard
+                      </Link>
+                    ) : (
+                      <Link href="/organiser-setup"
+                        onClick={() => setIsUserOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 font-headline text-[12px] uppercase tracking-widest text-primary hover:text-primary hover:bg-dark-lighter transition-colors">
+                        <Plus className="w-4 h-4" /> Setup Organiser Profile
+                      </Link>
+                    )}
+
+                    <div className="border-t border-dark-lighter" />
+
                     <button onClick={handleSignOut}
                       className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[12px] uppercase tracking-widest text-muted hover:text-red-400 hover:bg-dark-lighter transition-colors">
                       <LogOut className="w-4 h-4" /> Sign Out
@@ -144,6 +190,20 @@ export default function Header() {
                 </Link>
               );
             })}
+            {status === "authenticated" && hasOrganiser && (
+              <Link href="/organiser/dashboard"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center px-5 h-[52px] font-headline text-sm uppercase tracking-tighter font-medium border-l-2 border-transparent text-muted hover:text-primary hover:border-primary/40 transition-colors">
+                <Building2 className="w-4 h-4 mr-3" /> Organiser Dashboard
+              </Link>
+            )}
+            {status === "authenticated" && !hasOrganiser && (
+              <Link href="/organiser-setup"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center px-5 h-[52px] font-headline text-sm uppercase tracking-tighter font-medium border-l-2 border-transparent text-primary hover:text-primary transition-colors">
+                <Plus className="w-4 h-4 mr-3" /> Setup Organiser
+              </Link>
+            )}
             <div className="px-4 py-3 border-t border-dark-lighter">
               {status === "authenticated" ? (
                 <button onClick={() => { setIsMenuOpen(false); handleSignOut(); }}
