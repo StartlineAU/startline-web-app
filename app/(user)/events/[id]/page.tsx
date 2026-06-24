@@ -7,6 +7,7 @@ import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatEventDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
+import { hasCoordinates } from "@/lib/map-events";
 import { Button } from "@/components/ui/button";
 
 export const revalidate = 60;
@@ -163,14 +164,14 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   </a>
                 </Button>
               )}
-              <Button asChild variant="outline" size="ctaLg">
-                <Link href={`https://maps.google.com/?q=${encodeURIComponent(
-                  event.location + ", " + event.city + ", Australia"
-                )}`} target="_blank" rel="noopener noreferrer">
-                  <MapPin className="w-4 h-4" />
-                  View on Maps
-                </Link>
-              </Button>
+              {hasCoordinates(event) && (
+                <Button asChild variant="outline" size="ctaLg">
+                  <Link href={`/events?view=map&event=${event.id}`}>
+                    <MapPin className="w-4 h-4" />
+                    View on Map
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </div>

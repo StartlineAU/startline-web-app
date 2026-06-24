@@ -22,6 +22,33 @@ test.describe("events page", () => {
     await page.waitForLoadState("networkidle");
     await expect(page.getByText(/filter|type|state/i).first()).toBeVisible();
   });
+
+  test("list/map view toggle is present", async ({ page }) => {
+    await page.goto("/events");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("view-mode-list")).toBeVisible();
+    await expect(page.getByTestId("view-mode-map")).toBeVisible();
+  });
+
+  test("switching to map mode shows map container", async ({ page }) => {
+    await page.goto("/events");
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("view-mode-map").click();
+    await expect(page.getByTestId("events-map")).toBeVisible();
+  });
+
+  test("map mode keeps event selection when events load", async ({ page }) => {
+    await page.goto("/events");
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("view-mode-map").click();
+    const mapContainer = page.getByTestId("events-map");
+    await expect(mapContainer).toBeVisible();
+    const marker = page.locator(".mapboxgl-marker button").first();
+    if (await marker.isVisible()) {
+      await marker.click();
+      await expect(page.getByText(/more info/i).first()).toBeVisible();
+    }
+  });
 });
 
 test.describe("static pages", () => {

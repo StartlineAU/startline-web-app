@@ -8,6 +8,8 @@ export type AddressResult = {
   city:    string;
   state:   string;
   venue:   string;
+  latitude?:  number;
+  longitude?: number;
 };
 
 interface Props {
@@ -67,7 +69,16 @@ function extractComponents(place: google.maps.places.PlaceResult): AddressResult
     if (!address) address = parts[0] ?? "";
   }
 
-  return { address, city, state, venue };
+  const lat = place.geometry?.location?.lat();
+  const lng = place.geometry?.location?.lng();
+
+  return {
+    address,
+    city,
+    state,
+    venue,
+    ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
+  };
 }
 
 export default function AddressAutocomplete({
@@ -110,7 +121,7 @@ export default function AddressAutocomplete({
 
     acRef.current = new google.maps.places.Autocomplete(inputRef.current, {
       componentRestrictions: { country: "au" },
-      fields: ["address_components", "formatted_address", "name"],
+      fields: ["address_components", "formatted_address", "name", "geometry"],
       types:  ["geocode", "establishment"],
     });
 

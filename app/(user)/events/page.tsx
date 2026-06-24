@@ -1,11 +1,12 @@
 ﻿"use client";
 
 import { useState, useMemo, useEffect, useRef, Suspense, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search, ChevronDown, MapPin, Clock, Users, Calendar,
-  ExternalLink, ArrowRight, X, SlidersHorizontal,
+  ExternalLink, ArrowRight, X, SlidersHorizontal, List, Map as MapIcon,
 } from "lucide-react";
 import type { UserEvent, FilterState, EventType, AustralianState, CompetitionFormat } from "@/types";
 import {
@@ -19,6 +20,57 @@ import {
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
 import { toUserEvents } from "@/lib/user-events";
+import { filterMapEvents, hasCoordinates } from "@/lib/map-events";
+
+const EventsMap = dynamic(() => import("@/components/EventsMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full flex items-center justify-center bg-dark">
+      <p className="font-headline text-sm uppercase tracking-widest text-muted">Loading map...</p>
+    </div>
+  ),
+});
+
+type ViewMode = "list" | "map";
+
+function ViewModeToggle({
+  viewMode,
+  onChange,
+}: {
+  viewMode: ViewMode;
+  onChange: (mode: ViewMode) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-dark-lighter bg-dark p-0.5 flex-shrink-0">
+      <button
+        type="button"
+        data-testid="view-mode-list"
+        onClick={() => onChange("list")}
+        className={`flex items-center gap-1.5 px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest rounded-full transition-colors ${
+          viewMode === "list"
+            ? "bg-primary text-dark"
+            : "text-muted hover:text-light"
+        }`}
+      >
+        <List className="w-3.5 h-3.5" />
+        List
+      </button>
+      <button
+        type="button"
+        data-testid="view-mode-map"
+        onClick={() => onChange("map")}
+        className={`flex items-center gap-1.5 px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest rounded-full transition-colors ${
+          viewMode === "map"
+            ? "bg-primary text-dark"
+            : "text-muted hover:text-light"
+        }`}
+      >
+        <MapIcon className="w-3.5 h-3.5" />
+        Map
+      </button>
+    </div>
+  );
+}
 
 interface FilterChipProps {
   label: string;
@@ -127,7 +179,10 @@ function EventsPageInner() {
   const [stateFilter,  setStateFilter]  = useState<AustralianState | "">("");
   const [formatFilter, setFormatFilter] = useState<CompetitionFormat | "">("");
   const [dateFilter,   setDateFilter]   = useState<FilterState["dateRange"]>("all");
-  const [selectedId,        setSelectedId]        = useState<string | null>(null);
+  const [selectedId,        setSelectedId]        = useState<string | null>(searchParams.get("event"));
+  const [viewMode,          setViewMode]          = useState<ViewMode>(
+    searchParams.get("view") === "map" ? "map" : "list",
+  );
   const [openDropdown,      setOpenDropdown]      = useState<string | null>(null);
   const [mobileSearch,      setMobileSearch]      = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -177,16 +232,33 @@ function EventsPageInner() {
     return results;
   }, [allEvents, filterState, whereQuery]);
 
+  const mapEvents = useMemo(() => filterMapEvents(displayEvents), [displayEvents]);
+  const missingCoordinateCount = displayEvents.length - mapEvents.length;
+
   const selectedEvent = useMemo(
     () => allEvents.find((e) => e.id === selectedId) ?? null,
     [allEvents, selectedId]
   );
 
   useEffect(() => {
+    if (viewMode === "map") return;
     if (!selectedId && displayEvents.length > 0) {
       setSelectedId(displayEvents[0].id);
     }
-  }, [displayEvents, selectedId]);
+  }, [displayEvents, selectedId, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "map" || mapEvents.length === 0 || selectedId === null) return;
+    const current = allEvents.find((e) => e.id === selectedId);
+    if (!current || !hasCoordinates(current)) {
+      setSelectedId(mapEvents[0].id);
+    }
+  }, [viewMode, mapEvents, selectedId, allEvents]);
+
+  function showOnMap(eventId?: string) {
+    if (eventId) setSelectedId(eventId);
+    setViewMode("map");
+  }
 
   function clearFilters() {
     setWhatQuery(""); setWhereQuery("");
@@ -351,13 +423,17 @@ function EventsPageInner() {
             onClose={() => setOpenDropdown(null)}
             onChange={(v) => { setDateFilter((v || "all") as FilterState["dateRange"]); setSelectedId(null); }}
           />
+          <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
           <span className="flex-shrink-0 ml-auto font-headline text-xs font-medium uppercase tracking-widest text-muted pl-2">
-            {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+            {viewMode === "map"
+              ? `${displayEvents.length} event${displayEvents.length !== 1 ? "s" : ""} | ${mapEvents.length} on map`
+              : `${displayEvents.length} event${displayEvents.length !== 1 ? "s" : ""}`}
           </span>
         </div>
 
-        {/* Mobile: single Filters button */}
+        {/* Mobile: filters + view toggle */}
         <div className="lg:hidden px-4 pb-3 flex items-center gap-2">
+          <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
           <button
             onClick={() => setMobileFiltersOpen(true)}
             className={`flex items-center gap-1.5 px-3 py-2 h-9 font-headline text-xs font-medium uppercase tracking-widest border transition-colors rounded-full ${
@@ -376,16 +452,34 @@ function EventsPageInner() {
             <ChevronDown className="w-3.5 h-3.5" />
           </button>
           <span className="ml-auto font-headline text-xs font-medium uppercase tracking-widest text-muted">
-            {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+            {viewMode === "map"
+              ? `${mapEvents.length} on map`
+              : `${displayEvents.length} event${displayEvents.length !== 1 ? "s" : ""}`}
           </span>
         </div>
+        {viewMode === "map" && missingCoordinateCount > 0 && (
+          <p className="px-4 lg:px-6 pb-2 font-headline text-[10px] uppercase tracking-widest text-muted">
+            {missingCoordinateCount} event{missingCoordinateCount !== 1 ? "s" : ""} hidden until coordinates are saved.
+          </p>
+        )}
       </div>
 
       {/* ── Body ── */}
       <div className="flex flex-1 max-w-[1440px] w-full mx-auto overflow-hidden">
 
-        {/* ── Mobile: full-width list (tap → detail page) ── */}
-        <div className="flex-1 overflow-y-auto lg:hidden">
+        {/* ── Mobile: full-width list or map ── */}
+        <div className="flex-1 overflow-hidden lg:hidden flex flex-col min-h-0">
+          {viewMode === "map" ? (
+            <div className="flex-1 min-h-[360px]" data-testid="events-map">
+              <EventsMap
+                events={displayEvents}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                className="h-full w-full"
+              />
+            </div>
+          ) : (
+          <div className="flex-1 overflow-y-auto">
           {displayEvents.length === 0 ? (
             <div className="p-8 text-center">
               <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-2">No events found.</p>
@@ -441,6 +535,8 @@ function EventsPageInner() {
                 );
               })}
             </div>
+          )}
+          </div>
           )}
         </div>
 
@@ -510,9 +606,18 @@ function EventsPageInner() {
           )}
         </div>
 
-        {/* ── Desktop right panel: event detail ── */}
-        <div className="hidden lg:block flex-1 overflow-y-auto bg-dark-darker">
-          {!selectedEvent ? (
+        {/* ── Desktop right panel: event detail or map ── */}
+        <div className="hidden lg:block flex-1 overflow-hidden bg-dark-darker min-h-0">
+          {viewMode === "map" ? (
+            <div className="h-full" data-testid="events-map">
+              <EventsMap
+                events={displayEvents}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                className="h-full w-full"
+              />
+            </div>
+          ) : !selectedEvent ? (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-center p-12">
               <ArrowRight className="w-10 h-10 text-muted rotate-180" />
               <p className="font-headline text-xl font-medium uppercase tracking-widest text-muted">
@@ -520,6 +625,7 @@ function EventsPageInner() {
               </p>
             </div>
           ) : (
+            <div className="h-full overflow-y-auto">
             <div className="p-4 flex flex-col gap-0">
 
               <div className="relative rounded-3xl overflow-hidden" style={{ aspectRatio: "16/7" }}>
@@ -586,17 +692,16 @@ function EventsPageInner() {
                   <p className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">
                     {selectedEvent.city}, {STATE_LABELS[selectedEvent.state]}
                   </p>
-                  <a
-                    href={`https://maps.google.com/?q=${encodeURIComponent(
-                      selectedEvent.location + ", " + selectedEvent.city + ", Australia"
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 font-headline text-xs uppercase tracking-widest text-primary hover:text-primary/70 transition-colors"
-                  >
-                    <MapPin className="w-3.5 h-3.5" />
-                    View on Maps
-                  </a>
+                  {hasCoordinates(selectedEvent) && (
+                    <button
+                      type="button"
+                      onClick={() => showOnMap(selectedEvent.id)}
+                      className="inline-flex items-center gap-2 font-headline text-xs uppercase tracking-widest text-primary hover:text-primary/70 transition-colors"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      View on Map
+                    </button>
+                  )}
                 </div>
 
                 <div className="py-7">
@@ -662,6 +767,7 @@ function EventsPageInner() {
                 </div>
 
               </div>
+            </div>
             </div>
           )}
         </div>

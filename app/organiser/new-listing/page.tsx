@@ -40,6 +40,7 @@ interface FormState {
   title: string; discipline: Discipline; description: string;
   date: string; endDate: string; startTime: string; endTime: string;
   venue: string; address: string; city: string; state: AusState;
+  latitude: number | null; longitude: number | null;
   format: Format; level: Level; categories: string[]; cap: string; minAge: string;
   waves: Wave[];
   inclusions: string; extras: string; activations: string; refundPolicy: string;
@@ -52,6 +53,7 @@ const INITIAL: FormState = {
   title: "", discipline: "", description: "",
   date: "", endDate: "", startTime: "", endTime: "",
   venue: "", address: "", city: "", state: "",
+  latitude: null, longitude: null,
   format: "", level: "",
   categories: [],
   cap: "", minAge: "",
@@ -560,12 +562,14 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
         <AddressAutocomplete
           value={form.address}
           onChange={(raw) => update({ address: raw })}
-          onSelect={({ address, city, state, venue }) => {
+          onSelect={({ address, city, state, venue, latitude, longitude }) => {
             update({
               ...(address && { address }),
               ...(city    && { city    }),
               ...(state   && { state: state as typeof form.state }),
               ...(venue   && { venue  }),
+              ...(latitude != null && { latitude }),
+              ...(longitude != null && { longitude }),
             });
           }}
           apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
@@ -1811,6 +1815,8 @@ export default function NewListingPage() {
           address:           e.address      ?? "",
           city:              e.city         ?? "",
           state:             e.state        ?? "",
+          latitude:          e.latitude     ?? null,
+          longitude:         e.longitude    ?? null,
           format:            e.format       ?? "",
           level:             e.level        ?? "",
           categories:        Array.isArray(e.categories) ? e.categories : [],
@@ -1873,6 +1879,7 @@ export default function NewListingPage() {
         description: form.description, eventDate: form.date, endDate: form.endDate || null,
         startTime: form.startTime, endTime: form.endTime,
         venue: form.venue, address: form.address, city: form.city, state: form.state,
+        latitude: form.latitude, longitude: form.longitude,
         format: form.format, level: form.level, categories: form.categories,
         cap: form.cap ? parseInt(form.cap) : null, minAge: form.minAge ? parseInt(form.minAge) : null,
         waves: form.waves, inclusions: form.inclusions, extras: form.extras, activations: form.activations,

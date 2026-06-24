@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { archivePastEvents } from "@/lib/archive-events";
+import { withDevDemoEvents } from "@/lib/demo-events";
 
 export interface PublicWave {
   label: string;
@@ -21,6 +22,8 @@ export interface PublicEvent {
   venue: string;
   city: string;
   state: string;
+  latitude: number | null;
+  longitude: number | null;
   format: string;
   level: string;
   categories: unknown;
@@ -67,6 +70,8 @@ export async function getAllEvents(): Promise<PublicEvent[]> {
         venue: true,
         city: true,
         state: true,
+        latitude: true,
+        longitude: true,
         format: true,
         level: true,
         categories: true,
@@ -82,11 +87,13 @@ export async function getAllEvents(): Promise<PublicEvent[]> {
       },
     });
 
-    return events.map((e) => ({
-      ...e,
-      fromPrice: lowestPrice(e.waves),
-    }));
+    return withDevDemoEvents(
+      events.map((e) => ({
+        ...e,
+        fromPrice: lowestPrice(e.waves),
+      })),
+    );
   } catch {
-    return [];
+    return withDevDemoEvents([]);
   }
 }

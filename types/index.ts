@@ -43,6 +43,8 @@ export interface UserEvent {
   location: string;
   city: string;
   state: AustralianState;
+  latitude?: number | null;
+  longitude?: number | null;
   type: EventType;
   format: string;
   level: string;

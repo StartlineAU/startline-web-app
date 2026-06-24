@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
     // metadataBase is set in layout.tsx but this is the canonical declaration
   },
 
-  // Allow Google Maps iframe embeds
+  // Allow Google Maps iframe embeds and Mapbox GL
   async headers() {
     return [
       {
@@ -24,7 +24,15 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "frame-src 'self' https://www.google.com https://maps.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com;",
+            value: [
+              "frame-src 'self' https://www.google.com https://maps.googleapis.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com https://api.mapbox.com",
+              "connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com",
+              "img-src 'self' data: blob: https://*.tiles.mapbox.com https://api.mapbox.com https://maps.googleapis.com https://maps.gstatic.com https:",
+              "worker-src 'self' blob:",
+              "style-src 'self' 'unsafe-inline' https://api.mapbox.com",
+              "font-src 'self' data: https://api.mapbox.com",
+            ].join("; "),
           },
         ],
       },

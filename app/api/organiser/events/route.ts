@@ -69,6 +69,8 @@ export async function POST(req: NextRequest) {
         address:          body.address           ?? null,
         city:             body.city              ?? "",
         state:            body.state             ?? "",
+        latitude:         body.latitude          ?? null,
+        longitude:        body.longitude         ?? null,
         format:           body.format            ?? "",
         level:            body.level             ?? "",
         categories:       body.categories        ?? [],

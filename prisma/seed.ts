@@ -190,7 +190,7 @@ async function main() {
 
   const event1 = await prisma.event.upsert({
     where:  { id: "seed-event-001" },
-    update: { status: "APPROVED" },
+    update: { status: "APPROVED", latitude: -37.8429, longitude: 144.9582 },
     create: {
       id: "seed-event-001",
       organiserId: org.id,
@@ -207,6 +207,8 @@ async function main() {
       address: "Albert Road, Albert Park",
       city: "Melbourne",
       state: "vic",
+      latitude: -37.8429,
+      longitude: 144.9582,
       format: "both",
       level: "open",
       categories: ["Individual Scaled", "Individual RX", "Individual Elite", "Team of 2"],
@@ -232,7 +234,7 @@ async function main() {
 
   const event2 = await prisma.event.upsert({
     where: { id: "seed-event-002" },
-    update: {},
+    update: { latitude: -37.8986, longitude: 145.2386 },
     create: {
       id: "seed-event-002",
       organiserId: org.id,
@@ -247,6 +249,8 @@ async function main() {
       venue: "Kokoda Track Memorial Walkway",
       city: "Scoresby",
       state: "vic",
+      latitude: -37.8986,
+      longitude: 145.2386,
       format: "individual",
       level: "open",
       categories: ["Open Male", "Open Female", "Masters 40+"],
@@ -263,7 +267,7 @@ async function main() {
 
   const event3 = await prisma.event.upsert({
     where: { id: "seed-event-003" },
-    update: {},
+    update: { latitude: -33.8568, longitude: 151.2153 },
     create: {
       id: "seed-event-003",
       organiserId: org.id,
@@ -278,6 +282,8 @@ async function main() {
       venue: "TBC",
       city: "Sydney",
       state: "nsw",
+      latitude: -33.8568,
+      longitude: 151.2153,
       format: "team",
       level: "open",
       categories: [],
@@ -289,7 +295,7 @@ async function main() {
 
   const event4 = await prisma.event.upsert({
     where: { id: "seed-event-004" },
-    update: {},
+    update: { latitude: -37.6689, longitude: 145.4428 },
     create: {
       id: "seed-event-004",
       organiserId: org.id,
@@ -304,6 +310,8 @@ async function main() {
       venue: "Yering Station",
       city: "Yering",
       state: "vic",
+      latitude: -37.6689,
+      longitude: 145.4428,
       format: "individual",
       level: "open",
       categories: ["5K", "10K", "Half Marathon"],

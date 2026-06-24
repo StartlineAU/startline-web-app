@@ -70,6 +70,8 @@ export async function PATCH(
         address:           data.address           ?? undefined,
         city:              data.city              ?? undefined,
         state:             data.state             ?? undefined,
+        latitude:          data.latitude          ?? null,
+        longitude:         data.longitude         ?? null,
         format:            data.format            ?? undefined,
         level:             data.level             ?? undefined,
         categories:        data.categories        ?? undefined,
