@@ -28,6 +28,22 @@ test.describe("organiser login", () => {
   });
 });
 
+test.describe("organiser new listing", () => {
+  test("date and location step shows location preview placeholder", async ({ page }) => {
+    await organiserLogin(page);
+
+    await page.goto("/organiser/new-listing");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByPlaceholder(/Functional Fitness Championship/i).fill("Map Preview Test Event");
+    await page.getByRole("button", { name: /^continue$/i }).click();
+
+    await expect(page.getByText(/when and where/i)).toBeVisible();
+    await expect(page.getByTestId("location-preview-empty")).toBeVisible();
+    await expect(page.getByText(/select an address above to preview the location/i)).toBeVisible();
+  });
+});
+
 test.describe("organiser dashboard", () => {
   test("dashboard shows stats and events after login", async ({ page }) => {
     await organiserLogin(page);

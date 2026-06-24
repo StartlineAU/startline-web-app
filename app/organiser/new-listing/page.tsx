@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import OrganiserTopBar     from "@/components/organiser/TopBar";
 import AddressAutocomplete from "@/components/ui/AddressAutocomplete";
+import LocationPreviewMap  from "@/components/organiser/LocationPreviewMap";
 
 /* ── Step definitions ───────────────────────────────────────── */
 const STEPS = [
@@ -525,6 +526,11 @@ const AUS_STATES: [AusState, string][] = [
 ];
 
 function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
+  const locationLabel =
+    [form.venue, form.city, form.state ? form.state.toUpperCase() : ""]
+      .filter(Boolean)
+      .join(", ") || form.address || undefined;
+
   return (
     <div>
       <Field label="Event date(s)" required hint="Tap start then end for multi-day">
@@ -561,7 +567,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
       <Field label="Street address" required>
         <AddressAutocomplete
           value={form.address}
-          onChange={(raw) => update({ address: raw })}
+          onChange={(raw) => update({ address: raw, latitude: null, longitude: null })}
           onSelect={({ address, city, state, venue, latitude, longitude }) => {
             update({
               ...(address && { address }),
@@ -595,6 +601,14 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
           </div>
         </Field>
       </div>
+
+      <Field label="Location preview" hint="Single pin for this event">
+        <LocationPreviewMap
+          latitude={form.latitude}
+          longitude={form.longitude}
+          label={locationLabel}
+        />
+      </Field>
 
     </div>
   );
