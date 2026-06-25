@@ -33,15 +33,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hydrate = useCallback(async () => {
     try {
       const session = await fetchAuthSession();
-      if (!session.tokens?.accessToken) { setUser(null); setStatus("unauthenticated"); return; }
+      if (!session.tokens?.accessToken) {
+        setUser(null);
+        setStatus("unauthenticated");
+        return;
+      }
+
       const current = await getCurrentUser();
-      setUser({ sub: current.userId, email: current.signInDetails?.loginId ?? "" });
+      const idPayload = session.tokens.idToken?.payload;
+      const loginId = current.signInDetails?.loginId ?? "";
+      const email =
+        (typeof idPayload?.email === "string" && idPayload.email.includes("@")
+          ? idPayload.email
+          : loginId.includes("@")
+            ? loginId
+            : "");
+
+      setUser({
+        sub:   current.userId,
+        email,
+      });
       setStatus("authenticated");
-    } catch { setUser(null); setStatus("unauthenticated"); }
+    } catch {
+      setUser(null);
+      setStatus("unauthenticated");
+    }
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { hydrate(); }, [hydrate]);
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
 
   const logout = useCallback(async () => {
     await signOut();

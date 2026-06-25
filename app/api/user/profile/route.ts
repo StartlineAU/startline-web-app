@@ -22,7 +22,12 @@ export async function GET() {
       organiser: { select: { id: true, orgName: true, logoUrl: true, verified: true } },
     },
   });
-  return NextResponse.json(user);
+
+  return NextResponse.json({
+    ...user,
+    mobile: session.phoneNumber,
+    dateOfBirth: session.birthdate,
+  });
 }
 
 export async function PUT(req: Request) {

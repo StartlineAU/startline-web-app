@@ -225,6 +225,13 @@ model Registration {
 
   athleteName  String
   athleteEmail String
+  firstName    String?
+  lastName     String?
+  dateOfBirth  String? // ISO yyyy-mm-dd
+  mobile       String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  waiverAccepted        Boolean @default(false)
   category     String?
   waveLabel    String?
 
@@ -234,12 +241,13 @@ model Registration {
   feeStructure     String @default("athlete") // "athlete" | "organiser"
 
   status                RegistrationStatus @default(CONFIRMED)
-  stripePaymentIntentId String?            @unique
+  stripePaymentIntentId String?
 
   createdAt DateTime @default(now())
 
   @@index([eventId])
   @@index([organiserId])
+  @@index([stripePaymentIntentId])
   @@map("registrations")
 }
 
@@ -278,4 +286,19 @@ model WaitlistSubscriber {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("waitlist_subscribers")
+}
+
+model GuestEmailVerification {
+  id         String    @id @default(uuid())
+  email      String
+  eventId    String
+  codeHash   String
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  attempts   Int       @default(0)
+  lastSentAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+
+  @@index([email, eventId])
+  @@map("guest_email_verifications")
 }

@@ -13,7 +13,10 @@
     "test:e2e": "playwright test",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:seed": "npx tsx prisma/seed.ts"
+    "prisma:seed": "npx tsx prisma/seed.ts",
+    "stripe:listen": "stripe listen --forward-to localhost:3000/api/stripe/webhook",
+    "stripe:setup": "node scripts/setup-stripe-local.mjs",
+    "test:registration": "node scripts/test-registration-payment.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
@@ -65,6 +68,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@stripe/cli": "^1.43.2",
     "@types/bad-words": "^3.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
