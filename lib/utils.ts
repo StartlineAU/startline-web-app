@@ -109,7 +109,7 @@ export function getEventsByState(events: UserEvent[]): Record<AustralianState, n
 
 export function getEventsByType(events: UserEvent[]): Record<string, number> {
   const today = startOfDay(new Date());
-  const counts: Record<string, number> = { "fitness-racing": 0, crossfit: 0, running: 0, hybrid: 0 };
+  const counts: Record<string, number> = { crossfit: 0, running: 0, hybrid: 0, swimming: 0, cycling: 0, triathlon: 0, duathlon: 0, weightlifting: 0, bodybuilding: 0 };
   for (const event of events) {
     if (isOnOrAfterToday(event.date, today)) counts[event.type]++;
   }

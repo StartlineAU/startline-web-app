@@ -4,11 +4,15 @@ import { getEventImage } from "@/lib/images";
 
 function mapDiscipline(discipline: string): EventType {
   const d = discipline.toLowerCase();
-  if (d === "fitness-racing") return "fitness-racing";
-  if (d === "crossfit")     return "crossfit";
-  if (d === "running")      return "running";
-  if (d === "hybrid")       return "hybrid";
-  if (d === "functionalfitness" || d === "functional_fitness") return "fitness-racing";
+  if (d === "crossfit")       return "crossfit";
+  if (d === "running")        return "running";
+  if (d === "hybrid")         return "hybrid";
+  if (d === "swimming")       return "swimming";
+  if (d === "cycling")        return "cycling";
+  if (d === "triathlon")      return "triathlon";
+  if (d === "duathlon")       return "duathlon";
+  if (d === "weightlifting")  return "weightlifting";
+  if (d === "bodybuilding")   return "bodybuilding";
   return "running";
 }
 

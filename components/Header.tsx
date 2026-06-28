@@ -11,7 +11,7 @@ import { useAuthContext } from "@/context/AuthContext";
 const navItems = [
   { href: "/", label: "HOME" },
   { href: "/events", label: "EVENTS" },
-  { href: "/about", label: "ABOUT" },
+  { href: "/activity", label: "ACTIVITY" },
 ];
 
 export default function Header() {
@@ -55,7 +55,7 @@ export default function Header() {
   const initial = displayName[0]?.toUpperCase() ?? "A";
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-dark-darker/80 backdrop-blur-xl border-b border-white/[0.05]">
+    <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-dark-darker/95 border-b border-white/[0.05]">
       <div className="flex items-center justify-between h-full max-w-[1200px] mx-auto px-4 sm:px-6">
         {/* Logo */}
         <Link href="/" className="shrink-0 py-1">

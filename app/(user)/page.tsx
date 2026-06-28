@@ -1,34 +1,101 @@
 import Link from "next/link";
-import { MapPin, Search, Calendar } from "lucide-react";
+import { MapPin, Calendar } from "lucide-react";
 import { EVENT_TYPE_LABELS } from "@/types";
 import { formatShortDate, truncateTitle } from "@/lib/utils";
-import { getEventImage, getCategoryImage } from "@/lib/images";
+import { getEventImage } from "@/lib/images";
 import { getAllEvents } from "@/lib/events";
 import { toUserEvents } from "@/lib/user-events";
+import { getUserSession } from "@/lib/amplify-server";
+import prisma from "@/lib/prisma";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
-import { Button } from "@/components/ui/button";
+import type { UserEvent } from "@/types";
 
 export const revalidate = 60;
 
-const CATEGORIES = [
-  { type: "fitness-racing", label: "Fitness Racing", description: "Functional Fitness Racing Events" },
-  { type: "running",        label: "Running",        description: "5K to Ultramarathon" },
-  { type: "crossfit",       label: "CrossFit",       description: "Functional Fitness Competitions" },
-  { type: "hybrid",         label: "Hybrid",         description: "Multi-Discipline & OCR Events" },
-] as const;
+function EventCard({ event }: { event: UserEvent }) {
+  const [day, month] = formatShortDate(event.date).split(" ");
+  const img = getEventImage(event.type, event.id);
+  return (
+    <Link
+      href={`/events/${event.id}`}
+      className="group flex-shrink-0 w-[240px] sm:w-[280px]"
+      style={{ scrollSnapAlign: "start" }}
+    >
+      <div className="relative w-full aspect-[3/4] overflow-hidden bg-dark rounded-2xl sm:rounded-3xl">
+        <img
+          src={img}
+          alt={event.title}
+          className="w-full h-full object-cover brightness-[0.55] group-hover:brightness-[0.7] group-hover:scale-105 transition-all duration-700"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker/90 via-dark-darker/20 to-transparent" />
 
-const EVENT_TYPE_ORDER = ["fitness-racing", "running", "crossfit", "hybrid"] as const;
+        <div className="absolute top-3 right-3 bg-dark/80 backdrop-blur-sm rounded-xl px-3 py-2 text-center leading-tight">
+          <span className="block font-headline text-lg font-black text-primary">{day}</span>
+          <span className="block font-headline text-[9px] font-bold uppercase tracking-widest text-light/70">{month}</span>
+        </div>
+
+        <div className="absolute top-3 left-3">
+          <span className="font-headline text-[9px] font-bold uppercase tracking-widest bg-primary text-dark px-2.5 py-1 rounded-full">
+            {EVENT_TYPE_LABELS[event.type]}
+          </span>
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 p-4">
+          <h3 className="font-headline text-base sm:text-lg font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1.5 line-clamp-2">
+            {truncateTitle(event.title)}
+          </h3>
+          <div className="flex items-center gap-1.5 font-headline text-[10px] text-muted uppercase tracking-widest mb-1">
+            <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+            {event.city}, {event.state.toUpperCase()}
+          </div>
+          {event.ticketDrops && event.ticketDrops.length > 0 && (
+            <div className="inline-block mt-1.5 bg-primary/15 backdrop-blur-sm rounded-lg px-3 py-1">
+              <span className="font-headline text-[11px] font-bold text-primary">From ${event.ticketDrops[0].price}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+          <div className="absolute -inset-full top-0 h-full w-1/2 skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/5 to-transparent group-hover:animate-shimmer" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function sortByDate(events: UserEvent[]): UserEvent[] {
+  return [...events].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
 
 export default async function Home() {
   const raw = await getAllEvents();
   const events = toUserEvents(raw);
 
-  const categories = CATEGORIES.map((c) => ({
-    ...c,
-    count: events.filter((e) => e.type === c.type).length,
-  }));
+  // ── Starting Soon (next upcoming events) ──
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcoming = sortByDate(events.filter((e) => new Date(e.date) >= today));
+  const startingSoon = upcoming.slice(0, 12);
+
+  // ── Recommended For You ──
+  let recommended = events;
+  try {
+    const session = await getUserSession();
+    if (session) {
+      const user = await prisma.user.findUnique({
+        where: { id: session.sub },
+        select: { city: true, state: true },
+      });
+      if (user?.state) {
+        const local = events.filter((e) => e.state === user.state);
+        if (local.length >= 3) recommended = local;
+      }
+    }
+  } catch {
+    // not authenticated — show all
+  }
 
   return (
     <main className="min-h-screen bg-dark-darker">
@@ -50,175 +117,39 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── Most Popular Events ── */}
-      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-16">
+      {/* ── Trending Now ── */}
+      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-6 sm:pb-8">
         <ScrollCarousel
           eyebrow="Trending Now"
           title="Most Popular Events"
-          viewAllHref="/events"
-          arrowTopClass="top-[98px]"
         >
-          {events.map((event) => {
-            const [day, month] = formatShortDate(event.date).split(" ");
-            const img = getEventImage(event.type, event.id);
-            return (
-              <Link
-                key={event.id}
-                href={`/events/${event.id}`}
-                className="group flex-shrink-0 w-[220px] sm:w-[260px]"
-                style={{ scrollSnapAlign: "start" }}
-              >
-                <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3 rounded-2xl sm:rounded-3xl">
-                  <img
-                    src={img}
-                    alt={event.title}
-                    className="w-full h-full object-cover brightness-75 group-hover:brightness-90 transition-all duration-500"
-                  />
-                  <div className="absolute top-2.5 left-2.5">
-                    <span className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
-                      {EVENT_TYPE_LABELS[event.type]}
-                    </span>
-                  </div>
-                </div>
-                <div className="px-0.5">
-                  <h3 className="font-headline text-sm sm:text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1">
-                    {truncateTitle(event.title)}
-                  </h3>
-                  <div className="flex items-center gap-1.5 font-headline text-[10px] sm:text-xs text-muted uppercase tracking-widest mb-0.5">
-                    <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
-                    {event.city}, {event.state.toUpperCase()}
-                  </div>
-                  <div className="flex items-center gap-1.5 font-headline text-[10px] sm:text-xs text-muted uppercase tracking-widest">
-                    <Calendar className="w-3 h-3 text-primary flex-shrink-0" />
-                    {day} {month}
-                  </div>
-                  {event.ticketDrops && event.ticketDrops.length > 0 && (
-                    <p className="font-headline text-xs font-bold text-light mt-1.5">
-                      From {event.ticketDrops[0].price}
-                    </p>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+          {events.map((event) => <EventCard key={event.id} event={event} />)}
         </ScrollCarousel>
       </section>
 
-      {/* ── Event Categories ── */}
-      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pb-10 sm:pb-16">
-        <ScrollCarousel
-          eyebrow="Browse by Discipline"
-          title="Event Categories"
-          arrowTopClass="top-[110px]"
-        >
-          {categories.map((cat) => (
-            <Link
-              key={cat.type}
-              href={`/events?type=${cat.type}`}
-              className="group flex-shrink-0 w-[180px] sm:w-[240px]"
-              style={{ scrollSnapAlign: "start" }}
-            >
-              <div className="relative w-full aspect-square overflow-hidden bg-dark mb-3 rounded-2xl sm:rounded-3xl">
-                <img
-                  src={getCategoryImage(cat.type)}
-                  alt={cat.label}
-                  className="w-full h-full object-cover brightness-50 group-hover:brightness-75 transition-all duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-dark-darker/80 to-transparent" />
-                <div className="absolute bottom-2.5 left-3">
-                  <span className="font-headline text-[10px] sm:text-xs font-medium uppercase tracking-widest text-primary">
-                    {cat.count} events
-                  </span>
-                </div>
-              </div>
-              <div className="px-0.5">
-                <h3 className="font-headline text-sm sm:text-base font-black italic tracking-tighter text-light group-hover:text-primary transition-colors mb-0.5">
-                  {cat.label}
-                </h3>
-                <p className="font-headline text-[10px] sm:text-xs text-muted tracking-wide">{cat.description}</p>
-              </div>
-            </Link>
-          ))}
-        </ScrollCarousel>
-      </section>
+      {/* ── Starting Soon ── */}
+      {startingSoon.length > 0 && (
+        <section className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <ScrollCarousel
+            eyebrow="Coming Up"
+            title="Starting Soon"
+          >
+            {startingSoon.map((event) => <EventCard key={event.id} event={event} />)}
+          </ScrollCarousel>
+        </section>
+      )}
 
-      {/* ── By Discipline ── */}
-      {EVENT_TYPE_ORDER.map((type) => {
-        const typeEvents = events.filter((e) => e.type === type);
-        if (typeEvents.length === 0) return null;
-        return (
-          <section key={type} className="max-w-[1440px] mx-auto px-4 sm:px-6 pb-10 sm:pb-14">
-            <ScrollCarousel
-              title={EVENT_TYPE_LABELS[type]}
-              viewAllHref={`/events?type=${type}`}
-              arrowTopClass="top-[83px]"
-            >
-              {typeEvents.map((event) => {
-                const [day, month] = formatShortDate(event.date).split(" ");
-                const img = getEventImage(event.type, event.id);
-                return (
-                  <Link
-                    key={event.id}
-                    href={`/events/${event.id}`}
-                    className="group flex-shrink-0 w-[180px] sm:w-[220px]"
-                    style={{ scrollSnapAlign: "start" }}
-                  >
-                    <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark mb-3 rounded-2xl sm:rounded-3xl">
-                      <img
-                        src={img}
-                        alt={event.title}
-                        className="w-full h-full object-cover brightness-75 group-hover:brightness-90 transition-all duration-500"
-                      />
-                    </div>
-                    <div className="px-0.5">
-                      <h3 className="font-headline text-sm font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1">
-                        {truncateTitle(event.title, 24)}
-                      </h3>
-                      <div className="flex items-center justify-between font-headline text-[10px] sm:text-xs text-muted uppercase tracking-widest">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-primary" />
-                          {event.city}
-                        </span>
-                        <span>{day} {month}</span>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </ScrollCarousel>
-          </section>
-        );
-      })}
-
-      {/* ── CTA ── */}
-      <section className="bg-dark border-t border-dark-lighter">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-12 sm:py-16 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
-          <div className="max-w-xl">
-            <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary flex items-center gap-3 mb-4">
-              <span className="w-8 h-px bg-primary inline-block" />
-              Australia&apos;s Fitness Event Calendar
-            </p>
-            <h2 className="font-headline text-3xl sm:text-4xl lg:text-5xl font-black italic tracking-tighter text-light leading-tight mb-3">
-              Where is your<br />
-              <span className="text-primary">next start line?</span>
-            </h2>
-            <p className="text-muted text-sm leading-relaxed">
-              Fitness racing, CrossFit, running and hybrid events across Australia &mdash; all in one place.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <Button asChild variant="machined" size="ctaLg" className="w-full sm:w-auto justify-center">
-              <Link href="/events">
-                <Search className="w-4 h-4" />
-                Browse Events
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="ctaLg" className="w-full sm:w-auto justify-center">
-              <Link href="/organiser/register">List Your Event</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+      {/* ── Recommended For You ── */}
+      {recommended.length > 0 && (
+        <section className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-16 sm:pb-20">
+          <ScrollCarousel
+            eyebrow="Personalised"
+            title="Recommended For You"
+          >
+            {recommended.map((event) => <EventCard key={event.id} event={event} />)}
+          </ScrollCarousel>
+        </section>
+      )}
 
     </main>
   );

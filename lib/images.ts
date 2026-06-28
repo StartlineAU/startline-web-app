@@ -1,9 +1,4 @@
 const IMAGE_POOLS: Record<string, string[]> = {
-  "fitness-racing": [
-    "https://images.unsplash.com/photo-1571008887538-b36bb32f4571",
-    "https://images.unsplash.com/photo-1549060279-7e168fcee0c2",
-    "https://images.unsplash.com/photo-1517963879433-6ad2b056d712",
-  ],
   crossfit: [
     "https://images.unsplash.com/photo-1534438327276-14e5300c3a48",
     "https://images.unsplash.com/photo-1517836357463-d25dfeac3438",
@@ -18,6 +13,36 @@ const IMAGE_POOLS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1552674605-db6ffd4facb5",
     "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61",
     "https://images.unsplash.com/photo-1574680096145-d05b474e2155",
+  ],
+  swimming: [
+    "https://images.unsplash.com/photo-1519311965067-36d3e5f33d39",
+    "https://images.unsplash.com/photo-1560088334-4de5f7b9559a",
+    "https://images.unsplash.com/photo-1530549387789-4c1017266634",
+  ],
+  cycling: [
+    "https://images.unsplash.com/photo-1485965120184-e220f721d03e",
+    "https://images.unsplash.com/photo-1517649763962-0c623066013b",
+    "https://images.unsplash.com/photo-1576435728678-68d0fbf94e5c",
+  ],
+  triathlon: [
+    "https://images.unsplash.com/photo-1461896836934-bd45ba8fcf9b",
+    "https://images.unsplash.com/photo-1541534741688-6078c8bf2355",
+    "https://images.unsplash.com/photo-1571497424536-0f872a53ef4e",
+  ],
+  duathlon: [
+    "https://images.unsplash.com/photo-1571497424536-0f872a53ef4e",
+    "https://images.unsplash.com/photo-1461896836934-bd45ba8fcf9b",
+    "https://images.unsplash.com/photo-1517649763962-0c623066013b",
+  ],
+  weightlifting: [
+    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48",
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438",
+    "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e",
+  ],
+  bodybuilding: [
+    "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e",
+    "https://images.unsplash.com/photo-1526506118085-60ce8714f8c5",
+    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48",
   ],
 };
 

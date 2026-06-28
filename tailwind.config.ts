@@ -50,6 +50,15 @@ const config: Config = {
       boxShadow: {
         machined: "2px 2px 0px 0px rgb(var(--color-primary))",
       },
+      animation: {
+        shimmer: "shimmer 2s ease-in-out infinite",
+      },
+      keyframes: {
+        shimmer: {
+          "0%": { transform: "translateX(-100%) skewX(-20deg)" },
+          "100%": { transform: "translateX(200%) skewX(-20deg)" },
+        },
+      },
     },
   },
   plugins: [],

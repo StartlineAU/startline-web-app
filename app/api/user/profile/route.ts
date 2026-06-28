@@ -18,6 +18,7 @@ export async function GET() {
     select: {
       id: true, email: true, name: true, username: true,
       bio: true, profilePicUrl: true, isPublic: true,
+      city: true, state: true,
       organiser: { select: { id: true, orgName: true, logoUrl: true, verified: true } },
     },
   });
@@ -52,6 +53,8 @@ export async function PUT(req: Request) {
   if ("bio" in body) data.bio = body.bio?.trim() || null;
   if ("profilePicUrl" in body) data.profilePicUrl = body.profilePicUrl || null;
   if ("isPublic" in body) data.isPublic = body.isPublic;
+  if ("city" in body) data.city = body.city?.trim() || null;
+  if ("state" in body) data.state = body.state?.trim() || null;
 
   const user = await prisma.user.update({
     where:  { id: session.sub },
@@ -59,6 +62,7 @@ export async function PUT(req: Request) {
     select: {
       id: true, email: true, name: true, username: true,
       bio: true, profilePicUrl: true, isPublic: true,
+      city: true, state: true,
     },
   });
   return NextResponse.json(user);
