@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getLevelProgress } from "@/lib/user-level";
+import {
+  registrationEventSelect,
+  serializeRegistration,
+  splitRegistrationsByDate,
+} from "@/lib/user-registrations";
 
 export async function GET(
   _req: Request,
@@ -14,15 +20,11 @@ export async function GET(
     where:  { username },
     select: {
       id: true, name: true, username: true, bio: true,
-      profilePicUrl: true, isPublic: true,
+      profilePicUrl: true, isPublic: true, points: true, level: true,
       registrations: {
         where: { status: "CONFIRMED" },
-        select: {
-          eventId: true,
-          event: { select: { title: true, eventDate: true, city: true, state: true } },
-        },
+        select: registrationEventSelect,
         orderBy: { createdAt: "desc" },
-        take: 20,
       },
     },
   });
@@ -35,5 +37,17 @@ export async function GET(
     return NextResponse.json({ error: "This profile is private." }, { status: 403 });
   }
 
-  return NextResponse.json(user);
+  const serialized = user.registrations.map(serializeRegistration);
+  const { upcoming, past } = splitRegistrationsByDate(serialized);
+
+  return NextResponse.json({
+    id: user.id,
+    name: user.name,
+    username: user.username,
+    bio: user.bio,
+    profilePicUrl: user.profilePicUrl,
+    isPublic: user.isPublic,
+    gamification: getLevelProgress(user.points),
+    registrations: { upcoming, past },
+  });
 }

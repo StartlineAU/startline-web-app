@@ -9,6 +9,7 @@ import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
 import { Button } from "@/components/ui/button";
+import SaveEventButton from "@/components/SaveEventButton";
 
 export const revalidate = 60;
 
@@ -78,6 +79,9 @@ export default async function Home() {
                     <span className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">
                       {EVENT_TYPE_LABELS[event.type]}
                     </span>
+                  </div>
+                  <div className="absolute top-2.5 right-2.5">
+                    <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm" />
                   </div>
                 </div>
                 <div className="px-0.5">
@@ -169,6 +173,9 @@ export default async function Home() {
                         alt={event.title}
                         className="w-full h-full object-cover brightness-75 group-hover:brightness-90 transition-all duration-500"
                       />
+                      <div className="absolute top-2 right-2">
+                        <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm" />
+                      </div>
                     </div>
                     <div className="px-0.5">
                       <h3 className="font-headline text-sm font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1">

@@ -19,6 +19,7 @@ import {
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
 import { toUserEvents } from "@/lib/user-events";
+import SaveEventButton from "@/components/SaveEventButton";
 
 interface FilterChipProps {
   label: string;
@@ -415,7 +416,8 @@ function EventsPageInner() {
                           {EVENT_TYPE_LABELS[event.type]}
                         </span>
                       </div>
-                      <div className="absolute top-2.5 right-3">
+                      <div className="absolute top-2.5 right-3 flex items-center gap-2">
+                        <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm" />
                         <span className="font-headline text-xs font-medium text-light bg-dark/60 backdrop-blur-sm px-2 py-0.5 rounded-full">
                           {eDay} {eMonth}
                         </span>
@@ -479,7 +481,11 @@ function EventsPageInner() {
                           {EVENT_TYPE_LABELS[event.type]}
                         </span>
                       </div>
-                      <div className="absolute top-3 right-3">
+                      <div className="absolute top-3 right-3 flex items-center gap-2">
+                        <SaveEventButton
+                          eventId={event.id}
+                          className="bg-dark/60 backdrop-blur-sm"
+                        />
                         <span className="font-headline text-xs font-medium text-light bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
                           {eDay} {eMonth}
                         </span>
@@ -525,13 +531,16 @@ function EventsPageInner() {
               <div className="relative rounded-3xl overflow-hidden" style={{ aspectRatio: "16/7" }}>
                 <img src={bannerUrl} alt={selectedEvent.title} className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/40 to-transparent" />
-                <div className="absolute top-4 left-5 flex items-center gap-2 flex-wrap">
-                  <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full ${status?.style}`}>
-                    {status?.label}
-                  </span>
-                  <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
-                    {EVENT_TYPE_LABELS[selectedEvent.type]}
-                  </span>
+                <div className="absolute top-4 left-5 right-5 flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full ${status?.style}`}>
+                      {status?.label}
+                    </span>
+                    <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                      {EVENT_TYPE_LABELS[selectedEvent.type]}
+                    </span>
+                  </div>
+                  <SaveEventButton eventId={selectedEvent.id} className="bg-dark/60 backdrop-blur-sm" />
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 p-5">
                   <Link href={`/events/${selectedEvent.id}`} className="group">
@@ -641,6 +650,7 @@ function EventsPageInner() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
+                    <SaveEventButton eventId={selectedEvent.id} variant="labeled" className="w-auto px-5 py-3 h-auto" />
                     <Link
                       href={`/events/${selectedEvent.id}`}
                       className="inline-flex items-center gap-2 border border-dark-lighter text-muted font-headline text-sm font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-primary/50 hover:text-light transition-colors"

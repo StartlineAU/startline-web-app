@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
+import { useAuthContext } from "@/context/AuthContext";
 
 const StripePaymentSection = dynamic(() => import("./stripe-payment"), { ssr: false });
 
@@ -45,6 +46,7 @@ export default function RegisterPage() {
 function RegisterContent() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const { status } = useAuthContext();
   const eventId = params.id as string;
   const preselectedWave = searchParams.get("wave") ?? "";
 
@@ -69,6 +71,18 @@ function RegisterContent() {
       })
       .catch(() => setLoading(false));
   }, [eventId]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    fetch("/api/user/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { name?: string | null; email?: string } | null) => {
+        if (!data) return;
+        setUserName((prev) => prev || data.name || "");
+        setUserEmail((prev) => prev || data.email || "");
+      })
+      .catch(() => {});
+  }, [status]);
 
   const selectedWaveData = event?.waves?.find((w) => w.label === selectedWave);
   const ticketPrice = selectedWaveData ? parseFloat(selectedWaveData.price || "0") : 0;
@@ -101,9 +115,9 @@ function RegisterContent() {
           category,
         }),
       });
-      const data = await res.json() as { clientSecret?: string; error?: string };
+      const data = await res.json() as { clientSecret?: string; error?: string; detail?: string };
       if (!res.ok || !data.clientSecret) {
-        setError(data.error ?? "Failed to create payment.");
+        setError(data.detail ? `${data.error} (${data.detail})` : (data.error ?? "Failed to create payment."));
         setProcessing(false);
         return;
       }

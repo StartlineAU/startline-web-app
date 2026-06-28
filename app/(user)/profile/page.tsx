@@ -2,13 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Save, Heart, Calendar, MapPin, Clock, RefreshCw, Settings, Globe, Lock, Check, X, AlertCircle } from "lucide-react";
+import { Settings, Globe, Lock, Check, X, AlertCircle } from "lucide-react";
 import type { UserEvent } from "@/types";
-import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
-import { formatMediumDate, formatTime } from "@/lib/utils";
-import { getSavedEventIds, getRegisteredEventIds } from "@/lib/client-lists";
+import { getSavedEventIds } from "@/lib/client-lists";
 import { toUserEvents } from "@/lib/user-events";
 import { useAuthContext } from "@/context/AuthContext";
+import { POINTS_PER_REGISTRATION } from "@/lib/user-level";
+import { LevelBadge } from "@/components/profile/LevelBadge";
+import {
+  ProfileEventCarouselCard,
+  registrationToCard,
+  userEventToCard,
+} from "@/components/profile/ProfileEventCarouselCard";
+import { ProfileEventCarouselSection } from "@/components/profile/ProfileEventCarouselSection";
+import type { LevelProgress } from "@/lib/user-level";
+import type { UserRegistrationEvent } from "@/lib/user-registrations";
 
 export default function ProfilePage() {
   const { user, status } = useAuthContext();
@@ -17,6 +25,8 @@ export default function ProfilePage() {
     id: string; email: string; name: string | null;
     username: string | null; bio: string | null;
     profilePicUrl: string | null; isPublic: boolean;
+    points: number; level: number;
+    gamification: LevelProgress;
     organiser: { id: string; orgName: string | null; logoUrl: string | null; verified: boolean } | null;
   } | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -85,11 +95,13 @@ export default function ProfilePage() {
     return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
   }, [editUsername, userData?.username]);
 
-  // Saved/registered events (localStorage)
+  // Saved events (localStorage) + paid registrations (account)
   const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [registeredIds, setRegisteredIds] = useState<string[]>([]);
   const [events, setEvents] = useState<UserEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
+  const [upcomingRegs, setUpcomingRegs] = useState<UserRegistrationEvent[]>([]);
+  const [pastRegs, setPastRegs] = useState<UserRegistrationEvent[]>([]);
+  const [regsLoading, setRegsLoading] = useState(true);
 
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
@@ -114,7 +126,6 @@ export default function ProfilePage() {
     setEventsLoading(true);
     try {
       setSavedIds(getSavedEventIds());
-      setRegisteredIds(getRegisteredEventIds());
       const eventsRes = await fetch("/api/events");
       const eventsData = eventsRes.ok ? await eventsRes.json() : [];
       setEvents(Array.isArray(eventsData) ? toUserEvents(eventsData) : []);
@@ -125,10 +136,31 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const loadRegistrations = useCallback(async () => {
+    setRegsLoading(true);
+    try {
+      const res = await fetch("/api/user/registrations");
+      if (res.ok) {
+        const data = await res.json();
+        setUpcomingRegs(data.upcoming ?? []);
+        setPastRegs(data.past ?? []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setRegsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (status === "authenticated") loadProfile();
-    else setProfileLoading(false);
-  }, [status, loadProfile]);
+    if (status === "authenticated") {
+      loadProfile();
+      loadRegistrations();
+    } else {
+      setProfileLoading(false);
+      setRegsLoading(false);
+    }
+  }, [status, loadProfile, loadRegistrations]);
 
   useEffect(() => {
     loadEvents();
@@ -136,7 +168,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     function onStorage(e: StorageEvent) {
-      if (e.key === "startline_saved_events" || e.key === "startline_registered_interest") loadEvents();
+      if (e.key === "startline_saved_events") loadEvents();
     }
     function onLocalChange() { loadEvents(); }
     window.addEventListener("storage", onStorage);
@@ -172,10 +204,8 @@ export default function ProfilePage() {
     }
   };
 
-  const loading = profileLoading || eventsLoading;
   const initial = userData?.name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "A";
   const savedEvents = events.filter((e) => savedIds.includes(String(e.id)));
-  const registeredEvents = events.filter((e) => registeredIds.includes(String(e.id)));
 
   if (status !== "authenticated") {
     return (
@@ -223,6 +253,14 @@ export default function ProfilePage() {
                         <><Lock className="w-3 h-3 text-muted-dark" /> Private profile</>
                       )}
                     </span>
+                    {userData?.username && userData.isPublic && (
+                      <Link
+                        href={`/profile/${userData.username}`}
+                        className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-primary hover:underline"
+                      >
+                        View public profile
+                      </Link>
+                    )}
                     {userData?.organiser && (
                       <Link href="/organiser/dashboard"
                         className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-primary hover:underline">
@@ -235,11 +273,17 @@ export default function ProfilePage() {
             </div>
             <button
               onClick={() => setEditing(!editing)}
-              className="flex items-center gap-2 h-9 px-4 rounded font-headline text-[11px] font-bold uppercase tracking-widest text-muted bg-transparent border border-dark-lighter hover:border-primary hover:text-primary transition-colors"
+              className="flex items-center gap-2 h-9 px-4 rounded font-headline text-[11px] font-bold uppercase tracking-widest text-muted bg-transparent border border-dark-lighter hover:border-primary hover:text-primary transition-colors flex-shrink-0"
             >
               <Settings className="w-3.5 h-3.5" /> Edit
             </button>
           </div>
+
+          {userData?.gamification && (
+            <div className="mt-8 max-w-xl">
+              <LevelBadge gamification={userData.gamification} />
+            </div>
+          )}
         </div>
       </section>
 
@@ -334,126 +378,51 @@ export default function ProfilePage() {
         </section>
       )}
 
-      {/* Saved & registered events */}
-      <section className="max-w-[1440px] mx-auto px-6 py-12">
-        <div className="mb-8">
-          <p className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-3 flex items-center gap-3">
-            <span className="w-10 h-px bg-primary inline-block" />
-            Your events
-          </p>
-          <p className="text-muted text-sm leading-relaxed">
-            Saved events and interest you register are stored in this browser only &mdash; nothing is sent to an account server.
-          </p>
-        </div>
+      {/* Event carousels */}
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-10 sm:py-16 space-y-12 sm:space-y-16">
+        <ProfileEventCarouselSection
+          eyebrow="Your shortlist"
+          title="Saved Events"
+          loading={eventsLoading}
+          itemCount={savedEvents.length}
+          emptyTitle="No saved events yet"
+          emptyDescription="Tap the heart on any event to bookmark it here. Saved events are stored in this browser."
+        >
+          {savedEvents.map((event) => (
+            <ProfileEventCarouselCard key={event.id} event={userEventToCard(event)} />
+          ))}
+        </ProfileEventCarouselSection>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-dark rounded-xl p-8">
-            <div className="flex items-center gap-3 mb-2">
-              <Heart className="w-5 h-5 text-primary" />
-              <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary">
-                Saved Events
-              </h2>
-              <span className="ml-auto font-headline text-xs text-muted">{savedEvents.length}</span>
-            </div>
-            <p className="text-muted text-xs mb-6 leading-relaxed">
-              Events you&apos;ve bookmarked with the heart icon &mdash; your personal shortlist to revisit later.
-            </p>
-            {eventsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="w-4 h-4 text-muted animate-spin" />
-              </div>
-            ) : savedEvents.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted text-sm mb-3">No saved events yet.</p>
-                <Link href="/events" className="font-headline text-xs font-bold uppercase tracking-widest text-primary hover:underline">
-                  Browse Events
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {savedEvents.map((event) => (
-                  <Link key={event.id} href={`/events/${event.id}`}
-                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-dark-light transition-colors group">
-                    <div className="flex-shrink-0 w-12 text-center">
-                      <span className="font-headline text-[10px] uppercase tracking-widest text-primary block">
-                        {EVENT_TYPE_LABELS[event.type]}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-headline text-sm font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors truncate">
-                        {event.title}
-                      </p>
-                      <div className="flex items-center gap-3 text-muted font-headline text-[10px] uppercase tracking-widest mt-0.5">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-primary" />
-                          {formatMediumDate(event.date)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-primary" />
-                          {event.city}, {STATE_LABELS[event.state]}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+        <ProfileEventCarouselSection
+          eyebrow="Registered & confirmed"
+          title="Upcoming Events"
+          loading={regsLoading}
+          itemCount={upcomingRegs.length}
+          emptyTitle="No upcoming registrations"
+          emptyDescription="Register for an event while signed in and it will show up here after payment."
+        >
+          {upcomingRegs.map((reg) => (
+            <ProfileEventCarouselCard key={reg.id} event={registrationToCard(reg)} />
+          ))}
+        </ProfileEventCarouselSection>
 
-          <div className="bg-dark rounded-xl p-8">
-            <div className="flex items-center gap-3 mb-2">
-              <Save className="w-5 h-5 text-primary" />
-              <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary">
-                Registered interest
-              </h2>
-              <span className="ml-auto font-headline text-xs text-muted">{registeredEvents.length}</span>
-            </div>
-            <p className="text-muted text-xs mb-6 leading-relaxed">
-              Events where you tapped &quot;Register interest&quot; &mdash; stored locally in this browser.
-            </p>
-            {eventsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="w-4 h-4 text-muted animate-spin" />
-              </div>
-            ) : registeredEvents.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted text-sm mb-3">No registered interest yet.</p>
-                <Link href="/events" className="font-headline text-xs font-bold uppercase tracking-widest text-primary hover:underline">
-                  Browse Events
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {registeredEvents.map((event) => (
-                  <Link key={event.id} href={`/events/${event.id}`}
-                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-dark-light transition-colors group">
-                    <div className="flex-shrink-0 w-12 text-center">
-                      <span className="font-headline text-[10px] uppercase tracking-widest text-primary block">
-                        {EVENT_TYPE_LABELS[event.type]}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-headline text-sm font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors truncate">
-                        {event.title}
-                      </p>
-                      <div className="flex items-center gap-3 text-muted font-headline text-[10px] uppercase tracking-widest mt-0.5">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-primary" />
-                          {formatMediumDate(event.date)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-primary" />
-                          {formatTime(event.time)}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+        <ProfileEventCarouselSection
+          eyebrow="Your history"
+          title="Past Events"
+          loading={regsLoading}
+          itemCount={pastRegs.length}
+          emptyTitle="No event history yet"
+          emptyDescription="Events you've registered for will move here after event day."
+        >
+          {pastRegs.map((reg) => (
+            <ProfileEventCarouselCard key={reg.id} event={registrationToCard(reg)} />
+          ))}
+        </ProfileEventCarouselSection>
+
+        <p className="text-muted text-sm text-center pt-2">
+          Earn {POINTS_PER_REGISTRATION} points per event you register for through Startline.
+        </p>
+      </div>
     </main>
   );
 }

@@ -10,9 +10,14 @@ import { cn } from "@/lib/utils";
 interface SaveEventButtonProps {
   eventId: string;
   className?: string;
+  variant?: "icon" | "labeled";
 }
 
-export default function SaveEventButton({ eventId, className = "" }: SaveEventButtonProps) {
+export default function SaveEventButton({
+  eventId,
+  className = "",
+  variant = "icon",
+}: SaveEventButtonProps) {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -36,21 +41,28 @@ export default function SaveEventButton({ eventId, className = "" }: SaveEventBu
   return (
     <Button
       type="button"
-      variant="ghost"
-      size="icon"
+      variant={variant === "labeled" ? "outline" : "ghost"}
+      size={variant === "labeled" ? "default" : "icon"}
       onClick={toggle}
       disabled={loading}
       aria-label={saved ? "Unsave event" : "Save event"}
       title={saved ? "Remove from saved" : "Save event"}
       className={cn(
-        "h-auto w-auto p-2 rounded-full transition-all",
+        variant === "labeled"
+          ? "w-full font-headline text-[11px] font-bold uppercase tracking-widest gap-2"
+          : "h-auto w-auto p-2 rounded-full transition-all",
         saved
-          ? "text-primary bg-primary/10 hover:bg-primary/20 hover:text-primary"
-          : "text-muted hover:text-primary hover:bg-dark-light",
+          ? variant === "labeled"
+            ? "border-primary text-primary bg-primary/10 hover:bg-primary/20"
+            : "text-primary bg-primary/10 hover:bg-primary/20 hover:text-primary"
+          : variant === "labeled"
+            ? "border-dark-lighter text-muted hover:border-primary hover:text-primary"
+            : "text-muted hover:text-primary hover:bg-dark-light",
         className
       )}
     >
       <Heart className={cn("w-4 h-4", saved && "fill-primary")} />
+      {variant === "labeled" && (saved ? "Saved" : "Save event")}
     </Button>
   );
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
+import { awardRegistrationPoints } from "@/lib/user-points";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -58,10 +59,20 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   });
   if (existing) return;
 
-  await prisma.registration.create({
+  let userId = meta.userId || null;
+  if (!userId && meta.userEmail) {
+    const user = await prisma.user.findUnique({
+      where: { email: meta.userEmail.trim().toLowerCase() },
+      select: { id: true },
+    });
+    userId = user?.id ?? null;
+  }
+
+  const registration = await prisma.registration.create({
     data: {
       eventId,
       organiserId,
+      userId,
       athleteName: meta.userName ?? "Unknown",
       athleteEmail: meta.userEmail ?? "",
       category: meta.category || null,
@@ -73,6 +84,12 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       stripePaymentIntentId: paymentIntent.id,
     },
   });
+
+  if (userId) {
+    await awardRegistrationPoints(userId, registration.id).catch((err) =>
+      console.error("Failed to award registration points:", err),
+    );
+  }
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },

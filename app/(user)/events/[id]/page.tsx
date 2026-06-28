@@ -8,6 +8,7 @@ import { formatEventDate, formatTime, formatCompetitionFormat } from "@/lib/util
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
 import { Button } from "@/components/ui/button";
+import SaveEventButton from "@/components/SaveEventButton";
 
 export const revalidate = 60;
 
@@ -38,14 +39,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         <img src={bannerUrl} alt={event.title} className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/50 to-transparent" />
 
-        {/* Badges */}
-        <div className="absolute top-4 left-4 flex items-center gap-2 flex-wrap">
-          <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full ${status.style}`}>
-            {status.label}
-          </span>
-          <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
-            {EVENT_TYPE_LABELS[event.type]}
-          </span>
+        {/* Badges + save */}
+        <div className="absolute top-4 left-4 right-4 flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`font-headline text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full ${status.style}`}>
+              {status.label}
+            </span>
+            <span className="font-headline text-xs font-medium uppercase tracking-widest text-muted bg-dark/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
+              {EVENT_TYPE_LABELS[event.type]}
+            </span>
+          </div>
+          <SaveEventButton eventId={event.id} className="bg-dark/60 backdrop-blur-sm" />
         </div>
 
         {/* Title overlaid at bottom of banner */}
@@ -147,6 +151,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 
             {/* CTAs — visible on desktop in sidebar, hidden on mobile (moved to sticky bar) */}
             <div className="hidden lg:flex flex-col gap-3">
+              <SaveEventButton eventId={event.id} variant="labeled" />
               {event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0 && (
                 <Button asChild variant="machined" size="ctaLg">
                   <Link href={`/events/${event.id}/register`}>
@@ -177,44 +182,43 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       </section>
 
       {/* ── Mobile sticky bottom CTA bar ── */}
-      {(event.registrationUrl || (event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0)) && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-darker border-t border-dark-lighter px-4 py-3 safe-area-bottom">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              {event.ticketDrops && event.ticketDrops.length > 0 && (
-                <>
-                  <p className="font-headline text-[10px] uppercase tracking-widest text-muted">From</p>
-                  <p className="font-headline text-xl font-black italic text-primary leading-none">
-                    {event.ticketDrops[0].price}
-                  </p>
-                </>
-              )}
-            </div>
-            {event.registrationType === "startline" ? (
-              <Link
-                href={`/events/${event.id}/register`}
-                className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
-              >
-                Register Now
-                <ExternalLink className="w-4 h-4" />
-              </Link>
-            ) : (
-              <a
-                href={event.registrationUrl ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
-              >
-                Register Now
-                <ExternalLink className="w-4 h-4" />
-              </a>
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-darker border-t border-dark-lighter px-4 py-3 safe-area-bottom">
+        <div className="flex items-center gap-3">
+          <SaveEventButton eventId={event.id} className="bg-dark border border-dark-lighter flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            {event.ticketDrops && event.ticketDrops.length > 0 && (
+              <>
+                <p className="font-headline text-[10px] uppercase tracking-widest text-muted">From</p>
+                <p className="font-headline text-xl font-black italic text-primary leading-none">
+                  {event.ticketDrops[0].price}
+                </p>
+              </>
             )}
           </div>
+          {event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0 ? (
+            <Link
+              href={`/events/${event.id}/register`}
+              className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
+            >
+              Register Now
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          ) : event.registrationUrl ? (
+            <a
+              href={event.registrationUrl ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
+            >
+              Register Now
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          ) : null}
         </div>
-      )}
+      </div>
 
       {/* Spacer so sticky bar doesn't cover content on mobile */}
-      {(event.registrationUrl || (event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0)) && <div className="lg:hidden h-20" />}
+      <div className="lg:hidden h-20" />
 
     </main>
   );

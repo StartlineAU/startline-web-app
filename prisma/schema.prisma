@@ -241,6 +241,7 @@ model Registration {
 
   @@index([eventId])
   @@index([organiserId])
+  @@index([userId])
   @@map("registrations")
 }
 
@@ -262,11 +263,14 @@ model User {
   bio        String?
   profilePicUrl String?
   isPublic   Boolean  @default(true) // public profile visible to others
+  points     Int      @default(0)
+  level      Int      @default(1)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   organiser     Organiser?
   registrations Registration[]
+  pointsLedger  PointsLedger[]
 
   @@map("users")
 }
@@ -277,4 +281,17 @@ model WaitlistSubscriber {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("waitlist_subscribers")
+}
+
+model PointsLedger {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount         Int
+  reason         String
+  registrationId String?  @unique
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@map("points_ledger")
 }

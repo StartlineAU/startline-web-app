@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { Calendar, MapPin, ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, User, Trophy, History } from "lucide-react";
+import { LevelBadge } from "@/components/profile/LevelBadge";
+import { RegistrationList } from "@/components/profile/RegistrationList";
+import type { LevelProgress } from "@/lib/user-level";
+import type { UserRegistrationEvent } from "@/lib/user-registrations";
 
 interface PublicProfilePageProps {
   params: Promise<{ username: string }>;
@@ -25,10 +29,11 @@ interface Profile {
   bio: string | null;
   profilePicUrl: string | null;
   isPublic: boolean;
+  gamification: LevelProgress;
   registrations: {
-    eventId: string;
-    event: { title: string; eventDate: string; city: string; state: string };
-  }[];
+    upcoming: UserRegistrationEvent[];
+    past: UserRegistrationEvent[];
+  };
 }
 
 export default async function PublicProfilePage({ params }: PublicProfilePageProps) {
@@ -78,37 +83,50 @@ export default async function PublicProfilePage({ params }: PublicProfilePagePro
               )}
             </div>
           </div>
+
+          <div className="mt-6">
+            <LevelBadge gamification={profile.gamification} compact />
+          </div>
         </div>
 
-        {profile.registrations.length > 0 && (
-          <section className="mt-8">
-            <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary mb-4">
-              Events attended
-            </h2>
-            <div className="space-y-2">
-              {profile.registrations.map((reg) => (
-                <Link
-                  key={reg.eventId}
-                  href={`/events/${reg.eventId}`}
-                  className="flex items-center gap-4 p-4 bg-dark rounded-xl hover:bg-dark-light transition-colors group"
-                >
-                  <Calendar className="w-5 h-5 text-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-headline text-sm font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors truncate">
-                      {reg.event.title}
-                    </p>
-                    <div className="flex items-center gap-3 text-muted font-headline text-[10px] uppercase tracking-widest mt-0.5">
-                      <span>{reg.event.eventDate}</span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {reg.event.city}
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
+        {(profile.registrations.upcoming.length > 0 || profile.registrations.past.length > 0) && (
+          <div className="mt-8 space-y-8">
+            {profile.registrations.upcoming.length > 0 && (
+              <section>
+                <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+                  <Trophy className="w-4 h-4" /> Upcoming events
+                </h2>
+                <div className="bg-dark rounded-xl border border-dark-lighter p-6">
+                  <RegistrationList
+                    registrations={profile.registrations.upcoming}
+                    emptyTitle=""
+                    emptyDescription=""
+                  />
+                </div>
+              </section>
+            )}
+
+            {profile.registrations.past.length > 0 && (
+              <section>
+                <h2 className="font-headline text-sm font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+                  <History className="w-4 h-4" /> Event history
+                </h2>
+                <div className="bg-dark rounded-xl border border-dark-lighter p-6">
+                  <RegistrationList
+                    registrations={profile.registrations.past}
+                    emptyTitle=""
+                    emptyDescription=""
+                  />
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
+        {profile.registrations.upcoming.length === 0 && profile.registrations.past.length === 0 && (
+          <p className="text-muted text-sm text-center mt-8">
+            No public event history yet.
+          </p>
         )}
       </div>
     </main>

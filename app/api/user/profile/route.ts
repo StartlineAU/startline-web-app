@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { validateUsername } from "@/lib/username-validation";
+import { getLevelProgress } from "@/lib/user-level";
 
 function badRequest(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
@@ -18,10 +19,19 @@ export async function GET() {
     select: {
       id: true, email: true, name: true, username: true,
       bio: true, profilePicUrl: true, isPublic: true,
+      points: true, level: true,
       organiser: { select: { id: true, orgName: true, logoUrl: true, verified: true } },
     },
   });
-  return NextResponse.json(user);
+
+  if (!user) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ...user,
+    gamification: getLevelProgress(user.points),
+  });
 }
 
 export async function PUT(req: Request) {

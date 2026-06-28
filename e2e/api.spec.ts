@@ -42,4 +42,16 @@ test.describe("profile API", () => {
     const body = await res.json();
     expect(body.error).toContain("Unauthorised");
   });
+
+  test("GET /api/user/registrations returns 401 without auth", async ({ request }) => {
+    const res = await request.get("/api/user/registrations");
+    expect(res.status()).toBe(401);
+    const body = await res.json();
+    expect(body.error).toContain("Unauthorised");
+  });
+
+  test("GET /api/user/profile returns 401 without auth", async ({ request }) => {
+    const res = await request.get("/api/user/profile");
+    expect(res.status()).toBe(401);
+  });
 });
