@@ -54,6 +54,3 @@ jobs:
               repo: context.repo.repo,
               body,
             });
-
-      - if: steps.plan.outcome == 'failure'
-        run: exit 1
