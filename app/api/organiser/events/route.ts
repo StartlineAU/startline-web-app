@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
 import { archivePastEvents } from "@/lib/archive-events";
+import { validateEventTimingPayload } from "@/lib/event-timing";
+import { syncEventScheduleFields } from "@/lib/event-schedule-db";
 export async function GET() {
   await archivePastEvents();
   const session = await getOrganiserSession();
@@ -48,6 +50,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const timingError = submit ? validateEventTimingPayload(body) : null;
+  if (timingError) {
+    return NextResponse.json({ error: timingError }, { status: 400 });
+  }
+
   const eventStatus = submit
     ? (session.verified ? "APPROVED" : "PENDING")
     : "DRAFT";
@@ -64,7 +71,7 @@ export async function POST(req: NextRequest) {
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
-        endTime:          body.endTime           || null,
+        endTime:          body.endTime          ?? "",
         venue:            body.venue             ?? "",
         address:          body.address           ?? null,
         city:             body.city              ?? "",
@@ -86,6 +93,15 @@ export async function POST(req: NextRequest) {
         coverImageUrl:    body.coverImageUrl      ?? null,
       },
     });
+
+    await syncEventScheduleFields(
+      prisma,
+      event.id,
+      body.multipleTimeSlots ?? false,
+      body.scheduleSlots,
+      body.cutoffDate,
+      body.eventDate ?? "",
+    );
 
     return NextResponse.json({ id: event.id, status: event.status });
   } catch (err) {

@@ -63,6 +63,8 @@ export async function getAllEvents(): Promise<PublicEvent[]> {
         eventDate: true,
         endDate: true,
         startTime: true,
+        cutoffDate: true,
+        scheduleSlots: true,
         endTime: true,
         venue: true,
         city: true,

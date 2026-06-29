@@ -91,10 +91,12 @@ model Event {
   description String?
 
   // Step 2 — date & location
-  eventDate String
-  endDate   String? // optional multi-day end (ISO yyyy-mm-dd)
-  startTime String
-  endTime   String
+  eventDate  String
+  endDate    String? // optional multi-day end (ISO yyyy-mm-dd)
+  startTime  String
+  cutoffDate String? // legacy: first slot date when using scheduleSlots
+  endTime    String
+  scheduleSlots Json @default("[]") // [{ date, startTime, cutoffTime }] when multiple slots
   venue     String
   address   String?
   city      String

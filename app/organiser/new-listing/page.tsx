@@ -10,6 +10,16 @@ import {
 } from "lucide-react";
 import OrganiserTopBar     from "@/components/organiser/TopBar";
 import AddressAutocomplete from "@/components/ui/AddressAutocomplete";
+import {
+  eventLastDate,
+  todayIso,
+  validateEventTiming,
+  validateAllTicketCloses,
+  validateTicketCloseDate,
+  formatIsoDate,
+  listEventDays,
+  syncSlotsToEventDays,
+} from "@/lib/event-timing";
 
 /* ── Step definitions ───────────────────────────────────────── */
 const STEPS = [
@@ -23,48 +33,12 @@ const STEPS = [
 
 const STEP_ERRORS: Record<number, string> = {
   0: "Event name is required.",
-  1: "Date, street address, city and state are required.",
+  1: "Date, start time, street address, city and state are required.",
   2: "Discipline, competition format, level and minimum age are required.",
   3: "At least one ticket category with a price is required.",
   4: "A registration URL is required.",
 };
 
-type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "";
-type Format     = "individual" | "team" | "both" | "";
-type Level      = "beginner" | "open" | "elite" | "";
-type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
-
-interface Wave { label: string; price: string; closes: string; }
-
-interface FormState {
-  title: string; discipline: Discipline; description: string;
-  date: string; endDate: string; startTime: string; endTime: string;
-  venue: string; address: string; city: string; state: AusState;
-  format: Format; level: Level; categories: string[]; cap: string; minAge: string;
-  waves: Wave[];
-  inclusions: string; extras: string; activations: string; refundPolicy: string;
-  registrationType: 'startline' | 'external';
-  feeStructure: 'athlete' | 'organiser';
-  coverImage: File | null; coverImageUrl: string; registrationUrl: string; accessibilityInfo: string;
-}
-
-const INITIAL: FormState = {
-  title: "", discipline: "", description: "",
-  date: "", endDate: "", startTime: "", endTime: "",
-  venue: "", address: "", city: "", state: "",
-  format: "", level: "",
-  categories: [],
-  cap: "", minAge: "",
-  waves: [
-    { label: "", price: "", closes: "" },
-  ],
-  inclusions: "", extras: "", activations: "", refundPolicy: "",
-  registrationType: "startline",
-  feeStructure: "athlete",
-  coverImage: null, coverImageUrl: "", registrationUrl: "", accessibilityInfo: "",
-};
-
-/* ── Shared field primitive ─────────────────────────────────── */
 function Field({ label, hint, required, children }: {
   label: string; hint?: string; required?: boolean; children: React.ReactNode;
 }) {
@@ -80,6 +54,209 @@ function Field({ label, hint, required, children }: {
     </div>
   );
 }
+
+function FieldError({ message, show }: { message?: string | null; show: boolean }) {
+  if (!show || !message) return null;
+  return (
+    <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+      <p className="font-headline text-[12px] text-orange-600">{message}</p>
+    </div>
+  );
+}
+
+function getBasicsStepErrors(form: FormState) {
+  return {
+    title: form.title.trim().length <= 2 ? "Event name must be at least 3 characters." : undefined,
+  };
+}
+
+function getWhenStepErrors(form: FormState) {
+  const errors: {
+    date?: string;
+    times?: string;
+    slotErrors: Record<number, string>;
+    address?: string;
+    location?: string;
+  } = { slotErrors: {} };
+
+  if (!form.date) errors.date = "Event date is required.";
+
+  const timing = validateEventTiming(eventTimingInput(form));
+  for (const msg of timing) {
+    if (
+      msg.includes("Event date") ||
+      msg.includes("end date") ||
+      msg.includes("past")
+    ) {
+      errors.date = errors.date ?? msg;
+    } else if (msg.startsWith("Slot ")) {
+      const match = msg.match(/^Slot (\d+): (.+)$/);
+      if (match) errors.slotErrors[parseInt(match[1], 10) - 1] = match[2];
+    } else if (msg.includes("Cut-off") || msg.includes("Start time")) {
+      errors.times = errors.times ?? msg;
+    }
+  }
+
+  if (!form.multipleTimeSlots && !form.startTime) {
+    errors.times = errors.times ?? "Start time is required.";
+  }
+
+  if (!form.address.trim()) errors.address = "Street address is required.";
+  if (!form.city.trim() || !form.state) {
+    errors.location = "City and state are required — pick an address from the suggestions.";
+  }
+
+  return errors;
+}
+
+function getFormatStepErrors(form: FormState) {
+  return {
+    format: !form.format ? "Select a competition format." : undefined,
+    discipline: !form.discipline ? "Select a discipline." : undefined,
+    level: !form.level ? "Select an experience level." : undefined,
+    minAge: form.minAge === "" ? "Set a minimum age or choose Open to all." : undefined,
+  };
+}
+
+function getTicketsStepErrors(form: FormState) {
+  const errors: {
+    registrationUrl?: string;
+    waves?: string;
+    waveCloses: Record<number, string>;
+  } = { waveCloses: {} };
+
+  if (form.registrationType === "external" && !form.registrationUrl.trim()) {
+    errors.registrationUrl = "Registration URL is required.";
+  }
+
+  const hasPrice =
+    form.waves.length > 0 && (form.waves[0]?.price === "0" || !!form.waves[0]?.price);
+  if (!hasPrice) errors.waves = "At least one ticket category with a price is required.";
+
+  const ticketTiming = validateAllTicketCloses(form.waves, form.date, ticketEventEndDate(form));
+  if (ticketTiming.length > 0) {
+    errors.waves = errors.waves ?? ticketTiming[0];
+  }
+
+  form.waves.forEach((w, i) => {
+    if (!w.closes) return;
+    const err = validateTicketCloseDate(w.closes, form.date, ticketEventEndDate(form));
+    if (err) errors.waveCloses[i] = err;
+  });
+
+  return errors;
+}
+
+function getExtrasStepErrors(form: FormState) {
+  return {
+    cover: !(form.coverImage || form.coverImageUrl) ? "A cover image is required." : undefined,
+  };
+}
+
+function getStepErrorMessage(s: number, form: FormState): string {
+  if (s === 0) return getBasicsStepErrors(form).title ?? STEP_ERRORS[0];
+  if (s === 1) {
+    const e = getWhenStepErrors(form);
+    return (
+      e.date ??
+      e.times ??
+      Object.values(e.slotErrors)[0] ??
+      e.address ??
+      e.location ??
+      STEP_ERRORS[1]
+    );
+  }
+  if (s === 2) {
+    const e = getFormatStepErrors(form);
+    return e.format ?? e.discipline ?? e.level ?? e.minAge ?? STEP_ERRORS[2];
+  }
+  if (s === 3) {
+    const e = getTicketsStepErrors(form);
+    return e.registrationUrl ?? e.waves ?? Object.values(e.waveCloses)[0] ?? STEP_ERRORS[3];
+  }
+  if (s === 4) return getExtrasStepErrors(form).cover ?? STEP_ERRORS[4];
+  if (s === 5) return "Please confirm the organiser terms before publishing.";
+  return STEP_ERRORS[s] ?? "Please complete required fields.";
+}
+
+function sanitizeWavesForEventDates(
+  waves: Wave[],
+  eventDate: string,
+  endDate: string,
+): Wave[] {
+  if (!eventDate) return waves;
+  const today = todayIso();
+  const lastDay = eventLastDate(eventDate, endDate);
+  return waves.map(w => {
+    if (!w.closes) return w;
+    if (w.closes < today || w.closes > lastDay) return { ...w, closes: "" };
+    return w;
+  });
+}
+
+function sanitizeScheduleSlots(
+  slots: ScheduleSlot[],
+  eventDate: string,
+  endDate: string,
+): ScheduleSlot[] {
+  return syncSlotsToEventDays(slots, eventDate, endDate);
+}
+
+function eventTimingInput(form: FormState) {
+  return {
+    eventDate: form.date,
+    endDate: form.endDate || null,
+    startTime: form.startTime,
+    endTime: form.endTime || null,
+    multipleTimeSlots: form.multipleTimeSlots,
+    scheduleSlots: form.scheduleSlots,
+  };
+}
+
+function ticketEventEndDate(form: FormState): string | null {
+  if (!form.date) return null;
+  return eventLastDate(form.date, form.endDate);
+}
+
+type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "";
+type Format     = "individual" | "team" | "both" | "";
+type Level      = "beginner" | "open" | "elite" | "";
+type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
+
+interface Wave { label: string; price: string; closes: string; }
+interface ScheduleSlot { date: string; startTime: string; cutoffTime: string; }
+
+interface FormState {
+  title: string; discipline: Discipline; description: string;
+  date: string; endDate: string; startTime: string; endTime: string;
+  multipleTimeSlots: boolean;
+  scheduleSlots: ScheduleSlot[];
+  venue: string; address: string; city: string; state: AusState;
+  format: Format; level: Level; categories: string[]; cap: string; minAge: string;
+  waves: Wave[];
+  inclusions: string; extras: string; activations: string; refundPolicy: string;
+  registrationType: 'startline' | 'external';
+  feeStructure: 'athlete' | 'organiser';
+  coverImage: File | null; coverImageUrl: string; registrationUrl: string; accessibilityInfo: string;
+}
+
+const INITIAL: FormState = {
+  title: "", discipline: "", description: "",
+  date: "", endDate: "", startTime: "", endTime: "",
+  multipleTimeSlots: false,
+  scheduleSlots: [{ date: "", startTime: "", cutoffTime: "" }],
+  venue: "", address: "", city: "", state: "",
+  format: "", level: "",
+  categories: [],
+  cap: "", minAge: "",
+  waves: [
+    { label: "", price: "", closes: "" },
+  ],
+  inclusions: "", extras: "", activations: "", refundPolicy: "",
+  registrationType: "startline",
+  feeStructure: "athlete",
+  coverImage: null, coverImageUrl: "", registrationUrl: "", accessibilityInfo: "",
+};
 
 const inputCls    = "w-full bg-white border border-gray-200 rounded-md px-4 py-3 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-lime-500 focus:outline-none transition-colors";
 const textareaCls = "w-full bg-white border border-gray-200 rounded-md px-4 py-3 text-[14px] text-gray-900 placeholder:text-gray-400 focus:border-lime-500 focus:outline-none resize-none transition-colors";
@@ -104,6 +281,9 @@ function DatePickerPopover({
   rangeEnd, onChangeEnd,
   placeholder = "Select date",
   disablePast = true,
+  minDate,
+  maxDate,
+  twoMonths = false,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -111,9 +291,13 @@ function DatePickerPopover({
   onChangeEnd?: (v: string) => void;
   placeholder?: string;
   disablePast?: boolean;
+  minDate?: string;
+  maxDate?: string;
+  twoMonths?: boolean;
 }) {
   const isRange    = !!onChangeEnd;
   const todayDate  = new Date(); todayDate.setHours(0, 0, 0, 0);
+  const todayIsoStr = todayIso();
 
   const parseView = (iso: string) => {
     if (iso) { const [y, m] = iso.split("-").map(Number); return { year: y, month: m - 1 }; }
@@ -123,7 +307,6 @@ function DatePickerPopover({
   const [open,      setOpen]      = useState(false);
   const [viewYear,  setViewYear]  = useState(parseView(value).year);
   const [viewMonth, setViewMonth] = useState(parseView(value).month);
-  // In range mode: "start" = waiting for end pick after start is set
   const [picking,   setPicking]   = useState<"start" | "end">("start");
   const ref = useRef<HTMLDivElement>(null);
 
@@ -137,28 +320,40 @@ function DatePickerPopover({
     if (value) { const [y, m] = value.split("-").map(Number); setViewYear(y); setViewMonth(m - 1); }
   }, [value]);
 
-  const toIso = (d: number) => {
-    const mm = String(viewMonth + 1).padStart(2, "0");
-    const dd = String(d).padStart(2, "0");
-    return `${viewYear}-${mm}-${dd}`;
+  const toIso = (d: number, year = viewYear, month = viewMonth) =>
+    formatIsoDate(year, month, d);
+
+  const shiftMonth = (year: number, month: number, delta: number) => {
+    const d = new Date(year, month + delta, 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
   };
 
-  const selectDay = (d: number) => {
-    const iso = toIso(d);
+  const rightMonth = shiftMonth(viewYear, viewMonth, 1);
+
+  const isDisabled = (d: number, year: number, month: number) => {
+    const iso = toIso(d, year, month);
+    if (disablePast && iso < todayIsoStr) return true;
+    if (minDate && iso < minDate) return true;
+    if (maxDate && iso > maxDate) return true;
+    return false;
+  };
+
+  const selectDay = (d: number, year: number, month: number) => {
+    const iso = toIso(d, year, month);
+    if (isDisabled(d, year, month)) return;
+
     if (!isRange) { onChange(iso); setOpen(false); return; }
 
     if (picking === "start" || !value) {
       onChange(iso);
-      if (onChangeEnd) onChangeEnd("");   // clear end when picking new start
+      if (onChangeEnd) onChangeEnd("");
       setPicking("end");
     } else {
       if (iso < value) {
-        // Clicked before start → treat as new start
         onChange(iso);
         if (onChangeEnd) onChangeEnd("");
         setPicking("end");
       } else if (iso === value) {
-        // Same day → single-day event, close
         if (onChangeEnd) onChangeEnd(iso);
         setOpen(false); setPicking("start");
       } else {
@@ -168,25 +363,90 @@ function DatePickerPopover({
     }
   };
 
-  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
-  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
-
-  const isPast     = (d: number) => !disablePast ? false : new Date(viewYear, viewMonth, d) < todayDate;
-  const isStart    = (d: number) => !!value   && toIso(d) === value;
-  const isEnd      = (d: number) => !!rangeEnd && toIso(d) === rangeEnd;
-  const isSelected = (d: number) => !isRange && !!value && toIso(d) === value;
-  const isInRange  = (d: number) => {
-    if (!isRange || !value || !rangeEnd) return false;
-    const iso = toIso(d); return iso > value && iso < rangeEnd;
+  const prevMonth = () => {
+    const next = shiftMonth(viewYear, viewMonth, -1);
+    setViewYear(next.year);
+    setViewMonth(next.month);
   };
-  const isToday = (d: number) =>
-    d === todayDate.getDate() && viewMonth === todayDate.getMonth() && viewYear === todayDate.getFullYear();
+  const nextMonth = () => {
+    const next = shiftMonth(viewYear, viewMonth, 1);
+    setViewYear(next.year);
+    setViewMonth(next.month);
+  };
 
-  const firstDow   = (() => { let d = new Date(viewYear, viewMonth, 1).getDay() - 1; return d < 0 ? 6 : d; })();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const isStart    = (d: number, year: number, month: number) => !!value && toIso(d, year, month) === value;
+  const isEnd      = (d: number, year: number, month: number) => !!rangeEnd && toIso(d, year, month) === rangeEnd;
+  const isSelected = (d: number, year: number, month: number) =>
+    !isRange && !!value && toIso(d, year, month) === value;
+  const isInRange  = (d: number, year: number, month: number) => {
+    if (!isRange || !value || !rangeEnd) return false;
+    const iso = toIso(d, year, month);
+    return iso > value && iso < rangeEnd;
+  };
+  const isToday = (d: number, year: number, month: number) =>
+    toIso(d, year, month) === todayIsoStr;
 
-  // Trigger label
+  const renderMonth = (year: number, month: number) => {
+    const firstDow = (() => {
+      let dow = new Date(year, month, 1).getDay() - 1;
+      return dow < 0 ? 6 : dow;
+    })();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: (number | null)[] = [
+      ...Array(firstDow).fill(null),
+      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    ];
+
+    return (
+      <div className={twoMonths ? "min-w-0 flex-1" : ""}>
+        {twoMonths && (
+          <div className="font-headline text-[12px] font-bold text-gray-900 text-center mb-3">
+            {MONTH_NAMES[month]} {year}
+          </div>
+        )}
+        <div className="grid grid-cols-7 mb-1">
+          {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map(d => (
+            <div key={d} className="font-headline text-[9px] uppercase tracking-widest text-gray-400 text-center py-1">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {cells.map((d, i) => {
+            if (d === null) return <div key={i} className="h-9" />;
+            const inRange  = isInRange(d, year, month);
+            const start    = isStart(d, year, month);
+            const end      = isEnd(d, year, month);
+            const sel      = isSelected(d, year, month);
+            const disabled = isDisabled(d, year, month);
+            const today    = isToday(d, year, month);
+            return (
+              <div key={i}
+                className={`flex items-center justify-center h-9
+                  ${inRange ? "bg-primary/10" : ""}
+                  ${start && (rangeEnd || picking === "end") ? "bg-gradient-to-r from-transparent to-primary/10" : ""}
+                  ${end ? "bg-gradient-to-l from-transparent to-primary/10" : ""}`}
+              >
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => selectDay(d, year, month)}
+                  className={`w-9 h-9 rounded-full text-[13px] font-headline font-bold transition-colors
+                    ${start || sel   ? "bg-lime-500 text-white"
+                    : end            ? "bg-lime-400 text-white"
+                    : inRange        ? "text-lime-700 hover:bg-lime-50"
+                    : disabled       ? "text-gray-300 opacity-50 cursor-not-allowed"
+                    : today          ? "text-lime-600 border border-lime-400 hover:bg-lime-50"
+                    :                  "text-gray-700 hover:bg-gray-100 hover:text-lime-600"}`}
+                >
+                  {d}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const displayValue = isRange
     ? value
       ? rangeEnd && rangeEnd !== value
@@ -198,8 +458,9 @@ function DatePickerPopover({
     : value ? fmtDateShort(value) : "";
 
   const selectToday = () => {
-    const now = new Date();
-    const iso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+    const iso = todayIsoStr;
+    if (minDate && iso < minDate) return;
+    if (maxDate && iso > maxDate) return;
     onChange(iso);
     if (isRange && onChangeEnd) { onChangeEnd(""); setPicking("end"); }
     else setOpen(false);
@@ -222,8 +483,8 @@ function DatePickerPopover({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-full sm:w-72 modal-in">
-          {/* Range mode hint */}
+        <div className={`absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 modal-in
+          ${twoMonths ? "w-full sm:w-[36rem]" : "w-full sm:w-72"}`}>
           {isRange && (
             <div className="mb-3 flex items-center justify-between">
               <span className={`font-headline text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-md
@@ -239,65 +500,47 @@ function DatePickerPopover({
             </div>
           )}
 
-          {/* Month nav */}
-          <div className="flex items-center justify-between mb-4">
-            <button type="button" onClick={prevMonth}
-              className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="font-headline text-[13px] font-bold text-gray-900">
-              {MONTH_NAMES[viewMonth]} {viewYear}
-            </span>
-            <button type="button" onClick={nextMonth}
-              className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          {!twoMonths && (
+            <div className="flex items-center justify-between mb-4">
+              <button type="button" onClick={prevMonth}
+                className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="font-headline text-[13px] font-bold text-gray-900">
+                {MONTH_NAMES[viewMonth]} {viewYear}
+              </span>
+              <button type="button" onClick={nextMonth}
+                className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-          {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 mb-1">
-            {["Mo","Tu","We","Th","Fr","Sa","Su"].map(d => (
-              <div key={d} className="font-headline text-[9px] uppercase tracking-widest text-gray-400 text-center py-1">{d}</div>
-            ))}
-          </div>
+          {twoMonths && (
+            <div className="flex items-center justify-between mb-4">
+              <button type="button" onClick={prevMonth}
+                className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="font-headline text-[11px] uppercase tracking-widest text-gray-500">
+                {MONTH_NAMES[viewMonth]} – {MONTH_NAMES[rightMonth.month]} {rightMonth.year}
+              </span>
+              <button type="button" onClick={nextMonth}
+                className="w-9 h-9 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-lime-600 transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-          {/* Day cells */}
-          <div className="grid grid-cols-7">
-            {cells.map((d, i) => {
-              if (d === null) return <div key={i} className="h-9" />;
-              const inRange  = isInRange(d);
-              const start    = isStart(d);
-              const end      = isEnd(d);
-              const sel      = isSelected(d);
-              const past     = isPast(d);
-              const today    = isToday(d);
-              return (
-                <div key={i}
-                  className={`flex items-center justify-center h-9
-                    ${inRange ? "bg-primary/10" : ""}
-                    ${start && (rangeEnd || picking === "end") ? "bg-gradient-to-r from-transparent to-primary/10" : ""}
-                    ${end ? "bg-gradient-to-l from-transparent to-primary/10" : ""}`}
-                >
-                  <button
-                    type="button"
-                    disabled={past}
-                    onClick={() => selectDay(d)}
-                    className={`w-9 h-9 rounded-full text-[13px] font-headline font-bold transition-colors
-                      ${start || sel   ? "bg-lime-500 text-white"
-                      : end            ? "bg-lime-400 text-white"
-                      : inRange        ? "text-lime-700 hover:bg-lime-50"
-                      : past           ? "text-gray-300 opacity-50 cursor-not-allowed"
-                      : today          ? "text-lime-600 border border-lime-400 hover:bg-lime-50"
-                      :                  "text-gray-700 hover:bg-gray-100 hover:text-lime-600"}`}
-                  >
-                    {d}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          {twoMonths ? (
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+              {renderMonth(viewYear, viewMonth)}
+              {renderMonth(rightMonth.year, rightMonth.month)}
+            </div>
+          ) : (
+            renderMonth(viewYear, viewMonth)
+          )}
 
-          {/* Footer */}
           <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
             <button type="button" onClick={() => { onChange(""); if (onChangeEnd) onChangeEnd(""); setOpen(false); setPicking("start"); }}
               className="font-headline text-[11px] uppercase tracking-widest text-gray-500 hover:text-lime-600 transition-colors">
@@ -495,12 +738,14 @@ const DISCIPLINE_CATS: Partial<Record<Discipline, string[]>> = {
   swimming: ["50m", "100m", "200m", "400m", "800m", "1500m", "Open Water"],
 };
 
-function BasicsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
+function BasicsStep({ form, update, showErrors }: { form: FormState; update: (p: Partial<FormState>) => void; showErrors: boolean }) {
+  const errors = getBasicsStepErrors(form);
   return (
     <div>
       <Field label="Event title" required hint={`${form.title.length}/60`}>
         <input maxLength={60} value={form.title} onChange={(e) => update({ title: e.target.value })}
           placeholder="e.g. Functional Fitness Championship Sydney 2026" className={inputCls} />
+        <FieldError show={showErrors} message={errors.title} />
       </Field>
 
 
@@ -522,37 +767,204 @@ const AUS_STATES: [AusState, string][] = [
   ["sa","SA"],["tas","TAS"],["act","ACT"],["nt","NT"],
 ];
 
-function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
+function WhenStep({ form, update, showErrors }: { form: FormState; update: (p: Partial<FormState>) => void; showErrors: boolean }) {
+  const errors = getWhenStepErrors(form);
+  const eventDays = form.date ? listEventDays(form.date, form.endDate) : [];
+  const maxSlots = eventDays.length;
+  const canAddSlot = maxSlots > 0 && form.scheduleSlots.length < maxSlots;
+
+  const syncSlots = (slots: ScheduleSlot[], eventDate: string, endDate: string) =>
+    syncSlotsToEventDays(slots, eventDate, endDate);
+
+  const handleDateChange = (date: string) => {
+    const patch: Partial<FormState> = {
+      date,
+      waves: sanitizeWavesForEventDates(form.waves, date, form.endDate),
+    };
+    if (form.multipleTimeSlots) {
+      patch.scheduleSlots = syncSlots(form.scheduleSlots, date, form.endDate);
+    }
+    update(patch);
+  };
+
+  const handleEndDateChange = (endDate: string) => {
+    const patch: Partial<FormState> = {
+      endDate,
+      waves: sanitizeWavesForEventDates(form.waves, form.date, endDate),
+    };
+    if (form.multipleTimeSlots) {
+      patch.scheduleSlots = syncSlots(form.scheduleSlots, form.date, endDate);
+    }
+    update(patch);
+  };
+
+  const updateSlot = (i: number, patch: Partial<ScheduleSlot>) => {
+    const scheduleSlots = [...form.scheduleSlots];
+    scheduleSlots[i] = { ...scheduleSlots[i], ...patch };
+    update({ scheduleSlots });
+  };
+
+  const removeSlot = (i: number) =>
+    update({
+      scheduleSlots: syncSlots(
+        form.scheduleSlots.filter((_, j) => j !== i),
+        form.date,
+        form.endDate,
+      ),
+    });
+
+  const addSlot = () => {
+    if (!canAddSlot) return;
+    const nextDate = eventDays[form.scheduleSlots.length];
+    update({
+      scheduleSlots: [
+        ...form.scheduleSlots,
+        { date: nextDate, startTime: "", cutoffTime: "" },
+      ],
+    });
+  };
+
+  const handleMultipleToggle = (checked: boolean) => {
+    if (checked) {
+      const firstDay = eventDays[0] ?? form.date ?? "";
+      update({
+        multipleTimeSlots: true,
+        scheduleSlots: syncSlots([{
+          date: firstDay,
+          startTime: form.startTime,
+          cutoffTime: form.endTime,
+        }], form.date, form.endDate),
+      });
+    } else {
+      const first = form.scheduleSlots[0];
+      update({
+        multipleTimeSlots: false,
+        startTime: first?.startTime || form.startTime,
+        endTime: first?.cutoffTime || form.endTime,
+        scheduleSlots: [{ date: "", startTime: "", cutoffTime: "" }],
+      });
+    }
+  };
+
   return (
     <div>
       <Field label="Event date(s)" required hint="Tap start then end for multi-day">
         <DatePickerPopover
+          twoMonths
           value={form.date}
-          onChange={v => update({ date: v })}
+          onChange={handleDateChange}
           rangeEnd={form.endDate}
-          onChangeEnd={v => update({ endDate: v })}
+          onChangeEnd={handleEndDateChange}
           placeholder="Pick start date"
         />
-        {/* Show clear end-date link when a range is set */}
         {form.endDate && form.endDate !== form.date && (
           <button
             type="button"
-            onClick={() => update({ endDate: "" })}
+            onClick={() => update({
+              endDate: "",
+              scheduleSlots: form.multipleTimeSlots
+                ? syncSlotsToEventDays(form.scheduleSlots, form.date, "")
+                : sanitizeScheduleSlots(form.scheduleSlots, form.date, ""),
+              waves: sanitizeWavesForEventDates(form.waves, form.date, ""),
+            })}
             className="mt-1.5 font-headline text-[10px] uppercase tracking-widest text-gray-400 hover:text-lime-600 transition-colors flex items-center gap-1"
           >
             <X className="w-3 h-3" /> Make single-day event
           </button>
         )}
+        <FieldError show={showErrors} message={errors.date} />
       </Field>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-        <Field label="Start time" required>
-          <TimePicker value={form.startTime} onChange={v => update({ startTime: v })} />
+      <label className="flex items-center gap-3 mb-6 cursor-pointer select-none group">
+        <input
+          type="checkbox"
+          checked={form.multipleTimeSlots}
+          onChange={e => handleMultipleToggle(e.target.checked)}
+          className="w-4 h-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+        />
+        <span className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-700 group-hover:text-gray-900 transition-colors">
+          Multiple start and cut-off times
+        </span>
+      </label>
+
+      {!form.multipleTimeSlots ? (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+            <Field label="Start time" required>
+              <TimePicker value={form.startTime} onChange={v => update({ startTime: v })} />
+            </Field>
+            <Field label="Cut-off time" hint="Last finisher">
+              <TimePicker
+                value={form.endTime}
+                onChange={v => update({ endTime: v })}
+                placeholder="Select cut-off time"
+              />
+            </Field>
+          </div>
+          <FieldError show={showErrors} message={errors.times} />
+        </div>
+      ) : (
+        <Field label="Start & cut-off times" required hint={maxSlots > 0 ? `Up to ${maxSlots} slot${maxSlots !== 1 ? "s" : ""} (one per event day)` : undefined}>
+          <div className="space-y-3">
+            {form.scheduleSlots.map((slot, i) => (
+              <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-md bg-gray-200 flex items-center justify-center font-headline font-black italic text-lime-600 text-[13px] shrink-0 mt-6">
+                    {i + 1}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 min-w-0">
+                    <div>
+                      <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Date</div>
+                      <div className={`${inputCls} ${slot.date ? "text-gray-900" : "text-gray-400"}`}>
+                        {slot.date ? fmtDateShort(slot.date) : "Set event date above"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Start time</div>
+                      <TimePicker
+                        value={slot.startTime}
+                        onChange={v => updateSlot(i, { startTime: v })}
+                      />
+                    </div>
+                    <div>
+                      <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Cut-off time</div>
+                      <TimePicker
+                        value={slot.cutoffTime}
+                        onChange={v => updateSlot(i, { cutoffTime: v })}
+                        placeholder="Select cut-off time"
+                      />
+                    </div>
+                  </div>
+                  {form.scheduleSlots.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSlot(i)}
+                      className="w-9 h-9 rounded text-gray-400 hover:text-lime-600 hover:bg-gray-100 flex items-center justify-center transition-colors shrink-0 mt-6"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <FieldError show={showErrors} message={errors.slotErrors[i]} />
+              </div>
+            ))}
+            {canAddSlot && (
+              <button
+                type="button"
+                onClick={addSlot}
+                className="w-full border border-dashed border-gray-200 rounded-md py-3 font-headline text-[12px] uppercase tracking-widest text-gray-500 hover:text-lime-600 hover:border-lime-400 flex items-center justify-center gap-2 transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Add time slot
+              </button>
+            )}
+            {!canAddSlot && maxSlots > 0 && form.scheduleSlots.length >= maxSlots && (
+              <p className="font-headline text-[11px] uppercase tracking-widest text-gray-400 text-center">
+                All {maxSlots} event day{maxSlots !== 1 ? "s" : ""} have a time slot
+              </p>
+            )}
+          </div>
         </Field>
-        <Field label="Cut-off time" hint="Last finisher">
-          <TimePicker value={form.endTime} onChange={v => update({ endTime: v })} placeholder="Select end time" />
-        </Field>
-      </div>
+      )}
 
       <div className="my-6 border-t border-gray-200" />
 
@@ -572,6 +984,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
           placeholder="Start typing an address…"
           className={inputCls}
         />
+        <FieldError show={showErrors} message={errors.address} />
       </Field>
 
       <Field label="Venue name">
@@ -591,6 +1004,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
           </div>
         </Field>
       </div>
+      <FieldError show={showErrors} message={errors.location} />
 
     </div>
   );
@@ -616,7 +1030,8 @@ const ALL_CATS = [
 const AGE_PRESETS  = ["18"];
 const CAP_PRESETS  = ["250", "500", "1000", "2000", "3000", "5000"];
 
-function FormatStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
+function FormatStep({ form, update, showErrors }: { form: FormState; update: (p: Partial<FormState>) => void; showErrors: boolean }) {
+  const errors = getFormatStepErrors(form);
   const toggle = (c: string) => {
     const s = new Set(form.categories);
     s.has(c) ? s.delete(c) : s.add(c);
@@ -663,6 +1078,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             );
           })}
         </div>
+        <FieldError show={showErrors} message={errors.format} />
       </Field>
 
       <Field label="Discipline" required>
@@ -678,6 +1094,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             );
           })}
         </div>
+        <FieldError show={showErrors} message={errors.discipline} />
       </Field>
 
       {DISCIPLINE_CATS[form.discipline as Discipline] && (
@@ -739,6 +1156,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
             </button>
           ))}
         </div>
+        <FieldError show={showErrors} message={errors.level} />
       </Field>
 
       {/* Participant cap — chip picker */}
@@ -824,6 +1242,7 @@ function FormatStep({ form, update }: { form: FormState; update: (p: Partial<For
         {ageMode === "open" && (
           <p className="font-headline text-[11px] uppercase tracking-widest text-gray-400">No age restriction — open to all ages.</p>
         )}
+        <FieldError show={showErrors} message={errors.minAge} />
       </Field>
     </div>
   );
@@ -853,7 +1272,10 @@ const STARTLINE_FLAT = 1.45;
 const STRIPE_PCT     = 0.0175;
 const STRIPE_FLAT    = 0.30;
 
-function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
+function TicketsStep({ form, update, showErrors }: { form: FormState; update: (p: Partial<FormState>) => void; showErrors: boolean }) {
+  const errors = getTicketsStepErrors(form);
+  const ticketLastDay = ticketEventEndDate(form) ?? "";
+
   const updateWave = (i: number, patch: Partial<Wave>) => {
     const waves = [...form.waves];
     waves[i] = { ...waves[i], ...patch };
@@ -997,6 +1419,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                 placeholder="https://yourorg.com/events/sydney-2026"
                 className={inputCls}
               />
+              <FieldError show={showErrors} message={errors.registrationUrl} />
             </Field>
           </div>
         )}
@@ -1080,8 +1503,11 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
                     value={w.closes}
                     onChange={v => updateWave(i, { closes: v })}
                     placeholder="Optional close date"
-                    disablePast={false}
+                    minDate={todayIso()}
+                    maxDate={ticketLastDay || undefined}
+                    disablePast
                   />
+                  <FieldError show={showErrors} message={errors.waveCloses[i]} />
                 </div>
               </div>
             </div>
@@ -1091,6 +1517,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
             <Plus className="w-4 h-4" /> Add ticket category
           </button>
         </div>
+        <FieldError show={showErrors} message={errors.waves} />
       </Field>
 
       {/* Inclusions — preset chips + custom input */}
@@ -1244,7 +1671,8 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
 /* ═══════════════════════════════════════════════════════════════
    STEP 5 — DETAILS & MEDIA
    ══════════════════════════════════════════════════════════════ */
-function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
+function ExtrasStep({ form, update, showErrors }: { form: FormState; update: (p: Partial<FormState>) => void; showErrors: boolean }) {
+  const errors = getExtrasStepErrors(form);
   return (
     <div>
       <Field label="Cover image" required hint="Recommended 1920×1080 · max 5MB">
@@ -1282,6 +1710,7 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
           <input type="file" accept="image/*" className="sr-only"
             onChange={(e) => update({ coverImage: e.target.files?.[0] ?? null })} />
         </label>
+        <FieldError show={showErrors} message={errors.cover} />
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
@@ -1310,16 +1739,35 @@ function ExtrasStep({ form, update }: { form: FormState; update: (p: Partial<For
 /* ═══════════════════════════════════════════════════════════════
    STEP 6 — REVIEW
    ══════════════════════════════════════════════════════════════ */
-function ReviewStep({ form, setStep, confirmed, onConfirm }: { form: FormState; setStep: (n: number) => void; confirmed: boolean; onConfirm: (v: boolean) => void }) {
+function ReviewStep({
+  form,
+  setStep,
+  confirmed,
+  onConfirm,
+  showErrors,
+  showConfirmError,
+}: {
+  form: FormState;
+  setStep: (n: number) => void;
+  confirmed: boolean;
+  onConfirm: (v: boolean) => void;
+  showErrors: boolean;
+  showConfirmError: boolean;
+}) {
   const rows: { k: string; v: string; step: number }[] = [
     { k: "Title",         v: form.title || "—",                                                              step: 0 },
     { k: "Discipline",    v: form.discipline ? form.discipline.toUpperCase() : "—",                          step: 0 },
     { k: "Date",          v: form.date
         ? form.endDate && form.endDate !== form.date
-          ? `${new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })} — ${new Date(form.endDate + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })}`
-          : new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { weekday:"short", day:"numeric", month:"short", year:"numeric" })
+          ? `${fmtDateShort(form.date)} — ${fmtDateShort(form.endDate)}`
+          : fmtDateShort(form.date)
         : "—", step: 1 },
-    { k: "Start / End",   v: form.startTime ? `${fmt24to12(form.startTime)}${form.endTime ? ` → ${fmt24to12(form.endTime)}` : ""}` : "—", step: 1 },
+    { k: "Start",       v: form.multipleTimeSlots
+        ? form.scheduleSlots.map((s, i) => `${i + 1}. ${s.date ? fmtDateShort(s.date) + " · " : ""}${s.startTime ? fmt24to12(s.startTime) : "—"}`).join(" / ")
+        : form.startTime ? fmt24to12(form.startTime) : "—", step: 1 },
+    { k: "Cut-off",     v: form.multipleTimeSlots
+        ? form.scheduleSlots.map((s, i) => `${i + 1}. ${s.date ? fmtDateShort(s.date) + " · " : ""}${s.cutoffTime ? fmt24to12(s.cutoffTime) : "—"}`).join(" / ")
+        : form.endTime ? fmt24to12(form.endTime) : "—", step: 1 },
     { k: "Venue",         v: `${form.venue || "—"}, ${form.city || "—"}, ${form.state ? form.state.toUpperCase() : "—"}`, step: 1 },
     { k: "Format",        v: form.format || "—",                                                              step: 2 },
     { k: "Level",         v: form.level  || "—",                                                              step: 2 },
@@ -1377,6 +1825,10 @@ function ReviewStep({ form, setStep, confirmed, onConfirm }: { form: FormState; 
           <span className="text-lime-600 hover:underline cursor-pointer">Event Listing Policy</span>.
         </span>
       </label>
+      <FieldError
+        show={showErrors || showConfirmError}
+        message={!confirmed ? "Please confirm the organiser terms before publishing." : undefined}
+      />
     </div>
   );
 }
@@ -1390,8 +1842,9 @@ const DISC_LABEL: Record<string, string> = {
 const MONTHS_SHORT = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
 function LivePreview({ form }: { form: FormState }) {
-  const sp    = (form.date    || "").split("-");
-  const ep    = (form.endDate || "").split("-");
+  const spanEnd = eventLastDate(form.date, form.endDate);
+  const sp    = (form.date || "").split("-");
+  const ep    = (spanEnd || "").split("-");
   const sDay  = sp[2] || "—";
   const sMon  = sp[1] ? MONTHS_SHORT[parseInt(sp[1]) - 1] : "—";
   const eDay  = ep[2];
@@ -1399,7 +1852,7 @@ function LivePreview({ form }: { form: FormState }) {
   const price = form.waves.find(w => w.price === "0" || !!w.price)?.price;
 
   const dateLabel = form.date
-    ? form.endDate && form.endDate !== form.date
+    ? spanEnd && spanEnd !== form.date
       ? `${sDay} ${sMon} — ${eDay} ${eMon}`
       : `${sDay} ${sMon}${sp[0] ? ` ${sp[0]}` : ""}`
     : "Date TBC";
@@ -1524,8 +1977,9 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
     if (!form.date) return "Date TBC";
     const d = new Date(form.date);
     const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
-    if (form.endDate && form.endDate !== form.date) {
-      const e = new Date(form.endDate);
+    const spanEnd = eventLastDate(form.date, form.endDate);
+    if (spanEnd && spanEnd !== form.date) {
+      const e = new Date(spanEnd);
       return `${d.toLocaleDateString("en-AU", { day: "numeric", month: "long" })} – ${e.toLocaleDateString("en-AU", opts)}`;
     }
     return d.toLocaleDateString("en-AU", opts);
@@ -1644,8 +2098,31 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
                 </div>
                 <div className="bg-dark rounded-xl p-5">
                   <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-primary" /> Times</span>
-                  <div className="font-headline text-[13px] font-medium text-muted">Start: <span className="text-light font-bold">{form.startTime ? fmt24to12(form.startTime) : "TBC"}</span></div>
-                  {form.endTime && <div className="font-headline text-[13px] font-medium text-muted mt-1">Cut-off: <span className="text-light font-bold">{fmt24to12(form.endTime)}</span></div>}
+                  {form.multipleTimeSlots ? (
+                    <div className="space-y-2">
+                      {form.scheduleSlots.map((slot, i) => (
+                        <div key={i} className="font-headline text-[12px] font-medium text-muted">
+                          <span className="text-muted-dark uppercase tracking-widest text-[10px]">Slot {i + 1}</span>
+                          <div className="text-light font-bold mt-0.5">
+                            {slot.date ? fmtDateShort(slot.date) : "—"}
+                            {slot.startTime ? ` · ${fmt24to12(slot.startTime)}` : ""}
+                            {slot.cutoffTime ? ` → ${fmt24to12(slot.cutoffTime)}` : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="font-headline text-[13px] font-medium text-muted">
+                        Start: <span className="text-light font-bold">{form.startTime ? fmt24to12(form.startTime) : "TBC"}</span>
+                      </div>
+                      {form.endTime && (
+                        <div className="font-headline text-[13px] font-medium text-muted mt-1">
+                          Cut-off: <span className="text-light font-bold">{fmt24to12(form.endTime)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div className="bg-dark rounded-xl p-5">
                   <span className="font-headline text-[10px] tracking-widest text-muted uppercase mb-3 flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-primary" /> Venue</span>
@@ -1782,10 +2259,12 @@ export default function NewListingPage() {
   const [visited,       setVisited]       = useState<Set<number>>(new Set());
   const [confirmed,         setConfirmed]         = useState(false);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
+  const [showPublishModal,  setShowPublishModal]  = useState(false);
   const [showFullPreview,   setShowFullPreview]   = useState(false);
   const [direction,          setDirection]          = useState<"forward" | "back">("forward");
   const [showMobilePreview,  setShowMobilePreview]  = useState(false);
   const [eventId,   setEventId]   = useState<string | null>(null);
+  const [eventLocked, setEventLocked] = useState(false);
 
   const update = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
 
@@ -1798,7 +2277,23 @@ export default function NewListingPage() {
       .then(r => r.json())
       .then(e => {
         if (e.error) return;
+        if (e.status && e.status !== "DRAFT") {
+          setEventLocked(true);
+          return;
+        }
         setEventId(id);
+        const scheduleSlots = Array.isArray(e.scheduleSlots) && e.scheduleSlots.length > 0
+          ? e.scheduleSlots.map((s: ScheduleSlot) => ({
+              date: s.date ?? "",
+              startTime: s.startTime ?? "",
+              cutoffTime: s.cutoffTime ?? "",
+            }))
+          : [{ date: "", startTime: "", cutoffTime: "" }];
+        const multipleTimeSlots = Array.isArray(e.scheduleSlots) && e.scheduleSlots.length > 0;
+        const loadedSlots = multipleTimeSlots ? scheduleSlots : [{ date: "", startTime: "", cutoffTime: "" }];
+        const syncedSlots = multipleTimeSlots
+          ? syncSlotsToEventDays(loadedSlots, e.eventDate ?? "", e.endDate ?? "")
+          : loadedSlots;
         setForm({
           title:             e.title        ?? "",
           discipline:        e.discipline   ?? "",
@@ -1807,6 +2302,8 @@ export default function NewListingPage() {
           endDate:           e.endDate      ?? "",
           startTime:         e.startTime    ?? "",
           endTime:           e.endTime      ?? "",
+          multipleTimeSlots,
+          scheduleSlots: syncedSlots,
           venue:             e.venue        ?? "",
           address:           e.address      ?? "",
           city:              e.city         ?? "",
@@ -1835,12 +2332,23 @@ export default function NewListingPage() {
 
   const stepHasErrors = (s: number): boolean => {
     if (s === 0) return !(form.title.trim().length > 2);
-    if (s === 1) return !(form.date && form.address.trim() && form.city.trim() && form.state);
+    if (s === 1) {
+      const missingTimes = form.multipleTimeSlots
+        ? false
+        : !form.startTime;
+      const missingBasics = !(form.date && !missingTimes && form.address.trim() && form.city.trim() && form.state);
+      const timingErrors = validateEventTiming(eventTimingInput(form));
+      return missingBasics || timingErrors.length > 0;
+    }
     if (s === 2) return !(form.format && form.level && form.minAge !== "" && form.discipline);
-    if (s === 3) return !(
-      form.waves.length > 0 && (form.waves[0]?.price === "0" || !!form.waves[0]?.price) &&
-      (form.registrationType === "startline" || !!form.registrationUrl.trim())
-    );
+    if (s === 3) {
+      const ticketTiming = validateAllTicketCloses(form.waves, form.date, ticketEventEndDate(form));
+      const missingBasics = !(
+        form.waves.length > 0 && (form.waves[0]?.price === "0" || !!form.waves[0]?.price) &&
+        (form.registrationType === "startline" || !!form.registrationUrl.trim())
+      );
+      return missingBasics || ticketTiming.length > 0;
+    }
     if (s === 4) return !(form.coverImage || form.coverImageUrl);
     if (s === 5) return !confirmed;
     return false;
@@ -1868,10 +2376,16 @@ export default function NewListingPage() {
         }
       }
 
+      const firstSlot = form.scheduleSlots[0];
       const payload = {
         title: overrideTitle ?? form.title, discipline: form.discipline,
-        description: form.description, eventDate: form.date, endDate: form.endDate || null,
-        startTime: form.startTime, endTime: form.endTime,
+        description: form.description, eventDate: form.date,
+        endDate: form.endDate && form.endDate !== form.date ? form.endDate : null,
+        startTime: form.multipleTimeSlots ? (firstSlot?.startTime ?? form.startTime) : form.startTime,
+        endTime: form.multipleTimeSlots ? (firstSlot?.cutoffTime ?? form.endTime) : form.endTime,
+        cutoffDate: form.multipleTimeSlots ? (firstSlot?.date || form.date || null) : null,
+        multipleTimeSlots: form.multipleTimeSlots,
+        scheduleSlots: form.multipleTimeSlots ? form.scheduleSlots : [],
         venue: form.venue, address: form.address, city: form.city, state: form.state,
         format: form.format, level: form.level, categories: form.categories,
         cap: form.cap ? parseInt(form.cap) : null, minAge: form.minAge ? parseInt(form.minAge) : null,
@@ -1897,7 +2411,14 @@ export default function NewListingPage() {
       }
 
       const data = await res.json();
-      if (!res.ok) { setApiError(data.error ?? "Something went wrong."); return; }
+      if (!res.ok) {
+        if (data.error === "Only draft events can be updated this way.") {
+          setEventLocked(true);
+          return;
+        }
+        setApiError(data.error ?? "Something went wrong.");
+        return;
+      }
 
       if (asDraft) {
         if (!eventId && data.id) setEventId(data.id);
@@ -1921,7 +2442,7 @@ export default function NewListingPage() {
         setSubmitErrors(errs);
         return;
       }
-      submitToApi(false);
+      setShowPublishModal(true);
     }
   };
   const prev = () => {
@@ -1939,6 +2460,33 @@ export default function NewListingPage() {
       <OrganiserTopBar />
       <div className="pt-14">
 
+        {loadingEvent ? (
+          <div className="max-w-[1280px] mx-auto px-6 lg:px-8 py-20 text-center">
+            <p className="font-headline text-[13px] uppercase tracking-widest text-gray-400">Loading event…</p>
+          </div>
+        ) : eventLocked ? (
+          <div className="max-w-[1280px] mx-auto px-6 lg:px-8 py-20">
+            <div className="max-w-lg mx-auto rounded-xl border border-orange-200 bg-orange-50 px-8 py-10 text-center">
+              <p className="font-headline text-[15px] text-orange-700 leading-relaxed">
+                Sorry this event has already been published, for any further changes please contact our support team at{" "}
+                <a
+                  href="mailto:admin@startlineau.com"
+                  className="text-lime-700 font-bold hover:underline"
+                >
+                  admin@startlineau.com
+                </a>
+                .
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push("/organiser/listings")}
+                className="mt-8 bg-machined shadow-machined text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform"
+              >
+                Back to listings
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="anim-fade-slide">
           {/* Sticky header */}
           <div className="sticky top-16 z-30 bg-white/95 backdrop-blur border-b border-gray-200">
@@ -2031,12 +2579,21 @@ export default function NewListingPage() {
                   </p>
                 </div>
 
-                {step === 0 && <BasicsStep  form={form} update={update} />}
-                {step === 1 && <WhenStep    form={form} update={update} />}
-                {step === 2 && <FormatStep  form={form} update={update} />}
-                {step === 3 && <TicketsStep form={form} update={update} />}
-                {step === 4 && <ExtrasStep  form={form} update={update} />}
-                {step === 5 && <ReviewStep form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} />}
+                {step === 0 && <BasicsStep  form={form} update={update} showErrors={visited.has(0)} />}
+                {step === 1 && <WhenStep    form={form} update={update} showErrors={visited.has(1)} />}
+                {step === 2 && <FormatStep  form={form} update={update} showErrors={visited.has(2)} />}
+                {step === 3 && <TicketsStep form={form} update={update} showErrors={visited.has(3)} />}
+                {step === 4 && <ExtrasStep  form={form} update={update} showErrors={visited.has(4)} />}
+                {step === 5 && (
+                  <ReviewStep
+                    form={form}
+                    setStep={goTo}
+                    confirmed={confirmed}
+                    onConfirm={setConfirmed}
+                    showErrors={visited.has(5)}
+                    showConfirmError={submitErrors.includes(5)}
+                  />
+                )}
 
                 {apiError && (
                   <div className="mt-4 px-4 py-3 rounded-md bg-red-50 border border-red-200 text-red-600 font-headline text-[13px]">
@@ -2055,7 +2612,7 @@ export default function NewListingPage() {
                         <li key={i} className="flex items-start justify-between gap-4 py-2.5 px-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
                           <div>
                             <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-orange-600">{STEPS[i].n} — {STEPS[i].label}</p>
-                            <p className="text-orange-500 text-[12px] mt-0.5">{STEP_ERRORS[i]}</p>
+                            <p className="text-orange-500 text-[12px] mt-0.5">{getStepErrorMessage(i, form)}</p>
                           </div>
                           <button
                             onClick={() => { setSubmitErrors([]); goTo(i); }}
@@ -2120,11 +2677,45 @@ export default function NewListingPage() {
             </aside>
           </div>
         </div>
+        )}
       </div>
 
       {/* ── Full event page preview modal ── */}
       {showFullPreview && (
         <EventFullPreview form={form} onClose={() => setShowFullPreview(false)} />
+      )}
+
+      {/* ── Publish confirmation modal ── */}
+      {showPublishModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowPublishModal(false)} />
+          <div className="relative bg-white border border-gray-200 rounded-2xl shadow-2xl w-full max-w-md p-7 modal-in">
+            <p className="text-gray-600 text-[14px] leading-relaxed mb-7">
+              You are about to publish an event, any published events cannot be edited without the help from our support team. Are you ready to publish this event?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPublishModal(false);
+                  submitToApi(false);
+                }}
+                disabled={saving}
+                className="w-full bg-machined shadow-machined disabled:opacity-40 text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform flex items-center justify-center gap-2"
+              >
+                {saving ? "Publishing…" : <><Check className="w-4 h-4" /> Continue</>}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPublishModal(false)}
+                disabled={saving}
+                className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Cancel confirmation modal ── */}

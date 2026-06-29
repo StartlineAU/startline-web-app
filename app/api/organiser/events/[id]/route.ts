@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
+import { validateEventTimingPayload } from "@/lib/event-timing";
+import { syncEventScheduleFields } from "@/lib/event-schedule-db";
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -35,7 +37,7 @@ export async function PATCH(
   try {
     const existing = await prisma.event.findUnique({
       where:  { id },
-      select: { organiserId: true, status: true },
+      select: { organiserId: true, status: true, eventDate: true },
     });
 
     if (!existing)
@@ -55,6 +57,11 @@ export async function PATCH(
       }
     }
 
+    const timingError = submit ? validateEventTimingPayload(data) : null;
+    if (timingError) {
+      return NextResponse.json({ error: timingError }, { status: 400 });
+    }
+
     const updated = await prisma.event.update({
       where: { id },
       data: {
@@ -65,7 +72,7 @@ export async function PATCH(
         eventDate:         data.eventDate         ?? undefined,
         endDate:           data.endDate           ?? null,
         startTime:         data.startTime         ?? undefined,
-        endTime:           data.endTime           || null,
+        endTime:           data.endTime          ?? "",
         venue:             data.venue             ?? undefined,
         address:           data.address           ?? undefined,
         city:              data.city              ?? undefined,
@@ -88,6 +95,15 @@ export async function PATCH(
         status:            submit ? "PENDING" : "DRAFT",
       },
     });
+
+    await syncEventScheduleFields(
+      prisma,
+      id,
+      data.multipleTimeSlots ?? false,
+      data.scheduleSlots,
+      data.cutoffDate,
+      data.eventDate ?? existing.eventDate ?? "",
+    );
 
     return NextResponse.json({ id: updated.id, status: updated.status });
   } catch (err) {
