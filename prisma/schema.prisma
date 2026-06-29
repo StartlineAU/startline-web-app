@@ -16,7 +16,7 @@ model Admin {
   name       String?
   createdAt  DateTime @default(now())
 
-  eventReviews Event[] @relation("EventReviewedBy")
+  eventAdminReviews EventAdminReview[]
 
   @@map("admins")
 }
@@ -83,55 +83,16 @@ model Event {
   organiser   Organiser   @relation(fields: [organiserId], references: [id])
   organiserId String
   status      EventStatus @default(DRAFT)
+  isPinned    Boolean     @default(false)
 
-  // Step 1 — basics
-  title       String
-  discipline  String
-  tagline     String?
-  description String?
+  // Wizard step data (1:1)
+  basics      EventBasics?
+  schedule    EventSchedule?
+  format      EventFormat?
+  tickets     EventTickets?
+  details     EventDetails?
+  adminReview EventAdminReview?
 
-  // Step 2 — date & location
-  eventDate String
-  endDate   String? // optional multi-day end (ISO yyyy-mm-dd)
-  startTime String
-  endTime   String
-  venue     String
-  address   String?
-  city      String
-  state     String
-
-  // Step 3 — format & categories
-  format     String
-  level      String
-  categories Json
-  cap        Int?
-  minAge     Int    @default(16)
-
-  // Step 4 — tickets
-  waves             Json
-  inclusions        String?
-  extras            String?
-  activations       String?
-  refundPolicy      String?
-  registrationType  String  @default("startline")
-  feeStructure      String  @default("athlete")
-
-  // Step 5 — media & logistics
-  coverImageUrl     String?
-  registrationUrl   String?
-  bagDrop           String?
-  parking           String?
-  accessibilityInfo String?
-  additionalNotes   String?
-
-  // Admin review
-  adminNotes      String?
-  rejectionReason String?
-  reviewedById    String?
-  reviewedBy      Admin?    @relation("EventReviewedBy", fields: [reviewedById], references: [id])
-  reviewedAt      DateTime?
-
-  isPinned      Boolean        @default(false)
   reviews       Review[]
   announcements Announcement[]
   registrations Registration[]
@@ -140,6 +101,111 @@ model Event {
   updatedAt DateTime @updatedAt
 
   @@map("events")
+}
+
+model EventBasics {
+  eventId     String  @id
+  event       Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title       String
+  tagline     String?
+  description String?
+
+  @@map("event_basics")
+}
+
+model EventSchedule {
+  eventId   String  @id
+  event     Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventDate String
+  endDate   String?
+  startTime String
+  endTime   String?
+  venue     String
+  address   String?
+  city      String
+  state     String
+
+  @@map("event_schedules")
+}
+
+model EventFormat {
+  eventId    String @id
+  event      Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  discipline String
+  format     String
+  level      String
+  cap        Int?
+  minAge     Int    @default(16)
+  categories EventCategory[]
+
+  @@map("event_formats")
+}
+
+model EventCategory {
+  id        String      @id @default(uuid())
+  eventId   String
+  format    EventFormat @relation(fields: [eventId], references: [eventId], onDelete: Cascade)
+  name      String
+  sortOrder Int         @default(0)
+  isCustom  Boolean     @default(false)
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@map("event_categories")
+}
+
+model EventTickets {
+  eventId          String  @id
+  event            Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  inclusions       String?
+  extras           String?
+  activations      String?
+  refundPolicy     String?
+  registrationType String  @default("startline")
+  feeStructure     String  @default("athlete")
+  registrationUrl  String?
+  waves            EventWave[]
+
+  @@map("event_tickets")
+}
+
+model EventWave {
+  id         String       @id @default(uuid())
+  eventId    String
+  tickets    EventTickets @relation(fields: [eventId], references: [eventId], onDelete: Cascade)
+  label      String
+  priceCents Int          @default(0)
+  closesAt   DateTime?
+  capacity   Int?
+  sortOrder  Int          @default(0)
+
+  @@unique([eventId, label])
+  @@index([eventId])
+  @@map("event_waves")
+}
+
+model EventDetails {
+  eventId           String  @id
+  event             Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  coverImageUrl     String?
+  bagDrop           String?
+  parking           String?
+  accessibilityInfo String?
+  additionalNotes   String?
+
+  @@map("event_details")
+}
+
+model EventAdminReview {
+  eventId         String    @id
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  adminNotes      String?
+  rejectionReason String?
+  reviewedById    String?
+  reviewedBy      Admin?    @relation(fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+
+  @@map("event_admin_reviews")
 }
 
 enum EventStatus {

@@ -1,31 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
+import { eventInclude, toEventResponse } from "@/lib/event-data";
+
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
-
-const EVENT_SELECT = {
-  id:             true,
-  title:          true,
-  discipline:     true,
-  city:           true,
-  state:          true,
-  eventDate:      true,
-  startTime:      true,
-  status:         true,
-  createdAt:      true,
-  coverImageUrl:  true,
-  rejectionReason: true,
-  reviewedAt:     true,
-  organiser: {
-    select: {
-      id:          true,
-      orgName:     true,
-      contactName: true,
-      email:       true,
-    },
-  },
-} as const;
 
 export async function GET(req: NextRequest) {
   const session = await getAdminSession();
@@ -46,7 +25,7 @@ export async function GET(req: NextRequest) {
       prisma.event.findMany({
         where:   { status },
         orderBy: { createdAt: "desc" },
-        select:  EVENT_SELECT,
+        include: eventInclude.admin,
         skip,
         take: limit,
       }),
@@ -54,7 +33,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const response = NextResponse.json({
-      events,
+      events: events.map((e) => toEventResponse(e)),
       total,
       page,
       totalPages: Math.ceil(total / limit),

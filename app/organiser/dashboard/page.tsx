@@ -8,6 +8,7 @@ import OrganiserTopBar from "@/components/organiser/TopBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { ef, type EventResponse } from "@/lib/event-data";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +22,7 @@ const STATUS_ORDER: Record<EventStatus, number> = {
   ARCHIVED: 4,
 };
 
-interface EventRow {
-  id: string; title: string; discipline: string; city: string; state: string;
-  eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null; coverImageUrl?: string | null; registrationCount: number; registrationUrl?: string | null;
-}
+type EventRow = EventResponse;
 
 function formatEventDate(dateStr: string, startTime: string) {
   try {
@@ -85,7 +82,7 @@ export default function DashboardPage() {
     .sort((a, b) => {
       const diff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
       if (diff !== 0) return diff;
-      return a.eventDate.localeCompare(b.eventDate);
+      return ef.eventDate(a).localeCompare(ef.eventDate(b));
     })
     .slice(0, 3);
 
@@ -169,7 +166,7 @@ export default function DashboardPage() {
 
               {!loading && recent.map((e, i) => {
                 const s     = STATUS_STYLE[e.status];
-                const price = (e.waves as { price: string }[])?.[0]?.price;
+                const price = ef.waves(e)[0]?.price;
                 const href  = e.status === "APPROVED" ? `/organiser/events/${e.id}/dashboard` : `/organiser/events/${e.id}`;
                 return (
                   <div key={e.id} className={i < recent.length - 1 ? "border-b border-gray-100" : ""}>
@@ -180,22 +177,22 @@ export default function DashboardPage() {
                       onClick={() => router.push(href)}
                     >
                       <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
-                        {e.coverImageUrl
-                          ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
-                          : <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>}
+                        {ef.coverImageUrl(e)
+                          ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover" />
+                          : <div className="font-mono text-[9px] text-gray-400 uppercase">{ef.discipline(e).slice(0, 4)}</div>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-2 mb-0.5">
-                          <div className="font-headline text-[14px] font-black italic tracking-tighter text-gray-900 leading-tight line-clamp-1 flex-1">{e.title}</div>
+                          <div className="font-headline text-[14px] font-black italic tracking-tighter text-gray-900 leading-tight line-clamp-1 flex-1">{ef.title(e)}</div>
                           <Badge className={`${s.bg} ${s.text} border-0 text-[10px] shrink-0`}>{s.label}</Badge>
                         </div>
                         <div className="flex items-center gap-1 font-headline text-[10px] text-gray-400 uppercase tracking-widest mb-1">
-                          <MapPin className="w-3 h-3 text-lime-500 shrink-0" /> {e.city}, {e.state.toUpperCase()}
+                          <MapPin className="w-3 h-3 text-lime-500 shrink-0" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="font-headline text-[11px] text-gray-500">{formatEventDate(e.eventDate, e.startTime)}</div>
+                          <div className="font-headline text-[11px] text-gray-500">{formatEventDate(ef.eventDate(e), ef.startTime(e))}</div>
                           <div className="font-headline text-[11px] text-gray-600">
-                            {(e.registrationCount ?? 0)}{e.cap ? `/${e.cap}` : ""}<span className="text-gray-400"> reg</span>
+                            {(e.registrationCount ?? 0)}{ef.cap(e) ? `/${ef.cap(e)}` : ""}<span className="text-gray-400"> reg</span>
                           </div>
                         </div>
                       </div>
@@ -212,19 +209,19 @@ export default function DashboardPage() {
                     >
                       <div className="col-span-5 flex items-center gap-4 min-w-0">
                         <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
-                          {e.coverImageUrl
-                            ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
-                            : <div className="font-mono text-[9px] text-gray-400 uppercase">{e.discipline.slice(0, 4)}</div>}
+                          {ef.coverImageUrl(e)
+                            ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover" />
+                            : <div className="font-mono text-[9px] text-gray-400 uppercase">{ef.discipline(e).slice(0, 4)}</div>}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900">{e.title}</div>
+                          <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900">{ef.title(e)}</div>
                           <div className="flex items-center gap-1 font-headline text-[11px] text-gray-400 uppercase tracking-widest mt-0.5">
-                            <MapPin className="w-3 h-3 text-lime-500" /> {e.city}, {e.state.toUpperCase()}
+                            <MapPin className="w-3 h-3 text-lime-500" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
                           </div>
                         </div>
                       </div>
                       <div className="col-span-2 text-center">
-                        <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(e.eventDate, e.startTime)}</div>
+                        <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(ef.eventDate(e), ef.startTime(e))}</div>
                       </div>
                       <div className="col-span-2 flex justify-center">
                         <Badge className={`${s.bg} ${s.text} border-0`}>{s.label}</Badge>
@@ -232,8 +229,8 @@ export default function DashboardPage() {
                       <div className="col-span-2">
                         <div className="font-headline text-sm font-bold text-gray-900">
                           {(e.registrationCount ?? 0).toLocaleString()}
-                          {e.cap
-                            ? <span className="text-gray-400 font-normal"> / {e.cap.toLocaleString()}</span>
+                          {ef.cap(e)
+                            ? <span className="text-gray-400 font-normal"> / {ef.cap(e)!.toLocaleString()}</span>
                             : <span className="text-gray-400 font-normal"> / —</span>}
                         </div>
                         {price && <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mt-0.5">from A${price}</div>}

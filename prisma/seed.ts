@@ -1,5 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import {
+  buildEventCreateData,
+  flatToEventWritePayload,
+  type FlatEventInput,
+} from "../lib/event-data";
+import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
   AdminSetUserPasswordCommand,
@@ -11,7 +16,57 @@ import {
 
 const prisma = new PrismaClient();
 
+async function upsertSeedEvent(
+  id: string,
+  organiserId: string,
+  status: import("@prisma/client").EventStatus,
+  flat: FlatEventInput,
+  extra?: { rejectionReason?: string; reviewedAt?: Date },
+) {
+  const hasReview = extra?.rejectionReason || extra?.reviewedAt;
+  return prisma.event.upsert({
+    where: { id },
+    update: { status },
+    create: {
+      id,
+      ...buildEventCreateData(organiserId, status, flatToEventWritePayload(flat)),
+      ...(hasReview
+        ? {
+            adminReview: {
+              create: {
+                rejectionReason: extra?.rejectionReason,
+                reviewedAt: extra?.reviewedAt,
+              },
+            },
+          }
+        : {}),
+    },
+  });
+}
+
 const PASSWORD = "Password123!";
+
+const SKIP_COGNITO = process.env.SEED_SKIP_COGNITO === "true";
+
+/** Stable subs for DB-only local seed when Cognito API is unavailable */
+const LOCAL_SEED_SUBS: Record<string, string> = {
+  "admin@startline.test":     "seed-local-00000000-0000-4000-8000-000000000001",
+  "organiser@startline.test": "seed-local-00000000-0000-4000-8000-000000000002",
+  "user@startline.test":      "seed-local-00000000-0000-4000-8000-000000000003",
+};
+
+function printAwsCredentialsHelp(): void {
+  console.error(`
+  AWS credentials not found — seed needs Cognito admin API access.
+
+  Option A (recommended): configure AWS credentials, then re-run:
+    - Add AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY to .env.local, or
+    - Set AWS_PROFILE in .env.local to a profile with Cognito admin access
+
+  Option B (DB-only, no login): add to .env.local and re-run:
+    SEED_SKIP_COGNITO=true
+`);
+}
 
 const region       = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
 const userPoolId   = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
@@ -92,15 +147,32 @@ async function fetchCognitoSubs(): Promise<{
 async function main() {
   console.log("🌱 Seeding database…\n");
 
-  if (!userPoolId) {
+  if (!SKIP_COGNITO && !userPoolId) {
     console.error("  NEXT_PUBLIC_COGNITO_USER_POOL_ID not set in environment");
     process.exit(1);
   }
 
-  await ensureCognitoUsers();
+  let subsByEmail: Record<string, string>;
+  let adminSubs: string[];
 
-  const { subsByEmail, adminSubs } = await fetchCognitoSubs();
-  console.log(`  Cognito users found: ${Object.keys(subsByEmail).length}`);
+  if (SKIP_COGNITO) {
+    console.log("  SEED_SKIP_COGNITO=true — skipping Cognito (database-only seed; login will not work)\n");
+    subsByEmail = LOCAL_SEED_SUBS;
+    adminSubs = [LOCAL_SEED_SUBS["admin@startline.test"]];
+  } else {
+    try {
+      await ensureCognitoUsers();
+      ({ subsByEmail, adminSubs } = await fetchCognitoSubs());
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "";
+      if (name === "CredentialsProviderError" || String(err).includes("Could not load credentials")) {
+        printAwsCredentialsHelp();
+        process.exit(1);
+      }
+      throw err;
+    }
+    console.log(`  Cognito users found: ${Object.keys(subsByEmail).length}`);
+  }
 
   await prisma.registration.deleteMany();
   await prisma.review.deleteMany();
@@ -188,75 +260,55 @@ async function main() {
 
   // ── Events ───────────────────────────────────────────────────────────
 
-  const event1 = await prisma.event.upsert({
-    where:  { id: "seed-event-001" },
-    update: { status: "APPROVED" },
-    create: {
-      id: "seed-event-001",
-      organiserId: org.id,
-      status: "APPROVED",
-      title: "The Apex Throwdown 2026",
-      discipline: "functional_fitness",
-      tagline: "Two days. One leaderboard. Every rep counts.",
-      description: "Victoria's premier functional fitness competition. Three workouts across two days. Scaled, RX, and Elite divisions.",
-      eventDate: "2026-08-15", endDate: "2026-08-16", startTime: "07:30", endTime: "17:00",
-      venue: "Melbourne Sports & Aquatic Centre", address: "Albert Road, Albert Park",
-      city: "Melbourne", state: "vic", format: "both", level: "open",
-      categories: ["Individual Scaled", "Individual RX", "Individual Elite", "Team of 2"],
-      cap: 320, minAge: 16,
-      waves: [{ label: "Early Bird", date: "2026-05-01", price: "95", qty: 80 }, { label: "General", date: "2026-06-15", price: "115", qty: 150 }, { label: "Late Entry", date: "2026-07-31", price: "135", qty: 90 }],
-      inclusions: "Event t-shirt, finisher medal, post-event party, online score tracking",
-      extras: "Spectator tickets $15/day. Parking $12/day.", activations: "Vendor expo Friday evening.",
-      refundPolicy: "Moderate", registrationType: "startline", feeStructure: "athlete",
-      coverImageUrl: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
-      bagDrop: "Bag drop at Gate 3 from 6:45am.", parking: "MSAC car park $12/day.", accessibilityInfo: "Wheelchair accessible venue.",
-    },
+  const event1 = await upsertSeedEvent("seed-event-001", org.id, "APPROVED", {
+    title: "The Apex Throwdown 2026",
+    discipline: "functional_fitness",
+    tagline: "Two days. One leaderboard. Every rep counts.",
+    description: "Victoria's premier functional fitness competition. Three workouts across two days. Scaled, RX, and Elite divisions.",
+    eventDate: "2026-08-15", endDate: "2026-08-16", startTime: "07:30", endTime: "17:00",
+    venue: "Melbourne Sports & Aquatic Centre", address: "Albert Road, Albert Park",
+    city: "Melbourne", state: "vic", format: "both", level: "open",
+    categories: ["Individual Scaled", "Individual RX", "Individual Elite", "Team of 2"],
+    cap: 320, minAge: 16,
+    waves: [{ label: "Early Bird", date: "2026-05-01", price: "95", qty: 80 }, { label: "General", date: "2026-06-15", price: "115", qty: 150 }, { label: "Late Entry", date: "2026-07-31", price: "135", qty: 90 }],
+    inclusions: "Event t-shirt, finisher medal, post-event party, online score tracking",
+    extras: "Spectator tickets $15/day. Parking $12/day.", activations: "Vendor expo Friday evening.",
+    refundPolicy: "Moderate", registrationType: "startline", feeStructure: "athlete",
+    coverImageUrl: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
+    bagDrop: "Bag drop at Gate 3 from 6:45am.", parking: "MSAC car park $12/day.", accessibilityInfo: "Wheelchair accessible venue.",
   });
 
-  const event2 = await prisma.event.upsert({
-    where: { id: "seed-event-002" }, update: {},
-    create: {
-      id: "seed-event-002", organiserId: org.id, status: "PENDING",
-      title: "Hybrid Hustle Series — Round 3", discipline: "hybrid",
-      tagline: "Run. Lift. Repeat.",
-      description: "Trail running, loaded carries, obstacle crawls, and a surprise finale.",
-      eventDate: "2026-09-06", startTime: "08:00", endTime: "14:00",
-      venue: "Kokoda Track Memorial Walkway", city: "Scoresby", state: "vic",
-      format: "individual", level: "open", categories: ["Open Male", "Open Female", "Masters 40+"],
-      cap: 150, minAge: 16, waves: [{ label: "General Entry", date: "2026-07-01", price: "75", qty: 150 }],
-      inclusions: "Race entry, finisher medal, recovery snack bag", refundPolicy: "Flexible",
-      registrationType: "startline", feeStructure: "athlete",
-      coverImageUrl: "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1200&q=80",
-    },
+  const event2 = await upsertSeedEvent("seed-event-002", org.id, "PENDING", {
+    title: "Hybrid Hustle Series — Round 3", discipline: "hybrid",
+    tagline: "Run. Lift. Repeat.",
+    description: "Trail running, loaded carries, obstacle crawls, and a surprise finale.",
+    eventDate: "2026-09-06", startTime: "08:00", endTime: "14:00",
+    venue: "Kokoda Track Memorial Walkway", city: "Scoresby", state: "vic",
+    format: "individual", level: "open", categories: ["Open Male", "Open Female", "Masters 40+"],
+    cap: 150, minAge: 16, waves: [{ label: "General Entry", date: "2026-07-01", price: "75", qty: 150 }],
+    inclusions: "Race entry, finisher medal, recovery snack bag", refundPolicy: "Flexible",
+    registrationType: "startline", feeStructure: "athlete",
+    coverImageUrl: "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1200&q=80",
   });
 
-  const event3 = await prisma.event.upsert({
-    where: { id: "seed-event-003" }, update: {},
-    create: {
-      id: "seed-event-003", organiserId: org.id, status: "DRAFT",
-      title: "Team Throwdown Summer Series", discipline: "functional_fitness",
-      tagline: "", description: "Draft — details TBC",
-      eventDate: "2026-12-05", startTime: "09:00", endTime: "15:00",
-      venue: "TBC", city: "Sydney", state: "nsw", format: "team", level: "open",
-      categories: [], waves: [], registrationType: "startline", feeStructure: "athlete",
-    },
+  await upsertSeedEvent("seed-event-003", org.id, "DRAFT", {
+    title: "Team Throwdown Summer Series", discipline: "functional_fitness",
+    tagline: "", description: "Draft — details TBC",
+    eventDate: "2026-12-05", startTime: "09:00", endTime: "15:00",
+    venue: "TBC", city: "Sydney", state: "nsw", format: "team", level: "open",
+    categories: [], waves: [], registrationType: "startline", feeStructure: "athlete",
   });
 
-  const event4 = await prisma.event.upsert({
-    where: { id: "seed-event-004" }, update: {},
-    create: {
-      id: "seed-event-004", organiserId: org.id, status: "REJECTED",
-      title: "Autumn Run Festival", discipline: "running",
-      tagline: "5K, 10K through the Yarra Valley",
-      description: "A scenic trail run through the Yarra Valley vineyards.",
-      eventDate: "2026-04-11", startTime: "07:30", endTime: "13:00",
-      venue: "Yering Station", city: "Yering", state: "vic",
-      format: "individual", level: "open", categories: ["5K", "10K", "Half Marathon"],
-      cap: 500, waves: [{ label: "5K Entry", price: "45" }, { label: "10K Entry", price: "55" }, { label: "Half Marathon", price: "75" }],
-      registrationType: "startline", feeStructure: "athlete", refundPolicy: "Firm",
-      rejectionReason: "Event date has already passed.", reviewedAt: new Date("2026-04-01T09:00:00Z"),
-    },
-  });
+  await upsertSeedEvent("seed-event-004", org.id, "REJECTED", {
+    title: "Autumn Run Festival", discipline: "running",
+    tagline: "5K, 10K through the Yarra Valley",
+    description: "A scenic trail run through the Yarra Valley vineyards.",
+    eventDate: "2026-04-11", startTime: "07:30", endTime: "13:00",
+    venue: "Yering Station", city: "Yering", state: "vic",
+    format: "individual", level: "open", categories: ["5K", "10K", "Half Marathon"],
+    cap: 500, waves: [{ label: "5K Entry", price: "45" }, { label: "10K Entry", price: "55" }, { label: "Half Marathon", price: "75" }],
+    registrationType: "startline", feeStructure: "athlete", refundPolicy: "Firm",
+  }, { rejectionReason: "Event date has already passed.", reviewedAt: new Date("2026-04-01T09:00:00Z") });
 
   const seedEvents = [
     { id: "seed-event-005", status: "APPROVED" as const, title: "Sydney Harbour 10K",         discipline: "running",   eventDate: "2026-09-20", startTime: "07:00", endTime: "10:00", venue: "Mrs Macquaries Chair",           city: "Sydney",   state: "nsw", format: "individual", level: "open",  categories: ["5K", "10K"],              cap: 2000, waves: [{ label: "General", price: "55" }], tagline: "Run past the Opera House", description: "A scenic 10K through Sydney's foreshore parks and past iconic landmarks." },
@@ -293,12 +345,24 @@ async function main() {
   ];
 
   for (const e of seedEvents) {
-    await prisma.event.upsert({
-      where: { id: e.id }, update: {},
-      create: { id: e.id, organiserId: org.id, status: e.status, title: e.title, discipline: e.discipline,
-        tagline: e.tagline, description: e.description, eventDate: e.eventDate, startTime: e.startTime, endTime: e.endTime,
-        venue: e.venue, city: e.city, state: e.state, format: e.format, level: e.level, categories: e.categories,
-        cap: e.cap, waves: e.waves, registrationType: "startline", feeStructure: "athlete" },
+    await upsertSeedEvent(e.id, org.id, e.status, {
+      title: e.title,
+      discipline: e.discipline,
+      tagline: e.tagline,
+      description: e.description,
+      eventDate: e.eventDate,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      venue: e.venue,
+      city: e.city,
+      state: e.state,
+      format: e.format,
+      level: e.level,
+      categories: e.categories,
+      cap: e.cap,
+      waves: e.waves,
+      registrationType: "startline",
+      feeStructure: "athlete",
     });
   }
 
@@ -313,7 +377,7 @@ async function main() {
       id: "seed-review-001",
       organiserId: org.id,
       eventId: event1.id,
-      eventTitle: event1.title,
+      eventTitle: "The Apex Throwdown 2026",
       reviewerName: "Sarah K.",
       title: "Best competition I've done all year",
       body: "Incredibly well run from start to finish.",
@@ -329,7 +393,7 @@ async function main() {
       id: "seed-review-002",
       organiserId: org.id,
       eventId: event1.id,
-      eventTitle: event1.title,
+      eventTitle: "The Apex Throwdown 2026",
       reviewerName: "Tom R.",
       title: "Great event, minor timing hiccups",
       body: "Really enjoyed the event overall.",
@@ -339,11 +403,11 @@ async function main() {
   });
 
   const extraReviews = [
-    { id: "seed-review-003", reviewerName: "Mia Fontaine",   title: "Brilliant event, will be back", body: "Third year and this was the best one yet.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, event: event1 },
-    { id: "seed-review-004", reviewerName: "Jack Donovan",   title: "Great comp, tough workouts", body: "Workouts were brutal but fair.", overallRating: 4, communicationRating: 5, organisationRating: 4, experienceRating: 4, event: event1 },
-    { id: "seed-review-005", reviewerName: "Emma Whitfield", title: "Great organiser", body: "Consistently excellent events.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, event: null },
-    { id: "seed-review-006", reviewerName: "Liam O'Connor",  title: "Hybrid Hustle keeps getting better", body: "The trail section through the Dandenongs was epic.", overallRating: 5, communicationRating: 5, organisationRating: 4, experienceRating: 5, event: event2 },
-    { id: "seed-review-007", reviewerName: "Chloe Bennett",  title: "Challenging but rewarding", body: "Great community vibe.", overallRating: 4, communicationRating: 5, organisationRating: 3, experienceRating: 4, event: event2 },
+    { id: "seed-review-003", reviewerName: "Mia Fontaine",   title: "Brilliant event, will be back", body: "Third year and this was the best one yet.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, event: event1, eventTitle: "The Apex Throwdown 2026" },
+    { id: "seed-review-004", reviewerName: "Jack Donovan",   title: "Great comp, tough workouts", body: "Workouts were brutal but fair.", overallRating: 4, communicationRating: 5, organisationRating: 4, experienceRating: 4, event: event1, eventTitle: "The Apex Throwdown 2026" },
+    { id: "seed-review-005", reviewerName: "Emma Whitfield", title: "Great organiser", body: "Consistently excellent events.", overallRating: 5, communicationRating: 5, organisationRating: 5, experienceRating: 5, event: null, eventTitle: null },
+    { id: "seed-review-006", reviewerName: "Liam O'Connor",  title: "Hybrid Hustle keeps getting better", body: "The trail section through the Dandenongs was epic.", overallRating: 5, communicationRating: 5, organisationRating: 4, experienceRating: 5, event: event2, eventTitle: "Hybrid Hustle Series — Round 3" },
+    { id: "seed-review-007", reviewerName: "Chloe Bennett",  title: "Challenging but rewarding", body: "Great community vibe.", overallRating: 4, communicationRating: 5, organisationRating: 3, experienceRating: 4, event: event2, eventTitle: "Hybrid Hustle Series — Round 3" },
   ];
 
   for (const r of extraReviews) {
@@ -353,7 +417,7 @@ async function main() {
       create: {
         id: r.id,
         organiserId: org.id,
-        ...(r.event ? { eventId: r.event.id, eventTitle: r.event.title } : {}),
+        ...(r.event ? { eventId: r.event.id, eventTitle: r.eventTitle ?? undefined } : {}),
         reviewerName: r.reviewerName,
         title: r.title, body: r.body,
         overallRating: r.overallRating,
@@ -437,8 +501,8 @@ async function main() {
   // ── Notifications ────────────────────────────────────────────────────
 
   const notifications = [
-    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"${event1.title}" is live on Startline.`, eventId: event1.id, read: true },
-    { type: "EVENT_REJECTED" as const, title: "Event rejected", body: `"${event4.title}" was rejected.`, eventId: event4.id, read: true },
+    { type: "EVENT_APPROVED" as const, title: "Event approved", body: `"The Apex Throwdown 2026" is live on Startline.`, eventId: event1.id, read: true },
+    { type: "EVENT_REJECTED" as const, title: "Event rejected", body: `"Autumn Run Festival" was rejected.`, eventId: "seed-event-004", read: true },
     { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[0]} registered.`, eventId: event1.id, read: false },
     { type: "NEW_REGISTRATION" as const, title: "New registration", body: `${athleteNames[1]} registered.`, eventId: event1.id, read: false },
   ];
@@ -498,8 +562,12 @@ async function main() {
   console.log(`  Waitlist subscribers: ${waitlistEmails.length}`);
 
   console.log("\n✅ Database seeding complete!");
-  console.log(`   Password for all users: ${PASSWORD}`);
-  console.log("   Users: admin@startline.test, organiser@startline.test, user@startline.test");
+  if (SKIP_COGNITO) {
+    console.log("   Mode: DB-only (SEED_SKIP_COGNITO=true — Cognito login disabled for seed users)");
+  } else {
+    console.log(`   Password for all users: ${PASSWORD}`);
+    console.log("   Users: admin@startline.test, organiser@startline.test, user@startline.test");
+  }
 }
 
 main()

@@ -19,7 +19,12 @@ export async function GET(
         where: { status: "CONFIRMED" },
         select: {
           eventId: true,
-          event: { select: { title: true, eventDate: true, city: true, state: true } },
+          event: {
+            select: {
+              basics: { select: { title: true } },
+              schedule: { select: { eventDate: true, city: true, state: true } },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 20,

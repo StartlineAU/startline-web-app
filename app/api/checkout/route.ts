@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { calculateTotalWithFee } from "@/lib/platform-fee";
+import { eventInclude, getWaves } from "@/lib/event-data";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,21 +22,23 @@ export async function POST(req: NextRequest) {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: {
-        id: true, title: true, status: true, feeStructure: true, registrationType: true,
-        waves: true,
+        id: true,
+        status: true,
+        basics: { select: { title: true } },
+        tickets: { select: { waves: true, registrationType: true, feeStructure: true } },
         organiser: { select: { id: true, stripeAccountId: true, stripeOnboardingComplete: true } },
       },
     });
 
     if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
     if (event.status !== "APPROVED") return NextResponse.json({ error: "This event is not currently accepting registrations." }, { status: 409 });
-    if (event.registrationType !== "startline") return NextResponse.json({ error: "This event uses external registration." }, { status: 400 });
+    if (event.tickets?.registrationType !== "startline") return NextResponse.json({ error: "This event uses external registration." }, { status: 400 });
     if (!event.organiser.stripeOnboardingComplete || !event.organiser.stripeAccountId) {
       return NextResponse.json({ error: "This event is not ready to accept payments." }, { status: 409 });
     }
 
-    const waves = event.waves as { label: string; price: string; qty?: number }[] | null;
-    if (!Array.isArray(waves)) return NextResponse.json({ error: "No ticket tiers configured." }, { status: 400 });
+    const waves = getWaves(event);
+    if (waves.length === 0) return NextResponse.json({ error: "No ticket tiers configured." }, { status: 400 });
 
     const wave = waves.find((w) => w.label === waveLabel);
     if (!wave) return NextResponse.json({ error: "Selected ticket tier not found." }, { status: 400 });
@@ -43,9 +46,10 @@ export async function POST(req: NextRequest) {
     const ticketPriceCents = Math.round(parseFloat(wave.price || "0") * 100);
     if (ticketPriceCents <= 0) return NextResponse.json({ error: "Invalid ticket price." }, { status: 400 });
 
+    const feeStructure = event.tickets?.feeStructure ?? "athlete";
     const { totalCents, platformFeeCents } = calculateTotalWithFee(
       ticketPriceCents,
-      event.feeStructure
+      feeStructure,
     );
 
     const stripe = getStripe();
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
         organiserId: event.organiser.id,
         ticketPriceCents: String(ticketPriceCents),
         platformFeeCents: String(platformFeeCents),
-        feeStructure: event.feeStructure,
+        feeStructure,
       },
     });
 

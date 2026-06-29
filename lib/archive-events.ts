@@ -3,13 +3,15 @@ import prisma from "@/lib/prisma";
 export async function archivePastEvents(): Promise<number> {
   const today = new Date().toISOString().split("T")[0];
   const result = await prisma.$executeRaw`
-    UPDATE "events"
+    UPDATE "events" e
     SET status = 'ARCHIVED', "updatedAt" = NOW()
-    WHERE status = 'APPROVED'
+    FROM "event_schedules" s
+    WHERE e.id = s."eventId"
+    AND e.status = 'APPROVED'
     AND (
-      "endDate" IS NOT NULL AND "endDate" < ${today}
+      s."endDate" IS NOT NULL AND s."endDate" < ${today}
       OR
-      "endDate" IS NULL AND "eventDate" < ${today}
+      s."endDate" IS NULL AND s."eventDate" < ${today}
     )
   `;
   return result;

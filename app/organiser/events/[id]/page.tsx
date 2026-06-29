@@ -5,29 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
 import OrganiserTopBar from "@/components/organiser/TopBar";
+import { ef, type EventResponse } from "@/lib/event-data";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
-interface EventDetail {
-  id: string;
-  title: string;
-  discipline: string;
-  status: EventStatus;
-  eventDate: string;
-  startTime: string;
-  endDate?: string | null;
-  venue: string;
-  city: string;
-  state: string;
-  coverImageUrl?: string | null;
-  rejectionReason?: string | null;
-  adminNotes?: string | null;
-  waves: { label: string; price: string; qty?: number }[];
-  cap?: number | null;
-  registrationCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
+type EventDetail = EventResponse;
 
 function formatDate(dateStr: string, timeStr?: string) {
   try {
@@ -196,9 +178,9 @@ export default function EventStatusPage({
 
           {/* ── Event header ── */}
           <div className="flex flex-col lg:flex-row lg:items-start gap-6 mb-8">
-            {event.coverImageUrl && (
+            {ef.coverImageUrl(event) && (
               <div className="w-full lg:w-44 h-28 rounded-xl overflow-hidden shrink-0">
-                <img src={event.coverImageUrl} alt={event.title} className="w-full h-full object-cover" />
+                <img src={ef.coverImageUrl(event)!} alt={ef.title(event)} className="w-full h-full object-cover" />
               </div>
             )}
             <div className="flex-1 min-w-0">
@@ -207,20 +189,20 @@ export default function EventStatusPage({
                   {meta.label}
                 </span>
                 <span className="font-headline text-[11px] uppercase tracking-widest text-gray-400">
-                  {event.discipline.replace(/_/g, " ")}
+                  {ef.discipline(event).replace(/_/g, " ")}
                 </span>
               </div>
               <h1 className="font-headline text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-tight text-gray-900 mb-3">
-                {event.title}
+                {ef.title(event)}
               </h1>
               <div className="flex flex-col gap-1 text-[13px] text-gray-500">
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-lime-500 shrink-0" />
-                  {formatDate(event.eventDate, event.startTime)}
+                  {formatDate(ef.eventDate(event), ef.startTime(event))}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-lime-500 shrink-0" />
-                  {event.venue}, {event.city} {event.state.toUpperCase()}
+                  {ef.venue(event)}, {ef.city(event)} {ef.state(event).toUpperCase()}
                 </span>
               </div>
             </div>
@@ -261,10 +243,10 @@ export default function EventStatusPage({
                 <span className={`font-headline font-bold ${meta.color}`}>{meta.headline} </span>
                 {meta.description}
               </p>
-              {isRejected && event.rejectionReason && (
+              {isRejected && ef.rejectionReason(event) && (
                 <div className="mt-3 pl-3 border-l-2 border-red-300">
                   <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-red-400 mb-1">Feedback from Startline</div>
-                  <p className="text-[13px] text-gray-600 leading-relaxed">{event.rejectionReason}</p>
+                  <p className="text-[13px] text-gray-600 leading-relaxed">{ef.rejectionReason(event)}</p>
                 </div>
               )}
               {submitErr && (
@@ -283,25 +265,25 @@ export default function EventStatusPage({
               <div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1">Discipline</div>
                 <div className="font-headline text-[13px] font-bold text-gray-900 capitalize">
-                  {event.discipline.replace(/_/g, " ")}
+                  {ef.discipline(event).replace(/_/g, " ")}
                 </div>
               </div>
               <div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1">Capacity</div>
                 <div className="font-headline text-[13px] font-bold text-gray-900">
-                  {event.cap ? event.cap.toLocaleString() : "Unlimited"}
+                  {ef.cap(event) ? ef.cap(event)!.toLocaleString() : "Unlimited"}
                 </div>
               </div>
               <div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1">Ticket tiers</div>
                 <div className="font-headline text-[13px] font-bold text-gray-900">
-                  {event.waves.length > 0 ? `${event.waves.length} tier${event.waves.length !== 1 ? "s" : ""}` : "None set"}
+                  {ef.waves(event).length > 0 ? `${ef.waves(event).length} tier${ef.waves(event).length !== 1 ? "s" : ""}` : "None set"}
                 </div>
               </div>
               <div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-1">From</div>
                 <div className="font-headline text-[13px] font-bold text-gray-900">
-                  {event.waves.length > 0 ? `A$${event.waves[0].price}` : "—"}
+                  {ef.waves(event).length > 0 ? `A$${ef.waves(event)[0].price}` : "—"}
                 </div>
               </div>
             </div>

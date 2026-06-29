@@ -43,37 +43,44 @@ function lowestPrice(waves: unknown): number | null {
 }
 
 export function toUserEvent(event: PublicEvent): UserEvent {
-  const type = mapDiscipline(event.discipline);
-  const waves = event.waves ?? [];
+  const discipline = event.format?.discipline ?? "";
+  const type = mapDiscipline(discipline);
+  const waves = event.tickets?.waves ?? [];
   const ticketDrops = parseWaves(waves);
 
   return {
     id: event.id,
-    title: event.title,
-    description: event.description ?? "",
-    fullDescription: event.tagline ?? undefined,
-    date: event.eventDate,
-    time: event.startTime,
-    endTime: event.endTime ?? undefined,
-    location: event.venue,
-    city: event.city,
-    state: mapState(event.state),
+    title: event.basics?.title ?? "",
+    description: event.basics?.description ?? "",
+    fullDescription: event.basics?.tagline ?? undefined,
+    date: event.schedule?.eventDate ?? "",
+    time: event.schedule?.startTime ?? "",
+    endTime: event.schedule?.endTime ?? undefined,
+    location: event.schedule?.venue ?? "",
+    city: event.schedule?.city ?? "",
+    state: mapState(event.schedule?.state ?? ""),
     type,
-    format: event.format,
-    level: event.level,
-    image: event.coverImageUrl ?? getEventImage(type, event.id),
-    registrationUrl: event.registrationUrl,
-    registrationType: event.registrationType,
-    feeStructure: event.feeStructure,
+    format: event.format?.format ?? "",
+    level: event.format?.level ?? "",
+    image: event.details?.coverImageUrl ?? getEventImage(type, event.id),
+    registrationUrl: event.tickets?.registrationUrl ?? null,
+    registrationType: event.tickets?.registrationType ?? "startline",
+    feeStructure: event.tickets?.feeStructure ?? "athlete",
     organiserId: event.organiserId,
     organizer: event.organiser?.orgName ?? undefined,
     distance: undefined,
     isOfficial: false,
     ticketDrops,
     fromPrice: lowestPrice(waves),
-    tagline: event.tagline,
-    coverImageUrl: event.coverImageUrl,
-    organiser: event.organiser,
+    tagline: event.basics?.tagline,
+    coverImageUrl: event.details?.coverImageUrl ?? null,
+    organiser: event.organiser
+      ? {
+          id: event.organiser.id,
+          orgName: event.organiser.orgName,
+          logoUrl: event.organiser.logoUrl ?? null,
+        }
+      : undefined,
   };
 }
 

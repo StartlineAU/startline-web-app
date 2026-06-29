@@ -27,7 +27,10 @@ interface Profile {
   isPublic: boolean;
   registrations: {
     eventId: string;
-    event: { title: string; eventDate: string; city: string; state: string };
+    event: {
+      basics: { title: string } | null;
+      schedule: { eventDate: string; city: string; state: string } | null;
+    };
   }[];
 }
 
@@ -95,13 +98,13 @@ export default async function PublicProfilePage({ params }: PublicProfilePagePro
                   <Calendar className="w-5 h-5 text-primary flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="font-headline text-sm font-bold italic tracking-tighter text-light group-hover:text-primary transition-colors truncate">
-                      {reg.event.title}
+                      {reg.event.basics?.title}
                     </p>
                     <div className="flex items-center gap-3 text-muted font-headline text-[10px] uppercase tracking-widest mt-0.5">
-                      <span>{reg.event.eventDate}</span>
+                      <span>{reg.event.schedule?.eventDate}</span>
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
-                        {reg.event.city}
+                        {reg.event.schedule?.city}
                       </span>
                     </div>
                   </div>

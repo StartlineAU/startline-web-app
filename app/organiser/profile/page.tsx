@@ -12,14 +12,11 @@ import PhotoCarousel from "@/components/organiser/PhotoCarousel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/context/SettingsContext";
+import { ef, type EventResponse } from "@/lib/event-data";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
-interface EventRow {
-  id: string; title: string; discipline: string; city: string; state: string;
-  eventDate: string; startTime: string; status: EventStatus; waves: { price: string }[];
-  cap?: number | null; coverImageUrl?: string | null; isPinned?: boolean; registrationCount: number;
-}
+type EventRow = EventResponse;
 
 interface Profile {
   orgName: string; contactName: string; phone: string; contactEmail: string;
@@ -119,7 +116,7 @@ export default function ProfilePage() {
   const photos = useMemo(
     () => [
       ...profilePhotos,
-      ...events.map(e => e.coverImageUrl).filter((u): u is string => !!u),
+      ...events.map(e => ef.coverImageUrl(e)).filter((u): u is string => !!u),
     ],
     [profilePhotos, events],
   );
@@ -295,39 +292,39 @@ export default function ProfilePage() {
                       const shown = showAllEvents ? visible : visible.slice(0, 3);
                       return shown.map(e => {
                         const s     = STATUS_STYLE[e.status];
-                        const price = (e.waves as { price: string }[])?.[0]?.price;
+                        const price = ef.waves(e)[0]?.price;
                         return (
                           <Link key={e.id} href={`/organiser/events/${e.id}/dashboard`}
                             className="group overflow-hidden rounded-xl transition-all duration-200">
                             {/* Image */}
                             <div className="relative aspect-[16/10] bg-gray-100 overflow-hidden">
-                              {e.coverImageUrl
-                                ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                              {ef.coverImageUrl(e)
+                                ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                 : <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                                    <span className="font-headline font-black italic text-gray-300 text-4xl tracking-tighter">{e.discipline.slice(0, 4).toUpperCase()}</span>
+                                    <span className="font-headline font-black italic text-gray-300 text-4xl tracking-tighter">{ef.discipline(e).slice(0, 4).toUpperCase()}</span>
                                   </div>}
                               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                               {/* Discipline badge */}
                               <span className="absolute top-3 left-3 font-headline text-[10px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-2 py-1 rounded">
-                                {e.discipline.replace(/_/g, " ")}
+                                {ef.discipline(e).replace(/_/g, " ")}
                               </span>
                               {/* Date overlay */}
                               <div className="absolute bottom-3 right-3 text-right">
                                 <div className="font-headline text-[10px] uppercase tracking-widest text-white/70">
-                                  {new Date(e.eventDate + "T00:00:00").toLocaleDateString("en-AU", { month: "short" }).toUpperCase()}
+                                  {new Date(ef.eventDate(e) + "T00:00:00").toLocaleDateString("en-AU", { month: "short" }).toUpperCase()}
                                 </div>
                                 <div className="font-headline text-2xl font-black italic leading-none text-white">
-                                  {new Date(e.eventDate + "T00:00:00").getDate()}
+                                  {new Date(ef.eventDate(e) + "T00:00:00").getDate()}
                                 </div>
                               </div>
                             </div>
                             {/* Body */}
                             <div className="p-4">
                               <div className="font-headline text-[16px] font-black italic tracking-tighter text-gray-900 leading-tight mb-1 line-clamp-1 group-hover:text-lime-600 transition-colors">
-                                {e.title}
+                                {ef.title(e)}
                               </div>
                               <div className="flex items-center gap-1 font-headline text-[11px] text-gray-400 uppercase tracking-widest mb-3">
-                                <MapPin className="w-3 h-3 text-lime-500 shrink-0" /> {e.city}, {e.state.toUpperCase()}
+                                <MapPin className="w-3 h-3 text-lime-500 shrink-0" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
                               </div>
                               {price && (
                                 <div className="pt-3 border-t border-gray-100">

@@ -76,7 +76,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { title: true },
+    select: { basics: { select: { title: true } } },
   });
 
   await prisma.notification.create({
@@ -85,7 +85,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       eventId,
       type: "NEW_REGISTRATION",
       title: "New registration",
-      body: `${meta.userName} registered for ${event?.title ?? "your event"}`,
+      body: `${meta.userName} registered for ${event?.basics?.title ?? "your event"}`,
     },
   }).catch(err => console.error("Failed to create notification:", err));
 }

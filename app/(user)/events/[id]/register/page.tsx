@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
+import { ef, getWaves, type EventResponse } from "@/lib/event-data";
 
 const StripePaymentSection = dynamic(() => import("./stripe-payment"), { ssr: false });
 
@@ -18,23 +19,7 @@ interface Wave {
   date?: string;
 }
 
-interface EventData {
-  id: string;
-  title: string;
-  eventDate: string;
-  venue: string;
-  city: string;
-  state: string;
-  waves: Wave[];
-  feeStructure: string;
-  registrationType: string;
-  coverImageUrl: string | null;
-  organiser: {
-    id: string;
-    orgName: string | null;
-    logoUrl: string | null;
-  };
-}
+type EventData = EventResponse;
 
 export default function RegisterPage() {
   return (
@@ -70,14 +55,15 @@ function RegisterContent() {
       .catch(() => setLoading(false));
   }, [eventId]);
 
-  const selectedWaveData = event?.waves?.find((w) => w.label === selectedWave);
+  const selectedWaveData = event ? getWaves(event).find((w) => w.label === selectedWave) : undefined;
   const ticketPrice = selectedWaveData ? parseFloat(selectedWaveData.price || "0") : 0;
   const platformFeePercent = 0.0395;
   const platformFeeFixed = 1.45;
-  const platformFee = event?.feeStructure === "athlete"
+  const feeStructure = event ? ef.feeStructure(event) : "athlete";
+  const platformFee = feeStructure === "athlete"
     ? ticketPrice * platformFeePercent + platformFeeFixed
     : 0;
-  const totalPrice = event?.feeStructure === "athlete"
+  const totalPrice = feeStructure === "athlete"
     ? ticketPrice + platformFee
     : ticketPrice;
 
@@ -145,7 +131,7 @@ function RegisterContent() {
           <h1 className="font-headline text-[28px] font-black italic tracking-tighter text-light leading-none mb-2">
             Register
           </h1>
-          <p className="text-[13px] text-muted">{event.title}</p>
+          <p className="text-[13px] text-muted">{ef.title(event)}</p>
         </div>
 
         {error && (
@@ -159,7 +145,7 @@ function RegisterContent() {
             <div className="bg-dark rounded-xl p-5">
               <h2 className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">Ticket selection</h2>
               <div className="space-y-2">
-                {event.waves?.map((wave) => (
+                {ef.waves(event).map((wave: Wave) => (
                   <button
                     key={wave.label}
                     onClick={() => setSelectedWave(wave.label)}
@@ -202,7 +188,7 @@ function RegisterContent() {
                     <span>Ticket ({selectedWave})</span>
                     <span>${ticketPrice.toFixed(2)}</span>
                   </div>
-                  {event.feeStructure === "athlete" && (
+                  {feeStructure === "athlete" && (
                     <div className="flex justify-between text-muted">
                       <span>Service fee (3.95% + $1.45)</span>
                       <span>${platformFee.toFixed(2)}</span>
@@ -212,7 +198,7 @@ function RegisterContent() {
                     <span>Total</span>
                     <span className="font-headline text-lg font-black italic text-primary">${totalPrice.toFixed(2)}</span>
                   </div>
-                  {event.feeStructure === "organiser" && (
+                  {feeStructure === "organiser" && (
                     <div className="text-[11px] text-muted mt-1">Service fee (3.95% + $1.45) is covered by the organiser.</div>
                   )}
                 </div>

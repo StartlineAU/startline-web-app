@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
 import { archivePastEvents } from "@/lib/archive-events";
+import {
+  buildEventCreateData,
+  eventInclude,
+  parseEventWritePayload,
+  toEventResponse,
+  validateEventPayload,
+} from "@/lib/event-data";
+
 export async function GET() {
   await archivePastEvents();
   const session = await getOrganiserSession();
@@ -11,17 +19,9 @@ export async function GET() {
     const events = await prisma.event.findMany({
       where:   { organiserId: session.sub },
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true, title: true, discipline: true, city: true, state: true,
-        eventDate: true, startTime: true, status: true, createdAt: true,
-        waves: true, registrationType: true, feeStructure: true, registrationUrl: true, cap: true, isPinned: true,
-        coverImageUrl: true,
-        _count: { select: { registrations: true } },
-      },
+      include: eventInclude.listing,
     });
-    return NextResponse.json(
-      events.map(({ _count, ...rest }) => ({ ...rest, registrationCount: _count.registrations }))
-    );
+    return NextResponse.json(events.map((e) => toEventResponse(e)));
   } catch {
     return NextResponse.json([]);
   }
@@ -32,20 +32,12 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   const body = await req.json();
-  const { submit } = body;
+  const { submit } = body as { submit?: boolean };
+  const payload = parseEventWritePayload(body);
 
-  if (submit) {
-    const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level"];
-    for (const field of required) {
-      if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
-    }
-    if (body.registrationType === "external" && !body.registrationUrl) {
-      return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
-    }
-  } else {
-    if (!body.title?.trim()) {
-      return NextResponse.json({ error: "A title is required to save a draft." }, { status: 400 });
-    }
+  const validationError = validateEventPayload(payload, !!submit);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   const eventStatus = submit
@@ -54,37 +46,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const event = await prisma.event.create({
-      data: {
-        organiserId:      session.sub,
-        status:           eventStatus,
-        title:            body.title,
-        discipline:       body.discipline        ?? "",
-        tagline:          body.tagline           ?? null,
-        description:      body.description       ?? null,
-        eventDate:        body.eventDate         ?? "",
-        endDate:          body.endDate           ?? null,
-        startTime:        body.startTime         ?? "",
-        endTime:          body.endTime           || null,
-        venue:            body.venue             ?? "",
-        address:          body.address           ?? null,
-        city:             body.city              ?? "",
-        state:            body.state             ?? "",
-        format:           body.format            ?? "",
-        level:            body.level             ?? "",
-        categories:       body.categories        ?? [],
-        cap:              body.cap               ?? null,
-        minAge:           body.minAge            ?? 16,
-        waves:            body.waves             ?? [],
-        inclusions:       body.inclusions        ?? null,
-        extras:           body.extras            ?? null,
-        activations:      body.activations       ?? null,
-        refundPolicy:     body.refundPolicy      ?? null,
-        registrationType: body.registrationType  ?? "startline",
-        feeStructure:     body.feeStructure      ?? "athlete",
-        registrationUrl:  body.registrationUrl   ?? null,
-        accessibilityInfo: body.accessibilityInfo ?? null,
-        coverImageUrl:    body.coverImageUrl      ?? null,
-      },
+      data: buildEventCreateData(session.sub, eventStatus, payload),
+      include: eventInclude.full,
     });
 
     return NextResponse.json({ id: event.id, status: event.status });

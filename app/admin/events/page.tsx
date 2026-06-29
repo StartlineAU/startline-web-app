@@ -6,31 +6,20 @@ import { MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp } from "l
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ef, type EventResponse } from "@/lib/event-data";
 
 export const dynamic = "force-dynamic";
 
 type EventStatus = "PENDING" | "APPROVED" | "REJECTED";
 
-interface AdminEventRow {
-  id: string;
-  title: string;
-  discipline: string;
-  city: string;
-  state: string;
-  eventDate: string;
-  startTime: string;
-  status: EventStatus;
-  createdAt: string;
-  coverImageUrl: string | null;
-  rejectionReason: string | null;
-  reviewedAt: string | null;
+type AdminEventRow = EventResponse & {
   organiser: {
     id: string;
     orgName: string | null;
     contactName: string | null;
     email: string;
   };
-}
+};
 
 const TABS: { status: EventStatus; label: string }[] = [
   { status: "PENDING",  label: "Pending"  },
@@ -159,7 +148,7 @@ function EventRow({
     }
   };
 
-  const s = STATUS_STYLE[event.status];
+  const s = STATUS_STYLE[event.status as keyof typeof STATUS_STYLE];
 
   return (
     <div className="border-b border-gray-100 last:border-0">
@@ -167,16 +156,16 @@ function EventRow({
       <div className="flex items-start gap-4 px-5 py-4">
         {/* Cover thumbnail */}
         <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
-          {event.coverImageUrl
-            ? <img src={event.coverImageUrl} alt={event.title} className="w-full h-full object-cover" />
-            : <div className="font-mono text-[9px] text-gray-400 uppercase">{event.discipline.slice(0, 4)}</div>}
+          {ef.coverImageUrl(event)
+            ? <img src={ef.coverImageUrl(event)!} alt={ef.title(event)} className="w-full h-full object-cover" />
+            : <div className="font-mono text-[9px] text-gray-400 uppercase">{ef.discipline(event).slice(0, 4)}</div>}
         </div>
 
         {/* Details */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-start gap-x-3 gap-y-1 mb-1">
             <span className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900 truncate">
-              {event.title}
+              {ef.title(event)}
             </span>
             <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0 shrink-0`}>
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -187,13 +176,13 @@ function EventRow({
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-headline text-[11px] uppercase tracking-widest text-gray-500 mb-1">
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3 text-lime-500" />
-              {event.city}, {event.state.toUpperCase()}
+              {ef.city(event)}, {ef.state(event).toUpperCase()}
             </span>
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {formatDate(event.eventDate)}
+              {formatDate(ef.eventDate(event))}
             </span>
-            <span className="capitalize">{event.discipline}</span>
+            <span className="capitalize">{ef.discipline(event)}</span>
           </div>
 
           <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400">
@@ -202,9 +191,9 @@ function EventRow({
           </div>
 
           {/* Rejection reason (shown on REJECTED tab) */}
-          {event.status === "REJECTED" && event.rejectionReason && (
+          {event.status === "REJECTED" && ef.rejectionReason(event) && (
             <div className="mt-2 text-[13px] text-red-600 bg-red-50 rounded px-3 py-2 border border-red-100">
-              <span className="font-bold">Reason: </span>{event.rejectionReason}
+              <span className="font-bold">Reason: </span>{ef.rejectionReason(event)}
             </div>
           )}
         </div>
@@ -283,16 +272,16 @@ function EventRow({
             </div>
             <div>
               <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Event date</div>
-              <div className="text-[13px] text-gray-800">{formatDate(event.eventDate)} · {event.startTime}</div>
+              <div className="text-[13px] text-gray-800">{formatDate(ef.eventDate(event))} · {ef.startTime(event)}</div>
             </div>
             <div>
               <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Discipline</div>
-              <div className="text-[13px] text-gray-800 capitalize">{event.discipline}</div>
+              <div className="text-[13px] text-gray-800 capitalize">{ef.discipline(event)}</div>
             </div>
-            {event.reviewedAt && (
+            {ef.reviewedAt(event) && (
               <div>
                 <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Reviewed</div>
-                <div className="text-[13px] text-gray-800">{formatSubmitted(event.reviewedAt)}</div>
+                <div className="text-[13px] text-gray-800">{formatSubmitted(ef.reviewedAt(event)!)}</div>
               </div>
             )}
           </div>

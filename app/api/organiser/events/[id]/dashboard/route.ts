@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
 import { archivePastEvents } from "@/lib/archive-events";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FIXED_CENTS } from "@/lib/platform-fee";
+import { eventInclude, getWaves, toEventResponse } from "@/lib/event-data";
 
 export async function GET(
   _req: NextRequest,
@@ -17,18 +18,19 @@ export async function GET(
     await archivePastEvents();
     const event = await prisma.event.findUnique({
       where: { id },
+      include: eventInclude.full,
     });
 
     if (!event)                            return NextResponse.json({ error: "Not found." },  { status: 404 });
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     if (event.status !== "APPROVED")       return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
 
-    const waves = (event.waves as { label: string; price: string; qty?: number }[]) ?? [];
+    const eventResponse = toEventResponse(event);
+    const waves = getWaves(eventResponse);
     const lowestPrice = waves.length
       ? Math.min(...waves.map(w => parseFloat(w.price || "0")))
       : 0;
 
-    // Prefer real registration data when it exists, fall back to the estimate.
     const [registrations, registrationCount] = await Promise.all([
       prisma.registration.findMany({
         where:   { eventId: id, status: "CONFIRMED" },
@@ -71,24 +73,26 @@ export async function GET(
       select:  { id: true, title: true, body: true, createdAt: true },
     });
 
+    const feeStructure = event.tickets?.feeStructure ?? "athlete";
+
     return NextResponse.json({
       event: {
         id:                event.id,
-        title:             event.title,
-        discipline:        event.discipline,
-        eventDate:         event.eventDate,
-        endDate:           event.endDate,
-        startTime:         event.startTime,
-        endTime:           event.endTime,
-        venue:             event.venue,
-        city:              event.city,
-        state:             event.state,
-        cap:               event.cap,
+        title:             event.basics?.title ?? "",
+        discipline:        event.format?.discipline ?? "",
+        eventDate:         event.schedule?.eventDate ?? "",
+        endDate:           event.schedule?.endDate ?? null,
+        startTime:         event.schedule?.startTime ?? "",
+        endTime:           event.schedule?.endTime ?? null,
+        venue:             event.schedule?.venue ?? "",
+        city:              event.schedule?.city ?? "",
+        state:             event.schedule?.state ?? "",
+        cap:               event.format?.cap ?? null,
         registrationCount: count,
-        coverImageUrl:     event.coverImageUrl,
+        coverImageUrl:     event.details?.coverImageUrl ?? null,
         waves,
-        feeStructure:      event.feeStructure,
-        categories:        event.categories,
+        feeStructure,
+        categories:        eventResponse.format?.categories ?? [],
       },
       payout: {
         registrationCount: count,
@@ -96,7 +100,7 @@ export async function GET(
         grossRevenue:      gross,
         platformFees:      fees,
         estimatedPayout:   netPayout,
-        feeStructure:      event.feeStructure, // "athlete" | "organiser"
+        feeStructure,
         isEstimate:        !hasRealData,
         note: hasRealData
           ? "Based on confirmed registrations."
