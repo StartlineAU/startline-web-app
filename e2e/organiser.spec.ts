@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { organiserLogin } from "./helpers";
 
 test.describe("organiser login", () => {
-  test("dev bypass login redirects to dashboard", async ({ page }) => {
+  test("sign in redirects to dashboard", async ({ page }) => {
     await page.goto("/organiser");
     await page.waitForLoadState("networkidle");
 

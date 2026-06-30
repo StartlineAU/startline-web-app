@@ -14,7 +14,23 @@ Startline is a Next.js 15 (App Router) fitness event discovery platform with thr
 - `organiser.startlineau.com` → organiser portal (protects `/organiser/dashboard`, `/organiser/listings`, etc.)
 - `startlineau.com` → customer site (redirects `/organiser/*` and `/admin/*` to organiser subdomain)
 - Dev mode (`NODE_ENV=development`) skips all domain checks — everything runs at `localhost:3000`
-- Dev mode (`NODE_ENV=development`) skips all domain checks — everything runs at `localhost:3000`
+
+### Event data model
+
+Event listings use a slim `Event` parent row plus 1:1 wizard step tables and normalized child rows:
+
+| Table | Purpose |
+|---|---|
+| `EventBasics` | title, tagline, description |
+| `EventSchedule` | date, time, venue, location |
+| `EventFormat` | discipline, format, level, cap, minAge |
+| `EventCategory` | divisions/categories (1:many under `EventFormat`) |
+| `EventTickets` | inclusions, refund policy, registration type |
+| `EventWave` | ticket tiers — label, price (cents), closesAt, capacity (1:many under `EventTickets`) |
+| `EventDetails` | cover image, logistics notes |
+| `EventAdminReview` | admin notes, rejection reason, reviewer, reviewedAt |
+
+API responses nest wizard data under `basics`, `schedule`, `format`, `tickets`, `details`, and `adminReview`. Use `lib/event-data.ts` (`toEventResponse`, `buildEventCreateData`, `buildEventUpdateData`, `eventInclude`) for all reads/writes — do not query flat columns on `Event`.
 
 ### Auth (Cognito)
 
@@ -39,7 +55,7 @@ All seed users share password `Password123!`.
 | `organiser@startline.test` | User + Organiser (Apex Endurance Events, verified) |
 | `user@startline.test` | User only |
 
-Run `pnpm prisma:seed` to set up Cognito users + database seed data. Idempotent — safe to re-run.
+Run `pnpm prisma:seed` to set up Cognito users + database seed data. Requires AWS credentials with Cognito admin access (non-production pool). Idempotent — safe to re-run.
 
 > Note: Old Cognito users from previous seeds are not automatically removed. To clean them up, delete from the Cognito pool manually or reset via Terraform.
 
@@ -94,7 +110,7 @@ pnpm test:e2e     # Playwright e2e tests (requires Docker PostgreSQL running)
 
 - Unit tests in `src/__tests__/`, e2e in `e2e/`.
 - Vitest has `globals: true` — `describe`/`it`/`expect` available without imports.
-- Vitest config defaults `DATABASE_URL` to port **5433**, but local Docker uses port **5434** — tests connecting to DB may need `DATABASE_URL` set explicitly.
+- Vitest config defaults `DATABASE_URL` to port **5434** (same as Docker PostgreSQL).
 - Playwright uses Chromium, auto-starts `pnpm dev -p 3002` if not already running.
 - E2E tests authenticate via the non-production Cognito pool (password `Password123!`).
 

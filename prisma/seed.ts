@@ -46,28 +46,6 @@ async function upsertSeedEvent(
 
 const PASSWORD = "Password123!";
 
-const SKIP_COGNITO = process.env.SEED_SKIP_COGNITO === "true";
-
-/** Stable subs for DB-only local seed when Cognito API is unavailable */
-const LOCAL_SEED_SUBS: Record<string, string> = {
-  "admin@startline.test":     "seed-local-00000000-0000-4000-8000-000000000001",
-  "organiser@startline.test": "seed-local-00000000-0000-4000-8000-000000000002",
-  "user@startline.test":      "seed-local-00000000-0000-4000-8000-000000000003",
-};
-
-function printAwsCredentialsHelp(): void {
-  console.error(`
-  AWS credentials not found — seed needs Cognito admin API access.
-
-  Option A (recommended): configure AWS credentials, then re-run:
-    - Add AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY to .env.local, or
-    - Set AWS_PROFILE in .env.local to a profile with Cognito admin access
-
-  Option B (DB-only, no login): add to .env.local and re-run:
-    SEED_SKIP_COGNITO=true
-`);
-}
-
 const region       = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
 const userPoolId   = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
 const userPoolName = userPoolId.split("_").pop() ?? "unknown";
@@ -147,32 +125,26 @@ async function fetchCognitoSubs(): Promise<{
 async function main() {
   console.log("🌱 Seeding database…\n");
 
-  if (!SKIP_COGNITO && !userPoolId) {
+  if (!userPoolId) {
     console.error("  NEXT_PUBLIC_COGNITO_USER_POOL_ID not set in environment");
     process.exit(1);
   }
 
-  let subsByEmail: Record<string, string>;
-  let adminSubs: string[];
-
-  if (SKIP_COGNITO) {
-    console.log("  SEED_SKIP_COGNITO=true — skipping Cognito (database-only seed; login will not work)\n");
-    subsByEmail = LOCAL_SEED_SUBS;
-    adminSubs = [LOCAL_SEED_SUBS["admin@startline.test"]];
-  } else {
-    try {
-      await ensureCognitoUsers();
-      ({ subsByEmail, adminSubs } = await fetchCognitoSubs());
-    } catch (err) {
-      const name = err instanceof Error ? err.name : "";
-      if (name === "CredentialsProviderError" || String(err).includes("Could not load credentials")) {
-        printAwsCredentialsHelp();
-        process.exit(1);
-      }
-      throw err;
+  try {
+    await ensureCognitoUsers();
+  } catch (err) {
+    const name = err instanceof Error ? err.name : "";
+    const message = err instanceof Error ? err.message : String(err);
+    if (name === "CredentialsProviderError" || message.includes("Could not load credentials")) {
+      console.error("\n  AWS credentials required — seed uses the Cognito admin API.");
+      console.error("  Add AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY to .env.local, or set AWS_PROFILE.\n");
+      process.exit(1);
     }
-    console.log(`  Cognito users found: ${Object.keys(subsByEmail).length}`);
+    throw err;
   }
+
+  const { subsByEmail, adminSubs } = await fetchCognitoSubs();
+  console.log(`  Cognito users found: ${Object.keys(subsByEmail).length}`);
 
   await prisma.registration.deleteMany();
   await prisma.review.deleteMany();
@@ -562,12 +534,8 @@ async function main() {
   console.log(`  Waitlist subscribers: ${waitlistEmails.length}`);
 
   console.log("\n✅ Database seeding complete!");
-  if (SKIP_COGNITO) {
-    console.log("   Mode: DB-only (SEED_SKIP_COGNITO=true — Cognito login disabled for seed users)");
-  } else {
-    console.log(`   Password for all users: ${PASSWORD}`);
-    console.log("   Users: admin@startline.test, organiser@startline.test, user@startline.test");
-  }
+  console.log(`   Password for all users: ${PASSWORD}`);
+  console.log("   Users: admin@startline.test, organiser@startline.test, user@startline.test");
 }
 
 main()

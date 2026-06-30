@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { adminLogin } from "./helpers";
 
 test.describe("admin login", () => {
-  test("dev bypass login redirects to dashboard", async ({ page }) => {
+  test("sign in redirects to dashboard", async ({ page }) => {
     await page.goto("/admin/login");
     await page.waitForLoadState("networkidle");
 
