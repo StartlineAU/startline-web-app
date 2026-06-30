@@ -121,9 +121,6 @@ export default function GuestEmailVerificationStep({
           We sent a 6-digit code to each participant email for <strong className="text-light">{eventTitle}</strong>.
           Enter each code below before continuing to payment.
         </p>
-        <p className="mt-2 text-[12px] text-muted leading-relaxed">
-          In local development, Resend may only deliver to your Resend account email until your domain is verified.
-        </p>
       </div>
 
       {globalError && (

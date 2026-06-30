@@ -129,10 +129,6 @@ export async function POST(req: NextRequest) {
 
     const stripe = getStripe();
 
-    const useDirectCharge =
-      process.env.NODE_ENV === "development" &&
-      process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
-
     const participantMetadata: Record<string, string> = {
       participantCount: String(participantCount),
     };
@@ -143,12 +139,8 @@ export async function POST(req: NextRequest) {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "aud",
-      ...(useDirectCharge
-        ? {}
-        : {
-            application_fee_amount: platformFeeCents,
-            transfer_data: { destination: event.organiser.stripeAccountId! },
-          }),
+      application_fee_amount: platformFeeCents,
+      transfer_data: { destination: event.organiser.stripeAccountId! },
       metadata: {
         eventId,
         waveLabel,

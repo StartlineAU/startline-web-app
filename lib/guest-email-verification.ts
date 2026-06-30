@@ -31,8 +31,17 @@ export function generateVerificationCode(): string {
   return String(randomInt(100000, 1000000));
 }
 
+function getGuestEmailVerificationSecret(): string {
+  const secret = process.env.GUEST_EMAIL_VERIFICATION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("GUEST_EMAIL_VERIFICATION_SECRET is not configured.");
+  }
+  return "dev-guest-email-secret";
+}
+
 export function hashVerificationCode(code: string, email: string, eventId: string): string {
-  const secret = process.env.GUEST_EMAIL_VERIFICATION_SECRET ?? "dev-guest-email-secret";
+  const secret = getGuestEmailVerificationSecret();
   return createHash("sha256")
     .update(`${code.trim()}:${normalizeGuestEmail(email)}:${eventId}:${secret}`)
     .digest("hex");
