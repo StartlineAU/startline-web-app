@@ -47,10 +47,16 @@ jobs:
           PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
         with:
           script: |
-            const body = `### Terraform plan\n\n\`\`\`\n${process.env.PLAN_STDOUT}\n\`\`\``;
+            const plan = process.env.PLAN_STDOUT;
+            const summary = plan.match(/Plan:.*?(?:\d.*?)?(?:to add|to change|to destroy|No changes).*/)?.[0]?.trim()
+              ?? "See full plan below.";
+            const body = `<details><summary>${summary}</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n\n</details>`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body,
             });
+
+      - if: steps.plan.outcome == 'failure'
+        run: exit 1

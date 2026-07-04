@@ -99,3 +99,18 @@ output "github_actions_role_arn" {
   description = "Set as GitHub repo variable AWS_ROLE_ARN for the terraform workflows."
   value       = aws_iam_role.terraform_ci.arn
 }
+
+output "uploads_bucket_ids" {
+  description = "S3 upload bucket names per environment."
+  value       = { for k, m in module.env : k => m.uploads_bucket_id }
+}
+
+output "uploads_bucket_arns" {
+  description = "S3 upload bucket ARNs per environment."
+  value       = { for k, m in module.env : k => m.uploads_bucket_arn }
+}
+
+output "uploads_bucket_regional_domain_names" {
+  description = "S3 upload bucket regional domain names per environment."
+  value       = { for k, m in module.env : k => m.uploads_bucket_regional_domain_name }
+}

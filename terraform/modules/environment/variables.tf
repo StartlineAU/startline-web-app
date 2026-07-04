@@ -114,3 +114,10 @@ variable "cognito_deletion_protection" {
   description = "Enable deletion protection on the User Pool."
   type        = bool
 }
+
+# --- S3 upload bucket ---
+
+variable "bucket_cors_allowed_origins" {
+  description = "CORS allowed origins for the uploads bucket."
+  type        = list(string)
+}
