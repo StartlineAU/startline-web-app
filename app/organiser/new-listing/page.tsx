@@ -1639,7 +1639,6 @@ export default function NewListingPage() {
                         <div className={`relative w-8 h-8 rounded-md border flex items-center justify-center font-headline font-black italic text-[13px] flex-shrink-0
                           ${cur ? "bg-lime-500 text-white border-lime-500" : hasErr ? "bg-orange-50 text-orange-500 border-orange-300" : done ? "bg-gray-100 text-lime-600 border-lime-400/50" : "bg-white border-gray-200 text-gray-400"}`}>
                           {hasErr ? <span className="text-[15px] leading-none font-black">!</span> : done ? <Check className="w-4 h-4" /> : s.n}
-                          {hasErr && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-400 border border-white animate-pulse-dot" />}
                         </div>
                         <div className="hidden xl:block min-w-0">
                           <div className={`font-headline text-[11px] font-bold uppercase tracking-widest truncate ${cur ? "text-gray-900" : hasErr ? "text-orange-500" : "text-gray-500"}`}>
