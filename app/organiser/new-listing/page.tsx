@@ -687,7 +687,7 @@ function StateSelect({ value, onChange }: { value: AusState; onChange: (v: AusSt
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden modal-in">
+        <div className="absolute top-full left-0 mt-2 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-y-auto max-h-72 modal-in">
           {rows.map(([v, abbr, full]) => (
             <button
               key={v}
