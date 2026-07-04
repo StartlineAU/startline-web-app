@@ -649,9 +649,62 @@ function BasicsStep({ form, update }: { form: FormState; update: (p: Partial<For
    STEP 2 — DATE & LOCATION
    ══════════════════════════════════════════════════════════════ */
 const AUS_STATES: [AusState, string][] = [
-  ["nsw","NSW"],["vic","VIC"],["qld","QLD"],["wa","WA"],
-  ["sa","SA"],["tas","TAS"],["act","ACT"],["nt","NT"],
-];
+  ["nsw", "NSW", "New South Wales"],
+  ["vic", "VIC", "Victoria"],
+  ["qld", "QLD", "Queensland"],
+  ["wa",  "WA",  "Western Australia"],
+  ["sa",  "SA",  "South Australia"],
+  ["tas", "TAS", "Tasmania"],
+  ["act", "ACT", "Australian Capital Territory"],
+  ["nt",  "NT",  "Northern Territory"],
+] as unknown as [AusState, string][];
+
+/* ── State select — custom dropdown matching city autocomplete style ── */
+function StateSelect({ value, onChange }: { value: AusState; onChange: (v: AusState) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const rows = AUS_STATES as unknown as [AusState, string, string][];
+  const selected = rows.find(([v]) => v === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full bg-white border rounded-md px-4 py-3 text-[15px] text-left flex items-center justify-between transition-colors
+          ${open ? "border-lime-500" : "border-gray-200 hover:border-gray-300"}
+          ${value ? "text-gray-900" : "text-gray-400"}`}
+      >
+        <span>{selected ? `${selected[1]}` : "Select state…"}</span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-2 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden modal-in">
+          {rows.map(([v, abbr, full]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => { onChange(v); setOpen(false); }}
+              className={`w-full px-4 py-3 text-left flex items-baseline gap-2.5 transition-colors
+                ${v === value ? "bg-lime-50" : "hover:bg-gray-50"}`}
+            >
+              <span className={`font-headline text-[14px] font-bold ${v === value ? "text-lime-700" : "text-gray-900"}`}>{abbr}</span>
+              <span className="font-headline text-[12px] text-gray-400">{full}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
   return (
@@ -718,16 +771,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
           />
         </Field>
         <Field label="State" required>
-          <select
-            value={form.state}
-            onChange={e => update({ state: e.target.value as AusState })}
-            className={`${inputCls} appearance-none cursor-pointer`}
-          >
-            <option value="" disabled>Select state…</option>
-            {AUS_STATES.map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
+          <StateSelect value={form.state} onChange={v => update({ state: v })} />
         </Field>
       </div>
     </div>
