@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const { submit } = body;
 
   if (submit) {
-    const required = ["title", "discipline", "eventDate", "startTime", "venue", "city", "state", "format", "level"];
+    const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"];
     for (const field of required) {
       if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
     }
