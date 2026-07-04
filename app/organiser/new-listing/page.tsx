@@ -9,8 +9,9 @@ import {
   Ticket, ExternalLink, DollarSign, Bold, Italic, Underline,
   AlignLeft, Image as ImageIcon,
 } from "lucide-react";
-import OrganiserTopBar     from "@/components/organiser/TopBar";
-import AddressAutocomplete from "@/components/ui/AddressAutocomplete";
+import OrganiserTopBar      from "@/components/organiser/TopBar";
+import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
+import SuburbAutocomplete   from "@/components/ui/SuburbAutocomplete";
 
 /* ── Step definitions ───────────────────────────────────────── */
 const STEPS = [
@@ -707,10 +708,26 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
         <Field label="City" required>
-          <div className={`${inputCls} ${form.city ? "text-gray-900" : "text-gray-400"}`}>{form.city || "—"}</div>
+          <SuburbAutocomplete
+            value={form.city}
+            onChange={city  => update({ city })}
+            onStateChange={state => { if (!form.state) update({ state: state as AusState }); }}
+            apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+            placeholder="e.g. Melbourne"
+            className={inputCls}
+          />
         </Field>
         <Field label="State" required>
-          <div className={`${inputCls} ${form.state ? "text-gray-900" : "text-gray-400"}`}>{form.state ? form.state.toUpperCase() : "—"}</div>
+          <select
+            value={form.state}
+            onChange={e => update({ state: e.target.value as AusState })}
+            className={`${inputCls} appearance-none cursor-pointer`}
+          >
+            <option value="" disabled>Select state…</option>
+            {AUS_STATES.map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </select>
         </Field>
       </div>
     </div>

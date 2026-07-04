@@ -22,7 +22,7 @@ interface Props {
 
 let scriptPromise: Promise<void> | null = null;
 
-function loadMapsScript(apiKey: string): Promise<void> {
+export function loadMapsScript(apiKey: string): Promise<void> {
   if (scriptPromise) return scriptPromise;
   if (typeof window !== "undefined" && window.google?.maps) {
     return (scriptPromise = Promise.resolve());
