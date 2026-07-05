@@ -58,8 +58,7 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "t
       <div className="flex items-end justify-between mb-4 sm:mb-6">
         <div>
           {eyebrow && (
-            <p className="font-headline text-[10px] sm:text-xs font-medium uppercase tracking-widest text-primary mb-1 flex items-center gap-2">
-              <span className="w-6 h-px bg-primary inline-block animate-pulse" />
+            <p className="font-headline text-[10px] sm:text-xs font-medium uppercase tracking-widest text-primary mb-1">
               {eyebrow}
             </p>
           )}
