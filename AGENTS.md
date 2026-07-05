@@ -186,7 +186,10 @@ gh pr list --repo StartlineAU/startline
 
 ### PR conventions
 
-When creating a pull request, always scan open GitHub issues and link any that the PR resolves or relates to. Use `Closes #N`, `Fixes #N`, or `Related to #N` in the PR body.
+When creating a pull request, always:
+- Scan open GitHub issues and link any that the PR resolves or relates to. Use `Closes #N`, `Fixes #N`, or `Related to #N` in the PR body.
+- Follow the PR template at `.github/PULL_REQUEST_TEMPLATE.md`.
+- CI automatically runs lint, unit tests, and e2e on every PR (informational, does not block merge).
 
 ### Issue conventions
 

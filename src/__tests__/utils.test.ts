@@ -1,5 +1,6 @@
 ﻿import { describe, it, expect } from "vitest";
 import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, formatExperienceLevel, truncateTitle, filterEvents, sortEventsByDate, getUpcomingEvents, getTotalUpcomingEvents } from "@/lib/utils";
+import { addDays, format } from "date-fns";
 import type { UserEvent, FilterState } from "@/types";
 
 describe("cn", () => {
@@ -135,14 +136,15 @@ describe("filterEvents", () => {
 
 describe("getUpcomingEvents", () => {
   it("returns events sorted and limited", () => {
+    const today = new Date();
     const events: UserEvent[] = [
-      { date: "2026-10-10" } as UserEvent,
-      { date: "2026-07-01" } as UserEvent,
-      { date: "2026-12-25" } as UserEvent,
+      { date: format(addDays(today, 90), "yyyy-MM-dd") } as UserEvent,
+      { date: format(addDays(today, 30), "yyyy-MM-dd") } as UserEvent,
+      { date: format(addDays(today, 180), "yyyy-MM-dd") } as UserEvent,
     ];
     const result = getUpcomingEvents(events, 2);
     expect(result).toHaveLength(2);
-    expect(result[0].date).toBe("2026-07-01");
+    expect(result[0].date).toBe(format(addDays(today, 30), "yyyy-MM-dd"));
   });
 });
 

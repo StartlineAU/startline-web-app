@@ -138,6 +138,8 @@ module "env" {
   cognito_deletion_protection = each.value.cognito_deletion_protection
 
   bucket_cors_allowed_origins = each.value.bucket_cors_allowed_origins
+
+  gitleaks_license = var.gitleaks_license
 }
 
 # Custom apex domain attaches only to the prod branch. Route 53 records that

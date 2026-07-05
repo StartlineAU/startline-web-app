@@ -125,3 +125,12 @@ variable "database_secret_recovery_window_days" {
   type        = number
   default     = 0
 }
+
+# --- CI ---
+
+variable "gitleaks_license" {
+  description = "Gitleaks license key (required for org accounts)."
+  type        = string
+  sensitive   = true
+  default     = null
+}

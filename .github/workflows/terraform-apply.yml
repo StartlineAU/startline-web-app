@@ -35,3 +35,4 @@ jobs:
           TF_VAR_amplify_repository_access_token: ${{ secrets.AMPLIFY_REPOSITORY_ACCESS_TOKEN }}
           TF_VAR_resend_api_key: ${{ secrets.RESEND_API_KEY }}
           TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_gitleaks_license: ${{ secrets.GITLEAKS_LICENSE }}
