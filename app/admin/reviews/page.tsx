@@ -46,7 +46,7 @@ function Stars({ value }: { value: number }) {
       {[1, 2, 3, 4, 5].map((n) => (
         <Star
           key={n}
-          className={`w-3.5 h-3.5 ${n <= value ? "fill-amber-400 text-amber-400" : "text-gray-300"}`}
+          className={`w-3.5 h-3.5 ${n <= value ? "fill-amber-400 text-amber-400" : "text-dark-lighter"}`}
         />
       ))}
     </div>
@@ -94,33 +94,33 @@ function ReviewCard({
   };
 
   return (
-    <div className={`border-b border-gray-100 last:border-0 px-5 py-4 ${!review.isPublished ? "bg-gray-50/60" : ""}`}>
+    <div className={`border-b border-white/[0.06] last:border-0 px-5 py-4 ${!review.isPublished ? "bg-white/[0.02]" : ""}`}>
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5">
             <Stars value={review.overallRating} />
-            <span className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900">
+            <span className="font-headline text-[15px] font-black italic tracking-tighter text-light">
               {review.title}
             </span>
             {review.isVerified && (
-              <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-lime-600">
+              <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary">
                 <BadgeCheck className="w-3.5 h-3.5" /> Verified
               </span>
             )}
             {!review.isPublished && (
-              <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
                 <EyeOff className="w-3.5 h-3.5" /> Hidden
               </span>
             )}
           </div>
 
-          <p className="text-[14px] text-gray-700 leading-relaxed mb-2">{review.body}</p>
+          <p className="text-[14px] text-muted leading-relaxed mb-2">{review.body}</p>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400">
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">
             {review.reviewerName}
-            {review.eventTitle && <span className="text-gray-300"> · {review.eventTitle}</span>}
-            <span className="text-gray-300"> · for {organiserName}</span>
-            <span className="text-gray-300"> · {formatDate(review.createdAt)}</span>
+            {review.eventTitle && <span className="text-dark-lighter"> · {review.eventTitle}</span>}
+            <span className="text-dark-lighter"> · for {organiserName}</span>
+            <span className="text-dark-lighter"> · {formatDate(review.createdAt)}</span>
           </div>
         </div>
 
@@ -130,7 +130,7 @@ function ReviewCard({
             onClick={() => patch({ isPublished: !review.isPublished })}
             disabled={busy}
             title={review.isPublished ? "Hide review" : "Publish review"}
-            className="flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest border border-gray-200 text-gray-600 px-2.5 py-2 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest border border-dark-lighter text-muted px-2.5 py-2 rounded-md hover:bg-dark-light hover:text-light transition-colors disabled:opacity-40"
           >
             {review.isPublished ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             {review.isPublished ? "Hide" : "Publish"}
@@ -141,8 +141,9 @@ function ReviewCard({
             title={review.isVerified ? "Remove verification" : "Mark verified"}
             className={`flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest border px-2.5 py-2 rounded-md transition-colors disabled:opacity-40
               ${review.isVerified
-                ? "border-lime-300 text-lime-700 hover:bg-lime-50"
-                : "border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                ? "border-primary/40 text-primary hover:bg-primary/10"
+                : "border-dark-lighter text-muted hover:bg-dark-light hover:text-light"
+              }`}
           >
             <BadgeCheck className="w-3.5 h-3.5" />
             {review.isVerified ? "Verified" : "Verify"}
@@ -151,7 +152,7 @@ function ReviewCard({
             onClick={remove}
             disabled={busy}
             title="Delete review"
-            className="p-2 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-40"
+            className="p-2 text-muted-dark hover:text-red-400 transition-colors disabled:opacity-40"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -202,39 +203,39 @@ function AdminReviewsContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-darker">
       <AdminNav />
 
       <main className="pt-14">
         <div className="max-w-[1200px] mx-auto px-6 py-10 page-in">
-          {/* Header */}
+
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
             <div>
-              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
+              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
                 Admin portal
               </div>
-              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-gray-900">
+              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-light">
                 Reviews.
               </h1>
             </div>
             <button
               onClick={() => fetchReviews(activeFilter)}
-              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors"
+              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mb-6 border-b border-gray-200">
+          <div className="flex gap-1 mb-6 border-b border-dark-lighter">
             {TABS.map(({ filter, label }) => (
               <button
                 key={filter}
                 onClick={() => switchFilter(filter)}
                 className={`font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-2.5 border-b-2 transition-colors -mb-px
                   ${activeFilter === filter
-                    ? "border-gray-900 text-gray-900"
-                    : "border-transparent text-gray-400 hover:text-gray-700"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted hover:text-light"
                   }`}
               >
                 {label}
@@ -242,19 +243,18 @@ function AdminReviewsContent() {
             ))}
           </div>
 
-          {/* List */}
           <Card className="overflow-hidden">
             {loading && (
               <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-gray-500 uppercase tracking-widest">Loading…</div>
+                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
               </div>
             )}
 
             {!loading && reviews.length === 0 && (
               <div className="p-12 text-center">
-                <div className="font-headline text-lg font-black italic text-gray-900 mb-1">No reviews</div>
-                <div className="text-gray-500 text-sm">
+                <div className="font-headline text-lg font-black italic text-light mb-1">No reviews</div>
+                <div className="text-muted text-sm">
                   {activeFilter === "all" ? "No reviews have been submitted yet." : `No ${activeFilter} reviews.`}
                 </div>
               </div>
@@ -266,7 +266,7 @@ function AdminReviewsContent() {
           </Card>
 
           {!loading && reviews.length > 0 && (
-            <div className="mt-4 font-headline text-[12px] uppercase tracking-widest text-gray-400 text-right">
+            <div className="mt-4 font-headline text-[12px] uppercase tracking-widest text-muted text-right">
               {reviews.length} review{reviews.length !== 1 ? "s" : ""}
             </div>
           )}

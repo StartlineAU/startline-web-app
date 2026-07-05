@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { Search, RefreshCw, RotateCcw, DollarSign } from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +34,9 @@ const STATUS_TABS: { status: RegStatus | "ALL"; label: string }[] = [
 ];
 
 const STATUS_STYLE: Record<RegStatus, { bg: string; text: string; dot: string }> = {
-  CONFIRMED: { bg: "bg-lime-50",  text: "text-lime-700",  dot: "bg-lime-500"  },
-  CANCELLED: { bg: "bg-gray-100", text: "text-gray-500",  dot: "bg-gray-400"  },
-  REFUNDED:  { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
+  CONFIRMED: { bg: "bg-primary/10",   text: "text-primary",   dot: "bg-primary"   },
+  CANCELLED: { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark" },
+  REFUNDED:  { bg: "bg-amber-400/10", text: "text-amber-300", dot: "bg-amber-400"  },
 };
 
 function formatDate(iso: string) {
@@ -87,45 +86,45 @@ function RegistrationRow({
   };
 
   return (
-    <div className="border-b border-gray-100 last:border-0 px-5 py-4">
+    <div className="border-b border-white/[0.06] last:border-0 px-5 py-4">
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-            <span className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900">
+            <span className="font-headline text-[15px] font-black italic tracking-tighter text-light">
               {reg.athleteName}
             </span>
-            <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0`}>
+            <span className={`inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
               {reg.status.charAt(0) + reg.status.slice(1).toLowerCase()}
-            </Badge>
-            <span className="font-headline text-[13px] font-bold text-gray-700">
+            </span>
+            <span className="font-headline text-[13px] font-bold text-light">
               {formatAud(reg.amountCents)}
             </span>
             {reg.platformFeeCents > 0 && (
-              <span className="font-headline text-[11px] text-gray-400 uppercase tracking-widest">
+              <span className="font-headline text-[11px] text-muted-dark uppercase tracking-widest">
                 +{formatAud(reg.platformFeeCents)} fee
               </span>
             )}
           </div>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400 mb-1">
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mb-1">
             {reg.athleteEmail}
-            {reg.category   && <span className="text-gray-300"> · {reg.category}</span>}
-            {reg.waveLabel  && <span className="text-gray-300"> · {reg.waveLabel}</span>}
+            {reg.category  && <span> · {reg.category}</span>}
+            {reg.waveLabel && <span> · {reg.waveLabel}</span>}
           </div>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-500">
-            <span className="text-gray-700">{reg.event.title}</span>
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted">
+            <span className="text-light/80">{reg.event.title}</span>
             {" · "}{reg.event.city}, {reg.event.state.toUpperCase()}
             {" · "}{formatDate(reg.event.eventDate)}
           </div>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400 mt-0.5">
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mt-0.5">
             By {organiserName} · Registered {formatDate(reg.createdAt)}
           </div>
 
           {error && (
-            <div className="mt-2 text-[12px] text-red-600 bg-red-50 rounded px-3 py-1.5 border border-red-100">
+            <div className="mt-2 text-[12px] text-red-400 bg-red-500/10 rounded px-3 py-1.5 border border-red-500/20">
               {error}
             </div>
           )}
@@ -134,7 +133,7 @@ function RegistrationRow({
         {reg.status === "CONFIRMED" && (
           <div className="shrink-0 ml-auto pl-2 flex items-center gap-2">
             {confirming && (
-              <span className="font-headline text-[11px] text-amber-700 uppercase tracking-widest">
+              <span className="font-headline text-[11px] text-amber-300 uppercase tracking-widest">
                 Confirm?
               </span>
             )}
@@ -144,7 +143,7 @@ function RegistrationRow({
               className={`flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed
                 ${confirming
                   ? "bg-red-600 text-white hover:bg-red-700"
-                  : "border border-amber-300 text-amber-700 hover:bg-amber-50"
+                  : "border border-amber-400/30 text-amber-300 hover:bg-amber-400/10"
                 }`}
             >
               {refunding
@@ -156,7 +155,7 @@ function RegistrationRow({
             {confirming && (
               <button
                 onClick={() => setConfirming(false)}
-                className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-700 transition-colors px-2"
+                className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors px-2"
               >
                 Cancel
               </button>
@@ -215,7 +214,7 @@ function RegistrationsContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-darker">
       <AdminNav />
 
       <main className="pt-14">
@@ -223,19 +222,19 @@ function RegistrationsContent() {
 
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
             <div>
-              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
+              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
                 Admin portal
               </div>
-              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-gray-900">
+              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-light">
                 Registrations.
               </h1>
               {eventId && (
-                <p className="text-[13px] text-gray-500 mt-2">Filtered by event</p>
+                <p className="text-[13px] text-muted mt-2">Filtered by event</p>
               )}
             </div>
             <button
               onClick={() => fetchRegs(activeTab, query, page)}
-              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors"
+              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
@@ -244,18 +243,18 @@ function RegistrationsContent() {
           {/* Search */}
           <form onSubmit={handleSearch} className="flex gap-2 mb-6">
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
               <input
                 type="text"
                 placeholder="Search by athlete name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 placeholder:text-gray-400"
+                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-muted-dark focus:outline-none focus:border-primary transition-colors"
               />
             </div>
             <button
               type="submit"
-              className="font-headline text-[12px] font-bold uppercase tracking-widest bg-gray-900 text-white px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors"
+              className="font-headline text-[12px] font-bold uppercase tracking-widest bg-machined shadow-machined text-dark px-5 py-2.5 rounded-lg hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform"
             >
               Search
             </button>
@@ -263,7 +262,7 @@ function RegistrationsContent() {
               <button
                 type="button"
                 onClick={() => { setSearch(""); setQuery(""); setPage(1); }}
-                className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 px-3 py-2.5 transition-colors"
+                className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-3 py-2.5 transition-colors"
               >
                 Clear
               </button>
@@ -271,15 +270,15 @@ function RegistrationsContent() {
           </form>
 
           {/* Status tabs */}
-          <div className="flex gap-1 mb-6 border-b border-gray-200">
+          <div className="flex gap-1 mb-6 border-b border-dark-lighter">
             {STATUS_TABS.map(({ status, label }) => (
               <button
                 key={status}
                 onClick={() => { setActiveTab(status); setPage(1); }}
                 className={`font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-2.5 border-b-2 transition-colors -mb-px
                   ${activeTab === status
-                    ? "border-gray-900 text-gray-900"
-                    : "border-transparent text-gray-400 hover:text-gray-700"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted hover:text-light"
                   }`}
               >
                 {label}
@@ -290,17 +289,15 @@ function RegistrationsContent() {
           <Card className="overflow-hidden">
             {loading && (
               <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-gray-500 uppercase tracking-widest">Loading…</div>
+                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
               </div>
             )}
 
             {!loading && regs.length === 0 && (
               <div className="p-12 text-center">
-                <div className="font-headline text-lg font-black italic text-gray-900 mb-1">
-                  No registrations
-                </div>
-                <div className="text-gray-500 text-sm">
+                <div className="font-headline text-lg font-black italic text-light mb-1">No registrations</div>
+                <div className="text-muted text-sm">
                   {query
                     ? `No registrations match "${query}".`
                     : "No registrations found for this filter."}
@@ -314,22 +311,22 @@ function RegistrationsContent() {
           </Card>
 
           {!loading && regs.length > 0 && (
-            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-gray-400">
+            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-muted">
               <span>{total} registration{total !== 1 ? "s" : ""}</span>
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => p - 1)}
                     disabled={page <= 1}
-                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Prev
                   </button>
-                  <span className="text-gray-500">Page {page} of {totalPages}</span>
+                  <span>Page {page} of {totalPages}</span>
                   <button
                     onClick={() => setPage((p) => p + 1)}
                     disabled={page >= totalPages}
-                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>

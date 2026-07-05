@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Search, RefreshCw, Ban, CheckCircle2, Building2, UserX } from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +31,7 @@ function formatDate(iso: string) {
   }
 }
 
-function UserRow({
+function UserRowItem({
   user,
   onBanToggled,
 }: {
@@ -58,28 +57,28 @@ function UserRow({
   };
 
   return (
-    <div className="border-b border-gray-100 last:border-0 px-5 py-4">
+    <div className="border-b border-white/[0.06] last:border-0 px-5 py-4">
       <div className="flex items-start gap-4">
         <div className={`w-11 h-11 rounded-lg font-headline font-black italic flex items-center justify-center shrink-0 text-sm
-          ${user.isBanned ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-700"}`}>
+          ${user.isBanned ? "bg-red-500/10 text-red-400" : "bg-dark-light text-muted"}`}>
           {initial}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-            <span className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900 truncate">
+            <span className="font-headline text-[15px] font-black italic tracking-tighter text-light truncate">
               {displayName}
             </span>
 
             {user.isBanned && (
-              <Badge className="gap-1.5 bg-red-50 text-red-600 border-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Banned
-              </Badge>
+              <span className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-red-400/10 text-red-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Banned
+              </span>
             )}
 
             {user.organiser && (
               <span className={`inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest
-                ${user.organiser.status === "SUSPENDED" ? "text-red-500" : "text-lime-600"}`}>
+                ${user.organiser.status === "SUSPENDED" ? "text-red-400" : "text-primary"}`}>
                 <Building2 className="w-3.5 h-3.5" />
                 {user.organiser.orgName ?? "Organiser"}
                 {user.organiser.status === "SUSPENDED" && " (suspended)"}
@@ -87,20 +86,20 @@ function UserRow({
             )}
           </div>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400 mb-1">
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mb-1">
             {user.email}
-            {user.username && <span className="text-gray-300"> · @{user.username}</span>}
+            {user.username && <span> · @{user.username}</span>}
             {(user.city || user.state) && (
-              <span className="text-gray-300">
+              <span>
                 {" · "}{[user.city, user.state?.toUpperCase()].filter(Boolean).join(", ")}
               </span>
             )}
           </div>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-500">
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted">
             {user._count.registrations} registration{user._count.registrations !== 1 ? "s" : ""}
-            <span className="text-gray-300"> · Joined {formatDate(user.createdAt)}</span>
-            {!user.isPublic && <span className="text-gray-300"> · Private profile</span>}
+            <span className="text-muted-dark"> · Joined {formatDate(user.createdAt)}</span>
+            {!user.isPublic && <span className="text-muted-dark"> · Private profile</span>}
           </div>
         </div>
 
@@ -110,8 +109,8 @@ function UserRow({
             disabled={loading}
             className={`flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed
               ${user.isBanned
-                ? "border border-lime-300 text-lime-700 hover:bg-lime-50"
-                : "border border-red-200 text-red-600 hover:bg-red-50"
+                ? "border border-primary/40 text-primary hover:bg-primary/10"
+                : "border border-red-500/30 text-red-400 hover:bg-red-500/10"
               }`}
           >
             {loading
@@ -167,7 +166,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-darker">
       <AdminNav />
 
       <main className="pt-14">
@@ -175,16 +174,16 @@ export default function AdminUsersPage() {
 
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
             <div>
-              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
+              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
                 Admin portal
               </div>
-              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-gray-900">
+              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-light">
                 Users.
               </h1>
             </div>
             <button
               onClick={() => fetchUsers(query, page)}
-              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors"
+              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
@@ -193,18 +192,18 @@ export default function AdminUsersPage() {
           {/* Search */}
           <form onSubmit={handleSearch} className="flex gap-2 mb-6">
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
               <input
                 type="text"
                 placeholder="Search by name, email, or username…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 placeholder:text-gray-400"
+                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-muted-dark focus:outline-none focus:border-primary transition-colors"
               />
             </div>
             <button
               type="submit"
-              className="font-headline text-[12px] font-bold uppercase tracking-widest bg-gray-900 text-white px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors"
+              className="font-headline text-[12px] font-bold uppercase tracking-widest bg-machined shadow-machined text-dark px-5 py-2.5 rounded-lg hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform"
             >
               Search
             </button>
@@ -212,7 +211,7 @@ export default function AdminUsersPage() {
               <button
                 type="button"
                 onClick={() => { setSearch(""); setQuery(""); setPage(1); }}
-                className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 px-3 py-2.5 transition-colors"
+                className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-3 py-2.5 transition-colors"
               >
                 Clear
               </button>
@@ -222,45 +221,45 @@ export default function AdminUsersPage() {
           <Card className="overflow-hidden">
             {loading && (
               <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-gray-500 uppercase tracking-widest">Loading…</div>
+                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
               </div>
             )}
 
             {!loading && users.length === 0 && (
               <div className="p-12 text-center">
-                <UserX className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-                <div className="font-headline text-lg font-black italic text-gray-900 mb-1">
+                <UserX className="w-8 h-8 text-dark-lighter mx-auto mb-3" />
+                <div className="font-headline text-lg font-black italic text-light mb-1">
                   {query ? "No users found" : "No users yet"}
                 </div>
-                <div className="text-gray-500 text-sm">
+                <div className="text-muted text-sm">
                   {query ? `No users match "${query}".` : "User accounts will appear here once they sign up."}
                 </div>
               </div>
             )}
 
             {!loading && users.map((u) => (
-              <UserRow key={u.id} user={u} onBanToggled={handleBanToggled} />
+              <UserRowItem key={u.id} user={u} onBanToggled={handleBanToggled} />
             ))}
           </Card>
 
           {!loading && users.length > 0 && (
-            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-gray-400">
+            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-muted">
               <span>{total} user{total !== 1 ? "s" : ""}</span>
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => p - 1)}
                     disabled={page <= 1}
-                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Prev
                   </button>
-                  <span className="text-gray-500">Page {page} of {totalPages}</span>
+                  <span>Page {page} of {totalPages}</span>
                   <button
                     onClick={() => setPage((p) => p + 1)}
                     disabled={page >= totalPages}
-                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>

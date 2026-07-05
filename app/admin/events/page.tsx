@@ -28,12 +28,7 @@ interface AdminEventRow {
   coverImageUrl: string | null;
   rejectionReason: string | null;
   reviewedAt: string | null;
-  organiser: {
-    id: string;
-    orgName: string | null;
-    contactName: string | null;
-    email: string;
-  };
+  organiser: { id: string; orgName: string | null; contactName: string | null; email: string };
 }
 
 const TABS: { status: EventStatus; label: string }[] = [
@@ -44,10 +39,10 @@ const TABS: { status: EventStatus; label: string }[] = [
 ];
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
-  PENDING:  { bg: "bg-blue-50",  text: "text-blue-600",  dot: "bg-blue-500",  label: "Pending"  },
-  APPROVED: { bg: "bg-lime-50",  text: "text-lime-700",  dot: "bg-lime-500",  label: "Approved" },
-  REJECTED: { bg: "bg-red-50",   text: "text-red-600",   dot: "bg-red-500",   label: "Rejected" },
-  ARCHIVED: { bg: "bg-gray-100", text: "text-gray-500",  dot: "bg-gray-400",  label: "Archived" },
+  PENDING:  { bg: "bg-blue-400/10",  text: "text-blue-300",  dot: "bg-blue-400",   label: "Pending"  },
+  APPROVED: { bg: "bg-primary/10",   text: "text-primary",   dot: "bg-primary",    label: "Approved" },
+  REJECTED: { bg: "bg-red-400/10",   text: "text-red-400",   dot: "bg-red-400",    label: "Rejected" },
+  ARCHIVED: { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark", label: "Archived" },
 };
 
 function formatDate(dateStr: string) {
@@ -79,12 +74,12 @@ interface RejectPanelProps {
 function RejectPanel({ onConfirm, onCancel, loading }: RejectPanelProps) {
   const [reason, setReason] = useState("");
   return (
-    <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-      <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-red-700 block mb-2">
-        Rejection reason <span className="text-red-500">*</span>
+    <div className="mt-3 p-4 bg-red-500/[0.08] border border-red-500/20 rounded-lg">
+      <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-red-400 block mb-2">
+        Rejection reason <span className="text-red-400">*</span>
       </label>
       <textarea
-        className="w-full text-[14px] text-gray-900 bg-white border border-red-300 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-red-500 placeholder:text-gray-400"
+        className="w-full text-[14px] text-light bg-dark border border-red-500/30 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-red-400 placeholder:text-muted-dark"
         rows={3}
         placeholder="Explain why the event is being rejected…"
         value={reason}
@@ -94,7 +89,7 @@ function RejectPanel({ onConfirm, onCancel, loading }: RejectPanelProps) {
         <button
           onClick={onCancel}
           disabled={loading}
-          className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+          className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-3 py-1.5 rounded transition-colors disabled:opacity-50"
         >
           Cancel
         </button>
@@ -204,29 +199,29 @@ function EventRow({
   const s = STATUS_STYLE[event.status];
 
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-white/[0.06] last:border-0">
       <div className="flex items-start gap-3 px-5 py-4">
         {/* Checkbox */}
         <button
           onClick={() => onToggleSelect(event.id)}
-          className="mt-1 shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
+          className="mt-1 shrink-0 text-muted-dark hover:text-muted transition-colors"
         >
           {selected
-            ? <CheckSquare className="w-4 h-4 text-gray-900" />
+            ? <CheckSquare className="w-4 h-4 text-primary" />
             : <Square className="w-4 h-4" />}
         </button>
 
         {/* Cover thumbnail */}
-        <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+        <div className="w-14 h-14 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden">
           {event.coverImageUrl
             ? <img src={event.coverImageUrl} alt={event.title} className="w-full h-full object-cover" />
-            : <div className="font-mono text-[9px] text-gray-400 uppercase">{event.discipline.slice(0, 4)}</div>}
+            : <div className="font-mono text-[9px] text-muted-dark uppercase">{event.discipline.slice(0, 4)}</div>}
         </div>
 
         {/* Details */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-start gap-x-3 gap-y-1 mb-1">
-            <span className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900 truncate">
+            <span className="font-headline text-[15px] font-black italic tracking-tighter text-light truncate">
               {event.title}
             </span>
             <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0 shrink-0`}>
@@ -234,31 +229,31 @@ function EventRow({
               {s.label}
             </Badge>
             {event.isPinned && (
-              <Badge className="gap-1.5 bg-amber-50 text-amber-700 border-0 shrink-0">
+              <Badge className="gap-1.5 bg-amber-400/10 text-amber-300 border-0 shrink-0">
                 <Pin className="w-3 h-3" /> Pinned
               </Badge>
             )}
           </div>
 
-          <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-headline text-[11px] uppercase tracking-widest text-gray-500 mb-1">
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-headline text-[11px] uppercase tracking-widest text-muted mb-1">
             <span className="flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-lime-500" />
+              <MapPin className="w-3 h-3 text-primary" />
               {event.city}, {event.state.toUpperCase()}
             </span>
             <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
+              <Calendar className="w-3 h-3 text-muted-dark" />
               {formatDate(event.eventDate)}
             </span>
             <span className="capitalize">{event.discipline}</span>
           </div>
 
-          <div className="font-headline text-[11px] uppercase tracking-widest text-gray-400">
-            By <span className="text-gray-600">{organiserName}</span>
+          <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">
+            By <span className="text-muted">{organiserName}</span>
             {" · "}Submitted {formatSubmitted(event.createdAt)}
           </div>
 
           {event.status === "REJECTED" && event.rejectionReason && (
-            <div className="mt-2 text-[13px] text-red-600 bg-red-50 rounded px-3 py-2 border border-red-100">
+            <div className="mt-2 text-[13px] text-red-400 bg-red-500/10 rounded px-3 py-2 border border-red-500/20">
               <span className="font-bold">Reason: </span>{event.rejectionReason}
             </div>
           )}
@@ -271,17 +266,17 @@ function EventRow({
               <button
                 onClick={handleApprove}
                 disabled={approving || rejecting}
-                className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-lime-500 text-white px-3 py-2 rounded-md hover:bg-lime-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {approving
-                  ? <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                  ? <span className="w-3 h-3 border border-dark/40 border-t-dark rounded-full animate-spin" />
                   : <Check className="w-3.5 h-3.5" />}
                 Approve
               </button>
               <button
                 onClick={() => { setRejectOpen((o) => !o); setApproveError(""); }}
                 disabled={approving || rejecting}
-                className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-300 text-red-600 px-3 py-2 rounded-md hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-500/30 text-red-400 px-3 py-2 rounded-md hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <X className="w-3.5 h-3.5" /> Reject
               </button>
@@ -294,8 +289,8 @@ function EventRow({
               disabled={pinning}
               className={`flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed
                 ${event.isPinned
-                  ? "border border-amber-300 text-amber-700 hover:bg-amber-50"
-                  : "border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700"
+                  ? "border border-amber-400/40 text-amber-300 hover:bg-amber-400/10"
+                  : "border border-dark-lighter text-muted hover:border-primary/40 hover:text-light"
                 }`}
             >
               {pinning
@@ -314,7 +309,7 @@ function EventRow({
             className={`flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed
               ${confirmDel
                 ? "bg-red-600 text-white hover:bg-red-700"
-                : "border border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-500"
+                : "border border-dark-lighter text-muted-dark hover:border-red-500/40 hover:text-red-400"
               }`}
           >
             {deleting
@@ -325,7 +320,7 @@ function EventRow({
           {confirmDel && (
             <button
               onClick={() => setConfirmDel(false)}
-              className="font-headline text-[11px] text-gray-400 hover:text-gray-700 px-2 py-2 transition-colors"
+              className="font-headline text-[11px] text-muted hover:text-light px-2 py-2 transition-colors"
             >
               Cancel
             </button>
@@ -334,21 +329,21 @@ function EventRow({
           {/* Expand */}
           <button
             onClick={() => setExpanded((o) => !o)}
-            className="p-2 text-gray-400 hover:text-gray-700 transition-colors"
+            className="p-2 text-muted-dark hover:text-muted transition-colors"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Stripe gate error */}
+      {/* Approve error */}
       {approveError && (
         <div className="px-5 pb-4 pl-12">
-          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-            <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-lg px-4 py-3">
+            <svg className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
-            <div className="text-[13px] text-amber-800">{approveError}</div>
+            <div className="text-[13px] text-amber-200">{approveError}</div>
           </div>
         </div>
       )}
@@ -362,29 +357,29 @@ function EventRow({
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-5 pb-5 pl-12 bg-gray-50 border-t border-gray-100">
+        <div className="px-5 pb-5 pl-12 bg-white/[0.02] border-t border-white/[0.06]">
           <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3">
             <div>
-              <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Organiser</div>
-              <div className="text-[13px] text-gray-800">
+              <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-0.5">Organiser</div>
+              <div className="text-[13px] text-light/80">
                 {organiserName}
                 {organiserName !== event.organiser.email && (
-                  <span className="text-gray-400 ml-1">({event.organiser.email})</span>
+                  <span className="text-muted-dark ml-1">({event.organiser.email})</span>
                 )}
               </div>
             </div>
             <div>
-              <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Event date</div>
-              <div className="text-[13px] text-gray-800">{formatDate(event.eventDate)} · {event.startTime}</div>
+              <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-0.5">Event date</div>
+              <div className="text-[13px] text-light/80">{formatDate(event.eventDate)} · {event.startTime}</div>
             </div>
             <div>
-              <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Discipline</div>
-              <div className="text-[13px] text-gray-800 capitalize">{event.discipline}</div>
+              <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-0.5">Discipline</div>
+              <div className="text-[13px] text-light/80 capitalize">{event.discipline}</div>
             </div>
             {event.reviewedAt && (
               <div>
-                <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Reviewed</div>
-                <div className="text-[13px] text-gray-800">{formatSubmitted(event.reviewedAt)}</div>
+                <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-0.5">Reviewed</div>
+                <div className="text-[13px] text-light/80">{formatSubmitted(event.reviewedAt)}</div>
               </div>
             )}
           </div>
@@ -433,8 +428,8 @@ function BulkActionBar({
   };
 
   return (
-    <div className="sticky top-14 z-40 bg-gray-900 text-white px-5 py-3 flex flex-wrap items-center gap-3 shadow-lg">
-      <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-white/70">
+    <div className="sticky top-14 z-40 bg-dark-darker/95 backdrop-blur border-b border-primary/20 text-light px-5 py-3 flex flex-wrap items-center gap-3 shadow-lg">
+      <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted">
         {ids.length} selected
       </span>
 
@@ -443,14 +438,14 @@ function BulkActionBar({
           <button
             onClick={() => run("approve")}
             disabled={loading}
-            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-lime-500 text-white px-4 py-1.5 rounded-md hover:bg-lime-400 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-primary text-dark px-4 py-1.5 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40"
           >
             <Check className="w-3.5 h-3.5" /> Approve all
           </button>
           <button
             onClick={() => setRejectOpen(true)}
             disabled={loading}
-            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-400 text-red-400 px-4 py-1.5 rounded-md hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-500/30 text-red-400 px-4 py-1.5 rounded-md hover:bg-red-500/10 transition-colors disabled:opacity-40"
           >
             <X className="w-3.5 h-3.5" /> Reject all
           </button>
@@ -464,7 +459,7 @@ function BulkActionBar({
             placeholder="Rejection reason (required)…"
             value={bulkReason}
             onChange={(e) => setBulkReason(e.target.value)}
-            className="flex-1 max-w-sm text-[13px] bg-white/10 border border-white/20 rounded-md px-3 py-1.5 text-white placeholder:text-white/40 focus:outline-none focus:border-white/50"
+            className="flex-1 max-w-sm text-[13px] bg-dark-light border border-dark-lighter rounded-md px-3 py-1.5 text-light placeholder:text-muted-dark focus:outline-none focus:border-primary"
           />
           <button
             onClick={() => bulkReason.trim() && run("reject", bulkReason.trim())}
@@ -473,7 +468,7 @@ function BulkActionBar({
           >
             Confirm reject
           </button>
-          <button onClick={() => setRejectOpen(false)} className="text-white/50 hover:text-white transition-colors px-2 font-headline text-[12px] uppercase tracking-widest">
+          <button onClick={() => setRejectOpen(false)} className="text-muted hover:text-light transition-colors px-2 font-headline text-[12px] uppercase tracking-widest">
             Cancel
           </button>
         </div>
@@ -492,7 +487,7 @@ function BulkActionBar({
             >
               Yes, delete
             </button>
-            <button onClick={() => setConfirmDelete(false)} className="text-white/50 hover:text-white transition-colors px-2 font-headline text-[12px] uppercase tracking-widest">
+            <button onClick={() => setConfirmDelete(false)} className="text-muted hover:text-light transition-colors px-2 font-headline text-[12px] uppercase tracking-widest">
               Cancel
             </button>
           </div>
@@ -500,7 +495,7 @@ function BulkActionBar({
           <button
             onClick={() => setConfirmDelete(true)}
             disabled={loading}
-            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-500/40 text-red-400 px-4 py-1.5 rounded-md hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-500/30 text-red-400 px-4 py-1.5 rounded-md hover:bg-red-500/10 transition-colors disabled:opacity-40"
           >
             <Trash2 className="w-3.5 h-3.5" /> Delete all
           </button>
@@ -509,7 +504,7 @@ function BulkActionBar({
 
       <button
         onClick={onClearSelection}
-        className="ml-auto font-headline text-[12px] font-bold uppercase tracking-widest text-white/50 hover:text-white transition-colors"
+        className="ml-auto font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
       >
         Clear
       </button>
@@ -587,18 +582,14 @@ function AdminEventsContent() {
     setEvents((prev) => prev.map((e) => e.id === id ? { ...e, isPinned } : e));
   };
 
-  const handleBulkDone = (ids: string[], action: string) => {
-    if (action === "delete") {
-      setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
-    } else {
-      setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
-    }
+  const handleBulkDone = (ids: string[]) => {
+    setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
   };
 
   const allSelected = events.length > 0 && selectedIds.size === events.length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-darker">
       <AdminNav />
 
       {selectedIds.size > 0 && (
@@ -613,34 +604,33 @@ function AdminEventsContent() {
       <main className={selectedIds.size > 0 ? "" : "pt-14"}>
         <div className="max-w-[1200px] mx-auto px-6 py-10 page-in">
 
-          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
             <div>
-              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
+              <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
                 Admin portal
               </div>
-              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-gray-900">
+              <h1 className="font-headline text-[44px] font-black italic tracking-tighter leading-none text-light">
                 Events.
               </h1>
             </div>
             <button
               onClick={() => fetchEvents(activeTab, page)}
-              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors"
+              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mb-6 border-b border-gray-200">
+          <div className="flex gap-1 mb-6 border-b border-dark-lighter">
             {TABS.map(({ status, label }) => (
               <button
                 key={status}
                 onClick={() => switchTab(status)}
                 className={`font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-2.5 border-b-2 transition-colors -mb-px
                   ${activeTab === status
-                    ? "border-gray-900 text-gray-900"
-                    : "border-transparent text-gray-400 hover:text-gray-700"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted hover:text-light"
                   }`}
               >
                 {label}
@@ -648,22 +638,21 @@ function AdminEventsContent() {
             ))}
           </div>
 
-          {/* Events list */}
           <Card className="overflow-hidden">
             {/* Select-all header */}
             {!loading && events.length > 0 && (
-              <div className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-3 px-5 py-2.5 border-b border-white/[0.06] bg-white/[0.02]">
                 <button
                   onClick={toggleSelectAll}
-                  className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-700 transition-colors"
+                  className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-muted-dark hover:text-muted transition-colors"
                 >
                   {allSelected
-                    ? <CheckSquare className="w-4 h-4 text-gray-700" />
+                    ? <CheckSquare className="w-4 h-4 text-primary" />
                     : <Square className="w-4 h-4" />}
                   {allSelected ? "Deselect all" : "Select all"}
                 </button>
                 {selectedIds.size > 0 && (
-                  <span className="font-headline text-[11px] uppercase tracking-widest text-gray-500">
+                  <span className="font-headline text-[11px] uppercase tracking-widest text-muted">
                     {selectedIds.size} of {events.length} selected
                   </span>
                 )}
@@ -672,17 +661,17 @@ function AdminEventsContent() {
 
             {loading && (
               <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-gray-500 uppercase tracking-widest">Loading…</div>
+                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
               </div>
             )}
 
             {!loading && events.length === 0 && (
               <div className="p-12 text-center">
-                <div className="font-headline text-lg font-black italic text-gray-900 mb-1">
+                <div className="font-headline text-lg font-black italic text-light mb-1">
                   {activeTab === "PENDING" ? "Queue is clear" : `No ${activeTab.toLowerCase()} events`}
                 </div>
-                <div className="text-gray-500 text-sm">
+                <div className="text-muted text-sm">
                   {activeTab === "PENDING"
                     ? "No events are waiting for review right now."
                     : `No events with ${activeTab.toLowerCase()} status.`}
@@ -704,22 +693,22 @@ function AdminEventsContent() {
           </Card>
 
           {!loading && events.length > 0 && (
-            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-gray-400">
+            <div className="mt-4 flex items-center justify-between font-headline text-[12px] uppercase tracking-widest text-muted">
               <span>{total} event{total !== 1 ? "s" : ""}</span>
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { const p = page - 1; setPage(p); fetchEvents(activeTab, p); }}
                     disabled={page <= 1}
-                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Prev
                   </button>
-                  <span className="text-gray-500">Page {page} of {totalPages}</span>
+                  <span>Page {page} of {totalPages}</span>
                   <button
                     onClick={() => { const p = page + 1; setPage(p); fetchEvents(activeTab, p); }}
                     disabled={page >= totalPages}
-                    className="px-3 py-1 rounded border border-gray-200 hover:border-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>
