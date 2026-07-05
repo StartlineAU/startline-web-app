@@ -196,29 +196,47 @@ When creating a pull request, always:
 When creating GitHub issues, always:
 - Add relevant **labels** (create new ones if they don't exist). Available labels: `bug`, `enhancement`, `documentation`, `auth`, `ci`, `infrastructure`, `ui`, `payments`, `maps`, `video`, `dashboard`, `registrations`, `question`, `help wanted`, `good first issue`
 - Set the native **issue type** — `Bug`, `Feature`, or `Task` (not a label, a proper field)
-- Set **Priority** and **Effort** issue fields using the GraphQL API (`setIssueFieldValue` mutation) — `gh issue create` has no native flags for these
+- Set **Priority** and **Effort** issue fields using the GraphQL API — `gh issue create` has no native flags for these
 - Assign a **milestone** if one exists for the relevant sprint/release
 - Assign to a **project** if one exists
 - Use the issue template at `.github/ISSUE_TEMPLATE/issue.yml` — it enforces Type, Priority, and Effort as required fields
-- Use `gh issue create --repo StartlineAU/startline --label "<label1,label2>" --type "<Bug|Feature|Task>" --assignee "@me"` for new issues
 - Cross-reference **related issues** in the body (`**Related to:** #N`) and use `--add-blocking`/`--add-blocked-by` for dependency relationships
 - Use `--add-sub-issue` and `--parent` for parent-child issue hierarchies
-- After creation, set Priority/Effort via GraphQL — `gh issue create` has no native flags for these. Steps:
-  1. Get the issue's GraphQL node ID: `gh issue view <N> --json id --jq '.id'`
-  2. Get field option IDs (one-time discovery):
-     ```
-     Priority options: IFSSO_kgDOBFZBjQ(Urgent), IFSSO_kgDOBFZBjg(High), IFSSO_kgDOBFZBjw(Medium), IFSSO_kgDOBFZBkA(Low)
-     Effort options:   IFSSO_kgDOBFZBkQ(High),   IFSSO_kgDOBFZBkg(Medium), IFSSO_kgDOBFZBkw(Low)
-     ```
-  3. Set fields via mutation:
-     ```bash
-     gh api graphql -f query='
-       mutation {
-         p: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8Qg", singleSelectOptionId: "<OPTION_ID>" } }) { issue { number } }
-         e: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8RQ", singleSelectOptionId: "<OPTION_ID>" } }) { issue { number } }
-       }'
-     ```
-  Available fields: **Priority** (Urgent/High/Medium/Low), **Effort** (High/Medium/Low), **Start date**, **Target date**
+
+#### Setting issue type (simple)
+```bash
+gh issue edit <N> --repo StartlineAU/startline --type "Bug|Feature|Task"
+```
+
+#### Setting Priority & Effort (GraphQL)
+
+Field IDs (never change):
+- Priority field: `IFSS_kgDOAnp8Qg`
+- Effort field: `IFSS_kgDOAnp8RQ`
+
+| Field | Option | Option ID |
+|---|---|---|
+| Priority | Urgent | `IFSSO_kgDOBFZBjQ` |
+| Priority | High | `IFSSO_kgDOBFZBjg` |
+| Priority | Medium | `IFSSO_kgDOBFZBjw` |
+| Priority | Low | `IFSSO_kgDOBFZBkA` |
+| Effort | High | `IFSSO_kgDOBFZBkQ` |
+| Effort | Medium | `IFSSO_kgDOBFZBkg` |
+| Effort | Low | `IFSSO_kgDOBFZBkw` |
+
+Steps:
+1. Get the issue's GraphQL node ID: `gh issue view <N> --repo StartlineAU/startline --json id --jq '.id'`
+2. Set fields via batch mutation (copy-paste this, replace `<NODE_ID>`, `<PRI_OPT>`, `<EFF_OPT>`):
+   ```bash
+   gh api graphql -f query='
+     mutation {
+       p: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8Qg", singleSelectOptionId: "<PRI_OPT>" } }) { issue { number } }
+       e: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8RQ", singleSelectOptionId: "<EFF_OPT>" } }) { issue { number } }
+     }'
+   ```
+3. To verify: `gh issue view <N> --repo StartlineAU/startline --json id --jq '.id'` then query the GraphQL node manually if needed.
+
+> **Note:** Priority/Effort are separate from the issue body template fields. Setting them in the body template does NOT set the GraphQL-level custom fields. You must use the GraphQL mutation above.
 
 ## MCP servers
 
