@@ -4,25 +4,25 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 font-headline font-bold uppercase tracking-widest will-change-transform transition-all duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 focus-visible:ring-offset-2",
+  "inline-flex items-center justify-center gap-2 font-headline font-bold uppercase tracking-widest will-change-transform transition-all duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   {
     variants: {
       variant: {
         default:
-          "bg-gray-900 text-white hover:bg-gray-800 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
+          "bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-dark shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_#A4D62F] active:translate-x-0 active:translate-y-0 active:shadow-none",
         primary:
-          "bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-[rgb(31,31,31)] hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
+          "bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-dark shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_#A4D62F] active:translate-x-0 active:translate-y-0 active:shadow-none",
         outline:
-          "border border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:text-gray-900 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
+          "border border-dark-lighter bg-transparent text-light hover:bg-dark-light hover:border-primary hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
         ghost:
-          "text-gray-500 hover:text-gray-900 hover:bg-gray-100 hover:scale-[1.01] active:scale-100",
+          "text-muted hover:text-light hover:bg-white/5 hover:scale-[1.01] active:scale-100",
         destructive:
-          "bg-red-500 text-white hover:bg-red-600 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
+          "bg-red-400/10 text-red-300 border border-red-400/40 hover:bg-red-400 hover:text-dark hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
         lime:
-          "border border-lime-400 bg-lime-50 text-lime-700 hover:bg-lime-100 hover:-translate-y-1 hover:scale-[1.01] hover:shadow-xl active:translate-y-0 active:scale-100 active:shadow-none",
+          "bg-primary text-dark hover:bg-primary-light hover:-translate-y-1 hover:scale-[1.01] active:translate-y-0 active:scale-100",
         machined:
           "bg-machined text-dark machined-button-shadow hover:-translate-y-0.5 hover:-translate-x-0.5 active:translate-x-0 active:translate-y-0",
-        link: "text-lime-600 underline-offset-4 hover:underline",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         sm: "text-[11px] px-3 py-2 rounded-lg",

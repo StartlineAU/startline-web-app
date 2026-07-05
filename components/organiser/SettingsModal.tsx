@@ -3,22 +3,22 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
-  X, ChevronRight, Upload, Camera, Move, Mail, Phone,
-  CheckCircle, User, Lock, Bell, CreditCard, Cookie, Trash2,
+  X, ChevronRight, Upload, Move, Mail, Phone,
+  CheckCircle, User, Lock, Bell, CreditCard, Cookie,
 } from "lucide-react";
 import { useSettings, type SettingsSection } from "@/context/SettingsContext";
 
 // ── shared form primitives ──────────────────────────────────────────────────
 
-const inputCls = "w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-400 focus:border-lime-500 focus:outline-none transition-colors";
+const inputCls = "w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
 
 function FieldLabel({ label, hint, required }: { label: string; hint?: string; required?: boolean }) {
   return (
     <div className="flex items-baseline justify-between mb-1.5">
-      <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-700">
-        {label}{required && <span className="text-lime-600 ml-0.5">*</span>}
+      <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted-light">
+        {label}{required && <span className="text-primary ml-0.5">*</span>}
       </label>
-      {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-gray-400">{hint}</span>}
+      {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">{hint}</span>}
     </div>
   );
 }
@@ -63,14 +63,14 @@ function CoverEditor({
 
   if (!imageUrl) return (
     <div
-      className="relative h-28 rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200 cursor-pointer"
+      className="relative h-28 rounded-xl overflow-hidden bg-dark-light border border-dark-lighter cursor-pointer"
       onClick={() => fileRef.current?.click()}
     >
-      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #b3e153 0%, transparent 50%), radial-gradient(circle at 80% 20%, #86efac 0%, transparent 40%)" }} />
+      <div className="absolute inset-0 opacity-15" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #b3e153 0%, transparent 50%), radial-gradient(circle at 80% 20%, #86efac 0%, transparent 40%)" }} />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="bg-white/90 rounded-lg px-3 py-2 flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-gray-700">
+        <div className="bg-dark/80 rounded-lg px-3 py-2 flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-muted-light border border-dark-lighter">
           {uploading
-            ? <><div className="w-3.5 h-3.5 border-2 border-lime-500 border-t-transparent rounded-full animate-spin" /> Uploading…</>
+            ? <><div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" /> Uploading…</>
             : <><Upload className="w-3.5 h-3.5" /> Upload cover</>}
         </div>
       </div>
@@ -81,11 +81,11 @@ function CoverEditor({
     <div>
       <div
         ref={containerRef}
-        className={`relative h-28 rounded-xl overflow-hidden border border-gray-200 select-none ${reposition ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+        className={`relative h-28 rounded-xl overflow-hidden border border-dark-lighter select-none ${reposition ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove}
         onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
       >
-        <img src={imageUrl} alt="Cover" className="w-full h-full object-cover pointer-events-none"
+        <img src={imageUrl} alt="Cover" className="w-full h-full object-cover pointer-events-none brightness-[.62] saturate-110"
           style={{ objectPosition: position }} draggable={false} />
         {reposition && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
@@ -98,18 +98,18 @@ function CoverEditor({
       <div className="flex items-center gap-2 mt-2">
         {reposition ? (
           <button onClick={() => setReposition(false)}
-            className="font-headline text-[11px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-3 py-1.5 rounded-md hover:bg-lime-500 transition-colors">
+            className="font-headline text-[11px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-1.5 rounded-md hover:opacity-90 transition-opacity">
             Done
           </button>
         ) : (
           <button onClick={() => setReposition(true)}
-            className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors">
+            className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-1 transition-colors">
             <Move className="w-3 h-3" /> Reposition
           </button>
         )}
-        <span className="text-gray-300 text-xs">·</span>
+        <span className="text-white/20 text-xs">·</span>
         <button onClick={() => { setReposition(false); fileRef.current?.click(); }} disabled={uploading}
-          className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors disabled:opacity-40">
+          className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-1 transition-colors disabled:opacity-40">
           <Upload className="w-3 h-3" /> {uploading ? "Uploading…" : "Change photo"}
         </button>
       </div>
@@ -158,7 +158,7 @@ function LogoEditor({
     <div className="flex items-start gap-4">
       <div
         ref={containerRef}
-        className={`relative w-24 h-24 rounded-2xl overflow-hidden bg-lime-400 border border-gray-200 shrink-0 select-none
+        className={`relative w-24 h-24 rounded-2xl overflow-hidden bg-primary border border-dark-lighter shrink-0 select-none
           ${reposition && imageUrl ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove}
         onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
@@ -166,14 +166,14 @@ function LogoEditor({
         {imageUrl
           ? <img src={imageUrl} alt="Logo" className="w-full h-full object-cover pointer-events-none"
               style={{ objectPosition: position }} draggable={false} />
-          : <span className="font-headline font-black italic text-2xl text-gray-900 flex items-center justify-center w-full h-full">{initial}</span>}
+          : <span className="font-headline font-black italic text-2xl text-dark flex items-center justify-center w-full h-full">{initial}</span>}
         {reposition && imageUrl && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
             <Move className="w-4 h-4 text-white" />
           </div>
         )}
         {!reposition && (
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center"
+          <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors flex items-center justify-center"
             onClick={() => !imageUrl && fileRef.current?.click()}>
             {uploading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
           </div>
@@ -183,27 +183,27 @@ function LogoEditor({
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => { setReposition(false); fileRef.current?.click(); }} disabled={uploading}
-            className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-700 hover:text-lime-600 transition-colors disabled:opacity-40 flex items-center gap-1.5">
+            className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors disabled:opacity-40 flex items-center gap-1.5">
             <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : "Upload new photo"}
           </button>
           {imageUrl && (
             <>
-              <span className="text-gray-300 text-xs">·</span>
+              <span className="text-white/20 text-xs">·</span>
               {reposition ? (
                 <button onClick={() => setReposition(false)}
-                  className="font-headline text-[12px] font-bold uppercase tracking-widest bg-lime-400 text-gray-900 px-2.5 py-1 rounded-md hover:bg-lime-500 transition-colors">
+                  className="font-headline text-[12px] font-bold uppercase tracking-widest bg-primary text-dark px-2.5 py-1 rounded-md hover:opacity-90 transition-opacity">
                   Done
                 </button>
               ) : (
                 <button onClick={() => setReposition(true)}
-                  className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 flex items-center gap-1 transition-colors">
+                  className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-1 transition-colors">
                   <Move className="w-3 h-3" /> Reposition
                 </button>
               )}
             </>
           )}
         </div>
-        <p className="text-[11px] text-gray-400 mt-0.5">PNG or JPG, square recommended.</p>
+        <p className="text-[11px] text-muted-dark mt-0.5">PNG or JPG, square recommended.</p>
       </div>
     </div>
   );
@@ -308,7 +308,7 @@ function PersonalInfoForm() {
 
   if (loadingForm) return (
     <div className="py-10 text-center">
-      <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin mx-auto" />
+      <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto" />
     </div>
   );
 
@@ -317,7 +317,7 @@ function PersonalInfoForm() {
 
       {/* Photos */}
       <div>
-        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-4">Photos</div>
+        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4">Photos</div>
         <div className="mb-4">
           <FieldLabel label="Cover photo" hint="Recommended 1200×400" />
           <CoverEditor
@@ -344,7 +344,7 @@ function PersonalInfoForm() {
 
       {/* Organisation */}
       <div>
-        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-4">Organisation</div>
+        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4">Organisation</div>
         <div className="space-y-4">
           <div>
             <FieldLabel label="Organisation name" required />
@@ -352,7 +352,8 @@ function PersonalInfoForm() {
           </div>
           <div>
             <FieldLabel label="About" hint={`${form.bio.length}/600`} />
-            <textarea className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-lime-500 focus:outline-none transition-colors resize-none"
+            <textarea
+              className="w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors resize-none"
               rows={4} maxLength={600} value={form.bio} onChange={e => patch({ bio: e.target.value })}
               placeholder="Tell athletes what you run and who you are…" />
           </div>
@@ -361,7 +362,7 @@ function PersonalInfoForm() {
 
       {/* Contact */}
       <div>
-        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-4">Contact</div>
+        <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-4">Contact</div>
         <div className="space-y-4">
           <div>
             <FieldLabel label="Contact name" required />
@@ -370,7 +371,7 @@ function PersonalInfoForm() {
           <div>
             <FieldLabel label="Contact email" required />
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
               <input className={`${inputCls} pl-9`} type="email" value={form.contactEmail}
                 onChange={e => patch({ contactEmail: e.target.value })} placeholder="events@yourorg.com.au" />
             </div>
@@ -378,7 +379,7 @@ function PersonalInfoForm() {
           <div>
             <FieldLabel label="Phone" />
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
               <input className={`${inputCls} pl-9`} type="tel" value={form.phone}
                 onChange={e => patch({ phone: e.target.value })} placeholder="+61 4xx xxx xxx" />
             </div>
@@ -388,16 +389,16 @@ function PersonalInfoForm() {
 
       {/* Save footer */}
       {error && (
-        <div className="mx-0 mb-3 px-4 py-3 rounded-lg bg-orange-500/5 border border-orange-500/30 text-orange-500 font-headline text-[12px] leading-snug">
+        <div className="mx-0 mb-3 px-4 py-3 rounded-lg bg-red-400/10 border border-red-400/20 text-red-300 font-headline text-[12px] leading-snug">
           {error}
         </div>
       )}
-      <div className="pt-2 flex items-center justify-between gap-4 border-t border-gray-100">
+      <div className="pt-2 flex items-center justify-between gap-4 border-t border-dark-lighter">
         <div className="font-headline text-[11px] uppercase tracking-widest">
-          {saved && <span className="text-lime-600 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Saved</span>}
+          {saved && <span className="text-primary flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Saved</span>}
         </div>
         <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 bg-gray-900 text-white font-headline text-[11px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50">
+          className="flex items-center gap-2 bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-dark font-headline text-[11px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-lg shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform disabled:opacity-50">
           <CheckCircle className="w-3.5 h-3.5" /> {saving ? "Saving…" : "Save changes"}
         </button>
       </div>
@@ -414,19 +415,19 @@ function SectionContent({ section }: { section: SettingsSection }) {
     case "security":
       return (
         <div>
-          <p className="text-[13px] text-gray-500 leading-relaxed mb-6">
+          <p className="text-[13px] text-muted leading-relaxed mb-6">
             Password changes are handled via your Cognito account. Use &ldquo;Forgot password&rdquo; on the sign-in page to reset.
           </p>
-          <div className="border border-gray-200 rounded-lg p-4">
-            <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1">Password</div>
-            <div className="text-[13px] text-gray-500">Reset via the sign-in page using &ldquo;Forgot password&rdquo;.</div>
+          <div className="border border-dark-lighter rounded-lg p-4">
+            <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted-dark mb-1">Password</div>
+            <div className="text-[13px] text-muted">Reset via the sign-in page using &ldquo;Forgot password&rdquo;.</div>
           </div>
         </div>
       );
     case "notifications":
       return (
         <div>
-          <p className="text-[13px] text-gray-500 leading-relaxed mb-6">
+          <p className="text-[13px] text-muted leading-relaxed mb-6">
             You receive notifications when events are approved or rejected, and when new registrations come in.
           </p>
           <div className="space-y-1">
@@ -435,12 +436,12 @@ function SectionContent({ section }: { section: SettingsSection }) {
               { label: "Event rejected",   desc: "When your event is rejected with feedback" },
               { label: "New registration", desc: "When an athlete registers for your event"  },
             ].map(({ label, desc }) => (
-              <div key={label} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+              <div key={label} className="flex items-center justify-between py-3 border-b border-dark-lighter last:border-0">
                 <div>
-                  <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-700">{label}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">{desc}</div>
+                  <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">{label}</div>
+                  <div className="text-[11px] text-muted-dark mt-0.5">{desc}</div>
                 </div>
-                <div className="w-8 h-4 bg-lime-400 rounded-full shrink-0" />
+                <div className="w-8 h-4 bg-primary rounded-full shrink-0" />
               </div>
             ))}
           </div>
@@ -449,11 +450,11 @@ function SectionContent({ section }: { section: SettingsSection }) {
     case "payments":
       return (
         <div>
-          <p className="text-[13px] text-gray-500 leading-relaxed mb-6">
+          <p className="text-[13px] text-muted leading-relaxed mb-6">
             Manage your Stripe Express account for payouts, view payout history, and update banking details.
           </p>
           <Link href="/organiser/payments"
-            className="inline-flex items-center gap-2 border border-lime-400 bg-lime-50 text-lime-700 font-headline text-[11px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md hover:bg-lime-100 transition-colors">
+            className="inline-flex items-center gap-2 border border-primary/40 bg-primary/10 text-primary font-headline text-[11px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md hover:bg-primary/20 transition-colors">
             Manage payments <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -461,7 +462,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
     case "cookies":
       return (
         <div>
-          <p className="text-[13px] text-gray-500 leading-relaxed mb-6">
+          <p className="text-[13px] text-muted leading-relaxed mb-6">
             Startline uses essential cookies to keep you signed in. No advertising or tracking cookies are used.
           </p>
           <div className="space-y-1">
@@ -469,12 +470,12 @@ function SectionContent({ section }: { section: SettingsSection }) {
               { label: "Essential cookies", desc: "Required for the platform to function",       enabled: true,  locked: true  },
               { label: "Analytics",         desc: "Help us understand how the platform is used", enabled: false, locked: false },
             ].map(({ label, desc, enabled, locked }) => (
-              <div key={label} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+              <div key={label} className="flex items-center justify-between py-3 border-b border-dark-lighter last:border-0">
                 <div>
-                  <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-gray-700">{label}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">{desc}</div>
+                  <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">{label}</div>
+                  <div className="text-[11px] text-muted-dark mt-0.5">{desc}</div>
                 </div>
-                <div className={`w-8 h-4 rounded-full shrink-0 ${enabled ? "bg-lime-400" : "bg-gray-200"} ${locked ? "opacity-50 cursor-not-allowed" : ""}`} />
+                <div className={`w-8 h-4 rounded-full shrink-0 ${enabled ? "bg-primary" : "bg-white/10"} ${locked ? "opacity-50 cursor-not-allowed" : ""}`} />
               </div>
             ))}
           </div>
@@ -511,28 +512,28 @@ export default function SettingsModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
 
-      <div className="relative w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-2xl flex overflow-hidden modal-in"
+      <div className="relative w-full max-w-2xl bg-dark border border-dark-lighter rounded-2xl shadow-2xl flex overflow-hidden modal-in"
         style={{ height: "85vh" }}>
 
         {/* Close */}
         <button onClick={close}
-          className="absolute top-4 right-4 z-10 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors"
+          className="absolute top-4 right-4 z-10 w-7 h-7 flex items-center justify-center text-muted hover:text-light transition-colors"
           aria-label="Close settings">
           <X className="w-4 h-4" />
         </button>
 
         {/* Left sidebar */}
-        <div className="w-52 shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 rounded-l-2xl">
-          <div className="px-4 py-4 border-b border-gray-200">
-            <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-gray-400">Settings</div>
+        <div className="w-52 shrink-0 border-r border-dark-lighter flex flex-col bg-dark-darker rounded-l-2xl">
+          <div className="px-4 py-4 border-b border-dark-lighter">
+            <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">Settings</div>
           </div>
           <nav className="py-2 flex-1">
             {SECTIONS.map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => setSection(id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors
                   ${section === id
-                    ? "bg-white text-gray-900 border-r-2 border-r-lime-500"
-                    : "text-gray-500 hover:text-gray-900 hover:bg-white/60"}`}>
+                    ? "bg-dark-light text-white border-r-2 border-r-primary"
+                    : "text-muted hover:text-light hover:bg-white/5"}`}>
                 <Icon className="w-3.5 h-3.5 shrink-0" />
                 <span className="font-headline text-[11px] font-bold uppercase tracking-widest">{label}</span>
               </button>
@@ -541,9 +542,9 @@ export default function SettingsModal() {
         </div>
 
         {/* Right content */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          <div className="px-6 py-5 border-b border-gray-200 shrink-0">
-            <h2 className="font-headline text-[22px] font-black italic tracking-tight text-gray-900">
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-dark">
+          <div className="px-6 py-5 border-b border-dark-lighter shrink-0">
+            <h2 className="font-headline text-[22px] font-black italic tracking-tight text-white">
               {active.label}
             </h2>
           </div>
