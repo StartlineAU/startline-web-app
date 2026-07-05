@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon, ShieldCheck, ShieldX } from "lucide-react";
+import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon, ShieldCheck, ShieldX, Ban, CircleCheck } from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +36,15 @@ function formatDate(iso: string) {
   }
 }
 
-function OrganiserCard({ o, onToggleVerify }: { o: OrganiserRow; onToggleVerify: (id: string) => void }) {
+function OrganiserCard({
+  o,
+  onToggleVerify,
+  onToggleSuspend,
+}: {
+  o: OrganiserRow;
+  onToggleVerify: (id: string) => void;
+  onToggleSuspend: (id: string) => void;
+}) {
   const name = o.orgName || o.contactName || o.email;
   const initial = name.charAt(0).toUpperCase();
 
@@ -77,6 +85,16 @@ function OrganiserCard({ o, onToggleVerify }: { o: OrganiserRow; onToggleVerify:
               }`}
             >
               {o.verified ? <><ShieldCheck className="w-3.5 h-3.5" /> Verified</> : <><ShieldX className="w-3.5 h-3.5" /> Not verified</>}
+            </button>
+            <button
+              onClick={() => onToggleSuspend(o.id)}
+              className={`inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors hover:underline ${
+                o.status === "SUSPENDED" ? "text-lime-600" : "text-red-500"
+              }`}
+            >
+              {o.status === "SUSPENDED"
+                ? <><CircleCheck className="w-3.5 h-3.5" /> Activate</>
+                : <><Ban className="w-3.5 h-3.5" /> Suspend</>}
             </button>
           </div>
 
@@ -128,9 +146,23 @@ export default function AdminOrganisersPage() {
     try {
       const res = await fetch(`/api/admin/organisers/${id}/verify`, { method: "PATCH" });
       if (res.ok) {
-        const updated = await res.json();
+        const updated = await res.json() as { verified: boolean };
         setOrganisers((prev) =>
           prev.map((o) => (o.id === id ? { ...o, verified: updated.verified } : o))
+        );
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const toggleSuspend = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/organisers/${id}/suspend`, { method: "PATCH" });
+      if (res.ok) {
+        const updated = await res.json() as { status: string };
+        setOrganisers((prev) =>
+          prev.map((o) => (o.id === id ? { ...o, status: updated.status } : o))
         );
       }
     } catch {
@@ -180,7 +212,9 @@ export default function AdminOrganisersPage() {
               </div>
             )}
 
-            {!loading && organisers.map((o) => <OrganiserCard key={o.id} o={o} onToggleVerify={toggleVerify} />)}
+            {!loading && organisers.map((o) => (
+              <OrganiserCard key={o.id} o={o} onToggleVerify={toggleVerify} onToggleSuspend={toggleSuspend} />
+            ))}
           </Card>
 
           {!loading && organisers.length > 0 && (

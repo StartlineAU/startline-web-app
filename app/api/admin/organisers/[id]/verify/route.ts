@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
+import { writeAuditLog } from "@/lib/audit";
 
 export async function PATCH(
   _req: Request,
@@ -25,6 +26,13 @@ export async function PATCH(
       where: { id },
       data:  { verified: !organiser.verified },
       select: { id: true, verified: true },
+    });
+
+    writeAuditLog({
+      adminId: session.sub,
+      action: updated.verified ? "VERIFY_ORGANISER" : "UNVERIFY_ORGANISER",
+      targetType: "organiser",
+      targetId: id,
     });
 
     return NextResponse.json(updated);

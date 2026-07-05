@@ -5,18 +5,19 @@ const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "REJECTED", "ARCHIVED"] 
 type EventStatus = (typeof VALID_STATUSES)[number];
 
 const EVENT_SELECT = {
-  id:             true,
-  title:          true,
-  discipline:     true,
-  city:           true,
-  state:          true,
-  eventDate:      true,
-  startTime:      true,
-  status:         true,
-  createdAt:      true,
-  coverImageUrl:  true,
+  id:              true,
+  title:           true,
+  discipline:      true,
+  city:            true,
+  state:           true,
+  eventDate:       true,
+  startTime:       true,
+  status:          true,
+  isPinned:        true,
+  createdAt:       true,
+  coverImageUrl:   true,
   rejectionReason: true,
-  reviewedAt:     true,
+  reviewedAt:      true,
   organiser: {
     select: {
       id:          true,

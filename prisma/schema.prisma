@@ -16,9 +16,26 @@ model Admin {
   name       String?
   createdAt  DateTime @default(now())
 
-  eventReviews Event[] @relation("EventReviewedBy")
+  eventReviews Event[]        @relation("EventReviewedBy")
+  auditLogs    AdminAuditLog[]
 
   @@map("admins")
+}
+
+// ─── Admin audit log ─────────────────────────────────────────────────────────
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  admin      Admin    @relation(fields: [adminId], references: [id])
+  action     String
+  targetType String
+  targetId   String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetId])
+  @@map("admin_audit_logs")
 }
 
 // ─── Organiser accounts ───────────────────────────────────────────────────────
@@ -262,6 +279,7 @@ model User {
   bio        String?
   profilePicUrl String?
   isPublic   Boolean  @default(true) // public profile visible to others
+  isBanned   Boolean  @default(false)
   city       String? // for map centering on login
   state      String? // for map centering on login
   createdAt  DateTime @default(now())

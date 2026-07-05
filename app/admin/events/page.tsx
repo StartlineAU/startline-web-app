@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp,
+  Pin, PinOff, Trash2, CheckSquare, Square,
+} from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
-type EventStatus = "PENDING" | "APPROVED" | "REJECTED";
+type EventStatus = "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
 interface AdminEventRow {
   id: string;
@@ -20,6 +23,7 @@ interface AdminEventRow {
   eventDate: string;
   startTime: string;
   status: EventStatus;
+  isPinned: boolean;
   createdAt: string;
   coverImageUrl: string | null;
   rejectionReason: string | null;
@@ -36,12 +40,14 @@ const TABS: { status: EventStatus; label: string }[] = [
   { status: "PENDING",  label: "Pending"  },
   { status: "APPROVED", label: "Approved" },
   { status: "REJECTED", label: "Rejected" },
+  { status: "ARCHIVED", label: "Archived" },
 ];
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
   PENDING:  { bg: "bg-blue-50",  text: "text-blue-600",  dot: "bg-blue-500",  label: "Pending"  },
   APPROVED: { bg: "bg-lime-50",  text: "text-lime-700",  dot: "bg-lime-500",  label: "Approved" },
   REJECTED: { bg: "bg-red-50",   text: "text-red-600",   dot: "bg-red-500",   label: "Rejected" },
+  ARCHIVED: { bg: "bg-gray-100", text: "text-gray-500",  dot: "bg-gray-400",  label: "Archived" },
 };
 
 function formatDate(dateStr: string) {
@@ -108,15 +114,26 @@ function RejectPanel({ onConfirm, onCancel, loading }: RejectPanelProps) {
 
 function EventRow({
   event,
+  selected,
+  onToggleSelect,
   onReviewed,
+  onDeleted,
+  onPinToggled,
 }: {
   event: AdminEventRow;
-  onReviewed: (id: string, newStatus: EventStatus) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  onReviewed: (id: string) => void;
+  onDeleted: (id: string) => void;
+  onPinToggled: (id: string, isPinned: boolean) => void;
 }) {
   const [approving,    setApproving]    = useState(false);
   const [approveError, setApproveError] = useState("");
   const [rejectOpen,   setRejectOpen]   = useState(false);
   const [rejecting,    setRejecting]    = useState(false);
+  const [pinning,      setPinning]      = useState(false);
+  const [deleting,     setDeleting]     = useState(false);
+  const [confirmDel,   setConfirmDel]   = useState(false);
   const [expanded,     setExpanded]     = useState(false);
 
   const organiserName =
@@ -126,15 +143,15 @@ function EventRow({
     setApproving(true);
     setApproveError("");
     try {
-      const res  = await fetch(`/api/admin/events/${event.id}/review`, {
+      const res = await fetch(`/api/admin/events/${event.id}/review`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ action: "approve" }),
       });
       if (res.ok) {
-        onReviewed(event.id, "APPROVED");
+        onReviewed(event.id);
       } else {
-        const data = await res.json().catch(() => ({})) as { error?: string; code?: string };
+        const data = await res.json().catch(() => ({})) as { error?: string };
         setApproveError(data.error ?? "Failed to approve event.");
       }
     } finally {
@@ -146,16 +163,41 @@ function EventRow({
     setRejecting(true);
     try {
       const res = await fetch(`/api/admin/events/${event.id}/review`, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reject", reason }),
+        body:    JSON.stringify({ action: "reject", reason }),
       });
       if (res.ok) {
         setRejectOpen(false);
-        onReviewed(event.id, "REJECTED");
+        onReviewed(event.id);
       }
     } finally {
       setRejecting(false);
+    }
+  };
+
+  const handlePin = async () => {
+    setPinning(true);
+    try {
+      const res = await fetch(`/api/admin/events/${event.id}/pin`, { method: "PATCH" });
+      if (res.ok) {
+        const data = await res.json() as { isPinned: boolean };
+        onPinToggled(event.id, data.isPinned);
+      }
+    } finally {
+      setPinning(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDel) { setConfirmDel(true); return; }
+    setDeleting(true);
+    setConfirmDel(false);
+    try {
+      const res = await fetch(`/api/admin/events/${event.id}`, { method: "DELETE" });
+      if (res.ok) onDeleted(event.id);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -163,8 +205,17 @@ function EventRow({
 
   return (
     <div className="border-b border-gray-100 last:border-0">
-      {/* Main row */}
-      <div className="flex items-start gap-4 px-5 py-4">
+      <div className="flex items-start gap-3 px-5 py-4">
+        {/* Checkbox */}
+        <button
+          onClick={() => onToggleSelect(event.id)}
+          className="mt-1 shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
+        >
+          {selected
+            ? <CheckSquare className="w-4 h-4 text-gray-900" />
+            : <Square className="w-4 h-4" />}
+        </button>
+
         {/* Cover thumbnail */}
         <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
           {event.coverImageUrl
@@ -182,6 +233,11 @@ function EventRow({
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
               {s.label}
             </Badge>
+            {event.isPinned && (
+              <Badge className="gap-1.5 bg-amber-50 text-amber-700 border-0 shrink-0">
+                <Pin className="w-3 h-3" /> Pinned
+              </Badge>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-headline text-[11px] uppercase tracking-widest text-gray-500 mb-1">
@@ -201,7 +257,6 @@ function EventRow({
             {" · "}Submitted {formatSubmitted(event.createdAt)}
           </div>
 
-          {/* Rejection reason (shown on REJECTED tab) */}
           {event.status === "REJECTED" && event.rejectionReason && (
             <div className="mt-2 text-[13px] text-red-600 bg-red-50 rounded px-3 py-2 border border-red-100">
               <span className="font-bold">Reason: </span>{event.rejectionReason}
@@ -210,7 +265,7 @@ function EventRow({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0 ml-auto pl-2">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto pl-2 flex-wrap justify-end">
           {event.status === "PENDING" && (
             <>
               <button
@@ -228,26 +283,67 @@ function EventRow({
                 disabled={approving || rejecting}
                 className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-300 text-red-600 px-3 py-2 rounded-md hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <X className="w-3.5 h-3.5" />
-                Reject
+                <X className="w-3.5 h-3.5" /> Reject
               </button>
             </>
           )}
 
-          {/* Expand toggle (for detail view) */}
+          {event.status === "APPROVED" && (
+            <button
+              onClick={handlePin}
+              disabled={pinning}
+              className={`flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                ${event.isPinned
+                  ? "border border-amber-300 text-amber-700 hover:bg-amber-50"
+                  : "border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700"
+                }`}
+            >
+              {pinning
+                ? <span className="w-3 h-3 border border-current/40 border-t-current rounded-full animate-spin" />
+                : event.isPinned
+                  ? <><PinOff className="w-3.5 h-3.5" /> Unpin</>
+                  : <><Pin className="w-3.5 h-3.5" /> Pin</>}
+            </button>
+          )}
+
+          {/* Delete */}
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            title={confirmDel ? "Click again to confirm deletion" : "Delete event"}
+            className={`flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest px-3 py-2 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+              ${confirmDel
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "border border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-500"
+              }`}
+          >
+            {deleting
+              ? <span className="w-3 h-3 border border-current/40 border-t-current rounded-full animate-spin" />
+              : <Trash2 className="w-3.5 h-3.5" />}
+            {confirmDel ? "Confirm" : "Delete"}
+          </button>
+          {confirmDel && (
+            <button
+              onClick={() => setConfirmDel(false)}
+              className="font-headline text-[11px] text-gray-400 hover:text-gray-700 px-2 py-2 transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+
+          {/* Expand */}
           <button
             onClick={() => setExpanded((o) => !o)}
             className="p-2 text-gray-400 hover:text-gray-700 transition-colors"
-            title={expanded ? "Collapse" : "Expand"}
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Stripe gate error — shown when organiser hasn't completed onboarding (ToS §3.4) */}
+      {/* Stripe gate error */}
       {approveError && (
-        <div className="px-5 pb-4">
+        <div className="px-5 pb-4 pl-12">
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
             <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
@@ -259,18 +355,14 @@ function EventRow({
 
       {/* Reject panel */}
       {rejectOpen && (
-        <div className="px-5 pb-4">
-          <RejectPanel
-            onConfirm={handleReject}
-            onCancel={() => setRejectOpen(false)}
-            loading={rejecting}
-          />
+        <div className="px-5 pb-4 pl-12">
+          <RejectPanel onConfirm={handleReject} onCancel={() => setRejectOpen(false)} loading={rejecting} />
         </div>
       )}
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-5 pb-5 bg-gray-50 border-t border-gray-100">
+        <div className="px-5 pb-5 pl-12 bg-gray-50 border-t border-gray-100">
           <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3">
             <div>
               <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Organiser</div>
@@ -302,23 +394,148 @@ function EventRow({
   );
 }
 
+function BulkActionBar({
+  selectedIds,
+  activeTab,
+  onClearSelection,
+  onBulkDone,
+}: {
+  selectedIds: Set<string>;
+  activeTab: EventStatus;
+  onClearSelection: () => void;
+  onBulkDone: (ids: string[], action: string) => void;
+}) {
+  const [loading,       setLoading]       = useState(false);
+  const [rejectOpen,    setRejectOpen]    = useState(false);
+  const [bulkReason,    setBulkReason]    = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const ids = Array.from(selectedIds);
+
+  const run = async (action: string, reason?: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/events/bulk", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ ids, action, reason }),
+      });
+      if (res.ok) {
+        onBulkDone(ids, action);
+        onClearSelection();
+        setRejectOpen(false);
+        setConfirmDelete(false);
+        setBulkReason("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="sticky top-14 z-40 bg-gray-900 text-white px-5 py-3 flex flex-wrap items-center gap-3 shadow-lg">
+      <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-white/70">
+        {ids.length} selected
+      </span>
+
+      {activeTab === "PENDING" && !rejectOpen && !confirmDelete && (
+        <>
+          <button
+            onClick={() => run("approve")}
+            disabled={loading}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-lime-500 text-white px-4 py-1.5 rounded-md hover:bg-lime-400 transition-colors disabled:opacity-40"
+          >
+            <Check className="w-3.5 h-3.5" /> Approve all
+          </button>
+          <button
+            onClick={() => setRejectOpen(true)}
+            disabled={loading}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-400 text-red-400 px-4 py-1.5 rounded-md hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors disabled:opacity-40"
+          >
+            <X className="w-3.5 h-3.5" /> Reject all
+          </button>
+        </>
+      )}
+
+      {rejectOpen && (
+        <div className="flex items-center gap-2 flex-1">
+          <input
+            type="text"
+            placeholder="Rejection reason (required)…"
+            value={bulkReason}
+            onChange={(e) => setBulkReason(e.target.value)}
+            className="flex-1 max-w-sm text-[13px] bg-white/10 border border-white/20 rounded-md px-3 py-1.5 text-white placeholder:text-white/40 focus:outline-none focus:border-white/50"
+          />
+          <button
+            onClick={() => bulkReason.trim() && run("reject", bulkReason.trim())}
+            disabled={loading || !bulkReason.trim()}
+            className="font-headline text-[12px] font-bold uppercase tracking-widest bg-red-600 text-white px-4 py-1.5 rounded-md hover:bg-red-500 transition-colors disabled:opacity-40"
+          >
+            Confirm reject
+          </button>
+          <button onClick={() => setRejectOpen(false)} className="text-white/50 hover:text-white transition-colors px-2 font-headline text-[12px] uppercase tracking-widest">
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {!rejectOpen && (
+        confirmDelete ? (
+          <div className="flex items-center gap-2">
+            <span className="font-headline text-[11px] text-red-400 uppercase tracking-widest">
+              Delete {ids.length} event{ids.length !== 1 ? "s" : ""}?
+            </span>
+            <button
+              onClick={() => run("delete")}
+              disabled={loading}
+              className="font-headline text-[12px] font-bold uppercase tracking-widest bg-red-600 text-white px-4 py-1.5 rounded-md hover:bg-red-500 transition-colors disabled:opacity-40"
+            >
+              Yes, delete
+            </button>
+            <button onClick={() => setConfirmDelete(false)} className="text-white/50 hover:text-white transition-colors px-2 font-headline text-[12px] uppercase tracking-widest">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            disabled={loading}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-500/40 text-red-400 px-4 py-1.5 rounded-md hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors disabled:opacity-40"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Delete all
+          </button>
+        )
+      )}
+
+      <button
+        onClick={onClearSelection}
+        className="ml-auto font-headline text-[12px] font-bold uppercase tracking-widest text-white/50 hover:text-white transition-colors"
+      >
+        Clear
+      </button>
+    </div>
+  );
+}
+
 function AdminEventsContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const statusParam  = (searchParams.get("status") ?? "PENDING").toUpperCase() as EventStatus;
   const activeTab    = TABS.find((t) => t.status === statusParam)?.status ?? "PENDING";
 
-  const [events,     setEvents]     = useState<AdminEventRow[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [total,      setTotal]      = useState(0);
-  const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [events,      setEvents]      = useState<AdminEventRow[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [total,       setTotal]       = useState(0);
+  const [page,        setPage]        = useState(1);
+  const [totalPages,  setTotalPages]  = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchEvents = useCallback(async (status: EventStatus, p = 1) => {
     setLoading(true);
+    setSelectedIds(new Set());
     try {
       const res  = await fetch(`/api/admin/events?status=${status}&page=${p}&limit=50`);
-      const data = await res.json();
+      const data = await res.json() as { events: AdminEventRow[]; total: number; totalPages: number };
       if (res.ok && Array.isArray(data.events)) {
         setEvents(data.events);
         setTotal(data.total);
@@ -335,22 +552,65 @@ function AdminEventsContent() {
 
   useEffect(() => {
     fetchEvents(activeTab, 1);
+    setPage(1);
   }, [activeTab, fetchEvents]);
 
   const switchTab = (status: EventStatus) => {
-    setPage(1);
     router.push(`/admin/events?status=${status}`, { scroll: false });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === events.length ? new Set() : new Set(events.map((e) => e.id))
+    );
   };
 
   const handleReviewed = (id: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
+    setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
   };
+
+  const handleDeleted = (id: string) => {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+  };
+
+  const handlePinToggled = (id: string, isPinned: boolean) => {
+    setEvents((prev) => prev.map((e) => e.id === id ? { ...e, isPinned } : e));
+  };
+
+  const handleBulkDone = (ids: string[], action: string) => {
+    if (action === "delete") {
+      setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
+    } else {
+      setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
+    }
+  };
+
+  const allSelected = events.length > 0 && selectedIds.size === events.length;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
 
-      <main className="pt-14">
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          selectedIds={selectedIds}
+          activeTab={activeTab}
+          onClearSelection={() => setSelectedIds(new Set())}
+          onBulkDone={handleBulkDone}
+        />
+      )}
+
+      <main className={selectedIds.size > 0 ? "" : "pt-14"}>
         <div className="max-w-[1200px] mx-auto px-6 py-10 page-in">
 
           {/* Header */}
@@ -390,6 +650,26 @@ function AdminEventsContent() {
 
           {/* Events list */}
           <Card className="overflow-hidden">
+            {/* Select-all header */}
+            {!loading && events.length > 0 && (
+              <div className="flex items-center gap-3 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  {allSelected
+                    ? <CheckSquare className="w-4 h-4 text-gray-700" />
+                    : <Square className="w-4 h-4" />}
+                  {allSelected ? "Deselect all" : "Select all"}
+                </button>
+                {selectedIds.size > 0 && (
+                  <span className="font-headline text-[11px] uppercase tracking-widest text-gray-500">
+                    {selectedIds.size} of {events.length} selected
+                  </span>
+                )}
+              </div>
+            )}
+
             {loading && (
               <div className="p-12 text-center">
                 <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
@@ -414,7 +694,11 @@ function AdminEventsContent() {
               <EventRow
                 key={event.id}
                 event={event}
+                selected={selectedIds.has(event.id)}
+                onToggleSelect={toggleSelect}
                 onReviewed={handleReviewed}
+                onDeleted={handleDeleted}
+                onPinToggled={handlePinToggled}
               />
             ))}
           </Card>

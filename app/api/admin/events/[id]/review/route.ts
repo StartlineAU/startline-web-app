@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { sendEventApprovedEmail, sendEventRejectedEmail } from "@/lib/email";
+import { writeAuditLog } from "@/lib/audit";
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -90,6 +91,14 @@ export async function POST(
         console.error("Failed to send rejection email:", err),
       );
     }
+
+    writeAuditLog({
+      adminId: session.sub,
+      action: action === "approve" ? "APPROVE_EVENT" : "REJECT_EVENT",
+      targetType: "event",
+      targetId: id,
+      meta: { title: event.title, reason: reason?.trim() ?? null },
+    });
 
     return NextResponse.json({ ok: true, status: newStatus });
   } catch (err) {

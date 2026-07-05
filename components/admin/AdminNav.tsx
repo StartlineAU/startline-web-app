@@ -4,13 +4,20 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, CalendarDays, Users, Star, LogOut, ShieldCheck } from "lucide-react";
+import {
+  LayoutDashboard, CalendarDays, Users, Star, LogOut, ShieldCheck,
+  UserCircle, ClipboardList, BarChart2, ScrollText,
+} from "lucide-react";
 
 const NAV = [
-  { href: "/admin/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/admin/events",     label: "Events",     icon: CalendarDays    },
-  { href: "/admin/organisers", label: "Organisers", icon: Users           },
-  { href: "/admin/reviews",    label: "Reviews",    icon: Star            },
+  { href: "/admin/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
+  { href: "/admin/events",        label: "Events",        icon: CalendarDays    },
+  { href: "/admin/organisers",    label: "Organisers",    icon: Users           },
+  { href: "/admin/users",         label: "Users",         icon: UserCircle      },
+  { href: "/admin/registrations", label: "Registrations", icon: ClipboardList   },
+  { href: "/admin/reviews",       label: "Reviews",       icon: Star            },
+  { href: "/admin/analytics",     label: "Analytics",     icon: BarChart2       },
+  { href: "/admin/audit",         label: "Audit log",     icon: ScrollText      },
 ];
 
 export default function AdminNav() {

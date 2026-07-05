@@ -5,23 +5,25 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { archivePastEvents } from "@/lib/archive-events";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowRight, Clock, CheckCircle, XCircle, Users } from "lucide-react";
+import { ArrowRight, Clock, CheckCircle, XCircle, Users, UserCircle, ClipboardList, BarChart2, ScrollText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 async function getStats() {
   await archivePastEvents();
   try {
-    const [pending, approved, rejected, organisers] = await Promise.all([
-      prisma.event.count({ where: { status: "PENDING"  } }),
-      prisma.event.count({ where: { status: "APPROVED" } }),
-      prisma.event.count({ where: { status: "REJECTED" } }),
+    const [pending, approved, rejected, organisers, users, registrations] = await Promise.all([
+      prisma.event.count({ where: { status: "PENDING"   } }),
+      prisma.event.count({ where: { status: "APPROVED"  } }),
+      prisma.event.count({ where: { status: "REJECTED"  } }),
       prisma.organiser.count(),
+      prisma.user.count(),
+      prisma.registration.count({ where: { status: "CONFIRMED" } }),
     ]);
-    return { pending, approved, rejected, organisers };
+    return { pending, approved, rejected, organisers, users, registrations };
   } catch (err) {
     console.error("Admin dashboard stats error:", err);
-    return { pending: 0, approved: 0, rejected: 0, organisers: 0 };
+    return { pending: 0, approved: 0, rejected: 0, organisers: 0, users: 0, registrations: 0 };
   }
 }
 
@@ -102,7 +104,7 @@ export default async function AdminDashboardPage() {
           </div>
 
           {/* Stats grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
             <StatCard
               label="Pending review"
               value={stats.pending}
@@ -114,7 +116,7 @@ export default async function AdminDashboardPage() {
             <StatCard
               label="Published events"
               value={stats.approved}
-              sub="approved and published"
+              sub="approved and live"
               icon={<CheckCircle className="w-5 h-5" />}
               accent="text-lime-600"
               href="/admin/events?status=APPROVED"
@@ -134,6 +136,20 @@ export default async function AdminDashboardPage() {
               icon={<Users className="w-5 h-5" />}
               href="/admin/organisers"
             />
+            <StatCard
+              label="Users"
+              value={stats.users}
+              sub="athlete accounts"
+              icon={<UserCircle className="w-5 h-5" />}
+              href="/admin/users"
+            />
+            <StatCard
+              label="Registrations"
+              value={stats.registrations}
+              sub="confirmed entries"
+              icon={<ClipboardList className="w-5 h-5" />}
+              href="/admin/registrations"
+            />
           </div>
 
           {/* Quick links */}
@@ -142,67 +158,64 @@ export default async function AdminDashboardPage() {
               Quick actions
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Link
-                href="/admin/events?status=PENDING"
-                className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
-              >
-                <div>
-                  <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
-                    Review pending events
+              {[
+                {
+                  href:  "/admin/events?status=PENDING",
+                  label: "Review pending events",
+                  sub:   stats.pending > 0 ? `${stats.pending} submission${stats.pending !== 1 ? "s" : ""} waiting` : "No submissions waiting",
+                },
+                {
+                  href:  "/admin/events",
+                  label: "All events",
+                  sub:   "Browse, pin, delete and manage every event",
+                },
+                {
+                  href:  "/admin/organisers",
+                  label: "Organisers",
+                  sub:   "Verify, suspend, and manage organiser accounts",
+                },
+                {
+                  href:  "/admin/users",
+                  label: "Users",
+                  sub:   "Manage athlete accounts",
+                },
+                {
+                  href:  "/admin/registrations",
+                  label: "Registrations",
+                  sub:   "View entries and issue refunds",
+                },
+                {
+                  href:  "/admin/reviews",
+                  label: "Moderate reviews",
+                  sub:   "Publish, verify or remove athlete reviews",
+                },
+                {
+                  href:  "/admin/analytics",
+                  label: "Analytics",
+                  sub:   "Revenue, registrations and platform health",
+                  icon:  <BarChart2 className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />,
+                },
+                {
+                  href:  "/admin/audit",
+                  label: "Audit log",
+                  sub:   "Full record of every admin action",
+                  icon:  <ScrollText className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />,
+                },
+              ].map(({ href, label, sub, icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
+                >
+                  <div>
+                    <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
+                      {label}
+                    </div>
+                    <div className="text-[13px] text-gray-500">{sub}</div>
                   </div>
-                  <div className="text-[13px] text-gray-500">
-                    {stats.pending > 0
-                      ? `${stats.pending} submission${stats.pending !== 1 ? "s" : ""} waiting`
-                      : "No submissions waiting"}
-                  </div>
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
-              </Link>
-
-              <Link
-                href="/admin/events"
-                className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
-              >
-                <div>
-                  <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
-                    All events
-                  </div>
-                  <div className="text-[13px] text-gray-500">
-                    Browse and manage every event
-                  </div>
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
-              </Link>
-
-              <Link
-                href="/admin/organisers"
-                className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
-              >
-                <div>
-                  <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
-                    Organisers
-                  </div>
-                  <div className="text-[13px] text-gray-500">
-                    View accounts, payout and listing activity
-                  </div>
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
-              </Link>
-
-              <Link
-                href="/admin/reviews"
-                className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:shadow-sm transition-all group"
-              >
-                <div>
-                  <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-gray-900 mb-1">
-                    Moderate reviews
-                  </div>
-                  <div className="text-[13px] text-gray-500">
-                    Publish, verify or remove athlete reviews
-                  </div>
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
-              </Link>
+                  {icon ?? <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />}
+                </Link>
+              ))}
             </div>
           </div>
 
