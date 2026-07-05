@@ -33,6 +33,7 @@
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "aws-amplify": "^6.16.4",
+    "bad-words": "^4.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
@@ -62,6 +63,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@types/bad-words": "^3.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.0.0",

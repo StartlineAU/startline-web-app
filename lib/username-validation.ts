@@ -1,3 +1,5 @@
+import { Filter } from "bad-words";
+
 const RESERVED = new Set([
   "admin", "api", "events", "organiser", "organizer", "profile", "about",
   "customer", "verify", "forgot", "terms", "privacy", "help", "support",
@@ -8,6 +10,8 @@ const RESERVED = new Set([
 ]);
 
 const VALID_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
+
+const profanityFilter = new Filter();
 
 export type UsernameValidation =
   | { valid: true }
@@ -34,6 +38,13 @@ export function validateUsername(username: string): UsernameValidation {
 
   if (RESERVED.has(trimmed)) {
     return { valid: false, reason: "This username is reserved." };
+  }
+
+  // Check against profanity list (replace hyphens with spaces so the filter
+  // can match multi-word patterns like "bad-word" → "bad word")
+  const normalised = trimmed.replace(/-/g, " ");
+  if (profanityFilter.isProfane(normalised)) {
+    return { valid: false, reason: "That username isn't allowed." };
   }
 
   return { valid: true };

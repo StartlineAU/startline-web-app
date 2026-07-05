@@ -2,7 +2,7 @@ import Link from "next/link";
 import { MapPin, Clock, Users, Calendar } from "lucide-react";
 import type { UserEvent } from "@/types";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
-import { formatMediumDate, formatShortDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
+import { cn, formatMediumDate, formatShortDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
 import { getEventImage } from "@/lib/images";
 import { getEventStatus } from "@/lib/event-status";
 import SaveEventButton from "./SaveEventButton";
@@ -10,9 +10,10 @@ import SaveEventButton from "./SaveEventButton";
 interface EventCardProps {
   event: UserEvent;
   variant?: "default" | "compact" | "list";
+  cardClassName?: string;
 }
 
-export default function EventCard({ event, variant = "default" }: EventCardProps) {
+export default function EventCard({ event, variant = "default", cardClassName }: EventCardProps) {
   const typeLabel  = EVENT_TYPE_LABELS[event.type];
   const stateLabel = STATE_LABELS[event.state];
   const [day, month] = formatShortDate(event.date).split(" ");
@@ -76,7 +77,7 @@ export default function EventCard({ event, variant = "default" }: EventCardProps
 
   return (
     <Link href={`/events/${event.id}`} className="block group">
-      <div className="rounded-xl flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200 bg-dark border border-dark-lighter overflow-hidden">
+      <div className={cn("rounded-xl flex flex-col h-full ring-1 ring-transparent group-hover:ring-primary transition-all duration-200 bg-dark border border-dark-lighter overflow-hidden", cardClassName)}>
         <div className="relative h-36 sm:h-44 overflow-hidden flex-shrink-0">
           <img
             src={bannerUrl}
