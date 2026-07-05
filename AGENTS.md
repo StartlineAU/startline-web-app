@@ -1,4 +1,4 @@
-# AGENTS.md — Startline
+﻿# AGENTS.md — Startline
 
 ## Architecture
 
@@ -70,6 +70,30 @@ Infrastructure is managed via Terraform in `terraform/`:
 - Two GitHub Actions: `terraform-plan.yml` (on PR), `terraform-apply.yml` (on push to main)
 - App code deploys via AWS Amplify on branch push: `non-production` → staging, `production` → live
 - No app code CI (no lint/test/build checks) — only Terraform CI exists
+
+## Design system
+
+The authoritative design reference lives at **`design/design.md`**. Read it before touching any UI — it covers every decision that keeps the product coherent.
+
+### When to consult `design/design.md`
+
+- **Any UI work** — new pages, components, layouts, or reskins of existing ones.
+- **Copy / microcopy** — voice, casing rules, number formatting, Australian locale.
+- **Color choices** — which token to use and when; the one-accent rule.
+- **Typography** — which family, weight, size, tracking, and casing for the context.
+- **Component design** — button variants, badges, cards, inputs, modals, nav.
+- **Theming a shadcn default** — use the light→dark conversion table in §13 rather than inventing values.
+- **Picking a design register** — Product (clean, default) vs Instrument/HUD (dashboards, launch moments). See §12.
+
+### Non-negotiables from the design doc
+
+- **Dark only.** `color-scheme: dark` everywhere. No light surfaces, ever.
+- **One accent.** Signal green `#B3E153` (`--color-primary`) is the only brand hue. Blue/amber/red are status semantics only.
+- **Chakra Petch for structure, Inter for prose.** Structural chrome is uppercase + wide tracking; body copy is sentence case Inter.
+- **No emoji. Line icons (Lucide) only.**
+- **Text on `#B3E153` is always `#141414` (dark ink)** — never white.
+- **The "machined" shadow** (`box-shadow: 2px 2px 0 #B3E153`) belongs on the single primary CTA per view only.
+- **Status labels:** `APPROVED` renders as **"Published"** to organisers. Use the shared status object — never inline ad-hoc status styles.
 
 ## shadcn/ui conventions
 

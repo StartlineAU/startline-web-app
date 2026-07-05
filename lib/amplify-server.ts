@@ -76,9 +76,10 @@ export async function getServerSession(): Promise<ServerSession | null> {
     )?.value;
     if (!lastAuthUser) return null;
 
-    const accessToken = cookieStore.get(
-      `CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`
-    )?.value;
+    const accessToken = (
+      cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`)?.value ??
+      cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`)?.value
+    );
     if (!accessToken) return null;
 
     const payload = await verifyToken(accessToken);

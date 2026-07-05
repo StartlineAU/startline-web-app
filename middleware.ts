@@ -38,9 +38,10 @@ async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> 
   )?.value;
   if (!lastAuthUser) return null;
 
-  const accessToken = req.cookies.get(
-    `CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`
-  )?.value;
+  const accessToken = (
+    req.cookies.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`)?.value ??
+    req.cookies.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`)?.value
+  );
   if (!accessToken) return null;
 
   try {
