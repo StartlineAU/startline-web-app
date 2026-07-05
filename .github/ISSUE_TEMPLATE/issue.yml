@@ -1,0 +1,91 @@
+name: Issue
+description: Create a new issue
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fields marked with * are required.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description *
+      description: Clear context, background, and motivation
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of requirements to close this issue
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: false
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type *
+      options:
+        - Bug
+        - Feature
+        - Task
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority *
+      description: Set via the Priority field (not a label)
+      options:
+        - Urgent
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort *
+      description: Set via the Effort field (not a label)
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: labels
+    attributes:
+      label: Labels
+      description: Select all that apply (set via GitHub label, not just text)
+      options:
+        - label: bug
+        - label: enhancement
+        - label: documentation
+        - label: auth
+        - label: ci
+        - label: infrastructure
+        - label: ui
+        - label: payments
+        - label: maps
+        - label: video
+        - label: dashboard
+        - label: registrations
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related issues
+      description: Link related issues (e.g. #123)
+      placeholder: "Related to:"
+    validations:
+      required: false

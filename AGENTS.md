@@ -170,12 +170,14 @@ When creating a pull request, always scan open GitHub issues and link any that t
 When creating GitHub issues, always:
 - Add relevant **labels** (create new ones if they don't exist). Available labels: `bug`, `enhancement`, `documentation`, `auth`, `ci`, `infrastructure`, `ui`, `payments`, `maps`, `video`, `dashboard`, `registrations`, `question`, `help wanted`, `good first issue`
 - Set the native **issue type** — `Bug`, `Feature`, or `Task` (not a label, a proper field)
+- Set **Priority** and **Effort** issue fields using the GraphQL API (`setIssueFieldValue` mutation) — `gh issue create` has no native flags for these
 - Assign a **milestone** if one exists for the relevant sprint/release
 - Assign to a **project** if one exists
-- Write a descriptive **body** with clear context, requirements, and acceptance criteria
+- Use the issue template at `.github/ISSUE_TEMPLATE/issue.yml` — it enforces Type, Priority, and Effort as required fields
 - Use `gh issue create --repo StartlineAU/startline --label "<label1,label2>" --type "<Bug|Feature|Task>" --assignee "@me"` for new issues
 - Cross-reference **related issues** in the body (`**Related to:** #N`) and use `--add-blocking`/`--add-blocked-by` for dependency relationships
 - Use `--add-sub-issue` and `--parent` for parent-child issue hierarchies
+- After creation, set Priority/Effort via GraphQL — use the issue's GraphQL node ID (`gh issue view <N> --json id`) then `setIssueFieldValue` with field IDs. Available fields: **Priority** (Urgent/High/Medium/Low), **Effort** (High/Medium/Low), **Start date**, **Target date**
 
 ## MCP servers
 
