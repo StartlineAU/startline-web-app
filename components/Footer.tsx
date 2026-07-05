@@ -29,10 +29,15 @@ export default function Footer() {
               <div className="space-y-2">
                 {[
                   { href: "/events", label: "All Events" },
-                  { href: "/events?type=fitness-racing", label: "Fitness Racing" },
-                  { href: "/events?type=crossfit", label: "CrossFit" },
                   { href: "/events?type=running", label: "Running" },
+                  { href: "/events?type=cycling", label: "Cycling" },
+                  { href: "/events?type=swimming", label: "Swimming" },
+                  { href: "/events?type=triathlon", label: "Triathlon" },
+                  { href: "/events?type=duathlon", label: "Duathlon" },
+                  { href: "/events?type=crossfit", label: "CrossFit" },
                   { href: "/events?type=hybrid", label: "Hybrid" },
+                  { href: "/events?type=weightlifting", label: "Weightlifting" },
+                  { href: "/events?type=bodybuilding", label: "Body Building" },
                 ].map((link) => (
                   <Link
                     key={link.href}
@@ -52,8 +57,6 @@ export default function Footer() {
               <div className="space-y-2">
                 {[
                   { href: "/contact", label: "Contact" },
-                  { href: "/about", label: "About" },
-                  { href: "/organiser", label: "Organiser Login" },
                 ].map((link) => (
                   <Link
                     key={link.href}

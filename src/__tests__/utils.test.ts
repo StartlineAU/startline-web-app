@@ -102,7 +102,6 @@ describe("sortEventsByDate", () => {
 
 describe("filterEvents", () => {
   const baseEvents: UserEvent[] = [
-    { date: "2026-07-15", type: "fitness-racing", state: "nsw", format: "individual", title: "Sydney Fitness Race", city: "Sydney", location: "ICC Sydney" } as UserEvent,
     { date: "2026-08-20", type: "crossfit", state: "vic", format: "team", title: "CrossFit Melbourne", city: "Melbourne", location: "Melbourne Arena" } as UserEvent,
     { date: "2025-01-01", type: "running", state: "qld", format: "individual", title: "Old Event", city: "Brisbane", location: "GABBA" } as UserEvent,
   ];
@@ -116,9 +115,9 @@ describe("filterEvents", () => {
   });
 
   it("filters by type", () => {
-    const result = filterEvents(baseEvents, { ...emptyFilters, types: ["fitness-racing"] });
+    const result = filterEvents(baseEvents, { ...emptyFilters, types: ["crossfit"] });
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe("fitness-racing");
+    expect(result[0].type).toBe("crossfit");
   });
 
   it("filters by state", () => {

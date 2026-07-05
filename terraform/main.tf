@@ -62,6 +62,7 @@ locals {
       database_skip_final_snapshot = false
       database_deletion_protection = true
       cognito_deletion_protection  = true
+      bucket_cors_allowed_origins  = ["https://startlineau.com", "https://organiser.startlineau.com"]
     }
     nonprod = {
       branch_name                  = "non-production"
@@ -71,6 +72,7 @@ locals {
       database_skip_final_snapshot = true
       database_deletion_protection = false
       cognito_deletion_protection  = false
+      bucket_cors_allowed_origins  = ["*"]
     }
   }
 }
@@ -134,6 +136,8 @@ module "env" {
   database_secret_recovery_window_days  = var.database_secret_recovery_window_days
 
   cognito_deletion_protection = each.value.cognito_deletion_protection
+
+  bucket_cors_allowed_origins = each.value.bucket_cors_allowed_origins
 }
 
 # Custom apex domain attaches only to the prod branch. Route 53 records that

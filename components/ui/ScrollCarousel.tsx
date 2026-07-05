@@ -24,13 +24,25 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "t
     setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
   }
 
+  // Throttle scroll checks — once per frame max
+  const scrollPending = useRef(false);
+  function onScroll() {
+    if (scrollPending.current) return;
+    scrollPending.current = true;
+    requestAnimationFrame(() => {
+      scrollPending.current = false;
+      checkScroll();
+    });
+  }
+
   useEffect(() => {
-    checkScroll();
     const el = scrollRef.current;
-    el?.addEventListener("scroll", checkScroll, { passive: true });
+    if (!el) return;
+    checkScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", checkScroll);
     return () => {
-      el?.removeEventListener("scroll", checkScroll);
+      el.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", checkScroll);
     };
   }, []);
@@ -46,7 +58,8 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "t
       <div className="flex items-end justify-between mb-4 sm:mb-6">
         <div>
           {eyebrow && (
-            <p className="font-headline text-[10px] sm:text-xs font-medium uppercase tracking-widest text-primary mb-1">
+            <p className="font-headline text-[10px] sm:text-xs font-medium uppercase tracking-widest text-primary mb-1 flex items-center gap-2">
+              <span className="w-6 h-px bg-primary inline-block animate-pulse" />
               {eyebrow}
             </p>
           )}
@@ -65,12 +78,24 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "t
         )}
       </div>
 
-      {/* Arrow buttons are hidden on mobile — users swipe natively */}
       <div className="relative group/carousel">
+        <div
+          className={`hidden sm:block absolute left-0 top-0 bottom-0 w-12 z-[5] pointer-events-none transition-opacity duration-300 ${
+            canLeft ? "opacity-100" : "opacity-0"
+          }`}
+          style={{
+            background: "linear-gradient(to right, rgba(10,10,12,1) 0%, rgba(10,10,12,0) 100%)",
+          }}
+        />
+
         <button
           onClick={() => scroll("left")}
           aria-label="Scroll left"
-          className={`hidden sm:flex absolute left-0 ${arrowTopClass} -translate-y-1/2 -translate-x-1/2 z-10 w-11 h-11 rounded-full bg-dark border border-dark-lighter items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-150 ${canLeft ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`hidden sm:flex absolute left-0 ${arrowTopClass} -translate-y-1/2 -translate-x-1/2 z-10 w-11 h-11 rounded-full bg-dark border border-dark-lighter items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-200 ${
+            canLeft
+              ? "opacity-100 hover:scale-110 hover:shadow-primary/20 hover:shadow-lg"
+              : "opacity-0 pointer-events-none"
+          }`}
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -78,14 +103,27 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "t
         <button
           onClick={() => scroll("right")}
           aria-label="Scroll right"
-          className={`hidden sm:flex absolute right-0 ${arrowTopClass} -translate-y-1/2 translate-x-1/2 z-10 w-11 h-11 rounded-full bg-dark border border-dark-lighter items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-150 ${canRight ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`hidden sm:flex absolute right-0 ${arrowTopClass} -translate-y-1/2 translate-x-1/2 z-10 w-11 h-11 rounded-full bg-dark border border-dark-lighter items-center justify-center text-muted hover:text-primary hover:border-primary shadow-lg transition-all duration-200 ${
+            canRight
+              ? "opacity-100 hover:scale-110 hover:shadow-primary/20 hover:shadow-lg"
+              : "opacity-0 pointer-events-none"
+          }`}
         >
           <ChevronRight className="w-5 h-5" />
         </button>
 
         <div
+          className={`hidden sm:block absolute right-0 top-0 bottom-0 w-12 z-[5] pointer-events-none transition-opacity duration-300 ${
+            canRight ? "opacity-100" : "opacity-0"
+          }`}
+          style={{
+            background: "linear-gradient(to left, rgba(10,10,12,1) 0%, rgba(10,10,12,0) 100%)",
+          }}
+        />
+
+        <div
           ref={scrollRef}
-          className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar"
+          className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar py-2"
           style={{ scrollSnapType: "x mandatory" }}
         >
           {children}

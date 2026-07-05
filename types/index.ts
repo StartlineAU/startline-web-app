@@ -1,8 +1,13 @@
 export type EventType =
-  | "fitness-racing"
   | "crossfit"
   | "running"
-  | "hybrid";
+  | "hybrid"
+  | "swimming"
+  | "cycling"
+  | "triathlon"
+  | "duathlon"
+  | "weightlifting"
+  | "bodybuilding";
 
 export type AustralianState =
   | "nsw"
@@ -80,17 +85,27 @@ export interface EventTypeOption {
 }
 
 export const EVENT_TYPE_OPTIONS: EventTypeOption[] = [
-  { value: "fitness-racing", label: "Fitness Racing",             shortLabel: "Fitness Racing" },
   { value: "crossfit",       label: "CrossFit Competitions",      shortLabel: "CrossFit" },
   { value: "running",        label: "Running (5K–Marathon)",      shortLabel: "Running" },
   { value: "hybrid",         label: "Hybrid / Obstacle",         shortLabel: "Hybrid" },
+  { value: "swimming",       label: "Swimming",                   shortLabel: "Swimming" },
+  { value: "cycling",        label: "Cycling",                    shortLabel: "Cycling" },
+  { value: "triathlon",      label: "Triathlon",                  shortLabel: "Triathlon" },
+  { value: "duathlon",       label: "Duathlon",                   shortLabel: "Duathlon" },
+  { value: "weightlifting",  label: "Weightlifting",              shortLabel: "Weightlifting" },
+  { value: "bodybuilding",   label: "Body Building",              shortLabel: "Body Building" },
 ];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
-  "fitness-racing": "Fitness Racing",
   crossfit:         "CrossFit",
   running:          "Running",
   hybrid:           "Hybrid",
+  swimming:         "Swimming",
+  cycling:          "Cycling",
+  triathlon:        "Triathlon",
+  duathlon:         "Duathlon",
+  weightlifting:    "Weightlifting",
+  bodybuilding:     "Body Building",
 };
 
 export interface StateOption {

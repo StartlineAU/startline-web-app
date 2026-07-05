@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { EVENT_TYPE_OPTIONS, EVENT_TYPE_LABELS } from "@/types";
 
 describe("event status labels", () => {
   it("covers all statuses", () => {
@@ -9,10 +10,27 @@ describe("event status labels", () => {
 
 describe("competition types", () => {
   it("includes all supported disciplines", () => {
-    const types = ["fitness-racing", "crossfit", "running", "hybrid"];
+    const types = ["crossfit", "running", "hybrid", "swimming", "cycling", "triathlon", "duathlon", "weightlifting", "bodybuilding"];
+    expect(types).toHaveLength(9);
     types.forEach((t) => {
-      expect(["fitness-racing", "crossfit", "running", "hybrid"]).toContain(t);
+      expect(["crossfit", "running", "hybrid", "swimming", "cycling", "triathlon", "duathlon", "weightlifting", "bodybuilding"]).toContain(t);
     });
+  });
+});
+
+describe("EVENT_TYPE_OPTIONS", () => {
+  it("has an entry for every EventType", () => {
+    const optionValues = EVENT_TYPE_OPTIONS.map((o) => o.value);
+    const labelKeys = Object.keys(EVENT_TYPE_LABELS);
+    expect(optionValues.sort()).toEqual(labelKeys.sort());
+  });
+
+  it("each option has value, label, and shortLabel", () => {
+    for (const opt of EVENT_TYPE_OPTIONS) {
+      expect(opt.value).toBeTruthy();
+      expect(opt.label).toBeTruthy();
+      expect(opt.shortLabel).toBeTruthy();
+    }
   });
 });
 

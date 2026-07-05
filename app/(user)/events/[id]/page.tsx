@@ -96,7 +96,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                           <p className="font-headline text-xs text-muted uppercase tracking-widest mt-0.5">{drop.date}</p>
                         )}
                       </div>
-                      <span className="font-headline text-2xl font-black italic text-primary">{drop.price}</span>
+                      <span className="font-headline text-2xl font-black italic text-primary">${drop.price}</span>
                     </div>
                   ))}
                 </div>
@@ -185,7 +185,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                 <>
                   <p className="font-headline text-[10px] uppercase tracking-widest text-muted">From</p>
                   <p className="font-headline text-xl font-black italic text-primary leading-none">
-                    {event.ticketDrops[0].price}
+                    ${event.ticketDrops[0].price}
                   </p>
                 </>
               )}

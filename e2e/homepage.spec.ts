@@ -9,8 +9,9 @@ test.describe("homepage", () => {
 
   test("shows main headings and navigation", async ({ page }) => {
     await goToHomepage(page);
+    await expect(page.getByRole("link", { name: "HOME", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "EVENTS", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /organiser login/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: "ACTIVITY", exact: true })).toBeVisible();
   });
 
   test("event cards or empty state renders", async ({ page }) => {
@@ -20,9 +21,5 @@ test.describe("homepage", () => {
     expect(hasCards || hasContent).toBeTruthy();
   });
 
-  test("navigates to about page", async ({ page }) => {
-    await goToHomepage(page);
-    await page.getByRole("link", { name: "ABOUT", exact: true }).click();
-    await expect(page).toHaveURL(/\/about/);
-  });
+
 });
