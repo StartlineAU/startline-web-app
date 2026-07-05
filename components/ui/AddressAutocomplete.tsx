@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MapPin } from "lucide-react";
 
 export type AddressResult = {
   address: string;
@@ -10,148 +9,141 @@ export type AddressResult = {
   venue:   string;
 };
 
+interface PlaceResult {
+  placeId: string;
+  label: string;
+  title: string;
+  placeType: string;
+}
+
 interface Props {
   value:        string;
   onChange:     (raw: string) => void;
   onSelect:     (result: AddressResult) => void;
-  apiKey?:      string;
   placeholder?: string;
   className?:   string;
   disabled?:    boolean;
-}
-
-let scriptPromise: Promise<void> | null = null;
-
-function loadMapsScript(apiKey: string): Promise<void> {
-  if (scriptPromise) return scriptPromise;
-  if (typeof window !== "undefined" && window.google?.maps) {
-    return (scriptPromise = Promise.resolve());
-  }
-  scriptPromise = new Promise((resolve, reject) => {
-    const cb = "__gmapsLoaded";
-    (window as unknown as Record<string, unknown>)[cb] = resolve;
-    const s = document.createElement("script");
-    s.src     = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=${cb}`;
-    s.async   = true;
-    s.defer   = true;
-    s.onerror = () => reject(new Error("Google Maps failed to load."));
-    document.head.appendChild(s);
-  });
-  return scriptPromise;
-}
-
-const AU_STATES = ["nsw","vic","qld","wa","sa","tas","act","nt"];
-
-function extractComponents(place: google.maps.places.PlaceResult): AddressResult {
-  const components = place.address_components ?? [];
-  const get = (type: string, nameType: "long_name" | "short_name" = "long_name") =>
-    components.find((c) => c.types.includes(type))?.[nameType] ?? "";
-
-  let address = [get("street_number"), get("route")].filter(Boolean).join(" ");
-  let city    = get("locality") || get("sublocality_level_1") || get("neighborhood") || get("administrative_area_level_2");
-  let state   = get("administrative_area_level_1", "short_name").toLowerCase();
-  const venue = place.name && !place.name.match(/^\d/) ? place.name : "";
-
-  // Fallback: parse formatted_address if components didn't give us what we need
-  if ((!city || !state) && place.formatted_address) {
-    const parts = place.formatted_address.split(",").map(s => s.trim());
-    for (const part of parts) {
-      const tokens = part.split(" ").map(t => t.trim());
-      const stateToken = tokens.find(t => AU_STATES.includes(t.toLowerCase()));
-      if (stateToken) {
-        if (!state) state = stateToken.toLowerCase();
-        if (!city)  city  = tokens.slice(0, tokens.indexOf(stateToken)).join(" ");
-        break;
-      }
-    }
-    if (!address) address = parts[0] ?? "";
-  }
-
-  return { address, city, state, venue };
 }
 
 export default function AddressAutocomplete({
   value,
   onChange,
   onSelect,
-  apiKey: apiKeyProp,
   placeholder = "Start typing an address…",
   className = "",
   disabled = false,
 }: Props) {
-  const apiKey = apiKeyProp ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-
-  // Stable refs for callbacks — never cause the Autocomplete to rebuild
-  const onChangeRef = useRef(onChange);
-  const onSelectRef = useRef(onSelect);
-  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
-  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
-
+  const [open, setOpen]        = useState(false);
+  const [suggestions, setSuggestions] = useState<PlaceResult[]>([]);
+  const [loading, setLoading]  = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
-  const acRef    = useRef<google.maps.places.Autocomplete | null>(null);
+  const listRef  = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Synchronously true if Maps is already cached in this browser session
-  const [ready, setReady] = useState(
-    () => typeof window !== "undefined" && !!window.google?.maps,
-  );
-  const [error, setError] = useState(false);
-
-  // Load the Maps script (no-op if already loaded)
   useEffect(() => {
-    if (!apiKey || ready) return;
-    loadMapsScript(apiKey)
-      .then(() => setReady(true))
-      .catch(() => setError(true));
-  }, [apiKey, ready]);
+    const h = (e: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(e.target as Node) &&
+          listRef.current && !listRef.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
-  // Attach Autocomplete once — never rebuild it
-  useEffect(() => {
-    if (!ready || !inputRef.current || acRef.current) return;
+  const fetchSuggestions = async (q: string) => {
+    if (q.length < 2) { setSuggestions([]); setOpen(false); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/places/autocomplete?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setSuggestions(data.results ?? []);
+      setOpen((data.results ?? []).length > 0);
+      setActiveIdx(-1);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    acRef.current = new google.maps.places.Autocomplete(inputRef.current, {
-      componentRestrictions: { country: "au" },
-      fields: ["address_components", "formatted_address", "name"],
-      types:  ["geocode", "establishment"],
-    });
+  const select = async (item: PlaceResult) => {
+    const label = item.label;
+    onChange(label);
 
-    acRef.current.addListener("place_changed", () => {
-      const place = acRef.current!.getPlace();
-      if (!place) return;
-      const result = extractComponents(place);
-      onChangeRef.current(result.address || place.formatted_address || "");
-      onSelectRef.current(result);
-    });
-  }, [ready]);
+    try {
+      const res = await fetch(`/api/places/geocode?q=${encodeURIComponent(item.title || label)}`);
+      const data = await res.json();
+      const g = data.result;
+      if (g) {
+        onSelect({
+          address: g.label,
+          city: g.city,
+          state: g.stateCode,
+          venue: "",
+        });
+      }
+    } catch {
+      // fallback: use raw selection
+      const parts = label.split(",").map(s => s.trim());
+      onSelect({ address: parts[0] ?? label, city: "", state: "", venue: "" });
+    }
+    setOpen(false);
+  };
 
-  if (!apiKey || error) {
-    return (
-      <div className="relative">
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          disabled={disabled}
-          className={className}
-        />
-        {!apiKey && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-amber-500 pointer-events-none">
-            <MapPin className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-headline uppercase tracking-wider">No API key</span>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && activeIdx >= 0) {
+      e.preventDefault();
+      select(suggestions[activeIdx]);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
 
   return (
-    <input
-      ref={inputRef}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      disabled={disabled}
-      className={className}
-      autoComplete="off"
-    />
+    <div className="relative">
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={e => { onChange(e.target.value); clearTimeout(timerRef.current); timerRef.current = setTimeout(() => fetchSuggestions(e.target.value), 250); }}
+        onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        disabled={disabled}
+        className={className}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+      />
+      {loading && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <div className="w-4 h-4 border-2 border-lime-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      {open && suggestions.length > 0 && (
+        <div ref={listRef}
+          className="absolute top-full left-0 mt-1 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-y-auto max-h-64 modal-in">
+          {suggestions.map((item, i) => (
+            <button key={item.placeId} type="button"
+              onClick={() => select(item)}
+              onMouseEnter={() => setActiveIdx(i)}
+              className={`w-full px-4 py-3 text-left transition-colors
+                ${i === activeIdx ? "bg-lime-50" : "hover:bg-gray-50"}`}>
+              <span className={`font-headline text-[14px] ${i === activeIdx ? "text-lime-700" : "text-gray-900"}`}>
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

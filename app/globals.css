@@ -355,10 +355,10 @@ input[type="radio"] {
 /* ── Google Maps Places Autocomplete ────────────────────── */
 .pac-container {
   margin-top: 4px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: rgb(var(--color-dark));
+  border: 1px solid rgb(var(--color-dark-lighter));
   border-radius: 10px;
-  box-shadow: 0 4px 24px 0 rgba(0,0,0,0.08);
+  box-shadow: 0 8px 32px 0 rgba(0,0,0,0.5);
   font-family: 'Chakra Petch', sans-serif;
   overflow: hidden;
   padding: 4px;
@@ -370,25 +370,26 @@ input[type="radio"] {
   padding: 10px 12px;
   font-size: 15px;
   font-family: 'Chakra Petch', sans-serif;
-  color: #374151;
+  color: rgb(var(--color-muted));
   cursor: pointer;
   line-height: 1.4;
+  background: transparent;
 }
 .pac-item:hover,
 .pac-item-selected {
-  background: #f0fdf4;
-  color: #3f6212;
+  background: rgb(var(--color-dark-light));
+  color: rgb(var(--color-light));
 }
 .pac-item-query {
   font-size: 15px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 600;
-  color: #111827;
+  color: rgb(var(--color-light));
   padding-right: 4px;
 }
 .pac-item:hover .pac-item-query,
 .pac-item-selected .pac-item-query {
-  color: #3f6212;
+  color: rgb(var(--color-primary));
 }
-.pac-matched { font-weight: 700; }
+.pac-matched { font-weight: 700; color: rgb(var(--color-primary)); }
 .pac-icon { display: none; }

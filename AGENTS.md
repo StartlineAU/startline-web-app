@@ -1,4 +1,4 @@
-# AGENTS.md — Startline
+﻿# AGENTS.md — Startline
 
 ## Architecture
 
@@ -87,6 +87,30 @@ Infrastructure is managed via Terraform in `terraform/`:
 - App code deploys via AWS Amplify on branch push: `non-production` → staging, `production` → live
 - No app code CI (no lint/test/build checks) — only Terraform CI exists
 
+## Design system
+
+The authoritative design reference lives at **`design/design.md`**. Read it before touching any UI — it covers every decision that keeps the product coherent.
+
+### When to consult `design/design.md`
+
+- **Any UI work** — new pages, components, layouts, or reskins of existing ones.
+- **Copy / microcopy** — voice, casing rules, number formatting, Australian locale.
+- **Color choices** — which token to use and when; the one-accent rule.
+- **Typography** — which family, weight, size, tracking, and casing for the context.
+- **Component design** — button variants, badges, cards, inputs, modals, nav.
+- **Theming a shadcn default** — use the light→dark conversion table in §13 rather than inventing values.
+- **Picking a design register** — Product (clean, default) vs Instrument/HUD (dashboards, launch moments). See §12.
+
+### Non-negotiables from the design doc
+
+- **Dark only.** `color-scheme: dark` everywhere. No light surfaces, ever.
+- **One accent.** Signal green `#B3E153` (`--color-primary`) is the only brand hue. Blue/amber/red are status semantics only.
+- **Chakra Petch for structure, Inter for prose.** Structural chrome is uppercase + wide tracking; body copy is sentence case Inter.
+- **No emoji. Line icons (Lucide) only.**
+- **Text on `#B3E153` is always `#141414` (dark ink)** — never white.
+- **The "machined" shadow** (`box-shadow: 2px 2px 0 #B3E153`) belongs on the single primary CTA per view only.
+- **Status labels:** `APPROVED` renders as **"Published"** to organisers. Use the shared status object — never inline ad-hoc status styles.
+
 ## shadcn/ui conventions
 
 - Dark theme only. CSS variables in `app/globals.css` with primary green `#B3E153`.
@@ -97,7 +121,7 @@ Infrastructure is managed via Terraform in `terraform/`:
 
 - Next.js 15 with Turbopack. Use `pnpm dev` to start.
 - `@/*` path alias maps to project root.
-- CSP headers in `next.config.ts` allow Google Maps embeds.
+- CSP headers in `next.config.ts` — currently only `worker-src blob: 'self'` (Google Maps embeds removed with Google Maps API dependency).
 
 ## Testing
 
@@ -186,12 +210,29 @@ When creating a pull request, always scan open GitHub issues and link any that t
 When creating GitHub issues, always:
 - Add relevant **labels** (create new ones if they don't exist). Available labels: `bug`, `enhancement`, `documentation`, `auth`, `ci`, `infrastructure`, `ui`, `payments`, `maps`, `video`, `dashboard`, `registrations`, `question`, `help wanted`, `good first issue`
 - Set the native **issue type** — `Bug`, `Feature`, or `Task` (not a label, a proper field)
+- Set **Priority** and **Effort** issue fields using the GraphQL API (`setIssueFieldValue` mutation) — `gh issue create` has no native flags for these
 - Assign a **milestone** if one exists for the relevant sprint/release
 - Assign to a **project** if one exists
-- Write a descriptive **body** with clear context, requirements, and acceptance criteria
+- Use the issue template at `.github/ISSUE_TEMPLATE/issue.yml` — it enforces Type, Priority, and Effort as required fields
 - Use `gh issue create --repo StartlineAU/startline --label "<label1,label2>" --type "<Bug|Feature|Task>" --assignee "@me"` for new issues
 - Cross-reference **related issues** in the body (`**Related to:** #N`) and use `--add-blocking`/`--add-blocked-by` for dependency relationships
 - Use `--add-sub-issue` and `--parent` for parent-child issue hierarchies
+- After creation, set Priority/Effort via GraphQL — `gh issue create` has no native flags for these. Steps:
+  1. Get the issue's GraphQL node ID: `gh issue view <N> --json id --jq '.id'`
+  2. Get field option IDs (one-time discovery):
+     ```
+     Priority options: IFSSO_kgDOBFZBjQ(Urgent), IFSSO_kgDOBFZBjg(High), IFSSO_kgDOBFZBjw(Medium), IFSSO_kgDOBFZBkA(Low)
+     Effort options:   IFSSO_kgDOBFZBkQ(High),   IFSSO_kgDOBFZBkg(Medium), IFSSO_kgDOBFZBkw(Low)
+     ```
+  3. Set fields via mutation:
+     ```bash
+     gh api graphql -f query='
+       mutation {
+         p: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8Qg", singleSelectOptionId: "<OPTION_ID>" } }) { issue { number } }
+         e: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8RQ", singleSelectOptionId: "<OPTION_ID>" } }) { issue { number } }
+       }'
+     ```
+  Available fields: **Priority** (Urgent/High/Medium/Low), **Effort** (High/Medium/Low), **Start date**, **Target date**
 
 ## MCP servers
 

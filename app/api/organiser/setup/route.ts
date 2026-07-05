@@ -15,9 +15,10 @@ export async function POST(req: Request) {
 
   const existing = await prisma.organiser.findUnique({
     where: { userId: session.sub },
+    select: { id: true, orgName: true },
   });
   if (existing) {
-    return NextResponse.json({ error: "You already have an organiser profile." }, { status: 409 });
+    return NextResponse.json(existing);
   }
 
   try {

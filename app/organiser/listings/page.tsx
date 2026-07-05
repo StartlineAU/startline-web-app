@@ -41,11 +41,11 @@ function formatEventDate(dateStr: string, startTime: string) {
 }
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: string }> = {
-  DRAFT:    { bg: "bg-gray-200",  text: "text-gray-700",  label: "Draft"      },
-  PENDING:  { bg: "bg-blue-200",  text: "text-blue-900",  label: "Pending"    },
-  APPROVED: { bg: "bg-lime-200",  text: "text-lime-900",  label: "Published"  },
-  REJECTED: { bg: "bg-red-200",   text: "text-red-900",   label: "Rejected"   },
-  ARCHIVED: { bg: "bg-gray-200",  text: "text-gray-500",  label: "Archived"   },
+  DRAFT:    { bg: "bg-amber-400/10", text: "text-amber-300", label: "Draft"     },
+  PENDING:  { bg: "bg-blue-400/10",  text: "text-blue-300",  label: "Pending"   },
+  APPROVED: { bg: "bg-primary/10",   text: "text-primary",   label: "Published" },
+  REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
+  ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Archived"  },
 };
 
 type SortField = "status" | "date" | "name";
@@ -53,12 +53,12 @@ type SortDir   = "asc" | "desc";
 type Filter    = EventStatus | "all";
 
 const FILTERS: { k: Filter; l: string }[] = [
-  { k: "all",      l: "All"      },
-  { k: "APPROVED", l: "Published"     },
-  { k: "PENDING",  l: "Pending"  },
-  { k: "DRAFT",    l: "Drafts"   },
-  { k: "REJECTED", l: "Rejected" },
-  { k: "ARCHIVED", l: "Archived" },
+  { k: "all",      l: "All"       },
+  { k: "APPROVED", l: "Published" },
+  { k: "PENDING",  l: "Pending"   },
+  { k: "DRAFT",    l: "Drafts"    },
+  { k: "REJECTED", l: "Rejected"  },
+  { k: "ARCHIVED", l: "Archived"  },
 ];
 
 const SORT_LABELS: Record<SortField, string> = { status: "Status", date: "Date", name: "Name" };
@@ -83,29 +83,29 @@ function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => voi
       <Button
         size="icon" variant="ghost"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-        className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 w-10 h-10"
+        className="w-10 h-10"
       >
         <MoreHorizontal className="w-4 h-4" />
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden">
+        <div className="absolute right-0 top-11 z-50 w-52 bg-dark border border-dark-lighter rounded-xl shadow-lg py-1 overflow-hidden">
           <button
             onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/events/${event.id}/dashboard`); }}
-            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-gray-700 hover:bg-lime-50 hover:text-lime-700 transition-colors font-headline font-bold uppercase tracking-widest"
+            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-primary/5 hover:text-primary transition-colors font-headline font-bold uppercase tracking-widest"
           >
             <LayoutDashboard className="w-4 h-4" /> View dashboard
           </button>
           <button
             onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/new-listing?id=${event.id}`); }}
-            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors font-headline font-bold uppercase tracking-widest"
+            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/5 transition-colors font-headline font-bold uppercase tracking-widest"
           >
             <Pencil className="w-4 h-4" /> Edit event
           </button>
-          <div className="my-1 border-t border-gray-100" />
+          <div className="my-1 border-t border-dark-lighter" />
           <button
             onClick={e => { e.stopPropagation(); setOpen(false); onDelete(); }}
-            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-600 hover:bg-red-50 transition-colors font-headline font-bold uppercase tracking-widest"
+            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-300 hover:bg-red-400/10 transition-colors font-headline font-bold uppercase tracking-widest"
           >
             <Trash2 className="w-4 h-4" /> Delete event
           </button>
@@ -122,7 +122,7 @@ function SortButton({
   return (
     <button
       onClick={() => onSort(field)}
-      className="inline-flex items-center gap-1 hover:text-lime-600 transition-colors"
+      className="inline-flex items-center gap-1 hover:text-primary transition-colors"
     >
       {label}
       {active
@@ -209,7 +209,7 @@ export default function ListingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dark-darker">
       <OrganiserTopBar />
 
       <main className="pt-14">
@@ -218,13 +218,13 @@ export default function ListingsPage() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
             <div>
-              <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-2">
+              <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
                 Event Listings
               </div>
-              <h1 className="font-headline text-[36px] sm:text-[44px] lg:text-[56px] font-black italic tracking-tighter leading-none text-gray-900">
-                Your race<br /><span className="text-lime-500">calendar.</span>
+              <h1 className="font-headline text-[36px] sm:text-[44px] lg:text-[56px] font-black italic tracking-tighter leading-none text-white">
+                Your race<br /><span className="text-primary">calendar.</span>
               </h1>
-              <p className="text-gray-500 mt-3 text-[14px]">
+              <p className="text-muted mt-3 text-[14px]">
                 {events.length > 0
                   ? `${events.length} listing${events.length !== 1 ? "s" : ""} on the board.`
                   : "No listings yet. Create your first event to get started."}
@@ -237,7 +237,7 @@ export default function ListingsPage() {
             </Button>
           </div>
 
-          {/* Filter strip — horizontally scrollable on mobile */}
+          {/* Filter strip */}
           <div className="flex items-center gap-2 mb-4 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto no-scrollbar pb-1">
             {FILTERS.map(({ k, l }) => (
               <Button key={k} size="sm" variant={filter === k ? "lime" : "outline"}
@@ -254,13 +254,15 @@ export default function ListingsPage() {
 
           {/* Mobile sort chips */}
           <div className="flex sm:hidden items-center gap-2 mb-3 overflow-x-auto no-scrollbar pb-1">
-            <span className="font-headline text-[10px] uppercase tracking-widest text-gray-400 shrink-0">Sort</span>
+            <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark shrink-0">Sort</span>
             {(["status", "date", "name"] as SortField[]).map(field => {
               const active = sortField === field;
               return (
                 <button key={field} onClick={() => handleSort(field)}
                   className={`flex items-center gap-1 px-3 h-8 rounded-full font-headline text-[11px] font-bold uppercase tracking-widest border transition-colors shrink-0
-                    ${active ? "border-lime-500 bg-lime-50 text-lime-700" : "border-gray-200 text-gray-500 bg-white"}`}
+                    ${active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-dark-lighter text-muted bg-transparent"}`}
                 >
                   {SORT_LABELS[field]}
                   {active && (sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
@@ -269,10 +271,10 @@ export default function ListingsPage() {
             })}
           </div>
 
-          {/* Table — desktop only header, cards on all sizes */}
+          {/* Table */}
           <Card className="stagger-item">
             {/* Desktop table header */}
-            <div className="hidden sm:grid grid-cols-12 gap-4 px-5 py-3 bg-gray-50 border-b border-gray-200 font-headline font-bold text-[11px] uppercase tracking-widest text-gray-700 rounded-t-lg">
+            <div className="hidden sm:grid grid-cols-12 gap-4 px-5 py-3 bg-white/[0.02] border-b border-dark-lighter font-headline font-bold text-[11px] uppercase tracking-widest text-muted-dark rounded-t-xl">
               <div className="col-span-5">
                 <SortButton field="name" active={sortField === "name"} dir={sortDir} onSort={handleSort} label="Event" />
               </div>
@@ -288,8 +290,8 @@ export default function ListingsPage() {
 
             {loading && (
               <div className="p-12 text-center">
-                <div className="w-6 h-6 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-gray-400 uppercase tracking-widest">Loading…</div>
+                <div className="w-6 h-6 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
+                <div className="font-headline text-sm text-muted-dark uppercase tracking-widest">Loading…</div>
               </div>
             )}
 
@@ -297,32 +299,32 @@ export default function ListingsPage() {
               const s     = STATUS_STYLE[e.status];
               const price = ef.waves(e)[0]?.price;
               return (
-                <div key={e.id} className={`${i < filtered.length - 1 ? "border-b border-gray-100" : ""}`}>
+                <div key={e.id} className={`${i < filtered.length - 1 ? "border-b border-white/5" : ""}`}>
 
                   {/* ── Mobile card layout (< sm) ── */}
                   <div
-                    className="sm:hidden flex items-center gap-3 px-4 py-3.5 cursor-pointer active:bg-gray-50 transition-colors"
+                    className="sm:hidden flex items-center gap-3 px-4 py-3.5 cursor-pointer active:bg-white/5 transition-colors"
                     onClick={() => handleRowClick(e)}
                   >
-                    <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="w-12 h-12 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden">
                       {ef.coverImageUrl(e)
-                        ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover" />
-                        : <div className="font-mono text-[9px] text-gray-400 uppercase">{ef.discipline(e).slice(0, 4)}</div>}
+                        ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover brightness-[.62] saturate-110" />
+                        : <div className="font-mono text-[9px] text-muted-dark uppercase">{ef.discipline(e).slice(0, 4)}</div>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start gap-2 mb-0.5">
-                        <div className="font-headline text-[14px] font-black italic tracking-tighter text-gray-900 leading-tight line-clamp-1 flex-1">
+                        <div className="font-headline text-[14px] font-black italic tracking-tighter text-white leading-tight line-clamp-1 flex-1">
                           {ef.title(e)}
                         </div>
                         <Badge className={`${s.bg} ${s.text} border-0 text-[10px] shrink-0`}>{s.label}</Badge>
                       </div>
-                      <div className="flex items-center gap-1 font-headline text-[10px] text-gray-400 uppercase tracking-widest mb-1">
-                        <MapPin className="w-3 h-3 text-lime-500 shrink-0" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
+                      <div className="flex items-center gap-1 font-headline text-[10px] text-muted-dark uppercase tracking-widest mb-1">
+                        <MapPin className="w-3 h-3 text-primary shrink-0" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="font-headline text-[11px] text-gray-500">{formatEventDate(ef.eventDate(e), ef.startTime(e))}</div>
-                        <div className="font-headline text-[11px] text-gray-600">
-                          {(e.registrationCount ?? 0)}{ef.cap(e) ? `/${ef.cap(e)}` : ""}<span className="text-gray-400"> reg</span>
+                        <div className="font-headline text-[11px] text-muted">{formatEventDate(ef.eventDate(e), ef.startTime(e))}</div>
+                        <div className="font-headline text-[11px] text-muted-light">
+                          {(e.registrationCount ?? 0)}{ef.cap(e) ? `/${ef.cap(e)}` : ""}<span className="text-muted-dark"> reg</span>
                         </div>
                       </div>
                     </div>
@@ -335,37 +337,37 @@ export default function ListingsPage() {
                   <div
                     className={`hidden sm:grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer transition-all
                       ${e.status === "APPROVED"
-                        ? "hover:bg-lime-50 hover:border-l-2 hover:border-l-lime-400"
-                        : "hover:bg-gray-50 hover:border-l-2 hover:border-l-gray-300"}`}
+                        ? "hover:bg-primary/5 hover:border-l-2 hover:border-l-primary"
+                        : "hover:bg-white/5 hover:border-l-2 hover:border-l-dark-lighter"}`}
                     onClick={() => handleRowClick(e)}
                   >
                     <div className="col-span-5 flex items-center gap-4 min-w-0">
-                      <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+                      <div className="w-14 h-14 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden">
                         {ef.coverImageUrl(e)
-                          ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover" />
-                          : <div className="font-mono text-[9px] text-gray-400 uppercase">{ef.discipline(e).slice(0, 4)}</div>}
+                          ? <img src={ef.coverImageUrl(e)!} alt={ef.title(e)} className="w-full h-full object-cover brightness-[.62] saturate-110" />
+                          : <div className="font-mono text-[9px] text-muted-dark uppercase">{ef.discipline(e).slice(0, 4)}</div>}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-headline text-[15px] font-black italic tracking-tighter text-gray-900">{ef.title(e)}</div>
-                        <div className="flex items-center gap-1 font-headline text-[11px] text-gray-400 uppercase tracking-widest mt-0.5">
-                          <MapPin className="w-3 h-3 text-lime-500" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
+                        <div className="font-headline text-[15px] font-black italic tracking-tighter text-white">{ef.title(e)}</div>
+                        <div className="flex items-center gap-1 font-headline text-[11px] text-muted-dark uppercase tracking-widest mt-0.5">
+                          <MapPin className="w-3 h-3 text-primary" /> {ef.city(e)}, {ef.state(e).toUpperCase()}
                         </div>
                       </div>
                     </div>
                     <div className="col-span-2 text-center">
-                      <div className="font-headline text-sm font-bold text-gray-700">{formatEventDate(ef.eventDate(e), ef.startTime(e))}</div>
+                      <div className="font-headline text-sm font-bold text-white/70">{formatEventDate(ef.eventDate(e), ef.startTime(e))}</div>
                     </div>
                     <div className="col-span-2 flex justify-center">
                       <Badge className={`${s.bg} ${s.text} border-0`}>{s.label}</Badge>
                     </div>
                     <div className="col-span-2">
-                      <div className="font-headline text-sm font-bold text-gray-900">
-                        {(e.registrationCount ?? 0).toLocaleString()}
-                        {ef.cap(e)
-                          ? <span className="text-gray-400 font-normal"> / {ef.cap(e)!.toLocaleString()}</span>
-                          : <span className="text-gray-400 font-normal"> / —</span>}
+                      <div className="font-headline text-sm font-bold text-white">
+                      {(e.registrationCount ?? 0).toLocaleString()}
+                      {ef.cap(e)
+                        ? <span className="text-muted-dark font-normal"> / {ef.cap(e)!.toLocaleString()}</span>
+                        : <span className="text-muted-dark font-normal"> / —</span>}
                       </div>
-                      {price && <div className="font-headline text-[10px] uppercase tracking-widest text-gray-400 mt-0.5">from A${price}</div>}
+                      {price && <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5">from A${price}</div>}
                     </div>
                     <div className="col-span-1 flex items-center justify-end" onClick={ev => ev.stopPropagation()}>
                       <ActionsMenu event={e} onDelete={() => setConfirmDel(e)} />
@@ -377,11 +379,11 @@ export default function ListingsPage() {
 
             {!loading && filtered.length === 0 && (
               <div className="p-12 text-center">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gray-100 mb-4">
-                  <Search className="w-5 h-5 text-gray-400" />
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-dark-light mb-4">
+                  <Search className="w-5 h-5 text-muted-dark" />
                 </div>
-                <div className="font-headline text-lg font-black italic text-gray-900 mb-1">Nothing here yet</div>
-                <div className="text-gray-400 text-sm">
+                <div className="font-headline text-lg font-black italic text-white mb-1">Nothing here yet</div>
+                <div className="text-muted-dark text-sm">
                   {events.length === 0 ? "Create your first listing to get started." : "Try clearing the filter."}
                 </div>
               </div>
@@ -390,7 +392,7 @@ export default function ListingsPage() {
 
           {events.length > 0 && !loading && (
             <Link href="/organiser/new-listing"
-              className="group w-full mt-4 border border-dashed border-gray-200 hover:border-lime-400 bg-white rounded-xl p-5 flex items-center justify-center gap-3 text-gray-400 hover:text-lime-600 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:shadow-none transition-[transform,box-shadow] duration-200 ease-out">
+              className="group w-full mt-4 border border-dashed border-dark-lighter hover:border-primary bg-transparent rounded-xl p-5 flex items-center justify-center gap-3 text-muted-dark hover:text-primary hover:-translate-y-0.5 active:translate-y-0 transition-[transform,border-color,color] duration-200 ease-out">
               <Plus className="w-5 h-5" />
               <span className="font-headline text-sm font-bold uppercase tracking-widest">Add another event</span>
             </Link>
@@ -403,13 +405,13 @@ export default function ListingsPage() {
         <DialogContent>
           <DialogHeader>
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-red-400/10 text-red-300 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
               <DialogTitle>Delete this event?</DialogTitle>
             </div>
             <DialogDescription>
-              You&apos;re about to delete <span className="text-gray-900 font-semibold">{confirmDel ? ef.title(confirmDel) : ""}</span>.
+              You&apos;re about to delete <span className="text-white font-semibold">{confirmDel ? ef.title(confirmDel) : ""}</span>.
               This will remove it from the platform and cannot be undone.
             </DialogDescription>
           </DialogHeader>

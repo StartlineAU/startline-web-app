@@ -6,8 +6,7 @@ test.describe("events page", () => {
     await page.goto("/events");
     await page.waitForLoadState("networkidle");
     // The events page should have some visible content
-    const content = page.locator("main, body");
-    await expect(content).not.toBeEmpty();
+    await expect(page.locator("main")).not.toBeEmpty();
   });
 
   test("search input is present", async ({ page }) => {
@@ -17,10 +16,11 @@ test.describe("events page", () => {
     await expect(searchInput.first()).toBeVisible();
   });
 
-  test("sidebar filters are present", async ({ page }) => {
+  test("search toolbar is present", async ({ page }) => {
     await page.goto("/events");
     await page.waitForLoadState("networkidle");
-    await expect(page.getByText(/filter|type|state/i).first()).toBeVisible();
+    await expect(page.getByText("Event", { exact: true })).toBeVisible();
+    await expect(page.getByText("Where", { exact: true })).toBeVisible();
   });
 });
 
