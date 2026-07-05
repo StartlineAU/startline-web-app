@@ -135,14 +135,16 @@ describe("filterEvents", () => {
 
 describe("getUpcomingEvents", () => {
   it("returns events sorted and limited", () => {
+    const today = new Date();
+    const future = (d: number) => new Date(today.getTime() + d * 86400000).toISOString().split("T")[0];
     const events: UserEvent[] = [
-      { date: "2026-10-10" } as UserEvent,
-      { date: "2026-07-01" } as UserEvent,
-      { date: "2026-12-25" } as UserEvent,
+      { date: future(5) } as UserEvent,
+      { date: future(20) } as UserEvent,
+      { date: future(60) } as UserEvent,
     ];
     const result = getUpcomingEvents(events, 2);
     expect(result).toHaveLength(2);
-    expect(result[0].date).toBe("2026-07-01");
+    expect(result[0].date).toBe(future(5));
   });
 });
 
