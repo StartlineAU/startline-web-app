@@ -14,7 +14,6 @@ Startline is a Next.js 15 (App Router) fitness event discovery platform with thr
 - `organiser.startlineau.com` → organiser portal (protects `/organiser/dashboard`, `/organiser/listings`, etc.)
 - `startlineau.com` → customer site (redirects `/organiser/*` and `/admin/*` to organiser subdomain)
 - Dev mode (`NODE_ENV=development`) skips all domain checks — everything runs at `localhost:3000`
-- Dev mode (`NODE_ENV=development`) skips all domain checks — everything runs at `localhost:3000`
 
 ### Auth (Cognito)
 
@@ -81,7 +80,7 @@ Infrastructure is managed via Terraform in `terraform/`:
 
 - Next.js 15 with Turbopack. Use `pnpm dev` to start.
 - `@/*` path alias maps to project root.
-- CSP headers in `next.config.ts` allow Google Maps embeds.
+- CSP headers in `next.config.ts` — currently only `worker-src blob: 'self'` (Google Maps embeds removed with Google Maps API dependency).
 
 ## Testing
 
@@ -177,7 +176,22 @@ When creating GitHub issues, always:
 - Use `gh issue create --repo StartlineAU/startline --label "<label1,label2>" --type "<Bug|Feature|Task>" --assignee "@me"` for new issues
 - Cross-reference **related issues** in the body (`**Related to:** #N`) and use `--add-blocking`/`--add-blocked-by` for dependency relationships
 - Use `--add-sub-issue` and `--parent` for parent-child issue hierarchies
-- After creation, set Priority/Effort via GraphQL — use the issue's GraphQL node ID (`gh issue view <N> --json id`) then `setIssueFieldValue` with field IDs. Available fields: **Priority** (Urgent/High/Medium/Low), **Effort** (High/Medium/Low), **Start date**, **Target date**
+- After creation, set Priority/Effort via GraphQL — `gh issue create` has no native flags for these. Steps:
+  1. Get the issue's GraphQL node ID: `gh issue view <N> --json id --jq '.id'`
+  2. Get field option IDs (one-time discovery):
+     ```
+     Priority options: IFSSO_kgDOBFZBjQ(Urgent), IFSSO_kgDOBFZBjg(High), IFSSO_kgDOBFZBjw(Medium), IFSSO_kgDOBFZBkA(Low)
+     Effort options:   IFSSO_kgDOBFZBkQ(High),   IFSSO_kgDOBFZBkg(Medium), IFSSO_kgDOBFZBkw(Low)
+     ```
+  3. Set fields via mutation:
+     ```bash
+     gh api graphql -f query='
+       mutation {
+         p: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8Qg", singleSelectOptionId: "<OPTION_ID>" } }) { issue { number } }
+         e: updateIssueFieldValue(input: { issueId: "<NODE_ID>", issueField: { fieldId: "IFSS_kgDOAnp8RQ", singleSelectOptionId: "<OPTION_ID>" } }) { issue { number } }
+       }'
+     ```
+  Available fields: **Priority** (Urgent/High/Medium/Low), **Effort** (High/Medium/Low), **Start date**, **Target date**
 
 ## MCP servers
 

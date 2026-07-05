@@ -2,29 +2,20 @@ import { test, expect } from "@playwright/test";
 import { organiserLogin } from "./helpers";
 
 test.describe("organiser login", () => {
-  test("dev bypass login redirects to dashboard", async ({ page }) => {
-    await page.goto("/organiser");
-    await page.waitForLoadState("networkidle");
+  test("signs in via modal and redirects to dashboard", async ({ page }) => {
+    await organiserLogin(page);
 
-    await expect(page.locator("h1")).toContainText("Let");
-    await expect(page.getByText("Organiser Portal", { exact: true })).toBeVisible();
-
-    await page.getByPlaceholder(/events@/i).fill("test.organiser@startlineau.com");
-    await page.locator('input[type="password"]').first().fill("Password123!");
-    await page.getByRole("button", { name: /sign in to portal/i }).click();
-
-    await page.waitForURL("**/organiser/dashboard**", { timeout: 30000 });
     await expect(page.locator("h1")).toContainText("Hi there");
   });
 
-  test("login page renders all form elements", async ({ page }) => {
+  test("landing page renders without sign-in form", async ({ page }) => {
     await page.goto("/organiser");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByPlaceholder(/events@/i)).toBeVisible();
-    await expect(page.locator('input[type="password"]')).toBeVisible();
-    await expect(page.getByRole("button", { name: /sign in to portal/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /apply/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /organiser/i })).toBeVisible();
+    await expect(page.getByText(/sign in to your user account/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /go to startline/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /go to dashboard/i })).toBeVisible();
   });
 });
 
