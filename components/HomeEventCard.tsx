@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { MapPin, Clock, Users } from "lucide-react";
 import type { UserEvent } from "@/types";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
@@ -20,10 +21,12 @@ export default function HomeEventCard({ event }: { event: UserEvent }) {
 
         {/* Image */}
         <div className="relative w-full aspect-video overflow-hidden rounded-t-2xl">
-          <img
+          <Image
             src={img}
             alt={event.title}
-            className="w-full h-full object-cover brightness-[0.55] group-hover:brightness-[0.65] group-hover:scale-105 transition-all duration-700"
+            fill
+            className="pointer-events-none object-cover brightness-[0.55] group-hover:brightness-[0.65] group-hover:scale-105 transition-all duration-700"
+            sizes="(max-width: 640px) 100vw, 33vw"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-dark/60 via-transparent to-transparent" />
 

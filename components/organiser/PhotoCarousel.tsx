@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight, ImageIcon, X, Play } from "lucide-react";
 
 interface Props {
@@ -92,10 +93,12 @@ export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading
                     </div>
                   </>
                 ) : (
-                  <img
+                  <Image
                     src={src}
                     alt={`Photo ${i + 1}`}
-                    className="w-full h-full object-cover group-hover/photo:scale-105 transition-transform duration-300"
+                    fill
+                    className="object-cover group-hover/photo:scale-105 transition-transform duration-300"
+                    sizes="320px"
                   />
                 )}
               </button>
@@ -145,6 +148,7 @@ export default function PhotoCarousel({ photos, isOrganiser, onUpload, uploading
               onClick={e => e.stopPropagation()}
             />
           ) : (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={lightbox}
               alt="Event photo"

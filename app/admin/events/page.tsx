@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
 import { Card } from "@/components/ui/card";
@@ -166,9 +167,9 @@ function EventRow({
       {/* Main row */}
       <div className="flex items-start gap-4 px-5 py-4">
         {/* Cover thumbnail */}
-        <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
+        <div className="relative w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
           {event.coverImageUrl
-            ? <img src={event.coverImageUrl} alt={event.title} className="w-full h-full object-cover" />
+            ? <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover" sizes="56px" />
             : <div className="font-mono text-[9px] text-gray-400 uppercase">{event.discipline.slice(0, 4)}</div>}
         </div>
 

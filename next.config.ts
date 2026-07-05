@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
     // metadataBase is set in layout.tsx but this is the canonical declaration
   },
 
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "*.s3.ap-southeast-2.amazonaws.com", pathname: "/uploads/**" },
+      { protocol: "http", hostname: "localhost", port: "3000", pathname: "/uploads/**" },
+    ],
+  },
+
   async headers() {
     return [
       {

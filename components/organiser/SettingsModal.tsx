@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   X, ChevronRight, Upload, Move, Mail, Phone,
   CheckCircle, User, Lock, Bell, CreditCard, Cookie,
@@ -85,8 +86,8 @@ function CoverEditor({
         onMouseDown={onMouseDown} onMouseMove={onMouseMove}
         onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
       >
-        <img src={imageUrl} alt="Cover" className="w-full h-full object-cover pointer-events-none brightness-[.62] saturate-110"
-          style={{ objectPosition: position }} draggable={false} />
+        <Image src={imageUrl} alt="Cover" fill className="object-cover pointer-events-none brightness-[.62] saturate-110"
+          style={{ objectPosition: position }} draggable={false} sizes="(max-width: 768px) 100vw, 448px" />
         {reposition && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
             <div className="flex items-center gap-1.5 bg-black/60 text-white rounded-lg px-3 py-1.5 font-headline text-[11px] font-bold uppercase tracking-wider">
@@ -164,8 +165,8 @@ function LogoEditor({
         onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
       >
         {imageUrl
-          ? <img src={imageUrl} alt="Logo" className="w-full h-full object-cover pointer-events-none"
-              style={{ objectPosition: position }} draggable={false} />
+          ? <Image src={imageUrl} alt="Logo" fill className="object-cover pointer-events-none"
+              style={{ objectPosition: position }} draggable={false} sizes="96px" />
           : <span className="font-headline font-black italic text-2xl text-dark flex items-center justify-center w-full h-full">{initial}</span>}
         {reposition && imageUrl && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
