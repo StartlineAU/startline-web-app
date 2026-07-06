@@ -1,69 +1,14 @@
-import Link from "next/link";
-import { MapPin, Calendar } from "lucide-react";
-import { EVENT_TYPE_LABELS } from "@/types";
-import { formatShortDate, truncateTitle } from "@/lib/utils";
-import { getEventImage } from "@/lib/images";
 import { getAllEvents } from "@/lib/events";
 import { toUserEvents } from "@/lib/user-events";
 import { getUserSession } from "@/lib/amplify-server";
 import prisma from "@/lib/prisma";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
+import HomeEventCard from "@/components/HomeEventCard";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
 import type { UserEvent } from "@/types";
 
 export const revalidate = 60;
-
-function EventCard({ event }: { event: UserEvent }) {
-  const [day, month] = formatShortDate(event.date).split(" ");
-  const img = getEventImage(event.type, event.id);
-  return (
-    <Link
-      href={`/events/${event.id}`}
-      className="group flex-shrink-0 w-[240px] sm:w-[280px]"
-      style={{ scrollSnapAlign: "start" }}
-    >
-      <div className="relative w-full aspect-[3/4] overflow-hidden bg-dark rounded-2xl sm:rounded-3xl">
-        <img
-          src={img}
-          alt={event.title}
-          className="w-full h-full object-cover brightness-[0.55] group-hover:brightness-[0.7] group-hover:scale-105 transition-all duration-700"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker/90 via-dark-darker/20 to-transparent" />
-
-        <div className="absolute top-3 right-3 bg-dark/80 backdrop-blur-sm rounded-xl px-3 py-2 text-center leading-tight">
-          <span className="block font-headline text-lg font-black text-primary">{day}</span>
-          <span className="block font-headline text-[9px] font-bold uppercase tracking-widest text-light/70">{month}</span>
-        </div>
-
-        <div className="absolute top-3 left-3">
-          <span className="font-headline text-[9px] font-bold uppercase tracking-widest bg-primary text-dark px-2.5 py-1 rounded-full">
-            {EVENT_TYPE_LABELS[event.type]}
-          </span>
-        </div>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h3 className="font-headline text-base sm:text-lg font-black italic tracking-tighter text-light group-hover:text-primary transition-colors leading-tight mb-1.5 line-clamp-2">
-            {truncateTitle(event.title)}
-          </h3>
-          <div className="flex items-center gap-1.5 font-headline text-[10px] text-muted uppercase tracking-widest mb-1">
-            <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
-            {event.city}, {event.state.toUpperCase()}
-          </div>
-          {event.ticketDrops && event.ticketDrops.length > 0 && (
-            <div className="inline-block mt-1.5 bg-primary/15 backdrop-blur-sm rounded-lg px-3 py-1">
-              <span className="font-headline text-[11px] font-bold text-primary">From ${event.ticketDrops[0].price}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-          <div className="absolute -inset-full top-0 h-full w-1/2 skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/5 to-transparent group-hover:animate-shimmer" />
-        </div>
-      </div>
-    </Link>
-  );
-}
 
 function sortByDate(events: UserEvent[]): UserEvent[] {
   return [...events].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -123,7 +68,7 @@ export default async function Home() {
           eyebrow="Trending Now"
           title="Most Popular Events"
         >
-          {events.map((event) => <EventCard key={event.id} event={event} />)}
+          {events.map((event) => <HomeEventCard key={event.id} event={event} />)}
         </ScrollCarousel>
       </section>
 
@@ -134,7 +79,7 @@ export default async function Home() {
             eyebrow="Coming Up"
             title="Starting Soon"
           >
-            {startingSoon.map((event) => <EventCard key={event.id} event={event} />)}
+            {startingSoon.map((event) => <HomeEventCard key={event.id} event={event} />)}
           </ScrollCarousel>
         </section>
       )}
@@ -146,7 +91,7 @@ export default async function Home() {
             eyebrow="Personalised"
             title="Recommended For You"
           >
-            {recommended.map((event) => <EventCard key={event.id} event={event} />)}
+            {recommended.map((event) => <HomeEventCard key={event.id} event={event} />)}
           </ScrollCarousel>
         </section>
       )}

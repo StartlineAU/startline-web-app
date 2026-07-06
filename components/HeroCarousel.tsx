@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 const SLIDES = [
   { url: "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1920&q=80", alt: "Runners racing" },
@@ -31,16 +32,18 @@ export default function HeroCarousel() {
   return (
     <div className="absolute inset-0">
       {SLIDES.map((slide, i) => (
-        <img
+        <Image
           key={slide.url}
           src={slide.url}
           alt={slide.alt}
-          className="absolute inset-0 w-full h-full object-cover"
+          fill
+          className="object-cover"
           style={{
             opacity: i === current ? (fading ? 0 : 1) : 0,
             transition: `opacity ${FADE_MS}ms ease-in-out`,
             filter: "grayscale(40%) brightness(0.45)",
           }}
+          sizes="100vw"
         />
       ))}
       <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/90 via-dark-darker/60 to-dark-darker/20" />

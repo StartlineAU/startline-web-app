@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Search, MapPin, Calendar, X, SlidersHorizontal } from "lucide-react";
 import type { UserEvent, FilterState, EventType, AustralianState, CompetitionFormat } from "@/types";
 import {
@@ -31,10 +32,12 @@ function EventCard({ event, selected, onSelect }: { event: UserEvent; selected: 
       className={`cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${selected ? "ring-2 ring-primary bg-primary/5" : "hover:bg-dark-light/50"}`}
     >
       <div className="relative w-full aspect-[4/3] overflow-hidden bg-dark">
-        <img
+        <Image
           src={img}
           alt={event.title}
-          className="w-full h-full object-cover brightness-75 transition-all duration-500"
+          fill
+          className="pointer-events-none object-cover brightness-75 transition-all duration-500"
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         />
         <div className="absolute top-2.5 left-2.5">
           <span className="font-headline text-[10px] font-bold uppercase tracking-widest bg-primary text-dark px-2 py-1 rounded-full">

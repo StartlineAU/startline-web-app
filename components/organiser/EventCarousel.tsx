@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import Image from "next/image";
 import { MapPin, ChevronLeft, ChevronRight, Bookmark, BookmarkCheck } from "lucide-react";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
@@ -113,7 +114,7 @@ export default function EventCarousel({ events, pinnedIds, isOrganiser, onPin }:
               {/* Cover */}
               <div className="relative h-36 overflow-hidden">
                 {e.coverImageUrl ? (
-                  <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover" />
+                  <Image src={e.coverImageUrl} alt={e.title} fill className="pointer-events-none object-cover" sizes="272px" />
                 ) : (
                   <div className="absolute inset-0 hero-topo scan-grid" />
                 )}

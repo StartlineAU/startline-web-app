@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
 import OrganiserTopBar from "@/components/organiser/TopBar";
 
@@ -174,8 +175,6 @@ export default function EventStatusPage({
   }
 
   const meta       = STATUS_META[event.status];
-  const Icon       = meta.icon;
-  const isPending  = event.status === "PENDING";
   const isRejected = event.status === "REJECTED";
   const isDraft    = event.status === "DRAFT";
 
@@ -196,8 +195,8 @@ export default function EventStatusPage({
           {/* Event header */}
           <div className="flex flex-col lg:flex-row lg:items-start gap-6 mb-8">
             {event.coverImageUrl && (
-              <div className="w-full lg:w-44 h-28 rounded-xl overflow-hidden shrink-0">
-                <img src={event.coverImageUrl} alt={event.title} className="w-full h-full object-cover brightness-[.62] saturate-110" />
+              <div className="relative w-full lg:w-44 h-28 rounded-xl overflow-hidden shrink-0">
+                <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover brightness-[.62] saturate-110" sizes="(max-width: 1024px) 100vw, 176px" />
               </div>
             )}
             <div className="flex-1 min-w-0">

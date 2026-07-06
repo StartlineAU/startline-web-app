@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Plus, MapPin, ArrowRight,
   Edit2, CalendarDays, Facebook,
@@ -187,16 +188,16 @@ export default function ProfilePage() {
           {/* Banner */}
           <div className="relative h-36 sm:h-48 rounded-xl overflow-hidden bg-dark-light mt-4 sm:mt-6">
             {profile.coverImageUrl
-              ? <img src={profile.coverImageUrl} alt="Cover" className="w-full h-full object-cover brightness-[.62] saturate-110" style={{ objectPosition: profile.coverPosition || "50% 50%" }} />
+              ? <Image src={profile.coverImageUrl} alt="Cover" fill className="pointer-events-none object-cover brightness-[.62] saturate-110" style={{ objectPosition: profile.coverPosition || "50% 50%" }} sizes="(max-width: 640px) 100vw, 1200px" />
               : <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #b3e153 0%, transparent 50%), radial-gradient(circle at 80% 20%, #86efac 0%, transparent 40%)" }} />
             }
           </div>
 
           {/* Avatar + name row */}
           <div className="flex items-end gap-4 -mt-[72px] mb-5 relative z-10">
-            <div className="w-[144px] h-[144px] rounded-2xl bg-primary text-dark font-headline font-black italic text-5xl flex items-center justify-center border-4 border-dark-darker shadow-lg overflow-hidden shrink-0">
+            <div className="relative w-[144px] h-[144px] rounded-2xl bg-primary text-dark font-headline font-black italic text-5xl flex items-center justify-center border-4 border-dark-darker shadow-lg overflow-hidden shrink-0">
               {profile.logoUrl
-                ? <img src={profile.logoUrl} alt="Logo" className="w-full h-full object-cover" style={{ objectPosition: profile.logoPosition || "50% 50%" }} />
+                ? <Image src={profile.logoUrl} alt="Logo" fill className="pointer-events-none object-cover" style={{ objectPosition: profile.logoPosition || "50% 50%" }} sizes="144px" />
                 : initial}
             </div>
 
@@ -292,7 +293,7 @@ export default function ProfilePage() {
                           className="group overflow-hidden rounded-xl transition-all duration-200">
                           <div className="relative aspect-[16/10] bg-dark-light overflow-hidden">
                             {e.coverImageUrl
-                              ? <img src={e.coverImageUrl} alt={e.title} className="w-full h-full object-cover brightness-[.62] saturate-110 group-hover:scale-105 transition-transform duration-300" />
+                              ? <Image src={e.coverImageUrl} alt={e.title} fill className="pointer-events-none object-cover brightness-[.62] saturate-110 group-hover:scale-105 transition-transform duration-300" sizes="(max-width: 640px) 100vw, 33vw" />
                               : <div className="absolute inset-0 bg-dark-light flex items-center justify-center">
                                   <span className="font-headline font-black italic text-muted-dark text-4xl tracking-tighter">{e.discipline.slice(0, 4).toUpperCase()}</span>
                                 </div>}
