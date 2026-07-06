@@ -132,7 +132,7 @@ export const IntroScene: React.FC<{ durationInFrames: number }> = ({ durationInF
             opacity: tag.opacity,
           }}
         >
-          Australia's Competitive Fitness Calendar
+          Australia&apos;s Competitive Fitness Calendar
         </div>
 
         {/* Headline */}

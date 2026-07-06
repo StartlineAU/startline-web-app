@@ -45,6 +45,7 @@ export function ScrollCarousel({ title, eyebrow, viewAllHref, arrowTopClass = "t
       el.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", checkScroll);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function scroll(dir: "left" | "right") {

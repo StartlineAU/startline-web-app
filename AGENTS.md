@@ -118,7 +118,7 @@ pnpm test:e2e     # Playwright e2e tests (requires Docker PostgreSQL running)
 - Unit tests in `src/__tests__/`, e2e in `e2e/`.
 - Vitest has `globals: true` — `describe`/`it`/`expect` available without imports.
 - Vitest config defaults `DATABASE_URL` to port **5433**, but local Docker uses port **5434** — tests connecting to DB may need `DATABASE_URL` set explicitly.
-- Playwright uses Chromium, auto-starts `pnpm dev -p 3002` if not already running.
+- Playwright uses Chromium, auto-starts `pnpm dev -p 3000` if not already running.
 - E2E tests authenticate via the non-production Cognito pool (password `Password123!`).
 
 ### E2E test conventions
@@ -183,6 +183,17 @@ The `@modelcontextprotocol/server-github` MCP tool fails for `StartlineAU/startl
 gh issue list --repo StartlineAU/startline
 gh pr list --repo StartlineAU/startline
 ```
+
+### Pre-commit gate
+
+Before staging or committing any change, ALWAYS run:
+```bash
+pnpm lint        # 0 errors, 0 warnings
+pnpm test        # all tests pass
+pnpm test:e2e    # all e2e tests pass (requires Docker PostgreSQL running)
+```
+
+Do not commit or push if any of these fail. Fix failures locally before pushing.
 
 ### PR conventions
 

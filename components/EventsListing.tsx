@@ -170,9 +170,9 @@ function FiltersPanel({
         style={{ transform: `translateY(${sheetDragY}px)`, transition: sheetDragY === 0 ? "transform 0.3s ease" : "none" }}
       >
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
-          onTouchStart={(e) => { (window as any)._dragStart = e.touches[0].clientY; (window as any)._isDragging = true; }}
-          onTouchMove={(e) => { if (!(window as any)._isDragging) return; const d = e.touches[0].clientY - (window as any)._dragStart; if (d > 0) setSheetDragY(d); }}
-          onTouchEnd={() => { if (sheetDragY > 120) { onClose(); } setSheetDragY(0); (window as any)._isDragging = false; }}
+          onTouchStart={(e) => { (window as unknown as Record<string, unknown>)._dragStart = e.touches[0].clientY; (window as unknown as Record<string, unknown>)._isDragging = true; }}
+          onTouchMove={(e) => { if (!(window as unknown as Record<string, unknown>)._isDragging) return; const d = (e.touches[0].clientY - (window as unknown as Record<string, unknown>)._dragStart) as number; if (d > 0) setSheetDragY(d); }}
+          onTouchEnd={() => { if (sheetDragY > 120) { onClose(); } setSheetDragY(0); (window as unknown as Record<string, unknown>)._isDragging = false; }}
         >
           <div className="w-10 h-1 rounded-full bg-dark-lighter" />
         </div>

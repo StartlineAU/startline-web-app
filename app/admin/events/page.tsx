@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
@@ -315,28 +315,22 @@ function AdminEventsContent() {
   const [page,       setPage]       = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const fetchEvents = useCallback(async (status: EventStatus, p = 1) => {
-    setLoading(true);
-    try {
-      const res  = await fetch(`/api/admin/events?status=${status}&page=${p}&limit=50`);
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.events)) {
-        setEvents(data.events);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setEvents([]);
-        setTotal(0);
-        setTotalPages(1);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchEvents(activeTab, 1);
-  }, [activeTab, fetchEvents]);
+    fetch(`/api/admin/events?status=${activeTab}&page=1&limit=50`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && Array.isArray(data.events)) {
+          setEvents(data.events);
+          setTotal(data.total);
+          setTotalPages(data.totalPages);
+        } else {
+          setEvents([]);
+          setTotal(0);
+          setTotalPages(1);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [activeTab]);
 
   const switchTab = (status: EventStatus) => {
     setPage(1);

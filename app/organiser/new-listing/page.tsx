@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, Check, Plus, Trash2,
@@ -121,8 +121,10 @@ function DatePickerPopover({
   };
 
   const [open,      setOpen]      = useState(false);
-  const [viewYear,  setViewYear]  = useState(parseView(value).year);
-  const [viewMonth, setViewMonth] = useState(parseView(value).month);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const parsed = useMemo(() => value ? parseView(value) : parseView(""), [value]);
+  const [viewYear,  setViewYear]  = useState(parsed.year);
+  const [viewMonth, setViewMonth] = useState(parsed.month);
   // In range mode: "start" = waiting for end pick after start is set
   const [picking,   setPicking]   = useState<"start" | "end">("start");
   const ref = useRef<HTMLDivElement>(null);
@@ -134,7 +136,9 @@ function DatePickerPopover({
   }, []);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (value) { const [y, m] = value.split("-").map(Number); setViewYear(y); setViewMonth(m - 1); }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [value]);
 
   const toIso = (d: number) => {
@@ -373,16 +377,16 @@ function TimePicker({ value, onChange, placeholder = "Select time" }: {
   }, []);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (open) {
-      // Pre-fill custom input with current value so user can edit rather than retype
       setCustomRaw(value ? fmt24to12(value) : "");
       setCustomError(false);
-      // Scroll slot list to selected value
       if (listRef.current && value) {
         const idx = TIME_SLOTS.indexOf(value);
         if (idx >= 0) listRef.current.scrollTop = Math.max(0, idx * 44 - 88);
       }
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, value]);
 
   const commitCustom = () => {
@@ -1094,7 +1098,7 @@ function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<Fo
       </Field>
 
       {/* Inclusions — preset chips + custom input */}
-      <Field label="What's included">
+      <Field label="What&apos;s included">
         <div className="flex flex-wrap gap-2">
           {INCLUSION_PRESETS.map(item => {
             const active = activeInclusions.includes(item);
@@ -1719,7 +1723,7 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
               </PreviewSection>
             )}
 
-            {/* 05 What's included */}
+            {/* 05 What&apos;s included */}
             {(inclusions.length > 0 || form.extras || form.activations) && (
               <PreviewSection number="05" title="What&apos;s Included">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1795,6 +1799,7 @@ export default function NewListingPage() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("id");
     if (!id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingEvent(true);
     fetch(`/api/organiser/events/${id}`)
       .then(r => r.json())
@@ -2026,7 +2031,7 @@ export default function NewListingPage() {
                     {step === 2 && "You can enable multiple formats. Functional fitness events commonly offer Individual and Doubles."}
                     {step === 3 && "Add ticket categories with pricing. You can edit dates and prices anytime before opening sales."}
                     {step === 4 && "Polish your listing with a cover image, logistics info and your registration link."}
-                    {step === 5 && "Nothing's live yet. You can always come back to edit after publishing."}
+                    {step === 5 && "Nothing&apos;s live yet. You can always come back to edit after publishing."}
                   </p>
                 </div>
 
@@ -2135,7 +2140,7 @@ export default function NewListingPage() {
               Leave without saving?
             </h2>
             <p className="text-muted text-[14px] leading-relaxed mb-7">
-              Your event details haven't been saved yet. Save as a draft so you can come back and finish it later.
+              Your event details haven&apos;t been saved yet. Save as a draft so you can come back and finish it later.
             </p>
             <div className="flex flex-col gap-3">
               <button

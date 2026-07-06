@@ -20,7 +20,7 @@ export default function ConfirmationPage() {
         </h1>
 
         <p className="text-[13px] text-muted leading-relaxed mb-8">
-          Your payment has been processed and your spot is secured. You'll receive a confirmation email shortly with all the event details.
+          Your payment has been processed and your spot is secured. You&apos;ll receive a confirmation email shortly with all the event details.
         </p>
 
         <div className="flex flex-col gap-3">

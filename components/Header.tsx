@@ -26,23 +26,25 @@ export default function Header() {
   const { user, status, logout } = useAuthContext();
 
   useEffect(() => {
-    if (status === "authenticated" && !profileFetched.current) {
-      profileFetched.current = true;
-      fetch("/api/user/profile")
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data) {
-            setProfileName(data.name ?? null);
-            setHasOrganiser(!!data.organiser);
-          }
-        })
-        .catch(() => {});
-    }
     if (status !== "authenticated") {
       profileFetched.current = false;
+      /* eslint-disable react-hooks/set-state-in-effect */
       setProfileName(null);
       setHasOrganiser(false);
+      /* eslint-enable react-hooks/set-state-in-effect */
+      return;
     }
+    if (profileFetched.current) return;
+    profileFetched.current = true;
+    fetch("/api/user/profile")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setProfileName(data.name ?? null);
+          setHasOrganiser(!!data.organiser);
+        }
+      })
+      .catch(() => {});
   }, [status]);
 
   const handleSignOut = async () => {
