@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-const ADMIN_EMAIL = "admin@starlineau.com";
+const ADMIN_EMAIL = "admin@startlineau.com";
 
 function escapeHtml(value: string): string {
   return value
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
   try {
     await resend.emails.send({
-      from: "StartLine Contact <events@startline.com.au>",
+      from: "StartLine Contact <events@startlineau.com>",
       to: ADMIN_EMAIL,
       replyTo: email,
       subject: `[Contact] ${subject}`,
