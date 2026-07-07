@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:seed": "tsx --env-file=.env --env-file=.env.local prisma/seed.ts"
+    "prisma:seed": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local prisma/seed.ts"
   },
   "dependencies": {
     "@aws-amplify/adapter-nextjs": "^1.7.2",
@@ -58,7 +58,7 @@
     ]
   },
   "prisma": {
-    "seed": "tsx --env-file=.env --env-file=.env.local prisma/seed.ts"
+    "seed": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local prisma/seed.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
