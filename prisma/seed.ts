@@ -1,4 +1,6 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
@@ -9,7 +11,9 @@ import {
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 const PASSWORD = "Password123!";
 
