@@ -25,6 +25,7 @@ export interface PublicEvent {
   level: string;
   categories: unknown;
   waves: unknown;
+  extras: string | null;
   coverImageUrl: string | null;
   registrationType: string;
   registrationUrl: string | null;
@@ -71,6 +72,7 @@ export async function getAllEvents(): Promise<PublicEvent[]> {
         level: true,
         categories: true,
         waves: true,
+        extras: true,
         coverImageUrl: true,
         registrationType: true,
         registrationUrl: true,

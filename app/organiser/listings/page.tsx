@@ -147,18 +147,12 @@ export default function ListingsPage() {
   const [sortField,  setSortField]  = useState<SortField>("status");
   const [sortDir,    setSortDir]    = useState<SortDir>("asc");
 
-  const fetchEvents = async () => {
-    setLoading(true);
-    try {
-      const res  = await fetch("/api/organiser/events");
-      const data = await res.json();
-      if (res.ok) setEvents(Array.isArray(data) ? data : []);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    fetch("/api/organiser/events")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setEvents(Array.isArray(data) ? data : []); })
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");

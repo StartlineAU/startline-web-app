@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CheckCircle, Bell } from "lucide-react";
 import { addRegisteredInterest, getRegisteredEventIds } from "@/lib/client-lists";
 
@@ -11,12 +11,8 @@ interface RegisterInterestButtonProps {
 }
 
 export default function RegisterInterestButton({ eventId }: RegisterInterestButtonProps) {
-  const [registered, setRegistered] = useState(false);
+  const [registered, setRegistered] = useState(() => getRegisteredEventIds().includes(eventId));
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setRegistered(getRegisteredEventIds().includes(eventId));
-  }, [eventId]);
 
   function handleRegister() {
     if (registered) return;

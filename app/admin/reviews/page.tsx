@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Star, Eye, EyeOff, BadgeCheck, Trash2, RefreshCw } from "lucide-react";
 import AdminNav from "@/components/admin/AdminNav";
@@ -171,18 +171,12 @@ function AdminReviewsContent() {
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchReviews = useCallback(async (filter: Filter) => {
-    setLoading(true);
-    try {
-      const res  = await fetch(`/api/admin/reviews?filter=${filter}`);
-      const data = await res.json();
-      setReviews(res.ok && Array.isArray(data) ? data : []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchReviews(activeFilter); }, [activeFilter, fetchReviews]);
+  useEffect(() => {
+    fetch(`/api/admin/reviews?filter=${activeFilter}`)
+      .then(r => r.json())
+      .then(data => { setReviews(Array.isArray(data) ? data : []); })
+      .finally(() => setLoading(false));
+  }, [activeFilter]);
 
   const switchFilter = (filter: Filter) => {
     router.push(`/admin/reviews?filter=${filter}`, { scroll: false });

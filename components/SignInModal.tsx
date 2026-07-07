@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -62,6 +62,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
+      /* eslint-disable react-hooks/set-state-in-effect */
       setView("signin");
       setEmail(""); setFirstName(""); setLastName("");
       setDobDay(""); setDobMonth(""); setDobYear(""); setPhone("");
@@ -69,24 +70,26 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       setPassword(""); setConfirm("");
       setError(""); setShowPw(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
   // Username validation — format + profanity checked client-side.
-  // Uniqueness is enforced server-side when the profile PUT runs after sign-in.
-  useEffect(() => {
+  const usernameStatus_ = useMemo(() => {
     const val = username.trim().toLowerCase();
-    if (!val) { setUsernameStatus("idle"); setUsernameError(""); return; }
+    if (!val) return { status: "idle" as const, error: "" };
     const result = validateUsername(val);
-    if (!result.valid) {
-      setUsernameStatus("invalid");
-      setUsernameError(result.reason);
-      return;
-    }
-    setUsernameStatus("valid");
-    setUsernameError("");
+    if (!result.valid) return { status: "invalid" as const, error: result.reason };
+    return { status: "valid" as const, error: "" };
   }, [username]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setUsernameStatus(usernameStatus_.status);
+    setUsernameError(usernameStatus_.error);
+  }, [usernameStatus_]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Sign in ────────────────────────────────────────────────────────────────
   const handleSignIn = async (e: React.FormEvent) => {

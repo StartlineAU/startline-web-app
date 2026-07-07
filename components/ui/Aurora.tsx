@@ -119,6 +119,7 @@ export default function Aurora({
   speed      = 1.0,
 }: AuroraProps) {
   const propsRef = useRef({ colorStops, amplitude, blend, speed });
+  // eslint-disable-next-line react-hooks/refs
   propsRef.current = { colorStops, amplitude, blend, speed };
 
   const ctnRef = useRef<HTMLDivElement>(null);
@@ -134,6 +135,7 @@ export default function Aurora({
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.canvas.style.backgroundColor = "transparent";
 
+    // eslint-disable-next-line prefer-const
     let program: Program;
 
     const resize = () => {

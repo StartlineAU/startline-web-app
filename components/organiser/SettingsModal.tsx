@@ -236,7 +236,6 @@ function PersonalInfoForm() {
   const coverRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setLoadingForm(true);
     fetch("/api/organiser/profile")
       .then(r => r.ok ? r.json() : null)
       .then(data => {

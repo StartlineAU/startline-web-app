@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import type { UserEvent } from "@/types";
@@ -63,44 +63,43 @@ function EmptyState({ tab }: { tab: "registered" | "saved" }) {
 
 export default function ActivityPage() {
   const [activeTab, setActiveTab] = useState<"registered" | "saved">("registered");
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [registeredIds, setRegisteredIds] = useState<string[]>([]);
+  const [savedIds, setSavedIds] = useState(() => getSavedEventIds());
+  const [registeredIds, setRegisteredIds] = useState(() => getRegisteredEventIds());
   const [events, setEvents] = useState<UserEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
 
-  const loadEvents = useCallback(async () => {
-    setEventsLoading(true);
-    try {
-      setSavedIds(getSavedEventIds());
-      setRegisteredIds(getRegisteredEventIds());
-      const eventsRes = await fetch("/api/events");
-      const eventsData = eventsRes.ok ? await eventsRes.json() : [];
-      setEvents(Array.isArray(eventsData) ? toUserEvents(eventsData) : []);
-    } catch {
-      // silent
-    } finally {
-      setEventsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
+    fetch("/api/events")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setEvents(Array.isArray(data) ? toUserEvents(data) : []); })
+      .catch(() => {})
+      .finally(() => setEventsLoading(false));
 
-  useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === "startline_saved_events" || e.key === "startline_registered_interest") {
-        loadEvents();
+        setSavedIds(getSavedEventIds());
+        setRegisteredIds(getRegisteredEventIds());
+        fetch("/api/events")
+          .then(r => r.ok ? r.json() : [])
+          .then(data => { setEvents(Array.isArray(data) ? toUserEvents(data) : []); })
+          .catch(() => {});
       }
     }
-    function onLocalChange() { loadEvents(); }
+    function onLocalChange() {
+      setSavedIds(getSavedEventIds());
+      setRegisteredIds(getRegisteredEventIds());
+      fetch("/api/events")
+        .then(r => r.ok ? r.json() : [])
+        .then(data => { setEvents(Array.isArray(data) ? toUserEvents(data) : []); })
+        .catch(() => {});
+    }
     window.addEventListener("storage", onStorage);
     window.addEventListener("startline-lists-changed", onLocalChange);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("startline-lists-changed", onLocalChange);
     };
-  }, [loadEvents]);
+  }, []);
 
   const savedEvents = events.filter((e) => savedIds.includes(String(e.id)));
   const registeredEvents = events.filter((e) => registeredIds.includes(String(e.id)));

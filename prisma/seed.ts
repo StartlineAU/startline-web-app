@@ -206,7 +206,7 @@ async function main() {
       cap: 320, minAge: 16,
       waves: [{ label: "Early Bird", date: "2026-05-01", price: "95", qty: 80 }, { label: "General", date: "2026-06-15", price: "115", qty: 150 }, { label: "Late Entry", date: "2026-07-31", price: "135", qty: 90 }],
       inclusions: "Event t-shirt, finisher medal, post-event party, online score tracking",
-      extras: "Spectator tickets $15/day. Parking $12/day.", activations: "Vendor expo Friday evening.",
+      extras: "Prize pool: 8,000 — Awarded to podium finishers per division", activations: "Vendor expo Friday evening.",
       refundPolicy: "Moderate", registrationType: "startline", feeStructure: "athlete",
       coverImageUrl: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1200&q=80",
       bagDrop: "Bag drop at Gate 3 from 6:45am.", parking: "MSAC car park $12/day.", accessibilityInfo: "Wheelchair accessible venue.",

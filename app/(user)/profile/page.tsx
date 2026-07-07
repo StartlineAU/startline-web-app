@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { MapPin, Calendar, Check, X, AlertCircle } from "lucide-react";
@@ -54,31 +54,42 @@ export default function ProfilePage() {
   const [usernameError, setUsernameError] = useState("");
   const checkTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
-  useEffect(() => {
-    if (checkTimer.current) clearTimeout(checkTimer.current);
+  const usernameValidation = useMemo(() => {
     const val = editUsername.trim().toLowerCase();
-    if (!val || val === userData?.username) { setUsernameStatus("idle"); setUsernameError(""); return; }
-    if (val.length < 3) { setUsernameStatus("invalid"); setUsernameError("Username must be at least 3 characters."); return; }
-    if (val.length > 30) { setUsernameStatus("invalid"); setUsernameError("Username must be 30 characters or less."); return; }
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(val)) { setUsernameStatus("invalid"); setUsernameError("Only lowercase letters, numbers, and hyphens allowed."); return; }
+    if (!val || val === userData?.username) return { status: "idle" as const, error: "" };
+    if (val.length < 3) return { status: "invalid" as const, error: "Username must be at least 3 characters." };
+    if (val.length > 30) return { status: "invalid" as const, error: "Username must be 30 characters or less." };
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(val)) return { status: "invalid" as const, error: "Only lowercase letters, numbers, and hyphens allowed." };
+    return null;
+  }, [editUsername, userData?.username]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (usernameValidation) { setUsernameStatus(usernameValidation.status); setUsernameError(usernameValidation.error); return; }
     setUsernameStatus("checking");
+    if (checkTimer.current) clearTimeout(checkTimer.current);
     checkTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/user/profile/check-username?username=${encodeURIComponent(val)}`);
+        const res = await fetch(`/api/user/profile/check-username?username=${encodeURIComponent(editUsername.trim().toLowerCase())}`);
         const data = await res.json();
         if (data.available) { setUsernameStatus("valid"); setUsernameError(""); }
         else { setUsernameStatus("invalid"); setUsernameError(data.error || "This username is already taken."); }
       } catch { setUsernameStatus("idle"); setUsernameError(""); }
     }, 400);
     return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
-  }, [editUsername, userData?.username]);
+  }, [usernameValidation, editUsername, userData?.username]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  const loadProfile = useCallback(async () => {
-    setProfileLoading(true);
-    try {
-      const res = await fetch("/api/user/profile");
-      if (res.ok) {
-        const data = await res.json();
+  useEffect(() => {
+    if (status !== "authenticated") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProfileLoading(false);
+      return;
+    }
+    fetch("/api/user/profile")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
         setUserData(data);
         setEditName(data.name ?? "");
         setEditUsername(data.username ?? "");
@@ -86,18 +97,10 @@ export default function ProfilePage() {
         setEditIsPublic(data.isPublic);
         setEditCity(data.city ?? "");
         setEditState(data.state ?? "");
-      }
-    } catch {
-      // silent
-    } finally {
-      setProfileLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (status === "authenticated") loadProfile();
-    else setProfileLoading(false);
-  }, [status, loadProfile]);
+      })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false));
+  }, [status]);
 
   const handleSaveProfile = async () => {
     setEditSaving(true);
