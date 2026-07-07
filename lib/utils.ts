@@ -33,6 +33,12 @@ export function formatCompetitionFormat(format: string): string {
   return "Individual";
 }
 
+export function formatExperienceLevel(level: string): string {
+  if (level === "elite")   return "Elite";
+  if (level === "beginner") return "Beginner";
+  return "Open";
+}
+
 function isOnOrAfterToday(dateString: string, today: Date): boolean {
   const eventDate = parseISO(dateString);
   return isAfter(eventDate, today) ||
