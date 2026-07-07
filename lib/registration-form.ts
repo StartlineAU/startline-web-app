@@ -297,3 +297,23 @@ export function validateParticipants(
 export function validateRegistrationForm(data: RegistrationFormData): string | null {
   return validateParticipants([data]).firstMessage;
 }
+
+export function normalizeGuestEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export function getEmailsRequiringVerification(
+  participantEmails: string[],
+  authenticatedEmail?: string | null
+): string[] {
+  const unique = [...new Set(
+    participantEmails
+      .map(normalizeGuestEmail)
+      .filter((email) => email.length > 0)
+  )];
+
+  if (!authenticatedEmail) return unique;
+
+  const accountEmail = normalizeGuestEmail(authenticatedEmail);
+  return unique.filter((email) => email !== accountEmail);
+}

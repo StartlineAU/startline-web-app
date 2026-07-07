@@ -22,8 +22,8 @@ import {
   type RegistrationFormField,
   type EmergencyContact,
   type EmergencyContactErrors,
+  getEmailsRequiringVerification,
 } from "@/lib/registration-form";
-import { getEmailsRequiringVerification } from "@/lib/guest-email-verification";
 
 const StripePaymentSection = dynamic(() => import("./stripe-payment"), { ssr: false });
 

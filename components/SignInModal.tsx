@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { X, Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, ChevronDown, Check, AtSign } from "lucide-react";
-import { signIn, signUp, signOut } from "aws-amplify/auth";
+import { X, Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, ChevronDown, Check, AtSign, ShieldAlert } from "lucide-react";
+import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
 
@@ -50,6 +50,17 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [usernameStatus,  setUsernameStatus]  = useState<"idle" | "checking" | "valid" | "invalid">("idle");
   const [usernameError,   setUsernameError]   = useState("");
 
+  // Two‑step sign‑in state
+  const [checkingEmail,   setCheckingEmail]   = useState(false);
+  const [userExists,      setUserExists]      = useState<boolean | null>(null);
+  const [userStatus,      setUserStatus]      = useState<string | null>(null);
+  const [resetCode,       setResetCode]       = useState("");
+  const [newPassword,     setNewPassword]     = useState("");
+  const [newPwConfirm,    setNewPwConfirm]    = useState("");
+  const [resetSent,       setResetSent]       = useState(false);
+  const [newPwStep,       setNewPwStep]       = useState<"initial" | "sent" | "done">("initial");
+  // When signIn returned CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED
+  const [challengeFlow,   setChallengeFlow]   = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -71,6 +82,9 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setPassword(""); setConfirm("");
       setError(""); setShowPw(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
+      setCheckingEmail(false); setUserExists(null); setUserStatus(null);
+      setResetCode(""); setNewPassword(""); setNewPwConfirm("");
+      setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
       /* eslint-enable react-hooks/set-state-in-effect */
     }
     return () => { document.body.style.overflow = ""; };
@@ -92,6 +106,38 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   }, [usernameStatus_]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // ── Email check ─────────────────────────────────────────────────────────────
+  const handleCheckEmail = async () => {
+    setError("");
+    if (!email.includes("@")) { setError("Please enter a valid email."); return; }
+    setCheckingEmail(true);
+    try {
+      const res = await fetch("/api/user/exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!data.exists) {
+        setUserExists(false);
+        setUserStatus(null);
+      } else {
+        setUserExists(true);
+        setUserStatus(data.status);
+        if (data.status === "CONFIRMED") {
+          // Show password field — signInStep is implicitly "password" via userExists + userStatus
+        } else {
+          // FORCE_CHANGE_PASSWORD or RESET_REQUIRED → start reset flow
+          setNewPwStep("initial");
+        }
+      }
+    } catch {
+      setError("Could not verify email. Please try again.");
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   // ── Sign in ────────────────────────────────────────────────────────────────
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +152,13 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       }
       if (result.nextStep.signInStep === "RESET_PASSWORD") {
         onClose(); router.push("/customer/forgot-password?email=" + encodeURIComponent(email)); return;
+      }
+      if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+        setPassword("");
+        setNewPassword("");
+        setNewPwConfirm("");
+        setChallengeFlow(true);
+        return;
       }
       if (result.nextStep.signInStep !== "DONE") {
         setError("Additional verification required. Please contact support."); return;
@@ -152,6 +205,96 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     }
   };
 
+  // ── Handle new‑password challenge from sign-in ──────────────────────────────
+  const handleConfirmNewPassword = async () => {
+    setError("");
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (newPassword !== newPwConfirm) { setError("Passwords do not match."); return; }
+    setLoading(true);
+    try {
+      const result = await confirmSignIn({ challengeResponse: newPassword });
+
+      if (result.nextStep.signInStep !== "DONE") {
+        setError("Something went wrong. Please try again."); return;
+      }
+
+      await fetch("/api/user/auth/session", { method: "POST" });
+      await refresh();
+      onSuccess?.();
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to set password.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Handle in‑modal password reset (FORCE_CHANGE_PASSWORD) ──────────────────
+  const handleStartReset = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await resetPassword({ username: email });
+      setResetSent(true);
+      setNewPwStep("sent");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send reset code.";
+      if (msg.includes("LimitExceededException")) {
+        setError("Too many attempts. Please try again later.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteReset = async () => {
+    setError("");
+    if (resetCode.length < 6) { setError("Please enter the full verification code."); return; }
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (newPassword !== newPwConfirm) { setError("Passwords do not match."); return; }
+    setLoading(true);
+    try {
+      await confirmResetPassword({
+        username: email,
+        confirmationCode: resetCode,
+        newPassword,
+      });
+      // Sign in immediately with the new password
+      setPassword(newPassword);
+      setError("");
+      try {
+        await signOut({ global: false }).catch(() => {});
+        const result = await signIn({ username: email, password: newPassword });
+        if (result.nextStep.signInStep === "DONE") {
+          await fetch("/api/user/auth/session", { method: "POST" });
+          await refresh();
+          onSuccess?.();
+          onClose();
+          return;
+        }
+      } catch {}
+      // Fallback: show the password field
+      setUserStatus("CONFIRMED");
+      setNewPwStep("done");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to reset password.";
+      if (msg.includes("CodeMismatchException")) {
+        setError("That code is incorrect.");
+      } else if (msg.includes("ExpiredCodeException")) {
+        setError("That code has expired. Please request a new one.");
+      } else if (msg.includes("InvalidPasswordException")) {
+        setError("Password must be at least 8 characters with upper, lower and a number.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── Sign up step 1 ─────────────────────────────────────────────────────────
   const handleSignUp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,7 +335,6 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     if (!phone.trim()) { setError("Please enter your phone number."); return; }
     if (!acceptedTerms) { setError("You must accept the Terms & Conditions and Privacy Policy to continue."); return; }
 
-    // Normalise to E.164 — accept 04xx, 03xx, +61, 61 formats
     const rawPhone  = phone.trim().replace(/[\s\-()]/g, "");
     const e164Phone = rawPhone.startsWith("0")
       ? "+61" + rawPhone.slice(1)
@@ -218,7 +360,6 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
           },
         },
       });
-      // Store for profile update after email verification + sign-in
       try {
         sessionStorage.setItem("startline_pending_name",  fullName);
         sessionStorage.setItem("startline_pending_dob",   isoDate);
@@ -252,6 +393,18 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
 
   const switchView = (v: "signin" | "signup") => {
     setView(v); setError(""); setPassword(""); setConfirm("");
+    setCheckingEmail(false); setUserExists(null); setUserStatus(null);
+    setResetCode(""); setNewPassword(""); setNewPwConfirm("");
+    setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
+  };
+
+  const goBackToEmail = () => {
+    setUserExists(null);
+    setUserStatus(null);
+    setPassword("");
+    setError("");
+    setResetCode(""); setNewPassword(""); setNewPwConfirm("");
+    setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
   };
 
   const dobDayRef   = useRef<HTMLInputElement>(null);
@@ -298,27 +451,90 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
           </button>
         )}
 
-        {/* ── Sign In ── */}
-        {view === "signin" && (
+        {/* ── Sign In – Email step ── */}
+        {view === "signin" && userExists === null && !challengeFlow && (
           <>
             <div className="mb-6">
               <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
                 Welcome<br /><span className="text-primary">back.</span>
               </h2>
-              <p className="text-muted text-[14px] leading-relaxed">Sign in to track your events, saved races and registrations.</p>
+              <p className="text-muted text-[14px] leading-relaxed">Enter your email to get started.</p>
+            </div>
+
+            {error && <div className={errCls}>{error}</div>}
+
+            <form onSubmit={(e) => { e.preventDefault(); handleCheckEmail(); }} className="space-y-4">
+              <div>
+                <label className={labelCls}>Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className={inputCls}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <button type="submit" disabled={checkingEmail} className={btnCls}>
+                {checkingEmail ? (
+                  <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Checking…</>
+                ) : (
+                  <>Continue <ArrowRight className="w-4 h-4" /></>
+                )}
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* ── Sign In – No account found ── */}
+        {view === "signin" && userExists === false && (
+          <>
+            <div className="mb-6">
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
+              <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
+                No account<br /><span className="text-primary">found.</span>
+              </h2>
+              <p className="text-muted text-[14px] leading-relaxed">
+                No account exists with <strong className="text-light">{email}</strong>. Would you like to create one?
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <button onClick={() => switchView("signup")} className={btnCls}>
+                Create account <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={goBackToEmail}
+                className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1"
+              >
+                Use a different email
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Sign In – Password step ── */}
+        {view === "signin" && userExists === true && userStatus === "CONFIRMED" && !challengeFlow && (
+          <>
+            <div className="mb-6">
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
+              <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
+                Welcome<br /><span className="text-primary">back.</span>
+              </h2>
+              <p className="text-muted text-[14px] leading-relaxed">
+                Sign in as <strong className="text-light">{email}</strong>
+              </p>
             </div>
 
             {error && <div className={errCls}>{error}</div>}
 
             <form onSubmit={handleSignIn} className="space-y-4">
-              <div>
-                <label className={labelCls}>Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={inputCls} />
-                </div>
-              </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">Password</label>
@@ -326,7 +542,15 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                  <input type={showPw ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••" className={inputCls + " pr-11"} />
+                  <input
+                    type={showPw ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••"
+                    className={inputCls + " pr-11"}
+                    autoFocus
+                  />
                   <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -334,6 +558,167 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
               </div>
               <button type="submit" disabled={loading} className={btnCls}>
                 {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Signing in…</> : <>Sign in <ArrowRight className="w-4 h-4" /></>}
+              </button>
+              <button type="button" onClick={goBackToEmail} className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1">
+                Use a different email
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* ── Sign In – New password required (FORCE_CHANGE_PASSWORD) ── */}
+        {view === "signin" && userExists === true && userStatus !== "CONFIRMED" && !challengeFlow && (
+          <>
+            <div className="mb-6">
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Finish Setup</span>
+              <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
+                {newPwStep === "done" ? "Password<br /><span className='text-primary'>set.</span>" : "Set your<br /><span className='text-primary'>password.</span>"}
+              </h2>
+              <p className="text-muted text-[14px] leading-relaxed">
+                {newPwStep === "initial" && "Your account was created automatically. Let's set a password so you can sign in."}
+                {newPwStep === "sent" && "A verification code was sent to your email. Enter it below along with your new password."}
+                {newPwStep === "done" && "Password set successfully. You can now sign in."}
+              </p>
+            </div>
+
+            {error && <div className={errCls}>{error}</div>}
+
+            {newPwStep === "initial" && (
+              <button onClick={handleStartReset} disabled={loading} className={btnCls}>
+                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Sending code…</> : <>Send verification code <ArrowRight className="w-4 h-4" /></>}
+              </button>
+            )}
+
+            {newPwStep === "sent" && (
+              <form onSubmit={(e) => { e.preventDefault(); handleCompleteReset(); }} className="space-y-3">
+                <div>
+                  <label className={labelCls}>Verification Code</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      required
+                      value={resetCode}
+                      onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      className={inputCls + " tracking-[0.5em] text-center font-bold"}
+                      autoFocus
+                    />
+                  </div>
+                  <p className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-1">Enter the 6-digit code sent to {email}</p>
+                </div>
+                <div>
+                  <label className={labelCls}>New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                    <input
+                      type={showPw ? "text" : "password"}
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Min 8 characters"
+                      className={inputCls + " pr-11"}
+                    />
+                    <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
+                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Confirm Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                    <input
+                      type={showPw ? "text" : "password"}
+                      required
+                      value={newPwConfirm}
+                      onChange={(e) => setNewPwConfirm(e.target.value)}
+                      placeholder="Re-enter password"
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <button type="submit" disabled={loading || resetCode.length < 6} className={btnCls}>
+                  {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Setting password…</> : <>Set password <ArrowRight className="w-4 h-4" /></>}
+                </button>
+                <button type="button" onClick={handleStartReset} disabled={loading} className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1">
+                  Resend code
+                </button>
+              </form>
+            )}
+
+            {newPwStep === "done" && (
+              <div className="space-y-3">
+                <div className="px-3 py-2.5 rounded-md bg-green-900/20 border border-green-500/30 text-green-400 font-headline text-[13px] flex items-center gap-2">
+                  <Check className="w-4 h-4 flex-shrink-0" />
+                  Password set successfully. Sign in with your new password.
+                </div>
+                <button
+                  onClick={() => { setUserStatus("CONFIRMED"); setPassword(newPassword); setNewPwStep("done"); }}
+                  className={btnCls}
+                >
+                  Sign in <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {(newPwStep === "initial" || newPwStep === "sent") && (
+              <button type="button" onClick={goBackToEmail} className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1 mt-2">
+                Use a different email
+              </button>
+            )}
+          </>
+        )}
+
+        {/* ── Sign In – New password challenge (CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED) ── */}
+        {view === "signin" && challengeFlow && (
+          <>
+            <div className="mb-6">
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Set New Password</span>
+              <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
+                Update your<br /><span className="text-primary">password.</span>
+              </h2>
+              <p className="text-muted text-[14px] leading-relaxed">Your account requires a new password before you can sign in.</p>
+            </div>
+
+            {error && <div className={errCls}>{error}</div>}
+
+            <form onSubmit={(e) => { e.preventDefault(); handleConfirmNewPassword(); }} className="space-y-3">
+              <div>
+                <label className={labelCls}>New Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                  <input
+                    type={showPw ? "text" : "password"}
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min 8 characters"
+                    className={inputCls + " pr-11"}
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
+                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                  <input
+                    type={showPw ? "text" : "password"}
+                    required
+                    value={newPwConfirm}
+                    onChange={(e) => setNewPwConfirm(e.target.value)}
+                    placeholder="Re-enter password"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <button type="submit" disabled={loading} className={btnCls}>
+                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Updating…</> : <>Set password <ArrowRight className="w-4 h-4" /></>}
               </button>
             </form>
           </>

@@ -1,31 +1,12 @@
 import { createHash, randomInt } from "crypto";
 import prisma from "@/lib/prisma";
 import { sendGuestRegistrationVerificationEmail } from "@/lib/email";
+import { normalizeGuestEmail } from "@/lib/registration-form";
 
 export const GUEST_EMAIL_CODE_TTL_MS = 15 * 60 * 1000;
 export const GUEST_EMAIL_VERIFICATION_VALID_MS = 2 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 60 * 1000;
-
-export function normalizeGuestEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-export function getEmailsRequiringVerification(
-  participantEmails: string[],
-  authenticatedEmail?: string | null
-): string[] {
-  const unique = [...new Set(
-    participantEmails
-      .map(normalizeGuestEmail)
-      .filter((email) => email.length > 0)
-  )];
-
-  if (!authenticatedEmail) return unique;
-
-  const accountEmail = normalizeGuestEmail(authenticatedEmail);
-  return unique.filter((email) => email !== accountEmail);
-}
 
 export function generateVerificationCode(): string {
   return String(randomInt(100000, 1000000));

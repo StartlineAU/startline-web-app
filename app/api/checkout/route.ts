@@ -13,6 +13,8 @@ import {
 } from "@/lib/registration-form";
 import {
   getEmailsRequiringVerification,
+} from "@/lib/registration-form";
+import {
   assertGuestEmailsVerifiedForCheckout,
 } from "@/lib/guest-email-verification";
 
@@ -90,8 +92,11 @@ export async function POST(req: NextRequest) {
     if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
     if (event.status !== "APPROVED") return NextResponse.json({ error: "This event is not currently accepting registrations." }, { status: 409 });
     if (event.registrationType !== "startline") return NextResponse.json({ error: "This event uses external registration." }, { status: 400 });
+    const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
     if (!event.organiser.stripeOnboardingComplete || !event.organiser.stripeAccountId) {
-      return NextResponse.json({ error: "This event is not ready to accept payments." }, { status: 409 });
+      if (!isDirectCharge) {
+        return NextResponse.json({ error: "This event is not ready to accept payments." }, { status: 409 });
+      }
     }
 
     const waves = event.waves as { label: string; price: string; qty?: number }[] | null;
@@ -140,7 +145,9 @@ export async function POST(req: NextRequest) {
       amount: totalCents,
       currency: "aud",
       application_fee_amount: platformFeeCents,
-      transfer_data: { destination: event.organiser.stripeAccountId! },
+      ...(event.organiser.stripeAccountId && !isDirectCharge
+        ? { transfer_data: { destination: event.organiser.stripeAccountId } }
+        : {}),
       metadata: {
         eventId,
         waveLabel,
