@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from "vitest";
-import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, formatExperienceLevel, truncateTitle, filterEvents, sortEventsByDate, getUpcomingEvents, getTotalUpcomingEvents } from "@/lib/utils";
+import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, truncateTitle, filterEvents, sortEventsByDate, getUpcomingEvents, getTotalUpcomingEvents } from "@/lib/utils";
 import { addDays, format } from "date-fns";
 import type { UserEvent, FilterState } from "@/types";
 
@@ -68,13 +68,7 @@ describe("formatCompetitionFormat", () => {
   });
 });
 
-describe("formatExperienceLevel", () => {
-  it("capitalises level labels", () => {
-    expect(formatExperienceLevel("elite")).toBe("Elite");
-    expect(formatExperienceLevel("beginner")).toBe("Beginner");
-    expect(formatExperienceLevel("open")).toBe("Open");
-  });
-});
+
 
 describe("truncateTitle", () => {
   it("returns the full title when short enough", () => {

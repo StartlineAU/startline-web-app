@@ -1,6 +1,5 @@
-import type { PublicEvent } from "@/lib/events";
+import { type PublicEvent, lowestPrice } from "@/lib/event-types";
 import type { UserEvent, TicketDrop, EventType, AustralianState } from "@/types";
-import { getEventImage } from "@/lib/images";
 
 function mapDiscipline(discipline: string): EventType {
   const d = discipline.toLowerCase();
@@ -34,14 +33,6 @@ function parseWaves(waves: unknown): TicketDrop[] {
   return waves as TicketDrop[];
 }
 
-function lowestPrice(waves: unknown): number | null {
-  if (!Array.isArray(waves)) return null;
-  const prices = (waves as TicketDrop[])
-    .map((w) => parseFloat(w?.price ?? ""))
-    .filter((n) => Number.isFinite(n));
-  return prices.length ? Math.min(...prices) : null;
-}
-
 export function toUserEvent(event: PublicEvent): UserEvent {
   const type = mapDiscipline(event.discipline);
   const waves = event.waves ?? [];
@@ -61,7 +52,7 @@ export function toUserEvent(event: PublicEvent): UserEvent {
     type,
     format: event.format,
     level: event.level,
-    image: event.coverImageUrl ?? getEventImage(type, event.id),
+    image: event.coverImageUrl ?? "/images/placeholder-event.svg",
     registrationUrl: event.registrationUrl,
     registrationType: event.registrationType,
     feeStructure: event.feeStructure,

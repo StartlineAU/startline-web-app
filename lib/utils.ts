@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
-import type { UserEvent, FilterState, AustralianState } from "@/types";
+import type { UserEvent, FilterState } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -31,12 +31,6 @@ export function formatCompetitionFormat(format: string): string {
   if (format === "team") return "Team";
   if (format === "both") return "Individual & Team";
   return "Individual";
-}
-
-export function formatExperienceLevel(level: string): string {
-  if (level === "elite")   return "Elite";
-  if (level === "beginner") return "Beginner";
-  return "Open";
 }
 
 function isOnOrAfterToday(dateString: string, today: Date): boolean {
@@ -94,26 +88,6 @@ export function getUpcomingEvents(events: UserEvent[], limit = 10): UserEvent[] 
   const today = startOfDay(new Date());
   const upcoming = events.filter((e) => isOnOrAfterToday(e.date, today));
   return sortEventsByDate(upcoming).slice(0, limit);
-}
-
-export function getEventsByState(events: UserEvent[]): Record<AustralianState, number> {
-  const today = startOfDay(new Date());
-  const counts: Record<AustralianState, number> = {
-    nsw: 0, vic: 0, qld: 0, wa: 0, sa: 0, tas: 0, act: 0, nt: 0,
-  };
-  for (const event of events) {
-    if (isOnOrAfterToday(event.date, today)) counts[event.state]++;
-  }
-  return counts;
-}
-
-export function getEventsByType(events: UserEvent[]): Record<string, number> {
-  const today = startOfDay(new Date());
-  const counts: Record<string, number> = { crossfit: 0, running: 0, hybrid: 0, swimming: 0, cycling: 0, triathlon: 0, duathlon: 0, weightlifting: 0, bodybuilding: 0 };
-  for (const event of events) {
-    if (isOnOrAfterToday(event.date, today)) counts[event.type]++;
-  }
-  return counts;
 }
 
 export function getTotalUpcomingEvents(events: UserEvent[]): number {
