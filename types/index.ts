@@ -4,10 +4,7 @@ export type EventType =
   | "hybrid"
   | "swimming"
   | "cycling"
-  | "triathlon"
-  | "duathlon"
-  | "weightlifting"
-  | "bodybuilding";
+  | "triathlon";
 
 export type AustralianState =
   | "nsw"
@@ -91,9 +88,7 @@ export const EVENT_TYPE_OPTIONS: EventTypeOption[] = [
   { value: "swimming",       label: "Swimming",                   shortLabel: "Swimming" },
   { value: "cycling",        label: "Cycling",                    shortLabel: "Cycling" },
   { value: "triathlon",      label: "Triathlon",                  shortLabel: "Triathlon" },
-  { value: "duathlon",       label: "Duathlon",                   shortLabel: "Duathlon" },
-  { value: "weightlifting",  label: "Weightlifting",              shortLabel: "Weightlifting" },
-  { value: "bodybuilding",   label: "Body Building",              shortLabel: "Body Building" },
+
 ];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
@@ -103,9 +98,7 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   swimming:         "Swimming",
   cycling:          "Cycling",
   triathlon:        "Triathlon",
-  duathlon:         "Duathlon",
-  weightlifting:    "Weightlifting",
-  bodybuilding:     "Body Building",
+
 };
 
 export interface StateOption {
