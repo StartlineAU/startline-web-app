@@ -59,6 +59,8 @@ pnpm prisma:seed                  # seed test data (runs locally against port 54
 
 For active development with hot reload, run `bash scripts/dev.sh` (auto-starts Docker, generates Prisma client, starts Next.js) or `pnpm dev` directly — both connect to the Docker PostgreSQL and Mailpit services.
 
+> **Git worktrees:** If the repo is a worktree (check via `git worktree list`), do NOT run `docker compose up` yourself. Docker infra (PostgreSQL, Mailpit) runs on the main checkout. Worktrees connect to the main checkout's Docker services — just run `pnpm dev` directly or via `scripts/dev.sh` (which skips Docker in worktrees).
+
 ### Stripe Connect
 
 Uses Stripe Connect Express for organiser payouts. Organisers onboard via Stripe OAuth. Payments flow through `api/organiser/stripe/`. Money is stored in integer cents. Platform fee formula (in `lib/platform-fee.ts`): 3.95% + $1.45; `feeStructure` determines whether athlete or organiser absorbs it.

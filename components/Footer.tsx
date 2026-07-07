@@ -33,11 +33,9 @@ export default function Footer() {
                   { href: "/events?type=cycling", label: "Cycling" },
                   { href: "/events?type=swimming", label: "Swimming" },
                   { href: "/events?type=triathlon", label: "Triathlon" },
-                  { href: "/events?type=duathlon", label: "Duathlon" },
                   { href: "/events?type=crossfit", label: "CrossFit" },
                   { href: "/events?type=hybrid", label: "Hybrid" },
-                  { href: "/events?type=weightlifting", label: "Weightlifting" },
-                  { href: "/events?type=bodybuilding", label: "Body Building" },
+
                 ].map((link) => (
                   <Link
                     key={link.href}
@@ -57,6 +55,7 @@ export default function Footer() {
               <div className="space-y-2">
                 {[
                   { href: "/contact", label: "Contact" },
+                  { href: "/organiser-setup", label: "Become an Organiser" },
                 ].map((link) => (
                   <Link
                     key={link.href}
