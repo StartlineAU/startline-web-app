@@ -117,6 +117,7 @@ model Event {
 
   // Step 5 — media & logistics
   coverImageUrl     String?
+  photos            String[]
   registrationUrl   String?
   bagDrop           String?
   parking           String?

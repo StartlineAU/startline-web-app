@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
+import { sendRegistrationConfirmationEmail } from "@/lib/email";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -77,8 +78,27 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { title: true },
+    select: { title: true, eventDate: true, startTime: true, venue: true, city: true, state: true },
   });
+
+  if (event && meta.userEmail) {
+    const amountCents   = parseInt(meta.ticketPriceCents ?? '0', 10);
+    const feeCents      = parseInt(meta.platformFeeCents ?? '0', 10);
+    const totalCents    = amountCents + feeCents;
+    const fmt           = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+    sendRegistrationConfirmationEmail(meta.userEmail, {
+      eventName:        event.title,
+      eventDate:        event.eventDate,
+      startTime:        event.startTime,
+      category:         meta.category || 'General',
+      location:         `${event.venue}, ${event.city} ${event.state}`,
+      registrationFee:  fmt(amountCents),
+      serviceFee:       fmt(feeCents),
+      total:            fmt(totalCents),
+      userEmail:        meta.userEmail,
+    }).catch(err => console.error('Failed to send registration email:', err));
+  }
 
   await prisma.notification.create({
     data: {
