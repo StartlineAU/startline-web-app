@@ -20,8 +20,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "1026:1025"
-      - "8026:8025"
+      - "1025:1025"
+      - "8025:8025"
     environment:
       MP_MAX_MESSAGES: 5000
       MP_DATA_FILE: /data/mailpit.db

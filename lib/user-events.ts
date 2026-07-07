@@ -10,9 +10,7 @@ function mapDiscipline(discipline: string): EventType {
   if (d === "swimming")       return "swimming";
   if (d === "cycling")        return "cycling";
   if (d === "triathlon")      return "triathlon";
-  if (d === "duathlon")       return "duathlon";
-  if (d === "weightlifting")  return "weightlifting";
-  if (d === "bodybuilding")   return "bodybuilding";
+
   return "running";
 }
 

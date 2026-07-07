@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Menu, X, LogOut, User, Building2, Plus } from "lucide-react";
+import { Menu, X, LogOut, User, Building2 } from "lucide-react";
 import SignInModal from "@/components/SignInModal";
 import { useAuthContext } from "@/context/AuthContext";
 
@@ -123,15 +123,10 @@ export default function Header() {
                     <User className="w-4 h-4" /> Profile
                   </Link>
 
-                  {hasOrganiser ? (
+                  {hasOrganiser && (
                     <Link href="/organiser/dashboard" onClick={() => setIsUserOpen(false)}
                       className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                       <Building2 className="w-4 h-4" /> Organiser Dashboard
-                    </Link>
-                  ) : (
-                    <Link href="/organiser-setup" onClick={() => setIsUserOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-primary/80 hover:text-primary hover:bg-white/5 transition-colors">
-                      <Plus className="w-4 h-4" /> Setup Organiser
                     </Link>
                   )}
 
@@ -183,15 +178,10 @@ export default function Header() {
             {status === "authenticated" && (
               <>
                 <div className="border-t border-white/10 my-1.5" />
-                {hasOrganiser ? (
+                {hasOrganiser && (
                   <Link href="/organiser/dashboard" onClick={() => setIsMenuOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                     <Building2 className="w-4 h-4" /> Organiser Dashboard
-                  </Link>
-                ) : (
-                  <Link href="/organiser-setup" onClick={() => setIsMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-primary/80 hover:text-primary hover:bg-white/5 transition-colors">
-                    <Plus className="w-4 h-4" /> Setup Organiser
                   </Link>
                 )}
               </>
