@@ -385,7 +385,7 @@ export const DashboardScene: React.FC<{ durationInFrames: number }> = ({ duratio
                   transform: `translateY(${h1b.translateY}px)`,
                 }}
               >
-                Here's your day.
+                Here&apos;s your day.
               </div>
             </div>
             <p

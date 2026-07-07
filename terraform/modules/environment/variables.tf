@@ -115,6 +115,14 @@ variable "cognito_deletion_protection" {
   type        = bool
 }
 
+# --- CI secrets ---
+
+variable "gitleaks_license" {
+  description = "Gitleaks license key (required for org accounts)."
+  type        = string
+  sensitive   = true
+}
+
 # --- S3 upload bucket ---
 
 variable "bucket_cors_allowed_origins" {

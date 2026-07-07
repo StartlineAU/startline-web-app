@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Heart } from "lucide-react";
 import { getSavedEventIds, toggleSavedEventId } from "@/lib/client-lists";
 
@@ -13,12 +13,8 @@ interface SaveEventButtonProps {
 }
 
 export default function SaveEventButton({ eventId, className = "" }: SaveEventButtonProps) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(() => getSavedEventIds().includes(eventId));
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setSaved(getSavedEventIds().includes(eventId));
-  }, [eventId]);
 
   function toggle(e: React.MouseEvent) {
     e.preventDefault();

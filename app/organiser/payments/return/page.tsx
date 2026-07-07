@@ -45,7 +45,7 @@ export default function PaymentsReturnPage() {
               Checking your account…
             </h1>
             <p className="text-gray-500 text-[14px]">
-              We're confirming your Stripe setup with Stripe. This only takes a moment.
+              We&apos;re confirming your Stripe setup with Stripe. This only takes a moment.
             </p>
           </>
         )}
@@ -83,7 +83,7 @@ export default function PaymentsReturnPage() {
               Not quite finished.
             </h1>
             <p className="text-gray-500 text-[14px] mb-6">
-              Stripe hasn't fully verified your account yet. This can happen if you didn't complete all the steps. Go back to payments to continue where you left off.
+              Stripe hasn&apos;t fully verified your account yet. This can happen if you didn&apos;t complete all the steps. Go back to payments to continue where you left off.
             </p>
             <button
               onClick={() => router.push("/organiser/payments")}

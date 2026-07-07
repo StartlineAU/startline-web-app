@@ -107,6 +107,7 @@ export default function SuburbAutocomplete({
         autoComplete="off"
         role="combobox"
         aria-expanded={open}
+        aria-controls={open && suggestions.length > 0 ? "suburb-suggestions" : undefined}
         aria-autocomplete="list"
       />
       {loading && (
@@ -115,7 +116,7 @@ export default function SuburbAutocomplete({
         </div>
       )}
       {open && suggestions.length > 0 && (
-        <div ref={listRef}
+        <div ref={listRef} id="suburb-suggestions"
           className="absolute top-full left-0 mt-1 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden modal-in">
           {suggestions.map((item, i) => (
             <button key={item.placeId} type="button"

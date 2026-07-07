@@ -1,7 +1,9 @@
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { MapPin, Clock, Calendar, ExternalLink } from "lucide-react";
+import { MapPin, Calendar, ExternalLink, Trophy } from "lucide-react";
 import { getAllEvents } from "@/lib/events";
+import { parsePrizePool } from "@/lib/prize-pool";
 import { toUserEvent } from "@/lib/user-events";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatEventDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
@@ -29,13 +31,14 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const event = toUserEvent(found);
   const status = getEventStatus(event);
   const bannerUrl = getEventImage(event.type, event.id, 1200);
+  const prizePool = parsePrizePool(found.extras);
 
   return (
     <main className="min-h-screen bg-dark-darker pt-14">
 
       {/* ── Banner ── */}
       <div className="relative overflow-hidden" style={{ aspectRatio: "4/3", maxHeight: "520px" }}>
-        <img src={bannerUrl} alt={event.title} className="absolute inset-0 w-full h-full object-cover" />
+        <Image src={bannerUrl} alt={event.title} fill className="object-cover" sizes="100vw" />
         <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/50 to-transparent" />
 
         {/* Badges */}
@@ -83,6 +86,22 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               <h2 className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-3">Event Overview</h2>
               <p className="text-sm font-medium text-muted leading-relaxed">{event.description}</p>
             </div>
+
+            {prizePool && (
+              <div className="bg-dark rounded-xl px-5 sm:px-6 py-5 flex items-center gap-4">
+                <Trophy className="w-7 h-7 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-headline text-xl font-black text-primary leading-tight">
+                    ${prizePool.amount} prize pool
+                  </p>
+                  {prizePool.details && (
+                    <p className="font-headline text-[11px] font-medium uppercase tracking-widest text-muted mt-1">
+                      {prizePool.details}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {event.ticketDrops && event.ticketDrops.length > 0 && (
               <div>

@@ -166,7 +166,23 @@ resource "aws_secretsmanager_secret_version" "database" {
   })
 }
 
-# ===== Cognito =====
+resource "aws_secretsmanager_secret" "ci" {
+  name_prefix             = "${var.project_name}/${var.name}/ci/"
+  recovery_window_in_days = 0
+
+  tags = {
+    Environment = var.name
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "ci" {
+  secret_id = aws_secretsmanager_secret.ci.id
+  secret_string = jsonencode({
+    NEXT_PUBLIC_COGNITO_USER_POOL_ID = aws_cognito_user_pool.this.id
+    NEXT_PUBLIC_COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.web.id
+    GITLEAKS_LICENSE                 = var.gitleaks_license
+  })
+}
 
 resource "aws_cognito_user_pool" "this" {
   name = "${var.project_name}-${var.name}-users"

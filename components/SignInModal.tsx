@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { X, Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, ChevronDown } from "lucide-react";
+import { X, Mail, Lock, Eye, EyeOff, ArrowRight, User, Phone, ChevronDown, Check, AtSign } from "lucide-react";
 import { signIn, signUp, signOut } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
+import { validateUsername } from "@/lib/username-validation";
 
-type View = "signin" | "signup" | "onboarding";
+type View = "signin" | "signup" | "onboarding" | "username";
 
 interface SignInModalProps {
   isOpen: boolean;
@@ -28,22 +29,26 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
   const router      = useRouter();
   const { refresh } = useAuthContext();
 
-  const [view,          setView]          = useState<View>("signin");
-  const [email,         setEmail]         = useState("");
-  const [firstName,     setFirstName]     = useState("");
-  const [lastName,      setLastName]      = useState("");
-  const [dobDay,        setDobDay]        = useState("");
-  const [dobMonth,      setDobMonth]      = useState("");
-  const [dobYear,       setDobYear]       = useState("");
-  const [phone,         setPhone]         = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [showTerms,     setShowTerms]     = useState(false);
-  const [showPrivacy,   setShowPrivacy]   = useState(false);
-  const [password,      setPassword]      = useState("");
-  const [confirm,       setConfirm]       = useState("");
-  const [showPw,        setShowPw]        = useState(false);
-  const [error,         setError]         = useState("");
-  const [loading,       setLoading]       = useState(false);
+  const [view,            setView]            = useState<View>("signin");
+  const [email,           setEmail]           = useState("");
+  const [firstName,       setFirstName]       = useState("");
+  const [lastName,        setLastName]        = useState("");
+  const [dobDay,          setDobDay]          = useState("");
+  const [dobMonth,        setDobMonth]        = useState("");
+  const [dobYear,         setDobYear]         = useState("");
+  const [phone,           setPhone]           = useState("");
+  const [acceptedTerms,   setAcceptedTerms]   = useState(false);
+  const [showTerms,       setShowTerms]       = useState(false);
+  const [showPrivacy,     setShowPrivacy]     = useState(false);
+  const [password,        setPassword]        = useState("");
+  const [confirm,         setConfirm]         = useState("");
+  const [showPw,          setShowPw]          = useState(false);
+  const [error,           setError]           = useState("");
+  const [loading,         setLoading]         = useState(false);
+  const [username,        setUsername]        = useState("");
+  const [usernameStatus,  setUsernameStatus]  = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [usernameError,   setUsernameError]   = useState("");
+
 
   useEffect(() => {
     if (!isOpen) return;
@@ -57,15 +62,34 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
+      /* eslint-disable react-hooks/set-state-in-effect */
       setView("signin");
       setEmail(""); setFirstName(""); setLastName("");
       setDobDay(""); setDobMonth(""); setDobYear(""); setPhone("");
       setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
       setPassword(""); setConfirm("");
       setError(""); setShowPw(false);
+      setUsername(""); setUsernameStatus("idle"); setUsernameError("");
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
+
+  // Username validation — format + profanity checked client-side.
+  const usernameStatus_ = useMemo(() => {
+    const val = username.trim().toLowerCase();
+    if (!val) return { status: "idle" as const, error: "" };
+    const result = validateUsername(val);
+    if (!result.valid) return { status: "invalid" as const, error: result.reason };
+    return { status: "valid" as const, error: "" };
+  }, [username]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setUsernameStatus(usernameStatus_.status);
+    setUsernameError(usernameStatus_.error);
+  }, [usernameStatus_]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Sign in ────────────────────────────────────────────────────────────────
   const handleSignIn = async (e: React.FormEvent) => {
@@ -89,16 +113,21 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       await fetch("/api/user/auth/session", { method: "POST" });
 
       try {
-        const pendingName = sessionStorage.getItem("startline_pending_name");
-        if (pendingName) {
+        const pendingName     = sessionStorage.getItem("startline_pending_name");
+        const pendingUsername = sessionStorage.getItem("startline_pending_username");
+        if (pendingName || pendingUsername) {
           await fetch("/api/user/profile", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: pendingName }),
+            body: JSON.stringify({
+              ...(pendingName     ? { name: pendingName }         : {}),
+              ...(pendingUsername ? { username: pendingUsername }  : {}),
+            }),
           });
           sessionStorage.removeItem("startline_pending_name");
           sessionStorage.removeItem("startline_pending_dob");
           sessionStorage.removeItem("startline_pending_phone");
+          sessionStorage.removeItem("startline_pending_username");
         }
       } catch {}
 
@@ -132,7 +161,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
     setView("onboarding");
   };
 
-  // ── Onboarding step 2 ──────────────────────────────────────────────────────
+  // ── Onboarding step 2 → creates Cognito account ───────────────────────────
   const handleContinueOnboarding = async () => {
     setError("");
     if (!firstName.trim()) { setError("Please enter your first name."); return; }
@@ -162,8 +191,8 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
     if (!acceptedTerms) { setError("You must accept the Terms & Conditions and Privacy Policy to continue."); return; }
 
     // Normalise to E.164 — accept 04xx, 03xx, +61, 61 formats
-    const rawPhone    = phone.trim().replace(/[\s\-()]/g, "");
-    const e164Phone   = rawPhone.startsWith("0")
+    const rawPhone  = phone.trim().replace(/[\s\-()]/g, "");
+    const e164Phone = rawPhone.startsWith("0")
       ? "+61" + rawPhone.slice(1)
       : rawPhone.startsWith("61")
         ? "+" + rawPhone
@@ -171,9 +200,10 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
           ? rawPhone
           : "+61" + rawPhone;
 
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+
     setLoading(true);
     try {
-      const fullName = `${firstName.trim()} ${lastName.trim()}`;
       await signUp({
         username: email,
         password,
@@ -186,13 +216,14 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
           },
         },
       });
+      // Store for profile update after email verification + sign-in
       try {
         sessionStorage.setItem("startline_pending_name",  fullName);
         sessionStorage.setItem("startline_pending_dob",   isoDate);
         sessionStorage.setItem("startline_pending_phone", e164Phone);
       } catch {}
-      onClose();
-      router.push("/customer/verify-email?email=" + encodeURIComponent(email));
+      setError("");
+      setView("username");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("UsernameExistsException")) {
@@ -205,6 +236,16 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Username step → store handle and redirect to verify ────────────────────
+  const handleContinueUsername = (skip = false) => {
+    if (!skip && (usernameStatus === "invalid" || usernameStatus === "checking")) return;
+    if (!skip && username.trim()) {
+      try { sessionStorage.setItem("startline_pending_username", username.trim().toLowerCase()); } catch {}
+    }
+    onClose();
+    router.push("/customer/verify-email?email=" + encodeURIComponent(email));
   };
 
   const switchView = (v: "signin" | "signup") => {
@@ -230,7 +271,7 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
       <div className="relative z-10 w-full max-w-[440px] bg-dark-darker border border-dark-lighter rounded-2xl p-6 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
-        {view !== "onboarding" ? (
+        {view !== "onboarding" && view !== "username" ? (
           <div className="flex items-center gap-2 mb-6">
             <div className="flex flex-1 gap-1 p-1 bg-dark rounded-lg">
               {(["signin", "signup"] as const).map((v) => (
@@ -488,12 +529,74 @@ export default function SignInModal({ isOpen, onClose }: SignInModalProps) {
               </div>
 
               <button onClick={handleContinueOnboarding} disabled={loading} className={btnCls}>
-                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Creating account…</> : <>Get started <ArrowRight className="w-4 h-4" /></>}
+                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Saving…</> : <>Continue <ArrowRight className="w-4 h-4" /></>}
               </button>
             </div>
           </>
         )}
 
+        {/* ── Username ── */}
+        {view === "username" && (
+          <>
+            <div className="mb-6 pt-2">
+              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">One last thing</span>
+              <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
+                Choose your<br /><span className="text-primary">handle.</span>
+              </h2>
+              <p className="text-muted text-[13px] leading-snug">Pick a unique username for your public profile. You can always change it later.</p>
+            </div>
+
+            {error && <div className={errCls}>{error}</div>}
+
+            <div className="space-y-4">
+              <div>
+                <label className={labelCls}>Username</label>
+                <div className="relative">
+                  <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="e.g. janedoe"
+                    className={`${inputCls} pr-10 ${
+                      usernameStatus === "invalid" ? "border-red-500/50 focus:border-red-500" :
+                      usernameStatus === "valid"   ? "border-green-500/50 focus:border-green-500" : ""
+                    }`}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {usernameStatus === "checking" && <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin block" />}
+                    {usernameStatus === "valid"    && <Check className="w-4 h-4 text-green-500" />}
+                  </span>
+                </div>
+                {usernameError ? (
+                  <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1">{usernameError}</p>
+                ) : (
+                  <p className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-1">
+                    3–30 characters — lowercase letters, numbers, hyphens only.
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={() => handleContinueUsername(false)}
+                disabled={loading || usernameStatus === "invalid" || usernameStatus === "checking" || !username.trim()}
+                className={btnCls}
+              >
+                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Creating account…</> : <>Create account <ArrowRight className="w-4 h-4" /></>}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleContinueUsername(true)}
+                disabled={loading}
+                className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1"
+              >
+                Skip for now
+              </button>
+            </div>
+          </>
+        )}
 
       </div>
     </div>,

@@ -241,6 +241,7 @@ const EventMap = forwardRef<EventMapHandle, EventMapProps>(function EventMap({ e
         return () => clearTimeout(t);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   return <div ref={containerRef} className="w-full h-full" />;

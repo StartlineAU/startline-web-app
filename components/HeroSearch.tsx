@@ -77,9 +77,9 @@ export default function HeroSearch() {
         </button>
       </div>
 
-      {/* Desktop: original horizontal layout */}
-      <div className="hidden sm:flex items-stretch gap-0.5 bg-dark-darker rounded-3xl overflow-hidden">
-        <div className="flex-1 bg-dark px-6 py-4 border-r border-dark-lighter min-w-0">
+      {/* Desktop: horizontal layout */}
+      <div className="hidden sm:flex items-stretch bg-dark rounded-3xl overflow-hidden">
+        <div className="flex-1 px-6 py-4 min-w-0">
           <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-1.5">
             Event
           </label>
@@ -100,7 +100,9 @@ export default function HeroSearch() {
           </div>
         </div>
 
-        <div className="flex-1 bg-dark px-6 py-4 border-r border-dark-lighter min-w-0">
+        <div className="w-px bg-dark-lighter self-stretch my-4" />
+
+        <div className="flex-1 px-6 py-4 min-w-0">
           <label className="font-headline text-xs font-black uppercase tracking-widest text-primary block mb-1.5">
             Where
           </label>

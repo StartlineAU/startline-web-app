@@ -52,8 +52,8 @@ function verifyToken(token: string): Promise<jwt.JwtPayload> {
   return new Promise((resolve, reject) => {
     jwt.verify(
       token,
-      function getKey(header: any, callback: (err: Error | null, key?: string) => void) {
-        jwksClient.getSigningKey(header.kid as string, (err: any, key: any) => {
+      function getKey(header: jwt.JwtHeader, callback: (err: Error | null, key?: string) => void) {
+        jwksClient.getSigningKey(header.kid as string, (err: Error | null, key: jwksClient.SigningKey) => {
           if (err) return callback(err);
           callback(null, key.getPublicKey());
         });

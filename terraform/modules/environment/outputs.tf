@@ -51,6 +51,11 @@ output "cognito_app_client_secret" {
   sensitive = true
 }
 
+output "ci_secret_arn" {
+  description = "Secrets Manager secret containing CI env vars (Cognito pool ID, client ID)."
+  value       = aws_secretsmanager_secret.ci.arn
+}
+
 output "uploads_bucket_id" {
   description = "S3 bucket name for user-uploaded images."
   value       = aws_s3_bucket.uploads.id

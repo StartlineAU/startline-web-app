@@ -32,12 +32,12 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3002:3000"
+      - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/startline?schema=public
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
-      - NEXT_PUBLIC_SITE_URL=http://localhost:3002
+      - NEXT_PUBLIC_SITE_URL=http://localhost:3000
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

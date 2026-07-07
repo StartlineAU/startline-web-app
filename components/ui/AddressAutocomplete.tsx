@@ -121,6 +121,7 @@ export default function AddressAutocomplete({
         autoComplete="off"
         role="combobox"
         aria-expanded={open}
+        aria-controls={open && suggestions.length > 0 ? "address-suggestions" : undefined}
         aria-autocomplete="list"
       />
       {loading && (
@@ -129,7 +130,7 @@ export default function AddressAutocomplete({
         </div>
       )}
       {open && suggestions.length > 0 && (
-        <div ref={listRef}
+        <div ref={listRef} id="address-suggestions"
           className="absolute top-full left-0 mt-1 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-y-auto max-h-64 modal-in">
           {suggestions.map((item, i) => (
             <button key={item.placeId} type="button"
