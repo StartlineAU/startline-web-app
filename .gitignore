@@ -58,6 +58,13 @@ next-env.d.ts
 # terraform
 terraform/.terraform/
 terraform/terraform.tfvars
+terraform/tfplan
+terraform/modules/environment/lambda/email-sender.zip
+
+# dev server logs
+.dev-server.log
+.dev-server-err.log
+.playwright-cli/
 
 # opencode internal state
 .opencode/
