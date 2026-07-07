@@ -63,6 +63,7 @@ locals {
       database_deletion_protection = true
       cognito_deletion_protection  = true
       bucket_cors_allowed_origins  = ["https://startlineau.com", "https://organiser.startlineau.com"]
+      site_url                     = "https://startlineau.com"
     }
     nonprod = {
       branch_name                  = "non-production"
@@ -73,6 +74,7 @@ locals {
       database_deletion_protection = false
       cognito_deletion_protection  = false
       bucket_cors_allowed_origins  = ["*"]
+      site_url                     = "https://nonprod.startlineau.com"
     }
   }
 }
@@ -136,6 +138,9 @@ module "env" {
   database_secret_recovery_window_days  = var.database_secret_recovery_window_days
 
   cognito_deletion_protection = each.value.cognito_deletion_protection
+
+  resend_api_key = var.resend_api_key
+  site_url       = each.value.site_url
 
   bucket_cors_allowed_origins = each.value.bucket_cors_allowed_origins
 

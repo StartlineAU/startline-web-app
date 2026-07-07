@@ -184,6 +184,87 @@ resource "aws_secretsmanager_secret_version" "ci" {
   })
 }
 
+# ===== Cognito custom email sender =====
+
+resource "aws_kms_key" "cognito_email" {
+  description             = "Encrypts OTP codes passed from Cognito to the custom email Lambda"
+  deletion_window_in_days = 10
+
+  tags = {
+    Environment = var.name
+  }
+}
+
+resource "aws_iam_role" "cognito_email_lambda" {
+  name = "${var.project_name}-${var.name}-cognito-email-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "cognito_email_lambda" {
+  role = aws_iam_role.cognito_email_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = aws_kms_key.cognito_email.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+    ]
+  })
+}
+
+data "archive_file" "cognito_email_lambda" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/email-sender/index.mjs"
+  output_path = "${path.module}/lambda/email-sender.zip"
+}
+
+resource "aws_lambda_function" "cognito_email" {
+  function_name    = "${var.project_name}-${var.name}-cognito-email"
+  role             = aws_iam_role.cognito_email_lambda.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
+  filename         = data.archive_file.cognito_email_lambda.output_path
+  source_code_hash = data.archive_file.cognito_email_lambda.output_base64sha256
+  timeout          = 30
+
+  environment {
+    variables = {
+      RESEND_API_KEY = coalesce(var.resend_api_key, "")
+      SITE_URL       = var.site_url
+    }
+  }
+
+  tags = {
+    Environment = var.name
+  }
+}
+
+resource "aws_lambda_permission" "cognito_email" {
+  statement_id  = "AllowCognito"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cognito_email.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.this.arn
+
+  depends_on = [aws_cognito_user_pool.this]
+}
+
 resource "aws_cognito_user_pool" "this" {
   name = "${var.project_name}-${var.name}-users"
 
@@ -210,10 +291,12 @@ resource "aws_cognito_user_pool" "this" {
     email_sending_account = "COGNITO_DEFAULT"
   }
 
-  verification_message_template {
-    default_email_option = "CONFIRM_WITH_CODE"
-    email_subject        = "Verify your ${var.project_name} email"
-    email_message        = "Your verification code is {####}"
+  lambda_config {
+    custom_email_sender {
+      lambda_arn     = aws_lambda_function.cognito_email.arn
+      lambda_version = "V1_0"
+    }
+    kms_key_id = aws_kms_key.cognito_email.arn
   }
 
   schema {

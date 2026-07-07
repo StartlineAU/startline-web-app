@@ -115,6 +115,18 @@ variable "cognito_deletion_protection" {
   type        = bool
 }
 
+variable "resend_api_key" {
+  description = "Resend API key passed to the custom email sender Lambda."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "site_url" {
+  description = "Public base URL for this environment (e.g. https://startlineau.com). Used in email links."
+  type        = string
+}
+
 # --- CI secrets ---
 
 variable "gitleaks_license" {
