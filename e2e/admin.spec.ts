@@ -44,7 +44,7 @@ test.describe("admin dashboard", () => {
 
     await expect(page.getByText("Review pending events")).toBeVisible();
     await expect(page.getByText("All events")).toBeVisible();
-    await expect(page.getByText("Organisers")).toBeVisible();
+    await expect(page.getByRole("link", { name: /organisers verify/i })).toBeVisible();
     await expect(page.getByText("Moderate reviews")).toBeVisible();
   });
 
