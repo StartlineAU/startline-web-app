@@ -44,7 +44,7 @@ Run `pnpm prisma:seed` to set up Cognito users + database seed data. Idempotent 
 
 ### Database
 
-PostgreSQL 15 via Docker on port **5434** (mapped from container port 5432). Prisma ORM with singleton client in `lib/prisma.ts`. Prisma schema targets `rhel-openssl-3.0.x` for Lambda/RHEL compatibility.
+PostgreSQL 15 via Docker on port **5432**. Prisma ORM with singleton client in `lib/prisma.ts`. Prisma schema targets `rhel-openssl-3.0.x` for Lambda/RHEL compatibility.
 
 Mailpit runs alongside PostgreSQL in Docker (SMTP on **1026**, web UI on **8026** — host ports) for local email testing.
 
@@ -54,7 +54,7 @@ The app itself runs in Docker via the `app` service (Next.js standalone on port 
 docker compose up -d              # starts PostgreSQL + Mailpit + app
 pnpm prisma:migrate               # apply migrations (via prisma migrate dev)
 docker compose exec app npx prisma studio        # launch Prisma Studio (or `pnpm prisma:studio` if defined)
-pnpm prisma:seed                  # seed test data (runs locally against port 5434)
+pnpm prisma:seed                  # seed test data (runs locally against port 5432)
 ```
 
 For active development with hot reload, run `bash scripts/dev.sh` (auto-starts Docker, generates Prisma client, starts Next.js) or `pnpm dev` directly — both connect to the Docker PostgreSQL and Mailpit services.
@@ -117,7 +117,7 @@ pnpm test:e2e     # Playwright e2e tests (requires Docker PostgreSQL running)
 
 - Unit tests in `src/__tests__/`, e2e in `e2e/`.
 - Vitest has `globals: true` — `describe`/`it`/`expect` available without imports.
-- Vitest config defaults `DATABASE_URL` to port **5433**, but local Docker uses port **5434** — tests connecting to DB may need `DATABASE_URL` set explicitly.
+- Vitest config defaults `DATABASE_URL` to port **5432**, matching Docker.
 - Playwright uses Chromium, auto-starts `pnpm dev -p 3000` if not already running.
 - E2E tests authenticate via the non-production Cognito pool (password `Password123!`).
 

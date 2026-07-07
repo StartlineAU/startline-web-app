@@ -8,7 +8,7 @@ export default defineConfig({
     env: {
       DATABASE_URL:
         process.env.DATABASE_URL ||
-        "postgresql://postgres:postgres@localhost:5433/startline?schema=public",
+        "postgresql://postgres:postgres@localhost:5432/startline?schema=public",
     },
   },
   resolve: {

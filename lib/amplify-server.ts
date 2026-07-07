@@ -1,15 +1,6 @@
-import { createServerRunner } from "@aws-amplify/adapter-nextjs";
-import { fetchAuthSession } from "aws-amplify/auth/server";
-import type { AuthSession } from "aws-amplify/auth";
 import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
-import JwksClientModule from "jwks-rsa";
-import { amplifyConfig } from "./amplify-config";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 import prisma from "./prisma";
-
-export const { runWithAmplifyServerContext } = createServerRunner({
-  config: amplifyConfig,
-});
 
 export type ServerSession = {
   sub:    string;
@@ -42,29 +33,16 @@ const clientId   = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID    ?? "";
 
 const cognitoDomain = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
 
-const jwksClient = new JwksClientModule.JwksClient({
-  jwksUri: `${cognitoDomain}/.well-known/jwks.json`,
-  requestHeaders: {},
-  timeout: 10000,
-});
+const JWKS = createRemoteJWKSet(
+  new URL(`${cognitoDomain}/.well-known/jwks.json`)
+);
 
-function verifyToken(token: string): Promise<jwt.JwtPayload> {
-  return new Promise((resolve, reject) => {
-    jwt.verify(
-      token,
-      function getKey(header: jwt.JwtHeader, callback: (err: Error | null, key?: string) => void) {
-        jwksClient.getSigningKey(header.kid as string, (err: Error | null, key: jwksClient.SigningKey) => {
-          if (err) return callback(err);
-          callback(null, key.getPublicKey());
-        });
-      },
-      { issuer: cognitoDomain, algorithms: ["RS256"] },
-      (err, decoded) => {
-        if (err) return reject(err);
-        resolve(decoded as jwt.JwtPayload);
-      }
-    );
+async function verifyToken(token: string) {
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer: cognitoDomain,
+    audience: undefined,
   });
+  return payload;
 }
 
 export async function getServerSession(): Promise<ServerSession | null> {

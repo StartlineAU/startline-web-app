@@ -44,10 +44,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
+      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
@@ -59,10 +62,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
+      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
       - run: pnpm install --frozen-lockfile
       - run: npx prisma generate
       - run: pnpm test
@@ -107,10 +113,13 @@ jobs:
           && echo "$SECRET" | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> $GITHUB_ENV \
           || echo "Secret not found yet — will be created by Terraform after merge"
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
+      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
       - run: pnpm install --frozen-lockfile
       - run: npx playwright install chromium
       - run: npx prisma generate
