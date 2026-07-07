@@ -149,4 +149,4 @@ export const DATE_RANGE_OPTIONS = [
 ] as const;
 
 // backward compat for utils.ts
-export type { FitnessEvent } from "./legacy";
+

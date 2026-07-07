@@ -4,9 +4,6 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ArrowRight, ArrowLeft, Check } from "lucide-react";
-import dynamic from "next/dynamic";
-
-const Aurora = dynamic(() => import("@/components/ui/Aurora"), { ssr: false });
 
 const inputCls = (err?: string) =>
   `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:outline-none transition-colors ${
@@ -139,16 +136,9 @@ export default function OnboardingPage() {
   return (
     <main className="min-h-screen bg-dark-darker relative">
 
-      {/* ── Aurora ── */}
+      {/* ── Background gradient ── */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute inset-0 opacity-70">
-          <Aurora
-            colorStops={["#0a1a05", "#1a3d08", "#b3e153"]}
-            amplitude={1.2}
-            blend={0.65}
-            speed={0.6}
-          />
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-br from-dark/80 via-dark-darker to-dark/60 opacity-80" />
         <div className="absolute inset-x-0 top-0    h-[30%] bg-gradient-to-b  from-dark-darker to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t  from-dark-darker to-transparent" />
         <div className="absolute inset-y-0 left-0   w-[20%] bg-gradient-to-r  from-dark-darker to-transparent" />
