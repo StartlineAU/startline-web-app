@@ -129,9 +129,9 @@ jobs:
         run: |
           pnpm dev -p 3000 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
-          # Pre-warm compilation so e2e tests don't time out on cold starts
-          for url in / /events /admin/login /organiser/dashboard /profile/test /organiser/listings/new; do
-            echo "Warming $url ..."
-            curl -so /dev/null "http://localhost:3000$url"
+          # Pre-warm page compilations in parallel so e2e tests don't timeout
+          for url in / /events /admin/login /organiser/dashboard /profile/test; do
+            (curl -m 60 -so /dev/null "http://localhost:3000$url" &)
           done
+          wait
       - run: pnpm test:e2e
