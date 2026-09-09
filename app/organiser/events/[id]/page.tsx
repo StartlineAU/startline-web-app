@@ -168,8 +168,9 @@ export default function EventStatusPage({
             <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-5">
               {error || "Event not found."}
             </div>
-            <Link href="/organiser/listings" className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-white transition-colors">
-              ← Back to listings
+            <Link href="/organiser/listings"
+              className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Listings
             </Link>
           </div>
         </main>
@@ -187,10 +188,13 @@ export default function EventStatusPage({
       <main className="pt-14">
         <div className="max-w-[900px] mx-auto px-6 py-8 pb-24 lg:pb-12 page-in">
 
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-widest text-muted-dark mb-8">
-            <Link href="/organiser/listings" className="hover:text-muted transition-colors flex items-center gap-1.5">
-              <ArrowLeft className="w-3 h-3" /> Listings
+          {/* Return to listings. Same pill the public event page uses for
+              "Back to Events" — the faint breadcrumb here read as a label
+              rather than a control (issue #309). */}
+          <div className="mb-8">
+            <Link href="/organiser/listings"
+              className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Listings
             </Link>
           </div>
 

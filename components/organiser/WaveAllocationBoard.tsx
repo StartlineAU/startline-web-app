@@ -617,7 +617,7 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search any wave by name, email, or bib"
           aria-label="Search athletes"
-          className="w-full bg-dark border border-dark-lighter rounded-lg pl-10 pr-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none"
+          className="w-full bg-dark border border-dark-lighter rounded-lg pl-10 pr-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
         />
       </div>
 

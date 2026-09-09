@@ -155,7 +155,7 @@ export default function RichTextEditor({
           "[&_h3]:font-headline [&_h3]:font-black [&_h3]:text-[16px] [&_h3]:text-light [&_h3]:mt-3 [&_h3]:mb-1",
           "[&_h4]:font-headline [&_h4]:font-bold [&_h4]:text-[14px] [&_h4]:text-light [&_h4]:mt-2 [&_h4]:mb-1",
           "[&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_li]:mb-0.5",
-          "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-dark empty:before:pointer-events-none",
+          "empty:before:content-[attr(data-placeholder)] empty:before:text-placeholder empty:before:pointer-events-none",
           editorClassName,
         )}
       />

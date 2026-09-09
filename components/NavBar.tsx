@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  User, LogOut, Building2, Shield, ShieldCheck, Menu, X, ChevronDown,
+  User, LogOut, Building2, Shield, ShieldCheck, Menu, X, ChevronDown, ChevronRight,
 } from "lucide-react";
 import SignInModal from "@/components/SignInModal";
 import { useAuthContext } from "@/context/AuthContext";
@@ -108,7 +108,10 @@ export default function NavBar() {
           <div className="border-t border-white/10 my-1" />
           {memberships.length > 0 && (
             <div>
-              <div className="px-4 pt-2 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">Organiser</div>
+              {/* Says where the row goes. These rows leave the public site for
+                  the organiser portal, which the bare organisation name did
+                  not convey (issue #309). */}
+              <div className="px-4 pt-2 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">Switch to organiser portal</div>
               {memberships.map((m) => (
                 <button key={m.organiserId} onClick={() => switchOrganiser(m.organiserId)}
                   className="w-full flex items-center gap-3 px-4 py-2.5 font-headline text-[12px] font-bold uppercase tracking-widest text-left text-white/60 hover:text-white hover:bg-white/10 transition-colors">
@@ -119,6 +122,7 @@ export default function NavBar() {
                   {m.role === "OWNER"
                     ? <span className="shrink-0 text-[9px] text-primary border border-primary/40 rounded px-1.5 py-0.5">OWNER</span>
                     : <span className="shrink-0 text-[9px] text-white/40 border border-white/15 rounded px-1.5 py-0.5">MANAGER</span>}
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-60" />
                 </button>
               ))}
             </div>
@@ -201,7 +205,7 @@ export default function NavBar() {
 
                 {isUserOpen && (
                   <div className="absolute right-0 top-full mt-1 min-w-[200px] bg-dark-darker border border-white/[0.05] rounded-xl shadow-2xl overflow-hidden">
-                    <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">User</div>
+                    <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">My athlete account</div>
                     <Link href="/profile" onClick={() => setIsUserOpen(false)}
                       className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                       <User className="w-4 h-4" /> Profile
@@ -276,7 +280,7 @@ export default function NavBar() {
                 <>
                   <div className="border-t border-white/10 my-1.5" />
                   {memberships.length > 0 && (
-                    <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">Organiser</div>
+                    <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">Switch to organiser portal</div>
                   )}
                   {memberships.map((m) => (
                     <button key={m.organiserId} onClick={() => { setIsMenuOpen(false); switchOrganiser(m.organiserId); }}

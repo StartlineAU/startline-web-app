@@ -206,7 +206,7 @@ export default function OrganiserSetupPage() {
                   type="text" required value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
                   placeholder="e.g. Apex Endurance Events"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-light/70 focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
 
@@ -218,7 +218,7 @@ export default function OrganiserSetupPage() {
                   type="text" required value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
                   placeholder="Full name"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-light/70 focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
 
@@ -230,7 +230,7 @@ export default function OrganiserSetupPage() {
                   type="email" required value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   placeholder="events@yourorg.com.au"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-light/70 focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
 
@@ -242,7 +242,7 @@ export default function OrganiserSetupPage() {
                   type="tel" value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+61 4xx xxx xxx"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-light/70 focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
 

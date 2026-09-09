@@ -14,7 +14,7 @@ import { isNative, openExternal } from "@/lib/capacitor";
 export const dynamic = "force-dynamic";
 
 const inputCls =
-  "w-full bg-dark-light border border-dark-lighter rounded-xl px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
+  "w-full bg-dark-light border border-dark-lighter rounded-xl px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
 
 interface Profile {
   orgName: string | null;

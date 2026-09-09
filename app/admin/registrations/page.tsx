@@ -265,7 +265,7 @@ function RegistrationsContent() {
                 placeholder="Search by athlete name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-muted-dark focus:outline-none focus:border-primary transition-colors"
+                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-placeholder focus:outline-none focus:border-primary transition-colors"
               />
             </div>
             <button

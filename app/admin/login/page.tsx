@@ -189,7 +189,7 @@ export default function AdminLoginPage() {
                   type="text" inputMode="numeric" required
                   value={totpCode} onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="000000"
-                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold"
+                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold"
                   autoFocus
                 />
               </div>
@@ -225,7 +225,7 @@ export default function AdminLoginPage() {
                     type="text" inputMode="numeric" required
                     value={totpCode} onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="000000"
-                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold"
+                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold"
                     autoFocus
                   />
                 </div>
@@ -253,7 +253,7 @@ export default function AdminLoginPage() {
                   type={showNewPw ? "text" : "password"} required
                   value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Choose a strong password"
-                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
                 <button type="button" onClick={() => setShowNewPw(s => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
@@ -281,7 +281,7 @@ export default function AdminLoginPage() {
                   type="email" required value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@startlineau.com"
-                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
             </div>
@@ -296,7 +296,7 @@ export default function AdminLoginPage() {
                   type={showPw ? "text" : "password"} required value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••"
-                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
                 <button
                   type="button" onClick={() => setShowPw((s) => !s)}

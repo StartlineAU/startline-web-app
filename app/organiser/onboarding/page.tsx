@@ -6,10 +6,10 @@ import Image from "next/image";
 import { ArrowRight, ArrowLeft, Check } from "lucide-react";
 
 const inputCls = (err?: string) =>
-  `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:outline-none transition-colors ${
+  `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:outline-none transition-colors ${
     err ? "border-orange-500/70 focus:border-orange-500" : "border-dark-lighter focus:border-primary"
   }`;
-const areaCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none resize-none transition-colors";
+const areaCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none resize-none transition-colors";
 
 const validators = {
   name:  (v: string) => !v.trim() ? "Required" : v.trim().length < 2 ? "Must be at least 2 characters" : !/^[a-zA-Z\s\-']+$/.test(v.trim()) ? "Letters only" : "",

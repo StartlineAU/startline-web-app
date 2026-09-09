@@ -412,7 +412,7 @@ function WriteReviewModal({ organiserId, events, onClose, onSuccess, editReview 
                   onChange={e => setTitle(e.target.value)}
                   placeholder="Summarise your experience…"
                   maxLength={100}
-                  className="w-full bg-dark-darker border border-dark-lighter rounded-md px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                  className="w-full bg-dark-darker border border-dark-lighter rounded-md px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                 />
               </div>
 
@@ -430,7 +430,7 @@ function WriteReviewModal({ organiserId, events, onClose, onSuccess, editReview 
                   maxLength={800}
                   rows={4}
                   placeholder="What was the event like? How was the organisation, communication, and overall experience?"
-                  className="w-full bg-dark-darker border border-dark-lighter rounded-md px-3 py-2.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors resize-none"
+                  className="w-full bg-dark-darker border border-dark-lighter rounded-md px-3 py-2.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors resize-none"
                 />
               </div>
 

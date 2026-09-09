@@ -139,7 +139,7 @@ function VerifyEmailForm() {
                   <label htmlFor="org-verify-email-input" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">Email address</label>
                   <input id="org-verify-email-input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="events@yourorg.com.au"
-                    className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+                    className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
                 </div>
               )}
 
@@ -155,7 +155,7 @@ function VerifyEmailForm() {
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="000000"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors font-headline font-black"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors font-headline font-black"
                 />
               </div>
 

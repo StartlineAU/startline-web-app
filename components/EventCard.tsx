@@ -89,6 +89,7 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
           <OrganiserCardMeta
             organiserId={event.organiserId}
             name={organiserName}
+            logoUrl={event.organiser?.logoUrl}
             rating={event.organiser?.rating}
             nestedInLink
             nameClassName="text-light hover:text-primary"

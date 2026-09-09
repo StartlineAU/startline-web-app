@@ -14,7 +14,7 @@ import { uploadFile } from "@/lib/upload-client";
 
 // ── shared form primitives ──────────────────────────────────────────────────
 
-const inputCls = "w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
+const inputCls = "w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
 
 function FieldLabel({ label, hint, required }: { label: string; hint?: string; required?: boolean }) {
   return (
@@ -374,7 +374,7 @@ function PersonalInfoForm() {
           <div>
             <FieldLabel label="About" hint={`${form.bio.length}/600`} />
             <textarea
-              className="w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors resize-none"
+              className="w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors resize-none"
               rows={4} maxLength={600} value={form.bio} onChange={e => patch({ bio: e.target.value })}
               placeholder="Tell athletes what you run and who you are…" />
           </div>

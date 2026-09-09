@@ -101,7 +101,7 @@ function RejectPanel({ onConfirm, onCancel, loading }: RejectPanelProps) {
         Rejection reason <span className="text-red-400">*</span>
       </label>
       <textarea
-        className="w-full text-[14px] text-light bg-dark border border-red-500/30 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-red-400 placeholder:text-muted-dark"
+        className="w-full text-[14px] text-light bg-dark border border-red-500/30 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-red-400 placeholder:text-placeholder"
         rows={3}
         placeholder="Explain why the event is being rejected…"
         value={reason}
@@ -527,7 +527,7 @@ function BulkActionBar({
             placeholder="Rejection reason (required)…"
             value={bulkReason}
             onChange={(e) => setBulkReason(e.target.value)}
-            className="flex-1 max-w-sm text-[13px] bg-dark-light border border-dark-lighter rounded-md px-3 py-1.5 text-light placeholder:text-muted-dark focus:outline-none focus:border-primary"
+            className="flex-1 max-w-sm text-[13px] bg-dark-light border border-dark-lighter rounded-md px-3 py-1.5 text-light placeholder:text-placeholder focus:outline-none focus:border-primary"
           />
           <button
             onClick={() => bulkReason.trim() && run("reject", bulkReason.trim())}

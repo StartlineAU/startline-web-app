@@ -40,6 +40,6 @@ export function RegisterField({
 /** Shared input styling for the registration form, matching the design tokens. */
 export const registerInputCls = (hasError?: boolean) =>
   cn(
-    "w-full bg-dark-light border rounded-[10px] px-[13px] py-[11px] text-[13.5px] font-headline text-light placeholder:text-muted-dark focus:outline-none transition-colors",
+    "w-full bg-dark-light border rounded-[10px] px-[13px] py-[11px] text-[13.5px] font-headline text-light placeholder:text-placeholder focus:outline-none transition-colors",
     hasError ? "border-red-500/70 focus:border-red-500" : "border-dark-lighter focus:border-primary"
   );

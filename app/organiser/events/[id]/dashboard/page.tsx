@@ -436,7 +436,7 @@ function EventDashboardInner({
                       value={annTitle}
                       onChange={e => setAnnTitle(e.target.value)}
                       placeholder="e.g. Schedule update — Saturday heat times"
-                      className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                      className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                     />
                   </div>
                   <div>
