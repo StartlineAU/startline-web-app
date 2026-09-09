@@ -157,6 +157,8 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
     return (
       <div
         onClick={onSelect}
+        data-testid="event-card"
+        data-event-id={event.id}
         className={cn("group flex flex-col self-stretch cursor-pointer", className)}
         style={{ scrollSnapAlign: "start" }}
       >
@@ -168,6 +170,8 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
   return (
     <Link
       href={`/events/${event.id}`}
+      data-testid="event-card"
+      data-event-id={event.id}
       className={cn(
         "group flex flex-col self-stretch",
         className ?? "flex-shrink-0 w-[280px] sm:w-[340px]"

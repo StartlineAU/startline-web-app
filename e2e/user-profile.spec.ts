@@ -87,11 +87,13 @@ test.describe("user profile: race history", () => {
   test("saving an event from the listing appears on the activity Saved tab", async ({ page }) => {
     // Take the event from the rendered listing itself (not /api/events, which
     // can include dates the listing filters out) so the card is guaranteed to
-    // exist before we click its save button.
+    // exist before we click its save button. Select on the card's own testid:
+    // desktop cards select an event for the detail pane beside the list rather
+    // than linking to it, so the card is not always an <a>.
     await page.goto("/events?view=list");
-    const card = page.locator('a[href^="/events/"]').first();
+    const card = page.getByTestId("event-card").first();
     await expect(card).toBeVisible({ timeout: 15000 });
-    const eventId = (await card.getAttribute("href"))!.split("/").pop()!;
+    const eventId = (await card.getAttribute("data-event-id"))!;
     const title = await card.locator("h3").innerText();
 
     // Idempotent across runs: start with this event unsaved, then reload so
