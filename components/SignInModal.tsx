@@ -506,8 +506,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
 
   if (!isOpen || typeof document === "undefined") return null;
 
-  const inputCls    = "w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
-  const dobInputCls = "w-full bg-dark border border-dark-lighter rounded-md px-3 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors text-center";
+  const inputCls    = "w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
+  const dobInputCls = "w-full bg-dark border border-dark-lighter rounded-md px-3 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors text-center";
   const labelCls    = "font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1";
   const btnCls      = "bg-machined shadow-machined w-full text-dark font-headline text-sm font-bold uppercase tracking-widest py-3 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-50 disabled:cursor-not-allowed";
   const errCls      = "mb-3 px-3 py-2.5 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]";

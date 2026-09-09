@@ -72,8 +72,8 @@ export default function EventCarousel({ events, pinnedIds, isOrganiser, onPin }:
   return (
     <div className="relative group/carousel">
       {/* Fade gradients */}
-      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-dark-darker to-transparent z-10" />
-      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-dark-darker to-transparent z-10" />
+      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-darker to-transparent z-10" />
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-darker to-transparent z-10" />
 
       {/* Nav arrows — visible on hover */}
       {sorted.length > 3 && (

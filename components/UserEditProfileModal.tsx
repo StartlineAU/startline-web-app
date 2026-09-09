@@ -7,7 +7,7 @@ import { GENDER_OPTIONS, maxDateOfBirthForMinAge } from "@/lib/registration-form
 import { uploadFile } from "@/lib/upload-client";
 
 const inputCls =
-  "w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
+  "w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
 
 type ProfileDraft = {
   name: string;

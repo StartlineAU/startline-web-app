@@ -179,7 +179,7 @@ export default function GuestEmailVerificationStep({
                     }))
                   }
                   placeholder="000000"
-                  className="w-full bg-dark-light border border-dark-border rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-muted focus:border-primary focus:outline-none transition-colors font-headline font-black"
+                  className="w-full bg-dark-light border border-dark-border rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors font-headline font-black"
                 />
               </div>
 

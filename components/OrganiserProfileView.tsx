@@ -102,9 +102,9 @@ export default function OrganiserProfileView({
             priority
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-dark via-dark-lighter to-dark-darker" />
+          <div className="absolute inset-0 bg-gradient-to-br from-dark via-dark-lighter to-darker" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-darker via-darker/40 to-transparent" />
       </div>
 
       <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pb-12">

@@ -59,7 +59,9 @@ export default function OrganiserIdentity({
         </span>
         {(rating || action) && (
           <span className="flex items-center gap-2 mt-0.5">
-            <OrganiserRating rating={rating} />
+            {/* Roomy enough to say what the number counts, unlike the card
+                bubble (issue #309). */}
+            <OrganiserRating rating={rating} size="md" />
             {action && (
               <span className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
                 {action}

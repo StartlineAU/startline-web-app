@@ -46,8 +46,8 @@ export default function HeroCarousel() {
           sizes="100vw"
         />
       ))}
-      <div className="absolute inset-0 bg-gradient-to-r from-dark-darker/90 via-dark-darker/60 to-dark-darker/20" />
-      <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-transparent to-dark-darker/40" />
+      <div className="absolute inset-0 bg-gradient-to-r from-darker/90 via-darker/60 to-darker/20" />
+      <div className="absolute inset-0 bg-gradient-to-t from-darker via-transparent to-darker/40" />
     </div>
   );
 }

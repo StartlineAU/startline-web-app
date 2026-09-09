@@ -64,7 +64,7 @@ export default function HeroSearch() {
               onEnter={handleSearch}
               where={where}
               placeholder="Event name, type or keyword"
-              className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-base placeholder:text-muted/40 focus:outline-none focus:ring-0"
+              className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-base placeholder:text-placeholder focus:outline-none focus:ring-0"
             />
             {what && (
               <button onClick={() => { setWhat(""); setSelection(null); }} className="text-muted hover:text-light p-1" aria-label="Clear">
@@ -88,7 +88,7 @@ export default function HeroSearch() {
                   filter={selection}
                   onEnter={handleSearch}
                   placeholder="State, city, or suburb"
-                  className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-base placeholder:text-muted/40 focus:outline-none focus:ring-0"
+                  className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-base placeholder:text-placeholder focus:outline-none focus:ring-0"
                 />
               </div>
               {where && (
@@ -130,7 +130,7 @@ export default function HeroSearch() {
               onEnter={handleSearch}
               where={where}
               placeholder="Event name, type or keyword"
-              className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-xl placeholder:text-muted/40 focus:outline-none focus:ring-0"
+              className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-xl placeholder:text-placeholder focus:outline-none focus:ring-0"
             />
             {what && (
               <button onClick={() => { setWhat(""); setSelection(null); }} className="text-muted hover:text-light" aria-label="Clear">
@@ -157,7 +157,7 @@ export default function HeroSearch() {
                   filter={selection}
                   onEnter={handleSearch}
                   placeholder="State, city, or suburb"
-                  className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-xl placeholder:text-muted/40 focus:outline-none focus:ring-0"
+                  className="search-field w-full bg-transparent border-0 rounded-none p-0 text-light font-headline text-xl placeholder:text-placeholder focus:outline-none focus:ring-0"
                 />
               </div>
               {where && (

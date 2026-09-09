@@ -121,8 +121,8 @@ function Field({ label, hint, required, children }: {
   );
 }
 
-const inputCls    = "w-full bg-dark-light border border-dark-lighter rounded-md px-4 py-3 font-headline text-[15px] text-light placeholder:text-muted focus:border-primary focus:outline-none transition-colors";
-const textareaCls = "w-full bg-dark-light border border-dark-lighter rounded-md px-4 py-3 font-headline text-[14px] text-light placeholder:text-muted focus:border-primary focus:outline-none resize-none transition-colors";
+const inputCls    = "w-full bg-dark-light border border-dark-lighter rounded-md px-4 py-3 font-headline text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
+const textareaCls = "w-full bg-dark-light border border-dark-lighter rounded-md px-4 py-3 font-headline text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none resize-none transition-colors";
 
 /* ═══════════════════════════════════════════════════════════════
    TIME PICKER
@@ -195,7 +195,7 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (html: s
           [&_h3]:font-headline [&_h3]:font-black [&_h3]:text-[16px] [&_h3]:text-light [&_h3]:mt-3 [&_h3]:mb-1
           [&_h4]:font-headline [&_h4]:font-bold [&_h4]:text-[14px] [&_h4]:text-light [&_h4]:mt-2 [&_h4]:mb-1
           [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_li]:mb-0.5
-          empty:before:content-[attr(data-placeholder)] empty:before:text-muted-dark empty:before:pointer-events-none"
+          empty:before:content-[attr(data-placeholder)] empty:before:text-placeholder empty:before:pointer-events-none"
       />
     </div>
   );
@@ -408,7 +408,7 @@ function BasicsStep({ form, update }: { form: FormState; update: (p: Partial<For
               <button type="button" onClick={() => update({ minAge: String(Math.max(0, (parseInt(form.minAge) || 0) - 1)) })}
                 className="w-9 h-11 flex items-center justify-center text-light hover:text-light hover:bg-white/5 transition-colors font-headline text-lg select-none">−</button>
               <input type="number" value={form.minAge} onChange={e => update({ minAge: e.target.value })} placeholder="0"
-                className="w-16 bg-dark-light px-2 py-3 font-headline text-[15px] text-light text-center placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                className="w-16 bg-dark-light px-2 py-3 font-headline text-[15px] text-light text-center placeholder:text-placeholder focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
               <button type="button" onClick={() => update({ minAge: String((parseInt(form.minAge) || 0) + 1) })}
                 className="w-9 h-11 flex items-center justify-center text-light hover:text-light hover:bg-white/5 transition-colors font-headline text-lg select-none">+</button>
             </div>
@@ -985,7 +985,7 @@ function MediaStep({ form, update }: { form: FormState; update: (p: Partial<Form
                       value={pdf.label}
                       placeholder="Label (e.g. Course Map)"
                       onChange={e => updateInfoPdfLabel(i, e.target.value)}
-                      className="w-full bg-dark border border-dark-lighter rounded-md px-3 py-2 mt-1.5 font-headline text-[12px] text-light placeholder:text-muted focus:border-primary focus:outline-none transition-colors"
+                      className="w-full bg-dark border border-dark-lighter rounded-md px-3 py-2 mt-1.5 font-headline text-[12px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
                     />
                   </div>
                   <div className="flex flex-col items-center gap-1 shrink-0">
@@ -1313,7 +1313,7 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
             ) : (
               <div className="absolute inset-0 placeholder-stripes scan-grid" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-darker via-darker/50 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6 pb-5">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 {discipline && (

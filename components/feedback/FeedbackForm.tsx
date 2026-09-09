@@ -30,7 +30,7 @@ const SUBMIT_LABELS: Record<FeedbackType, string> = {
 // ── Shared input classes ──────────────────────────────────────────────────────
 
 const inputCls =
-  "w-full bg-dark-light border border-dark-lighter rounded-[10px] px-[15px] py-3 text-[14.5px] text-light placeholder:text-muted-dark outline-none transition-[border-color,box-shadow] duration-180 focus:border-primary focus:shadow-[0_0_0_3px_rgba(179,225,83,0.1)]";
+  "w-full bg-dark-light border border-dark-lighter rounded-[10px] px-[15px] py-3 text-[14.5px] text-light placeholder:text-placeholder outline-none transition-[border-color,box-shadow] duration-180 focus:border-primary focus:shadow-[0_0_0_3px_rgba(179,225,83,0.1)]";
 
 const labelCls =
   "font-headline font-bold text-[10.5px] uppercase tracking-[0.15em] text-muted";

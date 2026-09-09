@@ -8,7 +8,7 @@ import {
 import { validateUsername } from "@/lib/username-validation";
 import { STATE_OPTIONS } from "@/types";
 
-const inputCls = "w-full bg-dark-light border border-dark-lighter rounded-md px-3 py-2.5 font-headline text-[14px] text-light placeholder:text-muted focus:border-primary focus:outline-none transition-colors";
+const inputCls = "w-full bg-dark-light border border-dark-lighter rounded-md px-3 py-2.5 font-headline text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
 
 interface UserData {
   id: string;

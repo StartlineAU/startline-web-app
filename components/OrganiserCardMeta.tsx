@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,8 @@ import type { OrganiserRating as Rating } from "@/lib/reviews";
 type Props = {
   organiserId: string;
   name: string;
+  /** Organiser logo, shown as a small avatar before the name. */
+  logoUrl?: string | null;
   rating?: Rating | null;
   className?: string;
   /** Override the name text colour classes (default: text-muted hover:text-primary) */
@@ -26,6 +29,7 @@ type Props = {
 export default function OrganiserCardMeta({
   organiserId,
   name,
+  logoUrl,
   rating,
   className,
   nameClassName,
@@ -42,8 +46,24 @@ export default function OrganiserCardMeta({
     nameClassName ?? "text-muted hover:text-primary",
   );
 
+  /* The OrganiserIdentity frame at card scale: same rounded square, same
+     dark-lighter ground, same initial fallback, just 24px instead of 40
+     (issue #309). */
+  const avatar = (
+    <span className="relative w-6 h-6 rounded-md overflow-hidden bg-dark-lighter shrink-0">
+      {logoUrl ? (
+        <Image src={logoUrl} alt="" fill className="object-cover" sizes="24px" />
+      ) : (
+        <span className="w-full h-full flex items-center justify-center font-headline text-[11px] font-black text-primary">
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </span>
+  );
+
   return (
     <div className={cn("flex items-center gap-2 min-w-0", className)}>
+      {avatar}
       {nestedInLink ? (
         <button
           type="button"

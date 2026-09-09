@@ -972,7 +972,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 value={editBib}
                 onChange={(e) => setEditBib(e.target.value)}
                 placeholder="e.g. 42"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
               />
               {editNextBib && editBib.trim() !== editNextBib && (
                 <button
@@ -993,7 +993,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 value={editFinish}
                 onChange={(e) => setEditFinish(e.target.value)}
                 placeholder="e.g. 0:45 or 3:30"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
               />
               <p className="text-[12px] text-muted-dark mt-1.5">Used to seed start waves by pace. Leave blank if unknown.</p>
             </div>
@@ -1049,7 +1049,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 value={resultTime}
                 onChange={(e) => setResultTime(e.target.value)}
                 placeholder="e.g. 41:05"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
               />
             </div>
             <div>
@@ -1059,7 +1059,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 value={resultPlacement}
                 onChange={(e) => setResultPlacement(e.target.value)}
                 placeholder="e.g. 8th / 512"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
               />
             </div>
             {resultError && <p className="text-[13px] text-red-300">{resultError}</p>}
@@ -1089,7 +1089,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
             onChange={(e) => setCsvText(e.target.value)}
             rows={8}
             placeholder={"email,time,placement\nalex.turner@example.com,41:05,8th / 512"}
-            className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[13px] text-light font-mono placeholder:text-muted-dark focus:border-primary focus:outline-none resize-y"
+            className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[13px] text-light font-mono placeholder:text-placeholder focus:border-primary focus:outline-none resize-y"
           />
           {csvMessage && <p className="text-[13px] text-muted-light">{csvMessage}</p>}
           <DialogFooter>
@@ -1176,7 +1176,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                       onChange={(e) => updateWave(w.id, { label: e.target.value })}
                       placeholder="Wave name"
                       aria-label={`Wave name for ${w.label || "new wave"}`}
-                      className="flex-1 min-w-0 bg-dark-light border border-dark-lighter rounded-lg px-2.5 py-2 text-[14px] font-headline font-bold text-light placeholder:text-muted-dark focus:border-primary focus:outline-none"
+                      className="flex-1 min-w-0 bg-dark-light border border-dark-lighter rounded-lg px-2.5 py-2 text-[14px] font-headline font-bold text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
                     />
                     <div className="flex items-center gap-1.5" title="Start time">
                       <Clock className="w-3.5 h-3.5 text-muted-dark shrink-0" />
@@ -1208,12 +1208,12 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                         <input type="number" min={0} value={w.finishMin ?? ""} placeholder="min"
                           id={`${w.id}-finish-min`} aria-label={`Minimum finish minutes for ${w.label || "this wave"}`}
                           onChange={(e) => updateWave(w.id, { finishMin: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none" />
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
                         <span className="text-muted-dark text-[12px]">-</span>
                         <input type="number" min={0} value={w.finishMax ?? ""} placeholder="max"
                           aria-label={`Maximum finish minutes for ${w.label || "this wave"}`}
                           onChange={(e) => updateWave(w.id, { finishMax: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none" />
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
                       </div>
                     </div>
                     <div>
@@ -1222,12 +1222,12 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                         <input type="number" min={0} value={w.ageMin ?? ""} placeholder="min"
                           id={`${w.id}-age-min`} aria-label={`Minimum age for ${w.label || "this wave"}`}
                           onChange={(e) => updateWave(w.id, { ageMin: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none" />
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
                         <span className="text-muted-dark text-[12px]">-</span>
                         <input type="number" min={0} value={w.ageMax ?? ""} placeholder="max"
                           aria-label={`Maximum age for ${w.label || "this wave"}`}
                           onChange={(e) => updateWave(w.id, { ageMax: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none" />
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
                       </div>
                     </div>
                     <div>
@@ -1235,7 +1235,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                       <input type="number" min={0} value={w.capacity ?? ""} placeholder="Any"
                         id={`${w.id}-capacity`} aria-label={`Maximum athletes in ${w.label || "this wave"}`}
                         onChange={(e) => updateWave(w.id, { capacity: e.target.value === "" ? null : Number(e.target.value) })}
-                        className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none" />
+                        className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
                     </div>
                   </div>
 

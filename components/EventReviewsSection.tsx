@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle, Star } from "lucide-react";
+import { ArrowRight, CheckCircle, Star } from "lucide-react";
 import OrganiserIdentity from "@/components/OrganiserIdentity";
 import type { OrganiserRating as Rating, PublicReview } from "@/lib/reviews";
 import { formatLongDate } from "@/lib/utils";
@@ -51,11 +51,14 @@ export default function EventReviewsSection({
             rating={rating}
           />
         </div>
+        {/* Same pill the event page uses for "Back to Events" and the listing
+            panel for "Open full page", so every link that leaves the screen
+            looks like the same control (issue #309). */}
         <Link
           href={`/organisers/${organiserId}#reviews`}
-          className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
+          className="inline-flex flex-shrink-0 items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors"
         >
-          View all on organiser profile &rarr;
+          View all on organiser profile <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 

@@ -5,9 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  User, LogOut, Building2, Shield, Plus, Settings, Bell,
+  LogOut, Building2, Shield, Plus, Settings, Bell,
   Check, TriangleAlert, Menu, X, ChevronDown, ChevronRight, Users, UserCircle,
-  UserRound, RefreshCw,
+  UserRound, RefreshCw, House,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
@@ -346,7 +346,9 @@ export default function OrganiserNavBar() {
                   </div>
 
                   {/* Organiser */}
-                  <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">Organiser</div>
+                  <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">
+                    {memberships.length > 1 ? "Organiser · switch organisation" : "Organiser"}
+                  </div>
                   <Link href="/organiser/new-listing" onClick={() => setIsUserOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                     <Plus className="w-4 h-4" /> Post an Event
@@ -372,9 +374,12 @@ export default function OrganiserNavBar() {
                     </div>
                   )}
 
-                  {/* User */}
+                  {/* Athlete side of the account. Named for what it is: the old
+                      header said "User" and its last row said "User" again,
+                      which gave no hint that the row left the organiser
+                      portal for the public site (issue #309). */}
                   <div className="border-t border-white/10 my-1" />
-                  <div className="px-4 pt-2 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">User</div>
+                  <div className="px-4 pt-2 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">My athlete account</div>
                   <Link href="/profile" onClick={() => setIsUserOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                     <UserCircle className="w-4 h-4" /> My profile
@@ -387,9 +392,11 @@ export default function OrganiserNavBar() {
                     className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                     <Settings className="w-4 h-4" /> Settings
                   </button>
+                  <div className="border-t border-white/10 my-1" />
                   <Link href="/" onClick={() => setIsUserOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                    <User className="w-4 h-4" /> User
+                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
+                    <House className="w-4 h-4" /> Startline home
+                    <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />
                   </Link>
                   <div className="border-t border-white/10" />
                   <button onClick={handleSignOut}
@@ -442,6 +449,7 @@ export default function OrganiserNavBar() {
               {memberships.length > 1 && (
                 <>
                   <div className="border-t border-white/10 my-1.5" />
+                  <div className="px-4 pt-1 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">Switch organisation</div>
                   {memberships.map((m) => (
                     <button key={m.organiserId} onClick={() => { setIsMenuOpen(false); switchOrganiser(m.organiserId); }}
                       className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[12px] font-bold uppercase tracking-widest text-primary hover:bg-white/10 transition-colors text-left">
@@ -453,6 +461,21 @@ export default function OrganiserNavBar() {
                   ))}
                 </>
               )}
+
+              {/* The way out of the organiser portal. Phones only had the
+                  organiser nav and Sign Out before, so the public site was
+                  unreachable from here (issue #309). */}
+              <div className="border-t border-white/10 my-1.5" />
+              <div className="px-4 pt-1 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">My athlete account</div>
+              <Link href="/profile" onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                <UserCircle className="w-4 h-4" /> My profile
+              </Link>
+              <Link href="/" onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
+                <House className="w-4 h-4" /> Startline home
+                <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />
+              </Link>
 
               <div className="border-t border-white/10 mt-1.5 pt-3 pb-2">
                 <button onClick={() => { setIsMenuOpen(false); handleSignOut(); }}

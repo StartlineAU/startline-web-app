@@ -174,7 +174,7 @@ export default function MembersPage() {
                 onChange={(e) => setAddEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAdd()}
                 placeholder="team@email.com"
-                className="w-full bg-dark-light border border-dark-lighter rounded-xl pl-10 pr-4 py-2.5 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors"
+                className="w-full bg-dark-light border border-dark-lighter rounded-xl pl-10 pr-4 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
               />
             </div>
             <button

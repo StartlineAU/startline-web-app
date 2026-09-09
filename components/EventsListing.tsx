@@ -20,6 +20,8 @@ import { useAuthContext } from "@/context/AuthContext";
 import EventMap from "@/components/EventMap";
 import type { EventMapHandle } from "@/components/EventMap";
 import EventCard from "@/components/EventCard";
+import EventDetailView from "@/components/event/EventDetailView";
+import type { EventDetailData } from "@/lib/event-detail";
 import EventLocationAutocomplete from "@/components/ui/EventLocationAutocomplete";
 import EventAutocomplete from "@/components/ui/EventAutocomplete";
 
@@ -174,7 +176,9 @@ function EventsListingInner() {
   const [openDropdown,  setOpenDropdown]  = useState<string | null>(null);
   const [mobileSearch,  setMobileSearch]  = useState(false);
   const [filterSheet,   setFilterSheet]   = useState(false);
-  const [view, setView] = useState<"list" | "map">(searchParams.get("view") === "list" ? "list" : "map");
+  // List is the default tab: the events tab opens on cards, and the map is
+  // somewhere you go via the toggle (issue #309). ?view=map still opens on it.
+  const [view, setView] = useState<"list" | "map">(searchParams.get("view") === "map" ? "map" : "list");
   // Latches true the first time the Map tab is viewed, so EventMap mounts
   // once and then just toggles visibility (avoids re-init/re-fetch on every tab switch).
   const [mapEverViewed, setMapEverViewed] = useState(view === "map");
@@ -385,15 +389,91 @@ function EventsListingInner() {
     });
   }, []);
 
+  /* ── Detail pane beside the list (desktop only) ──────────────────────────
+     Cards on the left, the selected event's information screen on the right.
+     Phones keep the plain card list, so the fetch below is gated on a desktop
+     viewport rather than firing for a pane nobody can see (issue #309). */
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const splitView = view === "list" && isDesktop;
+
+  // Something is always selected in the split view, so the pane is never blank.
+  // Derived rather than stored, so a filter change that drops the selected
+  // event falls straight back to the first result with no extra render.
+  const activeId = splitView && displayEvents.length > 0
+    ? (selectedId && displayEvents.some((e) => e.id === selectedId) ? selectedId : displayEvents[0].id)
+    : selectedId;
+
+  const [detail, setDetail] = useState<EventDetailData | null>(null);
+  const [detailError, setDetailError] = useState(false);
+  // Events already looked at this session render instantly on re-selection.
+  const detailCache = useRef(new Map<string, EventDetailData>());
+
+  useEffect(() => {
+    if (!splitView || !activeId) return;
+
+    let cancelled = false;
+    const cached = detailCache.current.get(activeId);
+    const load = cached
+      ? Promise.resolve(cached)
+      : fetch(`/api/events/${activeId}/detail`)
+          .then((r) => (r.ok ? r.json() as Promise<EventDetailData> : Promise.reject(new Error(String(r.status)))))
+          .then((data) => { detailCache.current.set(data.event.id, data); return data; });
+
+    load
+      .then((data) => { if (!cancelled) { setDetail(data); setDetailError(false); } })
+      .catch(() => { if (!cancelled) { setDetail(null); setDetailError(true); } });
+
+    return () => { cancelled = true; };
+  }, [splitView, activeId]);
+
+  /**
+   * Selecting from the list column. Unlike the map's card list this never
+   * toggles off: the detail pane beside it always has an event to show.
+   * Still flies the map when it happens to be mounted, so the selection
+   * carries over to the Map tab.
+   */
+  const handleListSelect = useCallback((id: string) => {
+    setSelectedId(id);
+    mapRef.current?.flyTo(id);
+    mapRef.current?.stopSpin();
+  }, []);
+
+  /* Phones get one button naming where it goes ("Map" while you are on the
+     list, "List" while you are on the map). The two-part desktop toggle plus
+     sort plus filters does not fit a phone row, and the half that used to get
+     pushed off the edge was the toggle itself (issue #309). */
+  const mobileViewToggle = (
+    <button
+      onClick={() => {
+        if (view === "list") { setView("map"); setMapEverViewed(true); }
+        else setView("list");
+      }}
+      data-testid={view === "list" ? "view-mode-map" : "view-mode-list"}
+      className="flex-shrink-0 flex items-center gap-1.5 h-11 px-3.5 rounded-xl bg-dark border border-dark-lighter text-light font-headline text-xs font-bold uppercase tracking-widest transition-colors hover:border-primary hover:text-primary"
+    >
+      {view === "list"
+        ? <><MapPin className="w-3.5 h-3.5" /> Map</>
+        : <><LayoutGrid className="w-3.5 h-3.5" /> List</>}
+    </button>
+  );
+
   const viewToggle = (
     <div className="flex items-center gap-0.5 bg-dark rounded-xl border border-dark-lighter p-0.5 flex-shrink-0">
       <button onClick={() => { setView("map"); setMapEverViewed(true); }} data-testid="view-mode-map"
-        className={`flex items-center gap-1.5 px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "map" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
+        className={`flex items-center gap-1.5 px-2.5 lg:px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "map" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
       >
         <MapPin className="w-3.5 h-3.5" /> Map
       </button>
       <button onClick={() => setView("list")} data-testid="view-mode-list"
-        className={`flex items-center gap-1.5 px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "list" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
+        className={`flex items-center gap-1.5 px-2.5 lg:px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "list" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
       >
         <LayoutGrid className="w-3.5 h-3.5" /> List
       </button>
@@ -423,7 +503,7 @@ function EventsListingInner() {
               onSelectCategory={applySelection}
               where={whereQuery}
               placeholder="Event name, type or keyword"
-              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:ring-0 focus:outline-none"
             />
           </div>
           {whatQuery && <button type="button" onClick={() => { setWhatQuery(""); setSelection(null); }} aria-label="Clear event search" className="text-muted hover:text-light flex-shrink-0"><X className="w-3.5 h-3.5" /></button>}
@@ -439,7 +519,7 @@ function EventsListingInner() {
               onSelect={(label) => handleWhereSearch(label)}
               onEnter={() => handleWhereSearch()}
               placeholder="State, city, or suburb"
-              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none"
+              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:ring-0 focus:outline-none"
             />
           </div>
           {isGeocoding
@@ -464,7 +544,7 @@ function EventsListingInner() {
               where={whereQuery}
               autoFocus
               placeholder="Event name, type or keyword"
-              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:outline-none"
+              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:outline-none"
             />
             {whatQuery && <button onClick={() => { setWhatQuery(""); setSelection(null); }} aria-label="Clear event search" className="text-muted flex-shrink-0"><X className="w-4 h-4" /></button>}
           </div>
@@ -478,7 +558,7 @@ function EventsListingInner() {
                 onSelect={(label) => handleWhereSearch(label)}
                 onEnter={() => handleWhereSearch()}
                 placeholder="City or state"
-                className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:outline-none"
+                className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:outline-none"
               />
             </div>
             {isGeocoding
@@ -617,12 +697,20 @@ function EventsListingInner() {
   );
 
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? "Sort";
+  // Phones drop the "Date:" / "Price:" half of the label. The full label plus
+  // Filters plus Map/List does not fit a 390px row, and what got pushed out
+  // was Map/List (issue #309).
+  const shortSortLabel = sortLabel.includes(": ") ? sortLabel.split(": ")[1] : sortLabel;
 
   // Phones get a Sort control plus a single Filters button that opens the
   // sheet below; six pills in a sideways-scrolling row was unusable at 390px.
   const mobileFilterBar = (
+    /* The sort and filter controls scroll inside their own track so a long sort
+       label cannot push Map/List off the right edge of a phone, which is what
+       hid the toggle entirely (issue #309). Mirrors the desktop row. */
     <div className="lg:hidden border-b border-dark-lighter bg-dark-darker px-3 py-2 flex items-center gap-2">
-      <FilterTrigger label={sortLabel} active={sortBy !== "date"}
+      <div className="flex flex-1 items-center gap-2 overflow-x-auto no-scrollbar min-w-0">
+      <FilterTrigger label={shortSortLabel} active={sortBy !== "date"}
         isOpen={openDropdown === "sort-mobile"}
         onToggle={() => setOpenDropdown(openDropdown === "sort-mobile" ? null : "sort-mobile")}
         panelClassName="w-48" icon={<ArrowUpDown className="w-3.5 h-3.5" />}
@@ -631,7 +719,7 @@ function EventsListingInner() {
       </FilterTrigger>
 
       <button onClick={() => { setOpenDropdown(null); setFilterSheet(true); }} data-testid="mobile-filters-open"
-        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full font-headline text-xs font-bold uppercase tracking-widest border transition-colors ${activeChips.length > 0 ? "border-primary/35 bg-primary/[0.08] text-primary" : "border-transparent text-muted"}`}
+        className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full font-headline text-xs font-bold uppercase tracking-widest border transition-colors ${activeChips.length > 0 ? "border-primary/35 bg-primary/[0.08] text-primary" : "border-transparent text-muted"}`}
       >
         <SlidersHorizontal className="w-3.5 h-3.5" />
         Filters
@@ -643,14 +731,15 @@ function EventsListingInner() {
       </button>
 
       {activeChips.length > 0 && (
-        <button onClick={clearFilters} className="font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-light transition-colors">
+        <button onClick={clearFilters} className="flex-shrink-0 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-light transition-colors">
           Clear All
         </button>
       )}
+      </div>
 
-      {/* Pushed right so Map/List anchors the end of the row whether or not
-          Clear All is showing. */}
-      <div className="ml-auto">{viewToggle}</div>
+      {/* Outside the scrolling track, so it stays pinned to the right edge
+          and is always reachable. */}
+      {mobileViewToggle}
     </div>
   );
 
@@ -852,8 +941,25 @@ function EventsListingInner() {
   const emptyState = noResults("lg");
 
   // Full-width results grid — shown for the "List" tab, all breakpoints
+  /** Placeholder while the selected event's information screen loads. */
+  const detailSkeleton = (
+    <div className="p-6 animate-pulse">
+      <div className="w-full h-[220px] rounded-2xl bg-dark" />
+      <div className="mt-6 h-6 w-2/3 rounded bg-dark" />
+      <div className="mt-3 h-4 w-1/3 rounded bg-dark" />
+      <div className="mt-6 space-y-2">
+        <div className="h-4 w-full rounded bg-dark" />
+        <div className="h-4 w-11/12 rounded bg-dark" />
+        <div className="h-4 w-9/12 rounded bg-dark" />
+      </div>
+    </div>
+  );
+
+  /* Phones and tablets: the plain card grid, unchanged. Rendered instead of
+     the split, never alongside it, so the listing holds one copy of the
+     results rather than two with one hidden. */
   const gridContent = (
-    <div className={view === "list" ? "flex-1 overflow-y-auto px-3 lg:px-6 py-4 lg:py-5" : "hidden"}>
+    <div className={view === "list" ? "flex-1 overflow-y-auto px-3 py-4" : "hidden"}>
       {displayEvents.length === 0 ? emptyState : (
         <>
           <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
@@ -864,6 +970,53 @@ function EventsListingInner() {
           {otherEventsBlock("lg")}
         </>
       )}
+    </div>
+  );
+
+  /* Desktop: one column of cards, the event information screen beside it.
+     Card column is the width of a home page card so the two read as the same
+     card, and the pane scrolls back to the top whenever the event changes. */
+  const splitContent = (
+    <div className={view === "list" ? "flex flex-1 min-h-0" : "hidden"}>
+      <div className="w-[372px] flex-shrink-0 border-r border-dark-lighter overflow-y-auto px-4 py-4">
+        {displayEvents.length === 0 ? (
+          noResults("sm")
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4">
+              {displayEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  className="w-full"
+                  selected={activeId === event.id}
+                  onSelect={() => handleListSelect(event.id)}
+                />
+              ))}
+            </div>
+            {otherEventsBlock("sm")}
+          </>
+        )}
+      </div>
+
+      <div key={activeId ?? "none"} className="flex-1 min-w-0 overflow-y-auto">
+        {displayEvents.length === 0 ? null
+          : detailError ? (
+            <div className="p-10 text-center">
+              <p className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-4">
+                That event could not be loaded.
+              </p>
+              {activeId && (
+                <Link href={`/events/${activeId}`}
+                  className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors">
+                  Open the event page
+                </Link>
+              )}
+            </div>
+          )
+          : detail && detail.event.id === activeId ? <EventDetailView data={detail} variant="panel" />
+          : detailSkeleton}
+      </div>
     </div>
   );
 
@@ -911,7 +1064,7 @@ function EventsListingInner() {
       {activeChipsRow}
 
       <div className="flex-1 min-h-0 flex flex-col">
-        {gridContent}
+        {splitView ? splitContent : gridContent}
         {mapContent}
       </div>
 

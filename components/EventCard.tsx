@@ -89,10 +89,11 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
           <OrganiserCardMeta
             organiserId={event.organiserId}
             name={organiserName}
+            logoUrl={event.organiser?.logoUrl}
             rating={event.organiser?.rating}
             nestedInLink
             nameClassName="text-light hover:text-primary"
-            className="self-start mb-3 bg-dark-lighter border border-dark-lighter rounded-lg px-2 py-1"
+            className="self-start mb-3 bg-dark-lighter border border-dark-lighter rounded-lg pl-1 pr-2.5 py-1"
           />
         )}
 
@@ -111,10 +112,19 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
             even a pixel. */}
         {(event.fromPrice !== null || onSelect) && (
           <div className="mt-auto pt-1 flex items-center gap-3">
+            {/* A free event says so. "From $0" reads like a placeholder for a
+                price that has not been set yet. Matches the wording the event
+                page and the listing wizard's preview card already use. */}
             {event.fromPrice !== null && (
               <span className="font-headline text-sm font-bold">
-                <span className="text-light">From </span>
-                <span className="text-primary">${event.fromPrice}</span>
+                {event.fromPrice === 0 ? (
+                  <span className="text-primary">Free</span>
+                ) : (
+                  <>
+                    <span className="text-light">From </span>
+                    <span className="text-primary">${event.fromPrice}</span>
+                  </>
+                )}
               </span>
             )}
 
@@ -147,6 +157,8 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
     return (
       <div
         onClick={onSelect}
+        data-testid="event-card"
+        data-event-id={event.id}
         className={cn("group flex flex-col self-stretch cursor-pointer", className)}
         style={{ scrollSnapAlign: "start" }}
       >
@@ -158,6 +170,8 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
   return (
     <Link
       href={`/events/${event.id}`}
+      data-testid="event-card"
+      data-event-id={event.id}
       className={cn(
         "group flex flex-col self-stretch",
         className ?? "flex-shrink-0 w-[280px] sm:w-[340px]"

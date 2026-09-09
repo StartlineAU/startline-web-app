@@ -227,7 +227,7 @@ export default function SecuritySettingsPage() {
                 value={totpCode}
                 onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 placeholder="000000"
-                className="flex-1 bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold"
+                className="flex-1 bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold"
                 autoFocus
               />
               <button onClick={handleVerifySetup} disabled={totpCode.length < 6 || setupStep === "verify"}
@@ -255,7 +255,7 @@ export default function SecuritySettingsPage() {
             <div className="relative">
               <input id="current-pw" type={showPw ? "text" : "password"} required value={currentPw}
                 onChange={(e) => setCurrentPw(e.target.value)} placeholder="Enter current password"
-                className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors pr-11" />
+                className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors pr-11" />
               <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary">
                 {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -267,7 +267,7 @@ export default function SecuritySettingsPage() {
               <input id="new-pw" type={showPw ? "text" : "password"} required value={newPw}
                 onChange={(e) => setNewPw(e.target.value)} placeholder="Create a new password"
                 aria-describedby="change-password-requirements"
-                className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors pr-11" />
+                className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors pr-11" />
             </div>
             <div id="change-password-requirements">
               <PasswordRequirements password={newPw} />
@@ -277,7 +277,7 @@ export default function SecuritySettingsPage() {
             <label htmlFor="confirm-pw" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1">Confirm New Password</label>
             <input id="confirm-pw" type={showPw ? "text" : "password"} required value={confirmPw}
               onChange={(e) => setConfirmPw(e.target.value)} placeholder="Re-enter new password"
-              className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+              className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
           </div>
           <button type="submit" disabled={pwLoading || !isPasswordValid(newPw)}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-headline text-[11px] font-bold uppercase tracking-widest border transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-primary/30 text-primary hover:bg-primary/10">

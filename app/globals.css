@@ -22,10 +22,23 @@
   --color-muted-light: #f0f2f5;
   --color-muted-dark: #bcc1ca;
 
+  /* Placeholder text only. The muted greys above were lifted close to white
+     for contrast (issue #304), which left placeholders reading as a filled in
+     value. This sits low enough to say "nothing typed here yet" and still
+     clears 4.5:1 on the --color-dark-light field background (issue #309). */
+  --color-placeholder: #8f949e;
+
   --font-sans: var(--font-chakra-petch), var(--font-inter), system-ui, sans-serif;
   --font-headline: var(--font-chakra-petch), sans-serif;
 
   --shadow-machined: 2px 2px 0 #b3e153;
+}
+
+/* Placeholders are grey everywhere, including fields that set no colour class
+   of their own. Anything wanting a different shade still overrides it. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-placeholder);
 }
 
 /* Hide scrollbar utility */
@@ -564,7 +577,7 @@ body:has([data-organiser-bar]) .app-shell {
   font-size: 15px;
   transition: border-color 0.15s;
 }
-.waitlist-input::placeholder { color: var(--color-muted-dark); }
+.waitlist-input::placeholder { color: var(--color-placeholder); }
 .waitlist-input:focus { outline: none; border-color: var(--color-primary); }
 
 .waitlist-btn {

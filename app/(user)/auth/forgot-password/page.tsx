@@ -93,7 +93,7 @@ function ForgotPasswordForm() {
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
                   <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
                 </div>
               </div>
               <button type="submit" disabled={loading}
@@ -125,7 +125,7 @@ function ForgotPasswordForm() {
                 <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} required
                   value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="000000"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors font-headline font-black" />
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors font-headline font-black" />
               </div>
               <div>
                 <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">New password</label>
@@ -134,7 +134,7 @@ function ForgotPasswordForm() {
                   <input type={showPw ? "text" : "password"} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                     aria-describedby="reset-password-requirements"
                     placeholder="Create a new password"
-                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-11 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
                   <button type="button" onClick={() => setShowPw((s) => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -150,7 +150,7 @@ function ForgotPasswordForm() {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
                   <input type={showPw ? "text" : "password"} required value={confirm} onChange={(e) => setConfirm(e.target.value)}
                     placeholder="Re-enter password"
-                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+                    className="w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
                 </div>
               </div>
               <button type="submit" disabled={loading || code.length < 6 || !isPasswordValid(newPassword)}
