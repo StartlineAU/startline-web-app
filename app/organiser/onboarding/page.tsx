@@ -156,11 +156,11 @@ export default function OnboardingPage() {
 
       {/* ── Background gradient ── */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-dark/80 via-dark-darker to-dark/60 opacity-80" />
-        <div className="absolute inset-x-0 top-0    h-[30%] bg-gradient-to-b  from-dark-darker to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t  from-dark-darker to-transparent" />
-        <div className="absolute inset-y-0 left-0   w-[20%] bg-gradient-to-r  from-dark-darker to-transparent" />
-        <div className="absolute inset-y-0 right-0  w-[20%] bg-gradient-to-l  from-dark-darker to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-br from-dark/80 via-darker to-dark/60 opacity-80" />
+        <div className="absolute inset-x-0 top-0    h-[30%] bg-gradient-to-b  from-darker to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t  from-darker to-transparent" />
+        <div className="absolute inset-y-0 left-0   w-[20%] bg-gradient-to-r  from-darker to-transparent" />
+        <div className="absolute inset-y-0 right-0  w-[20%] bg-gradient-to-l  from-darker to-transparent" />
         <div className="absolute inset-0 scan-grid opacity-50" />
       </div>
 

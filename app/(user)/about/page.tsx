@@ -67,7 +67,7 @@ export default function AboutPage() {
           sizes="100vw"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/55 to-dark-darker/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-darker via-darker/55 to-darker/30" />
         <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 pb-10 sm:pb-14">
           <p className="font-headline text-[10px] sm:text-xs font-black uppercase tracking-widest text-primary mb-3">
             About
@@ -131,7 +131,7 @@ export default function AboutPage() {
           className="object-cover"
           sizes="100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-dark-darker via-dark-darker/70 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-darker via-darker/70 to-transparent" />
         <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-16">
           <div className="max-w-xl">
             <p className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-3.5">

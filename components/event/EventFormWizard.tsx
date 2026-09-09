@@ -1313,7 +1313,7 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
             ) : (
               <div className="absolute inset-0 placeholder-stripes scan-grid" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-dark-darker via-dark-darker/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-darker via-darker/50 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6 pb-5">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 {discipline && (

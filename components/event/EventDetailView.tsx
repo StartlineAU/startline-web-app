@@ -73,7 +73,7 @@ export default function EventDetailView({
             is not a gradient colour Tailwind knows, so the page's overlay
             below renders fully transparent (pre-existing, left alone here). */}
         <div className={`absolute inset-0 bg-gradient-to-t ${
-          isPanel ? "from-darker via-darker/80 to-darker/30" : "from-dark-darker via-dark-darker/50 to-transparent"
+          isPanel ? "from-darker via-darker/80 to-darker/30" : "from-darker via-darker/50 to-transparent"
         }`} />
 
         {/* Title overlaid at bottom of banner */}
@@ -238,16 +238,13 @@ export default function EventDetailView({
                   </Link>
                 </Button>
               </div>
-              <div className="flex items-center justify-center gap-4 border border-dark-lighter rounded-xl py-2.5 px-4">
-                <div className="flex items-center gap-2">
-                  <SaveEventButton eventId={event.id} />
-                  <span className="font-headline text-xs font-bold uppercase tracking-widest text-muted">Save</span>
-                </div>
-                <div className="w-px h-5 bg-dark-lighter" />
-                <div className="flex items-center gap-2">
-                  <ShareEventButton eventId={event.id} slug={event.slug} title={event.title} />
-                  <span className="font-headline text-xs font-bold uppercase tracking-widest text-muted">Share</span>
-                </div>
+              {/* Two buttons, not one box holding two icons with captions
+                  beside them: only the icons were clickable there, and the
+                  captions were not part of the control (issue #309). Same
+                  outline treatment as View on Maps above. */}
+              <div className="grid grid-cols-2 gap-3">
+                <SaveEventButton eventId={event.id} label="Save" />
+                <ShareEventButton eventId={event.id} slug={event.slug} title={event.title} label="Share" />
               </div>
             </div>
 
@@ -284,9 +281,13 @@ export default function EventDetailView({
                 {event.categories && event.categories.length > 0 && (
                   <div>
                     <p className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted mb-1">Divisions</p>
+                    {/* Outline pills in the same idiom as the pricing rows'
+                        "Closed" tag and the listing's filter chips. The tinted
+                        green squares they replace matched nothing else on the
+                        page (issue #309). */}
                     <div className="flex flex-wrap gap-1.5">
                       {event.categories.map((c) => (
-                        <span key={c} className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary border border-primary/30 bg-primary/10 px-2 py-1 rounded-md">
+                        <span key={c} className="font-headline text-[11px] font-bold uppercase tracking-widest text-light border border-dark-lighter px-2.5 py-1 rounded-full">
                           {c}
                         </span>
                       ))}

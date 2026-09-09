@@ -10,6 +10,8 @@ interface ShareEventButtonProps {
   slug?: string;
   title: string;
   className?: string;
+  /** Render a full labelled button rather than the bare icon (issue #309). */
+  label?: string;
 }
 
 function eventUrl(eventId: string, slug?: string) {
@@ -18,7 +20,7 @@ function eventUrl(eventId: string, slug?: string) {
   return `${window.location.origin}${path}`;
 }
 
-export default function ShareEventButton({ eventId, slug, title, className = "" }: ShareEventButtonProps) {
+export default function ShareEventButton({ eventId, slug, title, className = "", label }: ShareEventButtonProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -65,19 +67,35 @@ export default function ShareEventButton({ eventId, slug, title, className = "" 
   const encodedTitle = encodeURIComponent(title);
 
   return (
-    <div className={cn("relative", className)}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={nativeShare}
-        aria-label="Share event"
-        title="Share event"
-        aria-expanded={open}
-        className="h-auto w-auto p-2 rounded-full text-muted hover:text-primary hover:bg-dark-light transition-all"
-      >
-        <Share2 className="w-4 h-4" />
-      </Button>
+    <div className={cn("relative", label && "w-full", className)}>
+      {label ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={nativeShare}
+          aria-label="Share event"
+          title="Share event"
+          aria-expanded={open}
+          className="w-full"
+        >
+          <Share2 className="w-4 h-4" />
+          {label}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={nativeShare}
+          aria-label="Share event"
+          title="Share event"
+          aria-expanded={open}
+          className="h-auto w-auto p-2 rounded-full text-muted hover:text-primary hover:bg-dark-light transition-all"
+        >
+          <Share2 className="w-4 h-4" />
+        </Button>
+      )}
 
       {open && (
         <>

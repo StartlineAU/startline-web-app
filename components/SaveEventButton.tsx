@@ -12,9 +12,15 @@ import { cn } from "@/lib/utils";
 interface SaveEventButtonProps {
   eventId: string;
   className?: string;
+  /**
+   * Render a full labelled button rather than the bare icon. The whole
+   * control is then clickable, which the icon-plus-caption arrangement on the
+   * event page was not (issue #309).
+   */
+  label?: string;
 }
 
-export default function SaveEventButton({ eventId, className = "" }: SaveEventButtonProps) {
+export default function SaveEventButton({ eventId, className = "", label }: SaveEventButtonProps) {
   const { status } = useAuthContext();
   const [saved, setSaved] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
@@ -54,6 +60,27 @@ export default function SaveEventButton({ eventId, className = "" }: SaveEventBu
     const ok = next ? await saveEventId(eventId) : await unsaveEventId(eventId);
     if (!ok) setSaved(!next);
     pending.current = false;
+  }
+
+  if (label) {
+    return (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={toggle}
+          aria-pressed={saved}
+          aria-label={saved ? "Unsave event" : "Save event"}
+          title={saved ? "Remove from saved" : "Save event"}
+          className={cn("w-full", saved && "border-primary/50 text-primary", className)}
+        >
+          <Heart className={cn("w-4 h-4", saved && "fill-primary")} />
+          {label}
+        </Button>
+        <SignInModal isOpen={signInOpen} onClose={() => setSignInOpen(false)} />
+      </>
+    );
   }
 
   return (

@@ -9,7 +9,14 @@ type Props = {
   size?: "sm" | "md";
 };
 
-/** Minimal star + average + (count). Returns null when there are no reviews. */
+/**
+ * Minimal star + average + review count. Returns null when there are no
+ * reviews.
+ *
+ * The count keeps its brackets but carries the same size and weight as the
+ * average, rather than the dimmed lighter-weight "(8)" that was hard to read
+ * (issue #309). At md there is room to say what the number counts.
+ */
 export default function OrganiserRating({ rating, className, size = "sm" }: Props) {
   if (!rating || rating.count <= 0) return null;
 
@@ -30,7 +37,9 @@ export default function OrganiserRating({ rating, className, size = "sm" }: Prop
     >
       <Star className={cn(starClass, "text-primary fill-primary shrink-0")} />
       <span>{rating.average.toFixed(1)}</span>
-      <span className="font-normal text-muted">({rating.count})</span>
+      <span className="text-muted">
+        ({rating.count}{size === "md" && ` review${rating.count === 1 ? "" : "s"}`})
+      </span>
     </span>
   );
 }

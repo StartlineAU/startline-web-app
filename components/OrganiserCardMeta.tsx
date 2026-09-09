@@ -46,14 +46,15 @@ export default function OrganiserCardMeta({
     nameClassName ?? "text-muted hover:text-primary",
   );
 
-  /* Logo, or the organiser's initial when they have none, so the bubble keeps
-     the same shape either way (issue #309). */
+  /* The OrganiserIdentity frame at card scale: same rounded square, same
+     dark-lighter ground, same initial fallback, just 24px instead of 40
+     (issue #309). */
   const avatar = (
-    <span className="relative w-5 h-5 rounded-full overflow-hidden bg-dark-lighter shrink-0">
+    <span className="relative w-6 h-6 rounded-md overflow-hidden bg-dark-lighter shrink-0">
       {logoUrl ? (
-        <Image src={logoUrl} alt="" fill className="object-cover" sizes="20px" />
+        <Image src={logoUrl} alt="" fill className="object-cover" sizes="24px" />
       ) : (
-        <span className="w-full h-full flex items-center justify-center font-headline text-[9px] font-black text-primary">
+        <span className="w-full h-full flex items-center justify-center font-headline text-[11px] font-black text-primary">
           {name.charAt(0).toUpperCase()}
         </span>
       )}
