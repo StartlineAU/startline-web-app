@@ -7,6 +7,7 @@ import { getOrganiserSession, getAdminSession, getUserSession } from "@/lib/ampl
 import { matchesMagicBytes } from "@/lib/upload-magic-bytes";
 import { uploadSizeError, TYPE_MIMES, MIME_EXT, isUploadType } from "@/lib/upload-limits";
 import { s3, S3_BUCKET, S3_PUBLIC_BASE_URL, UPLOADS_USE_S3 } from "@/lib/s3";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Large files no longer come through here at all: the browser signs a direct
 // POST to S3 via /api/upload/presign, because Amplify's WEB_COMPUTE runtime
@@ -41,6 +42,18 @@ export async function POST(req: NextRequest) {
     (await getAdminSession()) ??
     (await getUserSession());
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  // Limited on its own budget rather than sharing the presign one, so a
+  // proxy-mode upload (presign answers "proxy", the client then posts here)
+  // costs one slot in each counter instead of two in a shared one. This route
+  // reads the whole file into memory, so it is the more expensive of the two.
+  const blocked = await rateLimit(req, {
+    prefix: "upload",
+    limit: 30,
+    windowSeconds: 60,
+    identifier: session.sub,
+  });
+  if (blocked) return blocked;
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;

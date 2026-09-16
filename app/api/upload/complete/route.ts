@@ -4,6 +4,7 @@ import { getOrganiserSession, getAdminSession, getUserSession } from "@/lib/ampl
 import { matchesMagicBytes } from "@/lib/upload-magic-bytes";
 import { TYPE_MIMES, isUploadType } from "@/lib/upload-limits";
 import { s3, S3_BUCKET, S3_PUBLIC_BASE_URL, UPLOADS_USE_S3 } from "@/lib/s3";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Direct-to-S3 means the server never sees the bytes on their way past, so the
 // magic-byte check that /api/upload does inline has to happen after the fact.
@@ -19,6 +20,20 @@ export async function POST(req: NextRequest) {
     (await getAdminSession()) ??
     (await getUserSession());
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  // Deliberately far looser than the presign limit. By the time the browser
+  // calls this the file is already in the bucket, so a 429 here would strand an
+  // object that nothing will ever verify, return or delete. At four times the
+  // signing rate it cannot fire for a caller uploading legitimately, and it
+  // still stops someone replaying this route to make us issue an S3 GetObject
+  // per request against keys that do not exist.
+  const blocked = await rateLimit(req, {
+    prefix: "upload-complete",
+    limit: 120,
+    windowSeconds: 60,
+    identifier: session.sub,
+  });
+  if (blocked) return blocked;
 
   if (!UPLOADS_USE_S3) {
     return NextResponse.json({ error: "Direct uploads are not configured." }, { status: 400 });

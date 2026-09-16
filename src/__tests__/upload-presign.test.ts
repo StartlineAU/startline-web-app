@@ -36,6 +36,13 @@ vi.mock("@aws-sdk/client-s3", () => ({
   DeleteObjectCommand: mocks.DeleteObjectCommand,
 }));
 
+// These tests are not about rate limiting, but both routes now call the limiter,
+// which talks to Postgres. Left unmocked it opens a real connection per test and
+// only passes because rateLimit fails open, so on a machine where DATABASE_URL
+// resolves it would write real rows and start returning 429 mid-suite. Coverage
+// of the limits themselves lives in upload-rate-limit.test.ts.
+vi.mock("@/lib/rate-limit", () => ({ rateLimit: vi.fn().mockResolvedValue(null) }));
+
 vi.mock("@/lib/s3", () => ({
   s3: { send: mocks.send },
   S3_BUCKET: "startline-staging-uploads",
