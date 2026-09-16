@@ -76,6 +76,20 @@ export async function GET(
       startWave: {
         select: { label: true, startTime: true },
       },
+      // Merchandise flows into the CSV, the XLSX and the start-list PDF through
+      // EXPORT_COLUMNS and the export row.
+      addOns: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          nameSnapshot: true,
+          variantLabelSnapshot: true,
+          quantity: true,
+          amountCents: true,
+          platformFeeCents: true,
+          feeStructure: true,
+          status: true,
+        },
+      },
     },
   });
 
@@ -102,6 +116,7 @@ export async function GET(
     resultDistance: r.resultDistance,
     resultTime: r.resultTime,
     resultPlacement: r.resultPlacement,
+    addOns: r.addOns,
   }));
 
   const rows = mapAndSortExportRows(inputs);

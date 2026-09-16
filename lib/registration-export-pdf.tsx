@@ -65,6 +65,16 @@ const styles = StyleSheet.create({
   colGender: { width: "12%" },
   colPhone: { width: "24%" },
   colMed: { width: "10%", textAlign: "right" },
+  // Narrowed variants, used only when the event actually sold merchandise. An
+  // event with no add-ons keeps the widths above rather than carrying an empty
+  // seventh column across every page of its start list.
+  colBibX: { width: "7%" },
+  colNameX: { width: "22%" },
+  colCategoryX: { width: "14%" },
+  colGenderX: { width: "9%" },
+  colPhoneX: { width: "18%" },
+  colExtrasX: { width: "22%" },
+  colMedX: { width: "8%", textAlign: "right" },
   headerCell: {
     fontFamily: "Helvetica-Bold",
     fontSize: 8,
@@ -82,6 +92,32 @@ const styles = StyleSheet.create({
   },
 });
 
+/**
+ * Column widths for one start list, picked once for the whole document.
+ *
+ * Deciding per page would make the same column a different width from page to
+ * page, so this is a property of the export, not of the rows on a given page.
+ */
+function columnsFor(withExtras: boolean) {
+  return withExtras
+    ? {
+        bib: styles.colBibX,
+        name: styles.colNameX,
+        category: styles.colCategoryX,
+        gender: styles.colGenderX,
+        phone: styles.colPhoneX,
+        med: styles.colMedX,
+      }
+    : {
+        bib: styles.colBib,
+        name: styles.colName,
+        category: styles.colCategory,
+        gender: styles.colGender,
+        phone: styles.colPhone,
+        med: styles.colMed,
+      };
+}
+
 function StartListDoc(props: {
   eventTitle: string;
   eventDate: string;
@@ -93,6 +129,10 @@ function StartListDoc(props: {
 }) {
   const groups = groupByStartWave(props.rows);
   const location = [props.venue, props.city, props.state].filter(Boolean).join(", ");
+  // Merchandise is what the tent hands over, so it belongs on the sheet the
+  // volunteers are already holding rather than in a second document.
+  const withExtras = props.rows.some((r) => r.addOns !== "");
+  const col = columnsFor(withExtras);
 
   return (
     <Document>
@@ -112,21 +152,25 @@ function StartListDoc(props: {
           <View key={g.wave}>
             <Text style={styles.waveTitle}>{formatStartListGroupTitle(g)}</Text>
             <View style={styles.tableHeader}>
-              <Text style={[styles.colBib, styles.headerCell]}>Bib</Text>
-              <Text style={[styles.colName, styles.headerCell]}>Name</Text>
-              <Text style={[styles.colCategory, styles.headerCell]}>Category</Text>
-              <Text style={[styles.colGender, styles.headerCell]}>Gender</Text>
-              <Text style={[styles.colPhone, styles.headerCell]}>Emergency phone</Text>
-              <Text style={[styles.colMed, styles.headerCell]}>Medical</Text>
+              <Text style={[col.bib, styles.headerCell]}>Bib</Text>
+              <Text style={[col.name, styles.headerCell]}>Name</Text>
+              <Text style={[col.category, styles.headerCell]}>Category</Text>
+              <Text style={[col.gender, styles.headerCell]}>Gender</Text>
+              <Text style={[col.phone, styles.headerCell]}>Emergency phone</Text>
+              {withExtras && (
+                <Text style={[styles.colExtrasX, styles.headerCell]}>Add-ons</Text>
+              )}
+              <Text style={[col.med, styles.headerCell]}>Medical</Text>
             </View>
             {g.rows.map((r) => (
               <View key={r.id} style={styles.row} wrap={false}>
-                <Text style={styles.colBib}>{r.bib || "-"}</Text>
-                <Text style={styles.colName}>{r.name}</Text>
-                <Text style={styles.colCategory}>{r.category || "-"}</Text>
-                <Text style={styles.colGender}>{r.gender || "-"}</Text>
-                <Text style={styles.colPhone}>{r.emergencyPhone || "-"}</Text>
-                <Text style={styles.colMed}>{r.hasMedical ? "Yes" : ""}</Text>
+                <Text style={col.bib}>{r.bib || "-"}</Text>
+                <Text style={col.name}>{r.name}</Text>
+                <Text style={col.category}>{r.category || "-"}</Text>
+                <Text style={col.gender}>{r.gender || "-"}</Text>
+                <Text style={col.phone}>{r.emergencyPhone || "-"}</Text>
+                {withExtras && <Text style={styles.colExtrasX}>{r.addOns || "-"}</Text>}
+                <Text style={col.med}>{r.hasMedical ? "Yes" : ""}</Text>
               </View>
             ))}
           </View>
