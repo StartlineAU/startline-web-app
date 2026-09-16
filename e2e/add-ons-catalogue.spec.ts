@@ -93,6 +93,61 @@ test.describe("organiser add-on catalogue", () => {
     await expect(page.getByRole("button", { name: /^move cap up$/i })).toBeDisabled();
   });
 
+  // A 1x1 PNG, enough for the browser to decode and report naturalWidth.
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  test("a chosen photo survives leaving the step and coming back", async ({ page }) => {
+    await organiserLogin(page);
+    await openTicketsStep(page, "/organiser/new-listing");
+    await page.getByRole("button", { name: /add merchandise/i }).click();
+
+    await page
+      .locator('input[type="file"]')
+      .last()
+      .setInputFiles({ name: "tee.png", mimeType: "image/png", buffer: PNG });
+
+    const preview = page.locator('button[aria-label="Photo for add-on 1"] img');
+    await expect(preview).toBeVisible();
+
+    // Leave the step and come back. The object URL is minted in an effect and
+    // revoked by that same effect, so a remount has to mint a live one: the
+    // memoised version was revoked by StrictMode with no re-render to replace
+    // it, and the photo came back as a broken image.
+    await page.getByText("The Basics").first().click();
+    await expect(page.getByRole("button", { name: /add merchandise/i })).toHaveCount(0);
+    await page.getByText("Tickets & Pricing").first().click();
+
+    await expect(preview).toBeVisible();
+    // A revoked blob URL still renders an <img>; only naturalWidth tells the
+    // truth about whether the bytes actually loaded.
+    await expect
+      .poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth))
+      .toBeGreaterThan(0);
+  });
+
+  test("rejects a photo over the upload cap at pick time", async ({ page }) => {
+    await organiserLogin(page);
+    await openTicketsStep(page, "/organiser/new-listing");
+    await page.getByRole("button", { name: /add merchandise/i }).click();
+
+    // Uploads are deferred to save, so an oversized file has to be refused here
+    // rather than five steps later.
+    await page
+      .locator('input[type="file"]')
+      .last()
+      .setInputFiles({
+        name: "huge.png",
+        mimeType: "image/png",
+        buffer: Buffer.alloc(11 * 1024 * 1024, 1),
+      });
+
+    await expect(page.getByText(/image must be 10 MB or smaller/i)).toBeVisible();
+    await expect(page.locator('button[aria-label="Photo for add-on 1"] img')).toHaveCount(0);
+  });
+
   test("blocks a save that the server would reject anyway", async ({ page }) => {
     await organiserLogin(page);
     await openTicketsStep(page, "/organiser/new-listing");

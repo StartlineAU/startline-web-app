@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, startTransition } from "react";
 import Image from "next/image";
 import { Plus, Trash2, ImagePlus, ShoppingBag, Lock, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,90 @@ function moved<T>(items: T[], from: number, to: number): T[] {
 }
 
 /**
+ * One product's photo: the chooser, the preview and the size rejection.
+ *
+ * Its own component so the preview URL is created and revoked by the same
+ * effect, keyed on the File itself. Deriving it during render (a useMemo over
+ * the drafts) was wrong twice over: the cleanup revoked the URL the committed
+ * <Image> was still using, and on a remount StrictMode's double-invoked cleanup
+ * revoked it with no re-render left to replace it, so the photo came back
+ * broken whenever the organiser left this step and returned. Same shape as the
+ * cover image in EventFormWizard.
+ */
+function AddOnPhoto({
+  file,
+  imageUrl,
+  label,
+  disabled,
+  onPick,
+}: {
+  file: File | null;
+  imageUrl: string;
+  label: string;
+  disabled: boolean;
+  onPick: (file: File) => void;
+}) {
+  const input = useRef<HTMLInputElement | null>(null);
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const url = file ? URL.createObjectURL(file) : imageUrl || null;
+    startTransition(() => setSrc(url));
+    return () => {
+      if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+    };
+  }, [file, imageUrl]);
+
+  const pick = (chosen: File | null) => {
+    if (!chosen) return;
+    // Uploads are deferred to save, so an oversized photo has to be refused
+    // here rather than five steps later (issue #300).
+    const tooBig = uploadSizeError("photo", chosen.size);
+    if (tooBig) {
+      setError(tooBig);
+      return;
+    }
+    setError("");
+    onPick(chosen);
+  };
+
+  return (
+    <div>
+      <span className={labelCls}>Photo</span>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={label}
+        onClick={() => input.current?.click()}
+        className="relative w-[92px] h-[92px] rounded-lg border border-dashed border-dark-lighter grid place-items-center overflow-hidden hover:border-primary/50 transition-colors disabled:opacity-40"
+      >
+        {src ? (
+          <Image src={src} alt="" fill sizes="92px" className="object-cover" unoptimized />
+        ) : (
+          <ImagePlus className="w-5 h-5 text-muted-dark" />
+        )}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept={TYPE_MIMES.photo.join(",")}
+        className="hidden"
+        onChange={(e) => {
+          pick(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      {error && (
+        <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5 w-[92px]">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * The add-on catalogue editor, shared by the event wizard and the race
  * management panel so an organiser sees the same thing before and after their
  * event goes live.
@@ -53,44 +137,8 @@ export default function AddOnEditor({
   feeStructure: "athlete" | "organiser";
   disabled?: boolean;
 }) {
-  const fileInputs = useRef<Record<number, HTMLInputElement | null>>({});
-  // Keyed by product index, cleared as soon as an acceptable file replaces the
-  // rejected one. Uploads are deferred to save, so without a check at pick time
-  // an oversized photo is accepted silently and only fails on submit (issue #300).
-  const [imageErrors, setImageErrors] = useState<Record<number, string>>({});
-
-  // Object URLs for photos chosen but not yet uploaded. Created once per File and
-  // revoked when it goes away: minting one inline on every render would leak a
-  // blob URL on each keystroke in the form.
-  const previews = useMemo(() => {
-    const map = new Map<File, string>();
-    for (const addOn of addOns) {
-      if (addOn.image && !map.has(addOn.image)) {
-        map.set(addOn.image, URL.createObjectURL(addOn.image));
-      }
-    }
-    return map;
-  }, [addOns]);
-
-  useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
-
   const updateAddOn = (index: number, patch: Partial<AddOnDraft>) => {
     onChange(addOns.map((a, i) => (i === index ? { ...a, ...patch } : a)));
-  };
-
-  const pickImage = (index: number, file: File | null) => {
-    if (!file) return;
-    const tooBig = uploadSizeError("photo", file.size);
-    if (tooBig) {
-      setImageErrors((prev) => ({ ...prev, [index]: tooBig }));
-      return;
-    }
-    setImageErrors((prev) => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
-    updateAddOn(index, { image: file });
   };
 
   const reorderVariant = (addOnIndex: number, from: number, to: number) => {
@@ -123,7 +171,6 @@ export default function AddOnEditor({
         // The same function checkout and the webhook price with, so the number the
         // organiser is shown here cannot drift from the one they are charged.
         const fee = priceCents == null ? null : calculateAddOnTotalWithFee(priceCents, feeStructure);
-        const preview = addOn.image ? previews.get(addOn.image) : addOn.imageUrl;
 
         return (
           <div key={addOn.id ?? `new-${index}`} className="border border-dark-lighter rounded-xl overflow-hidden">
@@ -175,39 +222,13 @@ export default function AddOnEditor({
 
             <div className="p-5 space-y-4">
               <div className="flex gap-4">
-                <div>
-                  <span className={labelCls}>Photo</span>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    aria-label={`Photo for add-on ${index + 1}`}
-                    onClick={() => fileInputs.current[index]?.click()}
-                    className="relative w-[92px] h-[92px] rounded-lg border border-dashed border-dark-lighter grid place-items-center overflow-hidden hover:border-primary/50 transition-colors disabled:opacity-40"
-                  >
-                    {preview ? (
-                      <Image src={preview} alt="" fill sizes="92px" className="object-cover" unoptimized />
-                    ) : (
-                      <ImagePlus className="w-5 h-5 text-muted-dark" />
-                    )}
-                  </button>
-                  <input
-                    ref={(el) => {
-                      fileInputs.current[index] = el;
-                    }}
-                    type="file"
-                    accept={TYPE_MIMES.photo.join(",")}
-                    className="hidden"
-                    onChange={(e) => {
-                      pickImage(index, e.target.files?.[0] ?? null);
-                      e.target.value = "";
-                    }}
-                  />
-                  {imageErrors[index] && (
-                    <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5 w-[92px]">
-                      {imageErrors[index]}
-                    </p>
-                  )}
-                </div>
+                <AddOnPhoto
+                  file={addOn.image}
+                  imageUrl={addOn.imageUrl}
+                  label={`Photo for add-on ${index + 1}`}
+                  disabled={disabled}
+                  onPick={(file) => updateAddOn(index, { image: file })}
+                />
 
                 <div className="flex-1 space-y-3">
                   <div>
