@@ -726,10 +726,11 @@ function TicketsStep({
           after the event is published, which is why it saves through its own
           route rather than the DRAFT-locked event PATCH. */}
       {showAddOns && (
-        <Field
-          label="Merchandise"
-          hint="Optional extras athletes can buy with their entry, like a tee or a parking pass. You can add, restock or retire these at any time, including after the event goes live."
-        >
+        <Field label="Merchandise" hint="Optional">
+          <p className="font-headline text-[10px] uppercase tracking-widest text-light mb-3">
+            Extras athletes can buy with their entry, like a tee or a parking pass. Add, restock or
+            retire these at any time, including after the event goes live.
+          </p>
           <AddOnEditor
             addOns={addOns}
             onChange={setAddOns}
