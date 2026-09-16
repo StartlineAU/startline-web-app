@@ -4,6 +4,7 @@ import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getOrganiserSession, getAdminSession, getUserSession } from "@/lib/amplify-server";
 import { UPLOAD_LIMITS, TYPE_MIMES, MIME_EXT, isUploadType, uploadSizeError } from "@/lib/upload-limits";
 import { s3, S3_BUCKET, S3_PUBLIC_BASE_URL, UPLOADS_USE_S3 } from "@/lib/s3";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Hands the browser a short-lived signature so the file goes straight to S3.
 //
@@ -31,6 +32,19 @@ export async function POST(req: NextRequest) {
     (await getAdminSession()) ??
     (await getUserSession());
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  // This is the gate on the whole upload surface: no bytes reach the bucket
+  // without a signature from here, so limiting it limits everything downstream.
+  // Keyed on the authenticated identity rather than the IP, because an organiser
+  // filling in an event form legitimately uploads a cover, photos and a PDF in a
+  // row, and several organisers can share an office IP.
+  const blocked = await rateLimit(req, {
+    prefix: "upload-presign",
+    limit: 30,
+    windowSeconds: 60,
+    identifier: session.sub,
+  });
+  if (blocked) return blocked;
 
   // Without a bucket there is nothing to sign. Local dev and the Docker image
   // write to public/uploads, so tell the client to post to /api/upload instead
