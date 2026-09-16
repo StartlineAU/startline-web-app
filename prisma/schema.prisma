@@ -208,6 +208,10 @@ model Event {
   savedEvents   SavedEvent[]
   startWaveRows StartWave[]
 
+  addOns         EventAddOn[]
+  addOnVariants  EventAddOnVariant[]
+  addOnPurchases RegistrationAddOn[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -395,6 +399,10 @@ model Registration {
   finishTime      String? // legacy / alternate finish time
   result          String? // legacy position e.g. "1st", "42nd", "DNF"
 
+  // amountCents / platformFeeCents above cover the ENTRY only. Add-on money
+  // lives on RegistrationAddOn and never enters those two fields.
+  addOns RegistrationAddOn[]
+
   createdAt DateTime @default(now())
 
   @@unique([eventId, bibNumber])
@@ -412,6 +420,144 @@ enum RegistrationStatus {
   REFUND_REQUESTED
   REFUNDED
   CANCELLED
+}
+
+// ─── Paid add-ons (event merchandise) ────────────────────────────────────────
+// Products an organiser sells alongside an entry: a tee, a cap, a parking pass.
+// Modelled as tables rather than JSON on Event (the way ticket tiers are) because
+// purchased rows must point at a stable id, stock has to be counted
+// transactionally, and each item carries its own refund lifecycle. This is the
+// same JSON→table move already documented on StartWave above.
+model EventAddOn {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  // Price of one unit, before the Startline fee. Integer cents (AUD).
+  priceCents  Int
+  imageUrl    String?
+  // Heading shown above the variant choices, e.g. "Size" or "Colour".
+  optionLabel String  @default("Size")
+
+  sortOrder Int     @default(0)
+  // Retired products stay readable so purchase history and in-flight payments
+  // still resolve; they just leave the athlete's picker.
+  active    Boolean @default(true)
+
+  variants  EventAddOnVariant[]
+  purchases RegistrationAddOn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventId])
+  @@map("event_add_ons")
+}
+
+// One choosable value of a product's option group, e.g. the "M" of a tee.
+model EventAddOnVariant {
+  id      String     @id @default(uuid())
+  addOnId String
+  addOn   EventAddOn @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  // Denormalised so stock queries and checkout lookups never need the join.
+  eventId String
+  event   Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  label String
+  // Short, stable, server-generated. Carried in Stripe metadata so the webhook
+  // can resolve the line even if the organiser reorders the catalogue while the
+  // payment is in flight — a positional index would silently point elsewhere.
+  // Never reused once issued.
+  code  String
+
+  // Total units ever made available, NOT a remaining counter. Remaining stock is
+  // derived from purchases (see lib/add-on-stock.ts) so refunds restore it for
+  // free and no counter can drift.
+  stock Int @default(0)
+
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  purchases RegistrationAddOn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([addOnId, label])
+  @@unique([eventId, code])
+  @@index([eventId])
+  @@map("event_add_on_variants")
+}
+
+enum AddOnItemStatus {
+  PURCHASED
+  // Athlete has asked for this item back. Still holds stock: the shirt is not
+  // resellable until the organiser actually approves.
+  REFUND_REQUESTED
+  REFUNDED
+  // Written when a line could not be honoured at confirmation time.
+  CANCELLED
+}
+
+// One purchased add-on line, owned by the participant who chose it.
+//
+// Add-on money NEVER enters Registration.amountCents or
+// Registration.platformFeeCents. It lives only here. That is what makes
+// "refunding an entry does not refund the merch" true by construction: every
+// place that computes what someone paid for their entry as
+// amountCents + platformFeeCents keeps meaning exactly that, with no edits.
+model RegistrationAddOn {
+  id             String       @id @default(uuid())
+  registrationId String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  eventId        String
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Restrict, not Cascade: it must be physically impossible for a careless
+  // catalogue reconcile to delete a product out from under a paid order.
+  addOnId   String
+  addOn     EventAddOn        @relation(fields: [addOnId], references: [id], onDelete: Restrict)
+  variantId String
+  variant   EventAddOnVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  // Frozen at purchase so the athlete's receipt and the organiser's picking list
+  // survive any later edit to the catalogue.
+  nameSnapshot         String
+  optionLabelSnapshot  String
+  variantLabelSnapshot String
+  imageUrlSnapshot     String?
+
+  // Integer cents (AUD). amountCents is unitPriceCents * quantity; the fee is
+  // percentage-only and rounded once over that line total.
+  unitPriceCents   Int
+  quantity         Int    @default(1)
+  amountCents      Int
+  platformFeeCents Int    @default(0)
+  feeStructure     String @default("athlete") // "athlete" | "organiser"
+
+  status AddOnItemStatus @default(PURCHASED)
+
+  // Per-item refund lifecycle, independent of the entry's. No policy tiers: the
+  // athlete asks, the organiser approves or declines. A decline returns status to
+  // PURCHASED and stamps refundDeclinedAt rather than needing its own enum value.
+  refundRequestedAt   DateTime?
+  refundReason        String?
+  refundAmountCents   Int?
+  refundDecidedAt     DateTime?
+  refundDecidedBy     String?
+  refundDeclinedAt    DateTime?
+  refundDeclineReason String?
+  stripeRefundId      String?   @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([registrationId])
+  @@index([eventId])
+  @@index([variantId, status])
+  @@map("registration_add_ons")
 }
 
 // ─── User → Organiser follows ─────────────────────────────────────────────────
