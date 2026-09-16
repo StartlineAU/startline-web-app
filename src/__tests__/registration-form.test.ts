@@ -8,6 +8,7 @@ import {
   maxDateOfBirthForMinAge,
   splitFullName,
   createEmptyParticipant,
+  matchPreviousTickets,
 } from "@/lib/registration-form";
 
 describe("registration form validation", () => {
@@ -166,5 +167,56 @@ describe("registration form validation", () => {
 describe("splitFullName", () => {
   it("splits first and last name", () => {
     expect(splitFullName("Alex Rossi")).toEqual({ firstName: "Alex", lastName: "Rossi" });
+  });
+});
+
+// Which previous ticket becomes which new one. Both the buyer's typed details
+// and the extras they chose follow this mapping, so a wrong answer here does
+// not just lose a form field: it posts one participant's shirt size against a
+// different participant.
+describe("matchPreviousTickets", () => {
+  it("keeps every ticket in place when nothing changes", () => {
+    expect(matchPreviousTickets(2, ["Half", "Marathon"], ["Half", "Marathon"])).toEqual([0, 1]);
+  });
+
+  it("returns null for slots with no previous ticket to inherit", () => {
+    expect(matchPreviousTickets(0, [], ["Half"])).toEqual([null]);
+    expect(matchPreviousTickets(1, ["Half"], ["Half", "Half"])).toEqual([0, null]);
+  });
+
+  // The regression this function exists for. Dropping the first tier shifts the
+  // surviving ticket from index 1 to index 0; anything pinned to its old index
+  // would now belong to the wrong person.
+  it("follows a ticket to its new index when an earlier tier is removed", () => {
+    expect(matchPreviousTickets(2, ["Half", "Marathon"], ["Marathon"])).toEqual([1]);
+  });
+
+  it("matches on tier before falling back to position", () => {
+    // The Marathon ticket is claimed by tier even though it sits second.
+    expect(matchPreviousTickets(2, ["Half", "Marathon"], ["Marathon", "Half"])).toEqual([1, 0]);
+  });
+
+  it("gives each new slot a distinct previous ticket", () => {
+    const mapping = matchPreviousTickets(3, ["A", "A", "B"], ["A", "A", "B"]);
+    expect(new Set(mapping).size).toBe(mapping.length);
+  });
+
+  // A buyer who swaps one tier for another keeps what they already typed,
+  // rather than being handed an empty form.
+  it("reuses a leftover ticket positionally when no tier matches", () => {
+    expect(matchPreviousTickets(1, ["Half"], ["Marathon"])).toEqual([0]);
+  });
+
+  it("drops the surplus when the ticket count falls", () => {
+    // Two of the three tickets survive; the third has nothing to map to.
+    const mapping = matchPreviousTickets(3, ["A", "A", "A"], ["A", "A"]);
+    expect(mapping).toEqual([0, 1]);
+  });
+
+  it("never returns an index outside the previous tickets", () => {
+    const mapping = matchPreviousTickets(2, ["A", "B"], ["C", "D", "E"]);
+    for (const index of mapping) {
+      if (index != null) expect(index).toBeLessThan(2);
+    }
   });
 });

@@ -2,18 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { sendRegistrationConfirmationEmail } from "@/lib/email";
-import { parseParticipantsFromMetadata } from "@/lib/stripe-webhook";
-import { calculateTotalWithFee } from "@/lib/platform-fee";
-import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
+import { parseParticipantsFromMetadata, parseAddOnsFromMetadata } from "@/lib/stripe-webhook";
 import {
-  expandCompactParticipant,
-  athleteNameFromParticipant,
-  type CompactParticipant,
-} from "@/lib/registration-form";
-import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
-
-const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+  priceAddOnSelection,
+  selectionFromCodeLines,
+  sumAddOnLines,
+  type PricedAddOnLine,
+} from "@/lib/add-on-pricing";
+import { catalogueVariantsForEvent } from "@/lib/add-on-catalogue";
+import { buildRefundParams } from "@/lib/stripe-refunds";
+import { addOnSummaryLabel } from "@/lib/add-ons";
+import { calculateTotalWithFee } from "@/lib/platform-fee";
+import {
+  announceRegistrations,
+  ensureParticipantUsers,
+  insertConfirmedRegistrations,
+  type PricedEntry,
+} from "@/lib/registration-confirm";
+import { athleteNameFromParticipant, type CompactParticipant } from "@/lib/registration-form";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -53,19 +59,108 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function ensureGuestUser(email: string, name: string): Promise<string> {
-  let cognitoSub: string | null = null;
-  try {
-    cognitoSub = await ensureAthleteCognitoUser(email);
-  } catch (err) {
-    console.error(`Cognito creation failed for ${email}:`, err);
-  }
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: { ...(cognitoSub && { cognitoSub }), name: name || undefined },
-    create: { email, name: name || undefined, ...(cognitoSub ? { cognitoSub } : {}) },
+const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+/**
+ * Refund add-on lines that lost the last-unit race, and tell both parties.
+ *
+ * Called after the confirming transaction has committed, so the entries are
+ * already safe. Everything here is best-effort by design: a failed refund or a
+ * failed notification must never turn a confirmed entry back into a problem. A
+ * failure is logged loudly instead, because it leaves money that needs a human.
+ */
+async function refundOversoldAddOns(input: {
+  paymentIntent: Stripe.PaymentIntent;
+  dropped: PricedAddOnLine[];
+  eventId: string;
+  organiserId: string;
+  eventTitle: string;
+  buyerUserId: string;
+}): Promise<void> {
+  const { paymentIntent, dropped, eventId, organiserId, eventTitle, buyerUserId } = input;
+  if (dropped.length === 0) return;
+
+  const droppedCents = sumAddOnLines(dropped).chargedCents;
+  const droppedLabels = dropped
+    .map((line) =>
+      addOnSummaryLabel({
+        participantIndex: line.participantIndex,
+        name: line.name,
+        variantLabel: line.variantLabel,
+        quantity: line.quantity,
+      }),
+    )
+    .join(", ");
+
+  console.error("Add-on lines oversold, refunding:", paymentIntent.id, {
+    droppedCents,
+    droppedLabels,
   });
-  return user.id;
+
+  if (droppedCents > 0) {
+    try {
+      // A webhook payload carries latest_charge as a bare id, so the two flags
+      // that decide whether the organiser's share comes back with the refund
+      // have to be read off the Charge itself. A destination charge must reverse
+      // its transfer or Startline funds the refund; a direct charge has no
+      // transfer to reverse and Stripe rejects the attempt. Guessing moves real
+      // money in the wrong direction either way.
+      const chargeRef = paymentIntent.latest_charge;
+      const charge =
+        typeof chargeRef === "string"
+          ? await getStripe().charges.retrieve(chargeRef)
+          : chargeRef;
+      if (!charge) {
+        console.error("No charge to refund oversold add-ons against:", paymentIntent.id);
+      } else {
+        await getStripe().refunds.create(
+          ...buildRefundParams({
+            chargeId: charge.id,
+            amountCents: droppedCents,
+            // Keyed on the intent so a webhook redelivery cannot refund twice.
+            idempotencyKey: `addon-oversold-${paymentIntent.id}`,
+            hasTransfer: Boolean(charge.transfer),
+            hasApplicationFee: Boolean(charge.application_fee),
+          }),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to refund oversold add-ons:", paymentIntent.id, err);
+    }
+  }
+
+  // The organiser needs this so their picking list and their books agree.
+  await prisma.notification
+    .create({
+      data: {
+        organiserId,
+        eventId,
+        type: "NEW_REGISTRATION",
+        title: "Add-on sold out during checkout",
+        body:
+          `${droppedLabels} could not be fulfilled on a paid order because stock ran out. ` +
+          `${formatCents(droppedCents)} has been refunded automatically. The entry is confirmed.`,
+      },
+    })
+    .catch((err: unknown) => console.error("Failed to notify organiser of dropped add-ons:", err));
+
+  // The athlete needs it so they are not waiting for a parcel that is not coming.
+  if (buyerUserId) {
+    await prisma.userNotification
+      .create({
+        data: {
+          userId: buyerUserId,
+          type: "REFUND_PROCESSED",
+          title: "An extra sold out",
+          body:
+            `${droppedLabels} sold out while your payment was going through, so we could not ` +
+            `include it. ${formatCents(droppedCents)} is on its way back to your card. ` +
+            `Your entry to ${eventTitle} is confirmed.`,
+          eventId,
+        },
+      })
+      .catch((err: unknown) => console.error("Failed to notify athlete of dropped add-ons:", err));
+  }
 }
 
 async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
@@ -91,7 +186,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
-      title: true, status: true, feeStructure: true, registrationType: true,
+      id: true, title: true, status: true, feeStructure: true, registrationType: true,
       waves: true, cap: true, eventDate: true, startTime: true, venue: true, city: true, state: true,
       organiserId: true,
     },
@@ -125,25 +220,38 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  // Price every ticket from the DB wave definitions — never from metadata.
+  // Price every ticket from the DB wave definitions — never from metadata. A
+  // free tier is priced at zero rather than rejected, so a mixed cart (a free
+  // tier alongside a paid one) confirms with the right amount on each entry.
   const waves = Array.isArray(event.waves)
     ? event.waves as { label: string; price: string; qty?: number }[]
     : [];
   const waveOf = (participant: CompactParticipant) => participant.wav || meta.waveLabel || null;
-  const priceOf = (participant: CompactParticipant): { priceCents: number; platformFeeCents: number } | null => {
+  const priceEntry = (participant: CompactParticipant): PricedEntry | null => {
     const label = waveOf(participant);
     const wave = label ? waves.find((w) => w.label === label) : undefined;
     if (!wave) return null;
     const priceCents = Math.round(parseFloat(wave.price || "0") * 100);
-    if (priceCents <= 0) return null;
+    if (!Number.isFinite(priceCents) || priceCents < 0) return null;
     const { platformFeeCents } = calculateTotalWithFee(priceCents, event.feeStructure);
-    return { priceCents, platformFeeCents };
+    return { participant, waveLabel: label, priceCents, platformFeeCents };
   };
 
-  const priced = participants.map((participant) => ({
-    participant,
-    pricing: priceOf(participant),
-  }));
+  const priced = participants.map(priceEntry);
+
+  // Price the add-ons the same way, from the DB, through the same pure module
+  // checkout used. The catalogue is fetched UNFILTERED by `active`: a product the
+  // organiser retired between the payment and this webhook must still price the
+  // purchase in flight, or the total check below cancels an order that was paid
+  // for correctly.
+  const addOnMetadataLines = parseAddOnsFromMetadata(meta);
+  const addOnCatalogue =
+    addOnMetadataLines.length > 0 ? await catalogueVariantsForEvent(eventId) : [];
+  const addOnPricing = priceAddOnSelection(
+    selectionFromCodeLines(addOnMetadataLines, addOnCatalogue),
+    addOnCatalogue,
+    event.feeStructure,
+  );
 
   const recordCancelled = () =>
     prisma.registration.createMany({
@@ -162,145 +270,89 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   // The charged amount must match what the DB pricing implies. Stripe reports
   // amount_received in the minor currency unit, same as our cents.
-  const expectedTotalCents = priced.reduce((sum, { participant, pricing }) => {
-    if (!pricing) return sum;
+  //
+  // This comparison is the most dangerous line in the product: a mismatch writes
+  // CANCELLED registrations with amountCents 0 and returns, keeping the athlete's
+  // money with no refund. Add-on cents MUST be part of the expected total, and an
+  // add-on line that could not be priced MUST fail the check rather than being
+  // quietly dropped, because the athlete was charged for it.
+  const expectedTicketCents = priced.reduce((sum, entry) => {
+    if (!entry) return sum;
     return sum + (event.feeStructure === "athlete"
-      ? pricing.priceCents + pricing.platformFeeCents
-      : pricing.priceCents);
+      ? entry.priceCents + entry.platformFeeCents
+      : entry.priceCents);
   }, 0);
+  const expectedTotalCents = expectedTicketCents + sumAddOnLines(addOnPricing.lines).chargedCents;
 
-  if (paymentIntent.amount_received !== expectedTotalCents || priced.some(({ pricing }) => !pricing)) {
-    console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id,
-      { expectedTotalCents, amountReceived: paymentIntent.amount_received });
+  // An add-on line pointing at a participant this order does not have is
+  // malformed metadata. It is treated as a pricing failure rather than dropped,
+  // because there is no registration to hang the purchase on and the athlete may
+  // have been charged for it. PaymentIntent metadata is client-influenced, so
+  // this has to be checked rather than assumed.
+  const addOnsAddressRealParticipants = addOnPricing.lines.every(
+    (line) => line.participantIndex < participants.length,
+  );
+
+  if (
+    paymentIntent.amount_received !== expectedTotalCents ||
+    priced.some((entry) => !entry) ||
+    addOnPricing.unresolved.length > 0 ||
+    !addOnsAddressRealParticipants
+  ) {
+    console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id, {
+      expectedTotalCents,
+      expectedTicketCents,
+      amountReceived: paymentIntent.amount_received,
+      unresolvedAddOns: addOnPricing.unresolved.length,
+      addOnsAddressRealParticipants,
+    });
     await recordCancelled();
     return;
   }
+
+  const entries = priced as PricedEntry[];
 
   // For guest participants (no userId in metadata), create Cognito accounts +
   // Prisma Users up front so the confirmations below can link them.
-  const existingUserId = meta.userId || "";
-  const userIdByEmail: Record<string, string> = {};
-  if (!existingUserId) {
-    for (const participant of participants) {
-      const email = participant.em?.toLowerCase().trim();
-      if (!email) continue;
-      const name = athleteNameFromParticipant(participant);
-      const uid = await ensureGuestUser(email, name);
-      if (uid) userIdByEmail[email] = uid;
-    }
-  }
+  const buyerUserId = meta.userId || "";
+  const userIdByEmail = buyerUserId ? {} : await ensureParticipantUsers(entries);
 
-  // Atomic capacity check — refuse to confirm past the event cap or a tier's
-  // quantity. Runs inside the same transaction as the insert so concurrent
-  // confirmations can't both pass the count.
-  const capacityViolation = await prisma.$transaction(async (tx) => {
-    const requestedByWave = priced.reduce<Record<string, number>>((acc, { participant }) => {
-      const label = waveOf(participant);
-      if (label) acc[label] = (acc[label] ?? 0) + 1;
-      return acc;
-    }, {});
-    const usedLabels = Object.keys(requestedByWave);
-    const needsCapCheck = event.cap != null;
-    const needsWaveCheck = hasCappedWave(waves, usedLabels);
-    const confirmedTotal = needsCapCheck
-      ? await tx.registration.count({ where: { eventId, status: "CONFIRMED" } })
-      : 0;
-    const confirmedByWave: Record<string, number> = {};
-    if (needsWaveCheck) {
-      const grouped = await tx.registration.groupBy({
-        by: ["waveLabel"],
-        where: { eventId, status: "CONFIRMED" },
-        _count: { _all: true },
-      });
-      for (const row of grouped) {
-        if (row.waveLabel) confirmedByWave[row.waveLabel] = row._count._all;
-      }
-    }
-    const capacityError = getCapacityError({
-      cap: event.cap,
-      confirmedTotal,
-      requestedTotal: participants.length,
-      waves,
-      usedLabels,
-      confirmedByWave,
-      requestedByWave,
-    });
-    if (capacityError) return capacityError;
-    await tx.registration.createMany({
-      data: priced.map(({ participant, pricing }) => {
-        const expanded = expandCompactParticipant(participant);
-        const email = participant.em?.toLowerCase().trim() || "";
-        const uid = existingUserId || userIdByEmail[email] || "";
-        return {
-          eventId,
-          organiserId,
-          userId: uid || null,
-          athleteName: athleteNameFromParticipant(participant),
-          athleteEmail: participant.em,
-          firstName: expanded.firstName,
-          lastName: expanded.lastName,
-          dateOfBirth: expanded.dateOfBirth,
-          gender: expanded.gender || null,
-          mobile: expanded.mobile,
-          emergencyContactName: expanded.emergencyContactName,
-          emergencyContactPhone: expanded.emergencyContactPhone,
-          medicalNotes: expanded.medicalNotes || null,
-          waiverAccepted: true,
-          estimatedFinishMinutes: participant.eft ?? null,
-          waveLabel: waveOf(participant),
-          amountCents: pricing!.priceCents,
-          platformFeeCents: pricing!.platformFeeCents,
-          feeStructure: event.feeStructure,
-          status: "CONFIRMED" as const,
-          stripePaymentIntentId: paymentIntent.id,
-        };
-      }),
-    });
-    return null;
+  const outcome = await insertConfirmedRegistrations({
+    event,
+    organiserId,
+    entries,
+    buyerUserId,
+    userIdByEmail,
+    stripePaymentIntentId: paymentIntent.id,
+    addOnLines: addOnPricing.lines,
   });
 
-  if (capacityViolation) {
-    console.error("Confirmation refused — over capacity:", paymentIntent.id, capacityViolation);
+  if (!outcome.ok) {
+    console.error("Confirmation refused:", paymentIntent.id, outcome.error);
     await recordCancelled();
     return;
   }
 
-  const participantNames = participants.map((p) => athleteNameFromParticipant(p));
-  const notificationBody = participants.length === 1
-    ? `${participantNames[0]} registered for ${event.title}`
-    : `${participants.length} participants registered for ${event.title}: ${participantNames.join(", ")}`;
+  await refundOversoldAddOns({
+    paymentIntent,
+    dropped: outcome.droppedAddOns,
+    eventId,
+    organiserId,
+    eventTitle: event.title,
+    buyerUserId:
+      buyerUserId || userIdByEmail[(participants[0]?.em ?? "").trim().toLowerCase()] || "",
+  });
 
-  await prisma.notification.create({
-    data: {
-      organiserId,
-      eventId,
-      type: "NEW_REGISTRATION",
-      title: participants.length === 1 ? "New registration" : "New group registration",
-      body: notificationBody,
-    },
-  }).catch((err: unknown) => console.error("Failed to create notification:", err));
+  // Only lines that actually made it into the order: anything dropped for stock
+  // was refunded above and must not appear on a receipt as though it shipped.
+  const droppedKeys = new Set(
+    outcome.droppedAddOns.map((line) => `${line.participantIndex}:${line.variantId}`),
+  );
+  const confirmedAddOns = addOnPricing.lines.filter(
+    (line) => !droppedKeys.has(`${line.participantIndex}:${line.variantId}`),
+  );
 
-  // When the athlete absorbs the platform fee, the amount charged is
-  // price + fee — the email total must reflect that, not just the ticket
-  // price. When the organiser absorbs it, the athlete pays the ticket price
-  // only and the service fee shown to them is $0.
-  const athletePaysFee = event.feeStructure === "athlete";
-  for (const { participant, pricing } of priced) {
-    if (!participant.em || !pricing) continue;
-    const ticketCents = pricing.priceCents;
-    const feeCents = athletePaysFee ? pricing.platformFeeCents : 0;
-    sendRegistrationConfirmationEmail(participant.em, {
-      eventName:        event.title,
-      eventDate:        event.eventDate,
-      startTime:        event.startTime,
-      category:         waveOf(participant) || meta.category || "General",
-      location:         `${event.venue}, ${event.city} ${event.state}`,
-      registrationFee:  formatCents(ticketCents),
-      serviceFee:       formatCents(feeCents),
-      total:            formatCents(ticketCents + feeCents),
-      userEmail:        participant.em,
-    }).catch((err) => console.error("Failed to send registration confirmation email:", err));
-  }
+  await announceRegistrations(event, organiserId, entries, confirmedAddOns);
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

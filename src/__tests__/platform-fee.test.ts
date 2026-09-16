@@ -9,8 +9,15 @@ import {
 } from "@/lib/platform-fee";
 
 describe("calculatePlatformFee", () => {
-  it("charges the fixed fee even for a zero-amount ticket", () => {
-    expect(calculatePlatformFee(0)).toBe(PLATFORM_FEE_FIXED_CENTS);
+  // The fee is a share of a sale, not a subscription: charging the fixed
+  // component on a free ticket would bill the athlete A$1.45 to enter a free
+  // event, or hand Stripe a fee bigger than the charge (issue #308).
+  it("charges nothing on a free ticket", () => {
+    expect(calculatePlatformFee(0)).toBe(0);
+  });
+
+  it("charges nothing on a nonsensical negative amount", () => {
+    expect(calculatePlatformFee(-500)).toBe(0);
   });
 
   it("applies the percentage plus the fixed fee", () => {
@@ -54,6 +61,14 @@ describe("calculateTotalWithFee — organiser pays", () => {
   });
 });
 
+describe("calculateTotalWithFee — free ticket", () => {
+  it("costs nothing under either fee structure", () => {
+    expect(calculateTotalWithFee(0, "athlete")).toEqual({ totalCents: 0, platformFeeCents: 0 });
+    expect(calculateTotalWithFee(0, "organiser")).toEqual({ totalCents: 0, platformFeeCents: 0 });
+  });
+});
+
+
 // Add-ons are charged a percentage only. These lock the two fee schemes apart:
 // the ticket fee must keep its fixed component, and the add-on fee must not
 // acquire one.
@@ -94,13 +109,21 @@ describe("calculateAddOnTotalWithFee", () => {
   });
 });
 
-// The ticket path must not move a cent. calculatePlatformFee is deliberately
-// left byte-identical by the add-on work; this fails if the fixed component is
-// ever folded away.
+// The paid ticket path must not move a cent. The add-on work leaves
+// calculatePlatformFee alone; this fails if the fixed component is ever folded
+// away into the percentage.
+//
+// The one deliberate change to this function is #308's free-ticket case: a $0
+// ticket now yields a $0 fee rather than the bare fixed component, which is the
+// bug that stopped athletes registering for free events. Guarded just below.
 describe("ticket fee lock", () => {
-  it("still charges the fixed component on every ticket", () => {
+  it("still charges the fixed component on every paid ticket", () => {
     expect(PLATFORM_FEE_FIXED_CENTS).toBe(145);
-    expect(calculatePlatformFee(0)).toBe(145);
     expect(calculatePlatformFee(2500)).toBe(244);
+    expect(calculatePlatformFee(1)).toBe(145);
+  });
+
+  it("charges nothing on a free ticket", () => {
+    expect(calculatePlatformFee(0)).toBe(0);
   });
 });
