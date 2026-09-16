@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
+import { encodeAddOnsMetadata, assertMetadataBudget } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
   isOrderFailure,
@@ -29,8 +30,8 @@ export async function POST(req: NextRequest) {
 
     const {
       event, participants, waveLabels, wavePricing,
-      totalCents, platformFeeCents, groupRegistration, userSession,
-      athleteName, athleteEmail,
+      totalCents, platformFeeCents, addOnLines, addOnChargedCents,
+      groupRegistration, userSession, athleteName, athleteEmail,
     } = order;
 
     // Nothing to charge, so there is no PaymentIntent to create. The free path
@@ -62,6 +63,36 @@ export async function POST(req: NextRequest) {
     // application fee.
     const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
     const useConnect = Boolean(event.organiser.stripeAccountId) && !isDirectCharge;
+    // Add-on lines travel as variant codes so the webhook can resolve them even
+    // if the organiser reorders or retires the catalogue while this payment is in
+    // flight. Built and checked before the Stripe call so a metadata overflow
+    // fails here, cleanly, rather than as an opaque 400 under a card form.
+    const metadata: Record<string, string> = {
+      eventId: event.id,
+      // Legacy single-tier fields (first ticket's tier); per-ticket truth
+      // lives in participantN.wav + wavePricing.
+      waveLabel: waveLabels[0],
+      wavePricing: JSON.stringify(wavePricing),
+      userName: athleteName,
+      userEmail: athleteEmail,
+      organiserId: event.organiser.id,
+      userId: userSession?.sub ?? "",
+      ticketPriceCents: String(primaryWave.p),
+      platformFeeCents: String(platformFeeCents),
+      platformFeeCentsPerTicket: String(primaryWave.f),
+      feeStructure: event.feeStructure,
+      groupRegistration: groupRegistration ? "true" : "false",
+      ...participantMetadata,
+      ...encodeAddOnsMetadata(
+        addOnLines.map((line) => ({
+          participantIndex: line.participantIndex,
+          code: line.code,
+          quantity: line.quantity,
+        })),
+      ),
+    };
+    assertMetadataBudget(metadata);
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "aud",
@@ -74,30 +105,17 @@ export async function POST(req: NextRequest) {
             transfer_data: { destination: event.organiser.stripeAccountId as string },
           }
         : {}),
-      metadata: {
-        eventId: event.id,
-        // Legacy single-tier fields (first ticket's tier); per-ticket truth
-        // lives in participantN.wav + wavePricing.
-        waveLabel: waveLabels[0],
-        wavePricing: JSON.stringify(wavePricing),
-        userName: athleteName,
-        userEmail: athleteEmail,
-        organiserId: event.organiser.id,
-        userId: userSession?.sub ?? "",
-        ticketPriceCents: String(primaryWave.p),
-        platformFeeCents: String(platformFeeCents),
-        platformFeeCentsPerTicket: String(primaryWave.f),
-        feeStructure: event.feeStructure,
-        groupRegistration: groupRegistration ? "true" : "false",
-        ...participantMetadata,
-      },
+      metadata,
     });
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
+      // The authoritative total. The client displays this rather than its own
+      // arithmetic, so it can never show a figure the server disagrees with.
       amount: totalCents / 100,
       platformFee: platformFeeCents / 100,
+      addOnAmount: addOnChargedCents / 100,
       participantCount: participants.length,
     });
   } catch (err) {

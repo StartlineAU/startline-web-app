@@ -8,6 +8,9 @@ import {
   type CompactParticipant,
 } from "@/lib/registration-form";
 import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
+import { partitionByStock } from "@/lib/add-on-stock";
+import { heldByVariant, stockByVariant } from "@/lib/add-on-catalogue";
+import type { PricedAddOnLine } from "@/lib/add-on-pricing";
 
 /** One ticket, priced from the database rather than from the client. */
 export interface PricedEntry {
@@ -65,7 +68,15 @@ export async function ensureParticipantUsers(
 }
 
 export type ConfirmOutcome =
-  | { ok: true; registrationIds: string[] }
+  | {
+      ok: true;
+      registrationIds: string[];
+      /**
+       * Add-on lines that lost the last-unit race and were NOT written. The
+       * caller refunds these; the entries themselves are already confirmed.
+       */
+      droppedAddOns: PricedAddOnLine[];
+    }
   | { ok: false; error: string; reason: "capacity" | "duplicate" };
 
 /**
@@ -90,6 +101,12 @@ export async function insertConfirmedRegistrations(opts: {
    * so the guard is the athlete's own identity.
    */
   rejectExistingEntries?: boolean;
+  /**
+   * Priced merchandise for this order, addressed by participantIndex, which
+   * lines up with `entries`. Stock-checked authoritatively inside the
+   * transaction below.
+   */
+  addOnLines?: PricedAddOnLine[];
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
@@ -190,7 +207,67 @@ export async function insertConfirmedRegistrations(opts: {
       }),
     });
 
-    return { ok: true as const, registrationIds };
+    // Authoritative add-on stock check, in the transaction that just inserted
+    // the entries. Unlike the capacity check above, losing here NEVER cancels
+    // the order: it drops the lines that no longer fit, and the caller refunds
+    // them. Voiding someone's race entry over a t-shirt, with their entry money
+    // already captured, is not an acceptable outcome.
+    //
+    // Like the capacity check, this closes the common case rather than the last
+    // microsecond: under READ COMMITTED two simultaneous transactions can both
+    // observe the same held count. The blast radius is one unit oversold per
+    // variant, which an organiser can absorb, so v1 does not hold stock.
+    const addOnLines = opts.addOnLines ?? [];
+    const droppedAddOns: PricedAddOnLine[] = [];
+    if (addOnLines.length > 0) {
+      const [held, stock] = await Promise.all([
+        heldByVariant(event.id, tx),
+        stockByVariant(event.id, tx),
+      ]);
+      const available = Object.fromEntries(
+        Object.keys(stock).map((variantId) => [
+          variantId,
+          { stock: stock[variantId] ?? 0, held: held[variantId] ?? 0 },
+        ]),
+      );
+      // A line must name a participant this order actually wrote, or there is no
+      // registration to hang it on. The webhook rejects such metadata before it
+      // reaches here, so this is belt and braces - but inserting an undefined
+      // registrationId would throw inside the transaction and roll back entries
+      // that have already been paid for, which is far worse than dropping the
+      // line and refunding it.
+      const addressable = addOnLines.filter((line) => registrationIds[line.participantIndex]);
+      for (const line of addOnLines) {
+        if (!registrationIds[line.participantIndex]) droppedAddOns.push(line);
+      }
+
+      const { fitting, dropped } = partitionByStock(addressable, available);
+      droppedAddOns.push(...dropped);
+
+      if (fitting.length > 0) {
+        await tx.registrationAddOn.createMany({
+          data: fitting.map((line) => ({
+            registrationId: registrationIds[line.participantIndex],
+            eventId: event.id,
+            addOnId: line.addOnId,
+            variantId: line.variantId,
+            // Snapshots so a later catalogue edit cannot rewrite a receipt.
+            nameSnapshot: line.name,
+            optionLabelSnapshot: line.optionLabel,
+            variantLabelSnapshot: line.variantLabel,
+            imageUrlSnapshot: line.imageUrl,
+            unitPriceCents: line.unitPriceCents,
+            quantity: line.quantity,
+            amountCents: line.amountCents,
+            platformFeeCents: line.platformFeeCents,
+            feeStructure: event.feeStructure,
+            status: "PURCHASED" as const,
+          })),
+        });
+      }
+    }
+
+    return { ok: true as const, registrationIds, droppedAddOns };
   });
 }
 
@@ -203,6 +280,12 @@ export async function announceRegistrations(
   event: ConfirmEvent,
   organiserId: string,
   entries: PricedEntry[],
+  /**
+   * Merchandise that actually made it into the order, addressed by
+   * participantIndex. Anything dropped for stock was refunded and must not
+   * appear on a receipt as though it shipped.
+   */
+  confirmedAddOns: PricedAddOnLine[] = [],
 ): Promise<void> {
   const names = entries.map(({ participant }) => athleteNameFromParticipant(participant));
   const notificationBody = entries.length === 1
@@ -225,9 +308,14 @@ export async function announceRegistrations(
   // only and the service fee shown to them is $0. A free entry is $0 across
   // the board.
   const athletePaysFee = event.feeStructure === "athlete";
-  for (const { participant, waveLabel, priceCents, platformFeeCents } of entries) {
-    if (!participant.em) continue;
+  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents }, participantIndex) => {
+    if (!participant.em) return;
     const feeCents = athletePaysFee ? platformFeeCents : 0;
+
+    // Each athlete sees the merchandise they chose, not the whole family's.
+    const mine = confirmedAddOns.filter((line) => line.participantIndex === participantIndex);
+    const addOnCents = mine.reduce((sum, line) => sum + line.chargedCents, 0);
+
     sendRegistrationConfirmationEmail(participant.em, {
       eventName:        event.title,
       eventDate:        event.eventDate,
@@ -236,8 +324,14 @@ export async function announceRegistrations(
       location:         `${event.venue}, ${event.city} ${event.state}`,
       registrationFee:  formatCents(priceCents),
       serviceFee:       formatCents(feeCents),
-      total:            formatCents(priceCents + feeCents),
+      total:            formatCents(priceCents + feeCents + addOnCents),
       userEmail:        participant.em,
+      ...(mine.length > 0 && {
+        addOns: mine.map((line) => ({
+          label: `${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ""} x ${line.quantity}`,
+          amount: formatCents(line.chargedCents),
+        })),
+      }),
     }).catch((err) => console.error("Failed to send registration confirmation email:", err));
-  }
+  });
 }

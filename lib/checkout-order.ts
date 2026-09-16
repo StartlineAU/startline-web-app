@@ -13,6 +13,10 @@ import {
 import { assertGuestEmailsVerifiedForCheckout } from "@/lib/guest-email-verification";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import { todayIso } from "@/lib/event-types";
+import { priceAddOnSelection, type PricedAddOnLine } from "@/lib/add-on-pricing";
+import { getStockError, requestedByVariant } from "@/lib/add-on-stock";
+import { catalogueVariantsForEvent, heldByVariant, stockByVariant } from "@/lib/add-on-catalogue";
+import { addOnsEnabled, MAX_ADDON_LINES, MAX_ADDON_QUANTITY } from "@/lib/add-ons";
 
 export type CheckoutParticipant = RegistrationFormData & { waveLabel?: string };
 
@@ -39,8 +43,17 @@ const participantSchema = z.object({
   waveLabel: z.string().max(255).optional(),
 });
 
+// Ids and quantities only. The client never sends a price, exactly as with
+// tickets: everything is re-priced server-side from the catalogue.
+const addOnLineSchema = z.object({
+  participantIndex: z.number().int().min(0).max(99),
+  variantId: z.string().min(1).max(255),
+  quantity: z.number().int().min(1).max(MAX_ADDON_QUANTITY),
+});
+
 export const checkoutSchema = z.object({
   eventId: z.string().max(255).optional(),
+  addOns: z.array(addOnLineSchema).max(MAX_ADDON_LINES).optional(),
   waveLabel: z.string().max(255).optional(),
   groupRegistration: z.boolean().optional(),
   emergencyContact: z.object({ name: z.string(), phone: z.string() }).optional(),
@@ -92,10 +105,22 @@ export interface ResolvedOrder {
   waveLabels: string[];
   /** Per-tier price (p) and platform fee (f), both in cents. */
   wavePricing: Record<string, { p: number; f: number }>;
-  /** What the athlete pays for the whole order, in cents. Zero means free. */
+  /**
+   * What the athlete pays for the whole order, in cents. Zero means free.
+   * Includes any add-ons, which is what routes merchandise on a free event down
+   * the paid path rather than the free one.
+   */
   totalCents: number;
   /** Startline's cut of the whole order, in cents. */
   platformFeeCents: number;
+  /**
+   * Priced merchandise lines, already stock-checked. Empty when none were asked
+   * for. Their money is summed into totalCents above but is deliberately kept
+   * out of the per-ticket wavePricing, because it never enters a Registration.
+   */
+  addOnLines: PricedAddOnLine[];
+  /** What the add-on lines alone add to the charge, in cents. */
+  addOnChargedCents: number;
   groupRegistration: boolean;
   userSession: { sub: string; email: string } | null;
   athleteName: string;
@@ -234,6 +259,85 @@ export async function resolveCheckoutOrder(
     platformFeeCents += f;
   }
 
+  // ── Paid add-ons ──────────────────────────────────────────────────────────
+  // Priced from the catalogue by id, never from anything the client sent, and
+  // through the same lib/add-on-pricing entry point the webhook uses. The two
+  // must agree to the cent or the webhook cancels this order after taking the
+  // money, so there is exactly one way to price a basket and this is it.
+  const requestedAddOns = body.addOns ?? [];
+  if (requestedAddOns.length > 0 && !addOnsEnabled()) {
+    return {
+      error: "Add-ons are not available right now. Please continue without them.",
+      status: 503,
+    };
+  }
+
+  const addOnCatalogue = requestedAddOns.length > 0 ? await catalogueVariantsForEvent(eventId) : [];
+  const addOnPricing = priceAddOnSelection(requestedAddOns, addOnCatalogue, event.feeStructure);
+
+  if (addOnPricing.unresolved.length > 0) {
+    return {
+      error: "One of the extras you selected is no longer available. Please review your order.",
+      status: 409,
+    };
+  }
+
+  // Every line must belong to a participant in this order, or the webhook has
+  // nowhere to hang the purchase.
+  if (addOnPricing.lines.some((line) => line.participantIndex >= participants.length)) {
+    return { error: "Invalid extras selection.", status: 400 };
+  }
+
+  if (addOnPricing.lines.length > 0) {
+    // A retired product cannot be newly bought, even though it still prices for
+    // payments already in flight.
+    const buyable = await prisma.eventAddOnVariant.findMany({
+      where: {
+        eventId,
+        active: true,
+        addOn: { active: true },
+        id: { in: addOnPricing.lines.map((line) => line.variantId) },
+      },
+      select: { id: true },
+    });
+    const buyableIds = new Set(buyable.map((variant) => variant.id));
+    if (addOnPricing.lines.some((line) => !buyableIds.has(line.variantId))) {
+      return {
+        error: "One of the extras you selected is no longer on sale. Please review your order.",
+        status: 409,
+      };
+    }
+
+    // Advisory stock check: rejects the order before a card is touched. The
+    // authoritative one runs inside the confirming transaction, where a line
+    // that lost the race is dropped and refunded rather than cancelling the
+    // athlete's entry.
+    const [held, stock] = await Promise.all([heldByVariant(eventId), stockByVariant(eventId)]);
+    // Stock is counted per variant, not per participant, so roll the basket up
+    // first: a family buying three of the last two shirts must be refused.
+    const wanted = requestedByVariant(addOnPricing.lines);
+    const labelsByVariant = new Map<string, { name: string; variantLabel: string }>();
+    for (const line of addOnPricing.lines) {
+      if (!labelsByVariant.has(line.variantId)) {
+        labelsByVariant.set(line.variantId, { name: line.name, variantLabel: line.variantLabel });
+      }
+    }
+    const stockError = getStockError(
+      [...labelsByVariant.entries()].map(([variantId, labels]) => ({
+        variantId,
+        name: labels.name,
+        variantLabel: labels.variantLabel,
+        stock: stock[variantId] ?? 0,
+        held: held[variantId] ?? 0,
+        requested: wanted[variantId] ?? 0,
+      })),
+    );
+    if (stockError) return { error: stockError, status: 409 };
+  }
+
+  totalCents += addOnPricing.totals.chargedCents;
+  platformFeeCents += addOnPricing.totals.platformFeeCents;
+
   // Only an order that actually charges needs somewhere to send the money. A
   // free event is registerable whether or not its organiser has connected
   // Stripe, so this gate sits after pricing rather than before it.
@@ -304,6 +408,8 @@ export async function resolveCheckoutOrder(
     wavePricing,
     totalCents,
     platformFeeCents,
+    addOnLines: addOnPricing.lines,
+    addOnChargedCents: addOnPricing.totals.chargedCents,
     groupRegistration,
     userSession: userSession ? { sub: userSession.sub, email: userSession.email } : null,
     athleteName: athleteNameFromParticipant(primary),

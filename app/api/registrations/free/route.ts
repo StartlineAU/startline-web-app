@@ -77,6 +77,12 @@ export async function POST(req: NextRequest) {
     const buyerUserId = order.userSession?.sub ?? "";
     const userIdByEmail = buyerUserId ? {} : await ensureParticipantUsers(entries);
 
+    // A free order can still carry merchandise, as long as the merchandise is
+    // itself free: totalCents is the ticket total PLUS the add-on charge, and it
+    // is zero here, so every line priced at nothing. Anything with a price makes
+    // the order payable and it is turned away by the guard above, into checkout.
+    // Passing them through means a selection is honoured rather than silently
+    // dropped, and there is nothing to refund if one loses a stock race.
     const outcome = await insertConfirmedRegistrations({
       event,
       organiserId: event.organiser.id,
@@ -85,6 +91,7 @@ export async function POST(req: NextRequest) {
       userIdByEmail,
       stripePaymentIntentId: null,
       rejectExistingEntries: true,
+      addOnLines: order.addOnLines,
     });
 
     // Both a full event and an entry that already exists are conflicts with the
@@ -93,7 +100,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: outcome.error }, { status: 409 });
     }
 
-    await announceRegistrations(event, event.organiser.id, entries);
+    if (outcome.droppedAddOns.length > 0) {
+      // No money moved, so there is nothing to refund. Logged because the
+      // organiser's picking list will be one item short of what was chosen.
+      console.error(
+        "Free-order add-ons dropped for stock:",
+        outcome.droppedAddOns.map((line) => `${line.name} ${line.variantLabel}`).join(", "),
+      );
+    }
+
+    const droppedKeys = new Set(
+      outcome.droppedAddOns.map((line) => `${line.participantIndex}:${line.variantId}`),
+    );
+    await announceRegistrations(
+      event,
+      event.organiser.id,
+      entries,
+      order.addOnLines.filter(
+        (line) => !droppedKeys.has(`${line.participantIndex}:${line.variantId}`),
+      ),
+    );
 
     return NextResponse.json({
       registrationIds: outcome.registrationIds,

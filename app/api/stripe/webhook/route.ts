@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { parseParticipantsFromMetadata } from "@/lib/stripe-webhook";
+import { parseParticipantsFromMetadata, parseAddOnsFromMetadata } from "@/lib/stripe-webhook";
+import {
+  priceAddOnSelection,
+  selectionFromCodeLines,
+  sumAddOnLines,
+  type PricedAddOnLine,
+} from "@/lib/add-on-pricing";
+import { catalogueVariantsForEvent } from "@/lib/add-on-catalogue";
+import { buildRefundParams } from "@/lib/stripe-refunds";
+import { addOnSummaryLabel } from "@/lib/add-ons";
 import { calculateTotalWithFee } from "@/lib/platform-fee";
 import {
   announceRegistrations,
@@ -47,6 +56,110 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Stripe webhook error:", err);
     return NextResponse.json({ error: "Webhook handler failed." }, { status: 500 });
+  }
+}
+
+const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+/**
+ * Refund add-on lines that lost the last-unit race, and tell both parties.
+ *
+ * Called after the confirming transaction has committed, so the entries are
+ * already safe. Everything here is best-effort by design: a failed refund or a
+ * failed notification must never turn a confirmed entry back into a problem. A
+ * failure is logged loudly instead, because it leaves money that needs a human.
+ */
+async function refundOversoldAddOns(input: {
+  paymentIntent: Stripe.PaymentIntent;
+  dropped: PricedAddOnLine[];
+  eventId: string;
+  organiserId: string;
+  eventTitle: string;
+  buyerUserId: string;
+}): Promise<void> {
+  const { paymentIntent, dropped, eventId, organiserId, eventTitle, buyerUserId } = input;
+  if (dropped.length === 0) return;
+
+  const droppedCents = sumAddOnLines(dropped).chargedCents;
+  const droppedLabels = dropped
+    .map((line) =>
+      addOnSummaryLabel({
+        participantIndex: line.participantIndex,
+        name: line.name,
+        variantLabel: line.variantLabel,
+        quantity: line.quantity,
+      }),
+    )
+    .join(", ");
+
+  console.error("Add-on lines oversold, refunding:", paymentIntent.id, {
+    droppedCents,
+    droppedLabels,
+  });
+
+  if (droppedCents > 0) {
+    try {
+      // A webhook payload carries latest_charge as a bare id, so the two flags
+      // that decide whether the organiser's share comes back with the refund
+      // have to be read off the Charge itself. A destination charge must reverse
+      // its transfer or Startline funds the refund; a direct charge has no
+      // transfer to reverse and Stripe rejects the attempt. Guessing moves real
+      // money in the wrong direction either way.
+      const chargeRef = paymentIntent.latest_charge;
+      const charge =
+        typeof chargeRef === "string"
+          ? await getStripe().charges.retrieve(chargeRef)
+          : chargeRef;
+      if (!charge) {
+        console.error("No charge to refund oversold add-ons against:", paymentIntent.id);
+      } else {
+        await getStripe().refunds.create(
+          ...buildRefundParams({
+            chargeId: charge.id,
+            amountCents: droppedCents,
+            // Keyed on the intent so a webhook redelivery cannot refund twice.
+            idempotencyKey: `addon-oversold-${paymentIntent.id}`,
+            hasTransfer: Boolean(charge.transfer),
+            hasApplicationFee: Boolean(charge.application_fee),
+          }),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to refund oversold add-ons:", paymentIntent.id, err);
+    }
+  }
+
+  // The organiser needs this so their picking list and their books agree.
+  await prisma.notification
+    .create({
+      data: {
+        organiserId,
+        eventId,
+        type: "NEW_REGISTRATION",
+        title: "Add-on sold out during checkout",
+        body:
+          `${droppedLabels} could not be fulfilled on a paid order because stock ran out. ` +
+          `${formatCents(droppedCents)} has been refunded automatically. The entry is confirmed.`,
+      },
+    })
+    .catch((err: unknown) => console.error("Failed to notify organiser of dropped add-ons:", err));
+
+  // The athlete needs it so they are not waiting for a parcel that is not coming.
+  if (buyerUserId) {
+    await prisma.userNotification
+      .create({
+        data: {
+          userId: buyerUserId,
+          type: "REFUND_PROCESSED",
+          title: "An extra sold out",
+          body:
+            `${droppedLabels} sold out while your payment was going through, so we could not ` +
+            `include it. ${formatCents(droppedCents)} is on its way back to your card. ` +
+            `Your entry to ${eventTitle} is confirmed.`,
+          eventId,
+        },
+      })
+      .catch((err: unknown) => console.error("Failed to notify athlete of dropped add-ons:", err));
   }
 }
 
@@ -126,6 +239,20 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const priced = participants.map(priceEntry);
 
+  // Price the add-ons the same way, from the DB, through the same pure module
+  // checkout used. The catalogue is fetched UNFILTERED by `active`: a product the
+  // organiser retired between the payment and this webhook must still price the
+  // purchase in flight, or the total check below cancels an order that was paid
+  // for correctly.
+  const addOnMetadataLines = parseAddOnsFromMetadata(meta);
+  const addOnCatalogue =
+    addOnMetadataLines.length > 0 ? await catalogueVariantsForEvent(eventId) : [];
+  const addOnPricing = priceAddOnSelection(
+    selectionFromCodeLines(addOnMetadataLines, addOnCatalogue),
+    addOnCatalogue,
+    event.feeStructure,
+  );
+
   const recordCancelled = () =>
     prisma.registration.createMany({
       data: participants.map((participant) => ({
@@ -143,16 +270,42 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   // The charged amount must match what the DB pricing implies. Stripe reports
   // amount_received in the minor currency unit, same as our cents.
-  const expectedTotalCents = priced.reduce((sum, entry) => {
+  //
+  // This comparison is the most dangerous line in the product: a mismatch writes
+  // CANCELLED registrations with amountCents 0 and returns, keeping the athlete's
+  // money with no refund. Add-on cents MUST be part of the expected total, and an
+  // add-on line that could not be priced MUST fail the check rather than being
+  // quietly dropped, because the athlete was charged for it.
+  const expectedTicketCents = priced.reduce((sum, entry) => {
     if (!entry) return sum;
     return sum + (event.feeStructure === "athlete"
       ? entry.priceCents + entry.platformFeeCents
       : entry.priceCents);
   }, 0);
+  const expectedTotalCents = expectedTicketCents + sumAddOnLines(addOnPricing.lines).chargedCents;
 
-  if (paymentIntent.amount_received !== expectedTotalCents || priced.some((entry) => !entry)) {
-    console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id,
-      { expectedTotalCents, amountReceived: paymentIntent.amount_received });
+  // An add-on line pointing at a participant this order does not have is
+  // malformed metadata. It is treated as a pricing failure rather than dropped,
+  // because there is no registration to hang the purchase on and the athlete may
+  // have been charged for it. PaymentIntent metadata is client-influenced, so
+  // this has to be checked rather than assumed.
+  const addOnsAddressRealParticipants = addOnPricing.lines.every(
+    (line) => line.participantIndex < participants.length,
+  );
+
+  if (
+    paymentIntent.amount_received !== expectedTotalCents ||
+    priced.some((entry) => !entry) ||
+    addOnPricing.unresolved.length > 0 ||
+    !addOnsAddressRealParticipants
+  ) {
+    console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id, {
+      expectedTotalCents,
+      expectedTicketCents,
+      amountReceived: paymentIntent.amount_received,
+      unresolvedAddOns: addOnPricing.unresolved.length,
+      addOnsAddressRealParticipants,
+    });
     await recordCancelled();
     return;
   }
@@ -171,6 +324,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     buyerUserId,
     userIdByEmail,
     stripePaymentIntentId: paymentIntent.id,
+    addOnLines: addOnPricing.lines,
   });
 
   if (!outcome.ok) {
@@ -179,7 +333,26 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  await announceRegistrations(event, organiserId, entries);
+  await refundOversoldAddOns({
+    paymentIntent,
+    dropped: outcome.droppedAddOns,
+    eventId,
+    organiserId,
+    eventTitle: event.title,
+    buyerUserId:
+      buyerUserId || userIdByEmail[(participants[0]?.em ?? "").trim().toLowerCase()] || "",
+  });
+
+  // Only lines that actually made it into the order: anything dropped for stock
+  // was refunded above and must not appear on a receipt as though it shipped.
+  const droppedKeys = new Set(
+    outcome.droppedAddOns.map((line) => `${line.participantIndex}:${line.variantId}`),
+  );
+  const confirmedAddOns = addOnPricing.lines.filter(
+    (line) => !droppedKeys.has(`${line.participantIndex}:${line.variantId}`),
+  );
+
+  await announceRegistrations(event, organiserId, entries, confirmedAddOns);
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {
