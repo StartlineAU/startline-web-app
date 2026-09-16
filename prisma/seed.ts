@@ -576,56 +576,6 @@ async function main() {
     create: { id: "seed-event-001", slug: await uniqueSlug(apexThrowdown.title), organiserId: org.id, ...apexThrowdown },
   });
 
-  // Paid add-ons: merchandise sold alongside the entry. Fixed ids and variant
-  // codes so the seed is idempotent and e2e can address a known size. One size is
-  // deliberately seeded sold out, because "sold out" is the state most worth
-  // being able to look at.
-  const seedAddOns = [
-    {
-      id: "seed-addon-tee",
-      name: "Event tee",
-      description: "Unisex fit, 100% cotton. Collect from the merch tent on race day.",
-      priceCents: 2500,
-      imageUrl: null,
-      optionLabel: "Size",
-      sortOrder: 0,
-      variants: [
-        { id: "seed-addon-tee-s", code: "tees01", label: "S", stock: 25, sortOrder: 0 },
-        { id: "seed-addon-tee-m", code: "teem01", label: "M", stock: 40, sortOrder: 1 },
-        { id: "seed-addon-tee-l", code: "teel01", label: "L", stock: 30, sortOrder: 2 },
-        { id: "seed-addon-tee-xl", code: "teex01", label: "XL", stock: 0, sortOrder: 3 },
-      ],
-    },
-    {
-      id: "seed-addon-parking",
-      name: "Parking pass",
-      description: "Reserved bay in the MSAC car park for the day.",
-      priceCents: 1200,
-      imageUrl: null,
-      optionLabel: "Day",
-      sortOrder: 1,
-      variants: [
-        { id: "seed-addon-parking-sat", code: "parksa", label: "Saturday", stock: 60, sortOrder: 0 },
-      ],
-    },
-  ];
-
-  for (const addOn of seedAddOns) {
-    const { variants, ...addOnData } = addOn;
-    await prisma.eventAddOn.upsert({
-      where: { id: addOn.id },
-      update: { ...addOnData, eventId: event1.id, active: true },
-      create: { ...addOnData, eventId: event1.id, active: true },
-    });
-    for (const variant of variants) {
-      await prisma.eventAddOnVariant.upsert({
-        where: { id: variant.id },
-        update: { ...variant, addOnId: addOn.id, eventId: event1.id, active: true },
-        create: { ...variant, addOnId: addOn.id, eventId: event1.id, active: true },
-      });
-    }
-  }
-
   // Mirror the event's JSON start waves into the StartWave table — the new source
   // of truth. Idempotent via the (eventId, label) unique key. Registrations below
   // link to these by id as well as carrying the denormalised label.
@@ -749,6 +699,67 @@ async function main() {
       },
     });
   }
+
+  // Paid add-ons: merchandise sold alongside the entry, so the feature is
+  // visible from a plain `pnpm dev` without building a catalogue by hand.
+  //
+  // Deliberately NOT on seed-event-001. That event is the fixture for 27 e2e
+  // assertions including the register-page visual snapshot, and
+  // e2e/add-ons-catalogue.spec.ts empties its catalogue partway through its own
+  // run - so merchandise there would show up in that snapshot or not depending
+  // on which worker got there first. seed-event-007 is approved, owned by the
+  // default organiser, and referenced by no spec.
+  //
+  // Fixed ids and variant codes so re-seeding is idempotent. One size is
+  // deliberately seeded sold out, because "sold out" is the state most worth
+  // being able to look at.
+  const ADDON_EVENT_ID = "seed-event-007";
+  const seedAddOns = [
+    {
+      id: "seed-addon-tee",
+      name: "Event tee",
+      description: "Unisex fit, 100% cotton. Collect from the merch tent on race day.",
+      priceCents: 2500,
+      imageUrl: null,
+      optionLabel: "Size",
+      sortOrder: 0,
+      variants: [
+        { id: "seed-addon-tee-s", code: "tees01", label: "S", stock: 25, sortOrder: 0 },
+        { id: "seed-addon-tee-m", code: "teem01", label: "M", stock: 40, sortOrder: 1 },
+        { id: "seed-addon-tee-l", code: "teel01", label: "L", stock: 30, sortOrder: 2 },
+        { id: "seed-addon-tee-xl", code: "teex01", label: "XL", stock: 0, sortOrder: 3 },
+      ],
+    },
+    {
+      id: "seed-addon-parking",
+      name: "Parking pass",
+      description: "Reserved bay in the event car park for the day.",
+      priceCents: 1200,
+      imageUrl: null,
+      optionLabel: "Day",
+      sortOrder: 1,
+      variants: [
+        { id: "seed-addon-parking-sat", code: "parksa", label: "Saturday", stock: 60, sortOrder: 0 },
+      ],
+    },
+  ];
+
+  for (const addOn of seedAddOns) {
+    const { variants, ...addOnData } = addOn;
+    await prisma.eventAddOn.upsert({
+      where: { id: addOn.id },
+      update: { ...addOnData, eventId: ADDON_EVENT_ID, active: true },
+      create: { ...addOnData, eventId: ADDON_EVENT_ID, active: true },
+    });
+    for (const variant of variants) {
+      await prisma.eventAddOnVariant.upsert({
+        where: { id: variant.id },
+        update: { ...variant, addOnId: addOn.id, eventId: ADDON_EVENT_ID, active: true },
+        create: { ...variant, addOnId: addOn.id, eventId: ADDON_EVENT_ID, active: true },
+      });
+    }
+  }
+
 
   console.log(`  Events: ${4 + seedEvents.length} (including 1 pending, 1 draft, 1 rejected, 6 past Apex events)`);
 
