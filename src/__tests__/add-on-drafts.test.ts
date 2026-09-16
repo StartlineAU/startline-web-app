@@ -8,19 +8,26 @@ import {
   parsePriceToCents,
   parseStock,
   hasPurchaseHistory,
+  draftKey,
   type AddOnDraft,
+  type AddOnVariantDraft,
 } from "@/lib/add-on-drafts";
 import { sanitizeAddOnInput, MAX_ADD_ONS, MAX_ADDON_VARIANTS } from "@/lib/add-ons";
 
+function variant(overrides: Partial<AddOnVariantDraft> = {}): AddOnVariantDraft {
+  return { uid: draftKey(), label: "M", stock: "10", sold: 0, purchased: 0, ...overrides };
+}
+
 function draft(overrides: Partial<AddOnDraft> = {}): AddOnDraft {
   return {
+    uid: draftKey(),
     name: "Event tee",
     description: "",
     price: "25.00",
     image: null,
     imageUrl: "",
     optionLabel: "Size",
-    variants: [{ label: "M", stock: "10", sold: 0, purchased: 0 }],
+    variants: [variant()],
     ...overrides,
   };
 }
@@ -63,6 +70,22 @@ describe("emptyAddOnDraft", () => {
   });
 });
 
+describe("draftKey", () => {
+  // React keys unsaved rows on this. If two rows shared one, reordering would
+  // hand one row's component state to another.
+  it("is unique per call", () => {
+    const keys = Array.from({ length: 50 }, () => draftKey());
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("gives every new product and option its own key", () => {
+    const a = emptyAddOnDraft();
+    const b = emptyAddOnDraft();
+    const keys = [a.uid, b.uid, ...a.variants.map((v) => v.uid), ...b.variants.map((v) => v.uid)];
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 describe("draftsFromCatalogue", () => {
   it("round trips a saved catalogue back into editable drafts", () => {
     const drafts = draftsFromCatalogue([
@@ -83,12 +106,34 @@ describe("draftsFromCatalogue", () => {
     expect(drafts[0]).toMatchObject({ id: "a1", name: "Event tee", price: "25.00", imageUrl: "/u/tee.png" });
     expect(drafts[0].variants[0]).toMatchObject({ id: "v1", label: "M", stock: "10", sold: 3, purchased: 4 });
   });
+
+  // A saved row already has a unique server id, so it is the editing key too
+  // rather than a second identifier meaning the same thing.
+  it("keys a saved row on its server id", () => {
+    const drafts = draftsFromCatalogue([
+      {
+        id: "a1",
+        name: "Event tee",
+        description: null,
+        priceCents: 2500,
+        imageUrl: null,
+        optionLabel: "Size",
+        sortOrder: 0,
+        active: true,
+        variants: [
+          { id: "v1", label: "M", code: "aaa111", stock: 10, sold: 0, purchased: 0, remaining: 10, sortOrder: 0, active: true },
+        ],
+      },
+    ]);
+    expect(drafts[0].uid).toBe("a1");
+    expect(drafts[0].variants[0].uid).toBe("v1");
+  });
 });
 
 describe("hasPurchaseHistory", () => {
   it("is true once anything has ever been bought, refunds included", () => {
     // Refunded rows free their stock but must still block deletion.
-    expect(hasPurchaseHistory(draft({ variants: [{ label: "M", stock: "5", sold: 0, purchased: 2 }] }))).toBe(true);
+    expect(hasPurchaseHistory(draft({ variants: [variant({ stock: "5", purchased: 2 })] }))).toBe(true);
   });
 
   it("is false for a product nobody has touched", () => {
@@ -124,8 +169,8 @@ describe("draftValidationError", () => {
   it("rejects two options with the same name", () => {
     const d = draft({
       variants: [
-        { label: "M", stock: "1", sold: 0, purchased: 0 },
-        { label: "m", stock: "1", sold: 0, purchased: 0 },
+        variant({ label: "M", stock: "1" }),
+        variant({ label: "m", stock: "1" }),
       ],
     });
     expect(draftValidationError([d])).toMatch(/two options called/);
@@ -133,13 +178,13 @@ describe("draftValidationError", () => {
 
   it("requires a stock number on every option", () => {
     expect(
-      draftValidationError([draft({ variants: [{ label: "M", stock: "", sold: 0, purchased: 0 }] })]),
+      draftValidationError([draft({ variants: [variant({ stock: "" })] })]),
     ).toMatch(/needs a number of units/);
   });
 
   // The organiser must not be able to make remaining stock go negative.
   it("refuses stock below what has already sold, and says what to set it to", () => {
-    const d = draft({ variants: [{ label: "M", stock: "2", sold: 5, purchased: 5 }] });
+    const d = draft({ variants: [variant({ stock: "2", sold: 5, purchased: 5 })] });
     expect(draftValidationError([d])).toBe(
       '"Event tee - M" has already sold 5. Set its stock to 5 or more.',
     );
@@ -147,7 +192,7 @@ describe("draftValidationError", () => {
 
   it("allows stock set exactly to what has sold", () => {
     expect(
-      draftValidationError([draft({ variants: [{ label: "M", stock: "5", sold: 5, purchased: 5 }] })]),
+      draftValidationError([draft({ variants: [variant({ stock: "5", sold: 5, purchased: 5 })] })]),
     ).toBeNull();
   });
 
@@ -158,15 +203,23 @@ describe("draftValidationError", () => {
 
   it("caps the number of options", () => {
     const d = draft({
-      variants: Array.from({ length: MAX_ADDON_VARIANTS + 1 }, (_, i) => ({
-        label: `Size ${i}`, stock: "1", sold: 0, purchased: 0,
-      })),
+      variants: Array.from({ length: MAX_ADDON_VARIANTS + 1 }, (_, i) =>
+        variant({ label: `Size ${i}`, stock: "1" }),
+      ),
     });
     expect(draftValidationError([d])).toMatch(/at most/);
   });
 });
 
 describe("draftsToPayload", () => {
+  // uid is an editing concern. Sending it would put an unknown field in front of
+  // the route's sanitizer for no reason.
+  it("never sends the editing key to the API", () => {
+    const payload = draftsToPayload([draft({ id: "a1" })]);
+    expect(payload[0]).not.toHaveProperty("uid");
+    expect(payload[0].variants[0]).not.toHaveProperty("uid");
+  });
+
   it("converts dollars to whole cents and trims text", () => {
     const payload = draftsToPayload([
       draft({ name: "  Event tee  ", price: "25.5", description: "  Cotton  " }),
@@ -183,7 +236,7 @@ describe("draftsToPayload", () => {
 
   it("omits ids for new rows and keeps them for existing ones", () => {
     const payload = draftsToPayload([
-      draft({ id: "a1", variants: [{ id: "v1", label: "M", stock: "3", sold: 0, purchased: 0 }] }),
+      draft({ id: "a1", variants: [variant({ id: "v1", stock: "3" })] }),
       draft({ name: "Cap" }),
     ]);
     expect(payload[0].id).toBe("a1");

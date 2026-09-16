@@ -148,6 +148,58 @@ test.describe("organiser add-on catalogue", () => {
     await expect(page.locator('button[aria-label="Photo for add-on 1"] img')).toHaveCount(0);
   });
 
+  test("a photo and its rejection stay with the product through a reorder", async ({ page }) => {
+    await organiserLogin(page);
+    await openTicketsStep(page, "/organiser/new-listing");
+
+    await page.getByRole("button", { name: /add merchandise/i }).click();
+    await page.locator("#addon-name-0").fill("Event tee");
+    await page.getByRole("button", { name: /add merchandise/i }).click();
+    await page.locator("#addon-name-1").fill("Cap");
+
+    // Give the tee a good photo and the cap an oversized one.
+    await page
+      .locator('input[type="file"]')
+      .first()
+      .setInputFiles({ name: "tee.png", mimeType: "image/png", buffer: PNG });
+    await page
+      .locator('input[type="file"]')
+      .last()
+      .setInputFiles({
+        name: "huge.png",
+        mimeType: "image/png",
+        buffer: Buffer.alloc(11 * 1024 * 1024, 1),
+      });
+
+    // The rejection message is a sibling of its own product's photo button, so
+    // this says which product is showing it, not merely that one is.
+    const rejection = (slot: number) =>
+      page.locator(`div:has(> button[aria-label="Photo for add-on ${slot}"]) > p`);
+    const photo = (slot: number) => page.locator(`button[aria-label="Photo for add-on ${slot}"] img`);
+
+    await expect(photo(1)).toBeVisible();
+    await expect(rejection(1)).toHaveCount(0);
+    await expect(rejection(2)).toHaveText(/image must be 10 MB or smaller/i);
+
+    // Move the cap above the tee. Rows are keyed on a stable draft key, so both
+    // the preview and the rejection follow their product. Keyed on the array
+    // index they stay with the slot instead, and the cap's rejection would then
+    // be displayed under the tee.
+    await page.getByRole("button", { name: /^move cap up$/i }).click();
+    await expect(page.locator("#addon-name-0")).toHaveValue("Cap");
+
+    // Slot 1 is now the cap: its rejection came with it, and it still has no photo.
+    await expect(rejection(1)).toHaveText(/image must be 10 MB or smaller/i);
+    await expect(photo(1)).toHaveCount(0);
+
+    // Slot 2 is the tee, photo intact and no rejection of its own.
+    await expect(photo(2)).toBeVisible();
+    await expect(rejection(2)).toHaveCount(0);
+    await expect
+      .poll(() => photo(2).evaluate((img: HTMLImageElement) => img.naturalWidth))
+      .toBeGreaterThan(0);
+  });
+
   test("blocks a save that the server would reject anyway", async ({ page }) => {
     await organiserLogin(page);
     await openTicketsStep(page, "/organiser/new-listing");

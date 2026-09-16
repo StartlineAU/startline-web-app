@@ -16,7 +16,22 @@ import {
 } from "@/lib/add-ons";
 import type { CatalogueAddOnView } from "@/lib/add-on-catalogue";
 
+/**
+ * A key that identifies a row for as long as it is being edited, including
+ * before it has ever been saved.
+ *
+ * Distinct from `id`, which only exists once the server has seen the row, and
+ * never sent to the API. React needs it: keying an unsaved row on its array
+ * index means reordering hands one row's component state to another, so an
+ * error shown against one product follows the slot rather than the product.
+ */
+export function draftKey(): string {
+  return crypto.randomUUID();
+}
+
 export interface AddOnVariantDraft {
+  /** Stable while editing. See draftKey. */
+  uid: string;
   /** Present once saved. Absent means "create me". */
   id?: string;
   label: string;
@@ -29,6 +44,8 @@ export interface AddOnVariantDraft {
 }
 
 export interface AddOnDraft {
+  /** Stable while editing. See draftKey. */
+  uid: string;
   id?: string;
   name: string;
   description: string;
@@ -43,11 +60,12 @@ export interface AddOnDraft {
 }
 
 export function emptyVariantDraft(label = ""): AddOnVariantDraft {
-  return { label, stock: "", sold: 0, purchased: 0 };
+  return { uid: draftKey(), label, stock: "", sold: 0, purchased: 0 };
 }
 
 export function emptyAddOnDraft(): AddOnDraft {
   return {
+    uid: draftKey(),
     name: "",
     description: "",
     price: "",
@@ -62,6 +80,9 @@ export function emptyAddOnDraft(): AddOnDraft {
 /** Server catalogue → editable drafts. */
 export function draftsFromCatalogue(catalogue: CatalogueAddOnView[]): AddOnDraft[] {
   return catalogue.map((addOn) => ({
+    // Saved rows already have a unique server id, so reuse it rather than
+    // minting a second identifier that means the same thing.
+    uid: addOn.id,
     id: addOn.id,
     name: addOn.name,
     description: addOn.description ?? "",
@@ -70,6 +91,7 @@ export function draftsFromCatalogue(catalogue: CatalogueAddOnView[]): AddOnDraft
     imageUrl: addOn.imageUrl ?? "",
     optionLabel: addOn.optionLabel,
     variants: addOn.variants.map((variant) => ({
+      uid: variant.id,
       id: variant.id,
       label: variant.label,
       stock: String(variant.stock),

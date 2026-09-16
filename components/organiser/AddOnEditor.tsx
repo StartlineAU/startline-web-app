@@ -173,7 +173,7 @@ export default function AddOnEditor({
         const fee = priceCents == null ? null : calculateAddOnTotalWithFee(priceCents, feeStructure);
 
         return (
-          <div key={addOn.id ?? `new-${index}`} className="border border-dark-lighter rounded-xl overflow-hidden">
+          <div key={addOn.uid} className="border border-dark-lighter rounded-xl overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-5 py-3 bg-dark-light">
               <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-light flex items-center gap-2">
                 <ShoppingBag className="w-3.5 h-3.5 text-primary" />
@@ -306,7 +306,7 @@ export default function AddOnEditor({
                   {addOn.variants.map((variant, variantIndex) => {
                     const variantLocked = variant.purchased > 0;
                     return (
-                      <div key={variant.id ?? `new-${variantIndex}`} className="flex items-center gap-2">
+                      <div key={variant.uid} className="flex items-center gap-2">
                         <input
                           aria-label={`Option name ${variantIndex + 1}`}
                           className={cn(inputCls, "flex-1")}
