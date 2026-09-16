@@ -127,3 +127,74 @@ describe("ticket fee lock", () => {
     expect(calculatePlatformFee(0)).toBe(0);
   });
 });
+
+// ─── One booking fee per ticket, never one per item ──────────────────────────
+//
+// The rule as the business states it: an athlete buying a ticket and a t-shirt
+// pays 3.95% of the total plus ONE $1.45, not a separate Startline fee per item.
+// The unit tests above prove each function in isolation; these prove the thing
+// the athlete actually sees on the order summary, which is the sum of them.
+//
+// Checkout accumulates the fee per ticket and per add-on line
+// (lib/checkout-order.ts), so this mirrors that accumulation rather than calling
+// some single basket function, which does not exist.
+function basketFeeCents(ticketCents: number[], addOnCents: number[]): number {
+  return (
+    ticketCents.reduce((sum, c) => sum + calculatePlatformFee(c), 0) +
+    addOnCents.reduce((sum, c) => sum + calculateAddOnPlatformFee(c), 0)
+  );
+}
+
+/** What "3.95% of the whole basket plus one $1.45" comes to. */
+function oneFeeOnTotal(goodsCents: number): number {
+  return Math.round(goodsCents * PLATFORM_FEE_PERCENT) + PLATFORM_FEE_FIXED_CENTS;
+}
+
+describe("booking fee across a whole basket", () => {
+  it("charges one $1.45 for a ticket plus a tee, not one each", () => {
+    // $65 entry + $25 tee. Were the fixed component charged per item this would
+    // be $6.46 rather than $5.01.
+    expect(basketFeeCents([6500], [2500])).toBe(501);
+    expect(basketFeeCents([6500], [2500])).toBe(oneFeeOnTotal(6500 + 2500));
+  });
+
+  it("still charges one $1.45 however many add-ons ride along", () => {
+    for (const addOns of [[2500], [2500, 1200], [2500, 1200, 999, 4500]]) {
+      const goods = 6500 + addOns.reduce((a, b) => a + b, 0);
+      expect(basketFeeCents([6500], addOns)).toBe(oneFeeOnTotal(goods));
+    }
+  });
+
+  it("adds exactly the percentage when an add-on joins an existing ticket", () => {
+    const ticketOnly = basketFeeCents([6500], []);
+    const withTee = basketFeeCents([6500], [2500]);
+    expect(withTee - ticketOnly).toBe(calculateAddOnPlatformFee(2500));
+    expect(withTee - ticketOnly).toBe(99);
+  });
+
+  // Stated explicitly rather than left to be discovered: the fixed component is
+  // per TICKET, not per order, because it covers per-registration cost. A family
+  // of four pays four of them, exactly as they did before add-ons existed. Only
+  // the merchandise is exempt.
+  it("charges the fixed component once per ticket in a group booking", () => {
+    const four = basketFeeCents([6500, 6500, 6500, 6500], []);
+    expect(four).toBe(4 * calculatePlatformFee(6500));
+    // Per line, not over the total: the percentage is rounded once per ticket,
+    // so four $65 tickets take 4 x 257c, which is a cent more than rounding
+    // 3.95% of $260 in one go. Stating it this way keeps the assertion about
+    // the fixed component rather than about rounding.
+    expect(four - 4 * Math.round(6500 * PLATFORM_FEE_PERCENT)).toBe(4 * PLATFORM_FEE_FIXED_CENTS);
+
+    // Adding a tee per athlete adds only the percentage, never a fifth fixed fee.
+    const withTees = basketFeeCents([6500, 6500, 6500, 6500], [2500, 2500, 2500, 2500]);
+    expect(withTees - four).toBe(4 * calculateAddOnPlatformFee(2500));
+  });
+
+  // A free ticket carries no fee at all (#308), so merchandise bought alongside
+  // one is charged the percentage and no fixed component. Startline takes less
+  // here than the headline rule implies, which is the deliberate trade for
+  // letting people register free events.
+  it("charges no fixed component when the ticket is free", () => {
+    expect(basketFeeCents([0], [2500])).toBe(99);
+  });
+});

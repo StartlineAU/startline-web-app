@@ -65,16 +65,16 @@ const styles = StyleSheet.create({
   colGender: { width: "12%" },
   colPhone: { width: "24%" },
   colMed: { width: "10%", textAlign: "right" },
-  // Narrowed variants, used only when the event actually sold merchandise. An
-  // event with no add-ons keeps the widths above rather than carrying an empty
-  // seventh column across every page of its start list.
-  colBibX: { width: "7%" },
-  colNameX: { width: "22%" },
-  colCategoryX: { width: "14%" },
-  colGenderX: { width: "9%" },
-  colPhoneX: { width: "18%" },
-  colExtrasX: { width: "22%" },
-  colMedX: { width: "8%", textAlign: "right" },
+  // The seven-column layout, used only when the event actually sold
+  // merchandise. An event with no add-ons keeps the widths above rather than
+  // carrying an empty column across every page of its start list.
+  colBibNarrow: { width: "7%" },
+  colNameNarrow: { width: "22%" },
+  colCategoryNarrow: { width: "14%" },
+  colGenderNarrow: { width: "9%" },
+  colPhoneNarrow: { width: "18%" },
+  colExtras: { width: "22%" },
+  colMedNarrow: { width: "8%", textAlign: "right" },
   headerCell: {
     fontFamily: "Helvetica-Bold",
     fontSize: 8,
@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
 function columnsFor(withExtras: boolean) {
   return withExtras
     ? {
-        bib: styles.colBibX,
-        name: styles.colNameX,
-        category: styles.colCategoryX,
-        gender: styles.colGenderX,
-        phone: styles.colPhoneX,
-        med: styles.colMedX,
+        bib: styles.colBibNarrow,
+        name: styles.colNameNarrow,
+        category: styles.colCategoryNarrow,
+        gender: styles.colGenderNarrow,
+        phone: styles.colPhoneNarrow,
+        med: styles.colMedNarrow,
       }
     : {
         bib: styles.colBib,
@@ -158,7 +158,7 @@ function StartListDoc(props: {
               <Text style={[col.gender, styles.headerCell]}>Gender</Text>
               <Text style={[col.phone, styles.headerCell]}>Emergency phone</Text>
               {withExtras && (
-                <Text style={[styles.colExtrasX, styles.headerCell]}>Add-ons</Text>
+                <Text style={[styles.colExtras, styles.headerCell]}>Add-ons</Text>
               )}
               <Text style={[col.med, styles.headerCell]}>Medical</Text>
             </View>
@@ -169,7 +169,7 @@ function StartListDoc(props: {
                 <Text style={col.category}>{r.category || "-"}</Text>
                 <Text style={col.gender}>{r.gender || "-"}</Text>
                 <Text style={col.phone}>{r.emergencyPhone || "-"}</Text>
-                {withExtras && <Text style={styles.colExtrasX}>{r.addOns || "-"}</Text>}
+                {withExtras && <Text style={styles.colExtras}>{r.addOns || "-"}</Text>}
                 <Text style={col.med}>{r.hasMedical ? "Yes" : ""}</Text>
               </View>
             ))}

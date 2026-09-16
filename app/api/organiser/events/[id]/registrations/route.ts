@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { wavesWithCounts } from "@/lib/start-waves";
 import type { RegistrationStatus, Prisma } from "@prisma/client";
 import { idParams } from "@/lib/schemas";
+import { addOnsPaidCents } from "@/lib/registration-export";
 import { z } from "zod";
 
 const STATUSES = new Set(["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "CANCELLED"]);
@@ -144,7 +145,11 @@ export async function GET(
       isPersonalBest: r.isPersonalBest,
       isTopResult: r.isTopResult,
       // Merchandise, kept separate from `amount` above. `amount` stays the entry
-      // alone so every existing refund and reporting figure keeps its meaning.
+      // alone so every existing refund and reporting figure keeps its meaning,
+      // and addOnAmount below is its counterpart rather than an addition to it.
+      // The Add-ons tab totals the lines itself, so nothing renders addOnAmount
+      // today; it is here so a caller that wants the per-athlete merchandise
+      // total never has to re-derive the fee rule.
       addOns: r.addOns.map((a) => ({
         id: a.id,
         name: a.nameSnapshot,
@@ -164,14 +169,10 @@ export async function GET(
         refundDeclinedAt: a.refundDeclinedAt,
         refundDeclineReason: a.refundDeclineReason,
       })),
-      addOnAmount:
-        r.addOns
-          .filter((a) => a.status === "PURCHASED" || a.status === "REFUND_REQUESTED")
-          .reduce(
-            (sum, a) =>
-              sum + a.amountCents + (a.feeStructure === "athlete" ? a.platformFeeCents : 0),
-            0,
-          ) / 100,
+      // Shared with the export rather than recomputed, so the figure in the
+      // table and the figure in the CSV can never disagree about which statuses
+      // count or who bore the booking fee.
+      addOnAmount: addOnsPaidCents(r.addOns) / 100,
     })),
   });
 }

@@ -138,7 +138,7 @@ describe("runPayoutForEvent", () => {
       registrations: [],
       addOnPurchases: [],
     });
-    await expect(runPayoutForEvent("event-1")).rejects.toThrow(/No confirmed registrations/);
+    await expect(runPayoutForEvent("event-1")).rejects.toThrow(/Nothing to pay out/);
     expect(mocks.createPayout).not.toHaveBeenCalled();
   });
 });

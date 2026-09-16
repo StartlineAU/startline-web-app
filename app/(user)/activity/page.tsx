@@ -214,6 +214,10 @@ function RegisteredCard({
               const label = addOn.variantLabel
                 ? `${addOn.name} (${addOn.variantLabel})`
                 : addOn.name;
+              // The entry has a "Request refund" button of its own further down
+              // the card, so this item's button is labelled with what it refunds
+              // rather than leaving a screen reader two identical controls.
+              const refundLabel = `Request refund for ${addOn.quantity} x ${label}`;
               return (
                 <div key={addOn.id} className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -240,6 +244,7 @@ function RegisteredCard({
                       <button
                         type="button"
                         onClick={() => onRequestAddOnRefund(meta, addOn)}
+                        aria-label={refundLabel}
                         className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
                       >
                         Request refund

@@ -271,7 +271,14 @@ export function formatAddOnsCell(addOns: ExportRegistrationInput["addOns"]): str
     .join("; ");
 }
 
-/** What the athlete paid for merchandise on this entry, in dollars. */
+/**
+ * What the athlete paid for merchandise on this entry, in CENTS. The booking fee
+ * counts only under the "athlete" structure, because under "organiser" it came
+ * out of the organiser's share and the athlete never handed it over.
+ *
+ * Shared with the organiser registrations route, so the figure in the race
+ * management table and the figure in the export cannot disagree.
+ */
 export function addOnsPaidCents(addOns: ExportRegistrationInput["addOns"]): number {
   return liveAddOns(addOns).reduce(
     (sum, a) => sum + a.amountCents + (a.feeStructure === "athlete" ? a.platformFeeCents : 0),

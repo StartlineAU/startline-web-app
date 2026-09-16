@@ -19,6 +19,14 @@ const PAYOUT_ADDON_STATUSES = ["PURCHASED"] as const;
  * Merchandise money sits in the organiser's connected balance exactly like
  * ticket money. If it were left out of this sum it would simply never reach
  * their bank account.
+ *
+ * Add-ons are summed exactly the way entries already are, which means they
+ * inherit issue #251 rather than fix it: under the "organiser" fee structure the
+ * athlete was charged the price alone and the fee came out of the organiser's
+ * share, so their connected balance holds amountCents MINUS the fee and this sum
+ * asks for more than is there. That is pre-existing behaviour for tickets and is
+ * deliberately not changed here; whatever fixes it for entries has to subtract
+ * the organiser-borne fee from both halves of this sum at once.
  */
 function netCentsFor(event: {
   registrations: { amountCents: number }[];
@@ -108,7 +116,9 @@ export async function runPayoutForEvent(eventId: string): Promise<{ netCents: nu
   if (!event.organiser.stripeAccountId) throw new Error("Organiser has no Stripe account.");
 
   const netCents = netCentsFor(event);
-  if (netCents <= 0) throw new Error("No confirmed registrations to pay out.");
+  // Entries and merchandise both count toward this, so the message cannot claim
+  // registrations are what is missing.
+  if (netCents <= 0) throw new Error("Nothing to pay out for this event.");
 
   await getStripe().payouts.create(
     { amount: netCents, currency: "aud" },

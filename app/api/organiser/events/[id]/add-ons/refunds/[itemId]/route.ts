@@ -87,6 +87,12 @@ export async function POST(
 
   const label = addOnStockLabel(item.nameSnapshot, item.variantLabelSnapshot);
 
+  // refundDecidedBy below records session.sub, which requireOrganiser resolves to
+  // the Organiser id rather than the member who clicked. An organiser can have
+  // several members and OrganiserSession does not carry the acting user, so this
+  // says which organiser decided, not which person. Same granularity as every
+  // other organiser-side write.
+
   // Best-effort athlete notification; the decision itself is what matters.
   const notifyAthlete = async (title: string, body: string) => {
     if (!item.registration.userId) return;
