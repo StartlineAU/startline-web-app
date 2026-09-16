@@ -4,6 +4,11 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { getStripe } from "@/lib/stripe";
 import { writeAuditLog } from "@/lib/audit";
 import { idParams } from "@/lib/schemas";
+import {
+  buildRefundParams,
+  entryRefundAmountCents,
+  isOutsidePolicyRefund,
+} from "@/lib/stripe-refunds";
 
 export async function POST(
   _req: NextRequest,
@@ -24,6 +29,7 @@ export async function POST(
         status: true,
         amountCents: true,
         platformFeeCents: true,
+        feeStructure: true,
         refundAmountCents: true,
         refundPercent: true,
         stripePaymentIntentId: true,
@@ -82,16 +88,18 @@ export async function POST(
       return NextResponse.json({ ok: true, method: "free" });
     }
 
-    // Honour the snapshot taken when the athlete asked. A full refund sends no
-    // amount so Stripe returns the whole charge (ticket price plus the Startline
-    // fee); a partial tier refunds exactly what was quoted. A registration with no
-    // snapshot predates the structured policy, so it falls back to the whole charge.
-    const paidCents = registration.amountCents + registration.platformFeeCents;
-    const snapshot = registration.refundAmountCents;
-    const isPartial = snapshot != null && snapshot > 0 && snapshot < paidCents;
+    // Honour the snapshot taken when the athlete asked, clamped to what THIS
+    // entry's payer actually handed over. Under the "organiser" fee structure
+    // that is the ticket price alone: the booking fee came out of the
+    // organiser's share, so it is not the athlete's to receive back.
+    //
+    // The amount is always explicit. An amountless refund returns the entire
+    // charge, and one PaymentIntent covers every participant in a group booking,
+    // so that would refund the whole family over one athlete's request.
+    const refundCents = entryRefundAmountCents(registration);
 
     // Checked before touching Stripe so a refused request costs nothing.
-    if (snapshot === 0) {
+    if (isOutsidePolicyRefund(registration)) {
       return NextResponse.json(
         { error: "This request is outside the event's refund policy. Refund a different amount manually in Stripe if it is being granted as a goodwill exception." },
         { status: 409 },
@@ -99,29 +107,54 @@ export async function POST(
     }
 
     const stripe = getStripe();
+    // The charge is expanded rather than left as an id because the refund needs
+    // two facts that only exist on the Charge: whether there is a transfer to
+    // reverse and whether there is an application fee. Checkout omits both for a
+    // direct charge, and Stripe rejects a refund that claims either one is there
+    // when it is not.
     const paymentIntent = await stripe.paymentIntents.retrieve(
       registration.stripePaymentIntentId,
+      { expand: ["latest_charge"] },
     );
 
-    const chargeId =
-      typeof paymentIntent.latest_charge === "string"
-        ? paymentIntent.latest_charge
-        : paymentIntent.latest_charge?.id;
+    const latestCharge = paymentIntent.latest_charge;
 
-    if (!chargeId) {
+    if (!latestCharge) {
       return NextResponse.json(
         { error: "No charge found on this payment intent." },
         { status: 422 },
       );
     }
 
+    // Expanded above, so a bare id here means the expansion did not come back
+    // and we cannot prove what the charge carries. Guessing moves real money in
+    // the wrong direction either way, so refuse rather than send a refund whose
+    // flags might not match the charge.
+    if (typeof latestCharge === "string") {
+      return NextResponse.json(
+        { error: "Could not read the charge for this payment. Try again in a moment." },
+        { status: 502 },
+      );
+    }
+
+    const charge = latestCharge;
+
     const refund = await stripe.refunds.create(
-      isPartial ? { charge: chargeId, amount: snapshot } : { charge: chargeId },
+      ...buildRefundParams({
+        chargeId: charge.id,
+        amountCents: refundCents,
+        // Retrying a failed request must not refund the athlete twice. Note
+        // Stripe expires an idempotency key after 24 hours, so a refund that
+        // failed for a transient reason can still be retried tomorrow.
+        idempotencyKey: `entry-refund-${registration.id}`,
+        hasTransfer: Boolean(charge.transfer),
+        hasApplicationFee: Boolean(charge.application_fee),
+      }),
     );
 
     await prisma.registration.update({ where: { id }, data: { status: "REFUNDED" } });
 
-    await notifyAthlete(snapshot ?? paidCents);
+    await notifyAthlete(refundCents);
 
     writeAuditLog({
       adminId: session.sub,
