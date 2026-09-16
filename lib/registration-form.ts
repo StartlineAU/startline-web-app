@@ -371,3 +371,45 @@ export function getEmailsRequiringVerification(
   const accountEmail = normalizeGuestEmail(authenticatedEmail);
   return unique.filter((email) => email !== accountEmail);
 }
+
+/**
+ * For each slot in `nextWaves`, the index of the previous ticket it inherits
+ * from, or null for a brand-new slot. Tier first, then positionally through
+ * whatever is left over.
+ *
+ * This is the one rule deciding which previous ticket becomes which new one,
+ * and it exists as its own function because more than one thing hangs off a
+ * ticket. The buyer's details follow this mapping, and so do the add-ons they
+ * chose. Working it out twice, or applying it to details while leaving extras
+ * pinned to their old position, puts one participant's shirt size on a
+ * different participant - which is the whole point of choosing sizes per
+ * person.
+ */
+export function matchPreviousTickets(
+  prevCount: number,
+  prevWaves: string[],
+  nextWaves: string[],
+): (number | null)[] {
+  const used = new Array(prevCount).fill(false);
+
+  // Pass one: give each new slot a previous ticket of the same tier.
+  const matched: (number | null)[] = nextWaves.map((wave) => {
+    for (let i = 0; i < prevCount; i++) {
+      if (!used[i] && prevWaves[i] === wave) {
+        used[i] = true;
+        return i;
+      }
+    }
+    return null;
+  });
+
+  // Pass two: fill what is left positionally, so a buyer who switches a ticket
+  // from one tier to another keeps the details they already typed.
+  return matched.map((index) => {
+    if (index != null) return index;
+    const leftover = used.indexOf(false);
+    if (leftover === -1) return null;
+    used[leftover] = true;
+    return leftover;
+  });
+}

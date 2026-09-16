@@ -54,7 +54,9 @@ test.beforeAll(async ({ browser }) => {
       ],
     },
   });
-  expect(res.ok()).toBeTruthy();
+  // Surface the route's own message: a bare ok() assertion here fails the hook
+  // and every test in the file with nothing to go on.
+  expect(res.ok(), `catalogue PUT failed (${res.status()}): ${await res.text()}`).toBeTruthy();
 
   // Warm the athlete-facing route and its availability endpoint here rather than
   // paying for both compiles inside the first test's 30s budget. domcontentloaded

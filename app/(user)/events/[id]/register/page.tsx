@@ -31,6 +31,7 @@ import {
   formatPhoneForDisplay,
   createEmptyParticipant,
   MAX_REGISTRATION_PARTICIPANTS,
+  matchPreviousTickets,
   type ParticipantFormErrors,
   type RegistrationFormData,
   type EmergencyContact,
@@ -91,14 +92,20 @@ interface Availability {
 type AddOnSelections = Record<number, Record<string, number>>;
 
 /**
- * Drop selections belonging to participants who no longer exist, and clamp what
- * remains to the stock still on offer. Runs alongside reconcileParticipants: a
- * buyer who reduces their ticket count must not keep paying for the shirts of a
- * participant they removed.
+ * Move each ticket's extras onto that ticket's new position, dropping the ones
+ * whose ticket is gone and clamping what remains to the stock still on offer.
+ *
+ * Follows exactly the same mapping reconcileParticipants uses, which is what
+ * keeps a size with the person who chose it. Pinning extras to their old index
+ * instead would, on any change that reorders tickets, quietly hand one
+ * participant's shirt to another - and a buyer who removes a ticket must not
+ * keep paying for that participant's shirt either.
  */
 function reconcileAddOnSelections(
   prev: AddOnSelections,
-  participantCount: number,
+  prevCount: number,
+  prevWaves: string[],
+  nextWaves: string[],
   addOns: AddOnProduct[],
 ): AddOnSelections {
   const capByVariant = new Map<string, number>();
@@ -109,9 +116,11 @@ function reconcileAddOnSelections(
   }
 
   const next: AddOnSelections = {};
-  for (const [rawIndex, selection] of Object.entries(prev)) {
-    const index = Number(rawIndex);
-    if (index >= participantCount) continue;
+  matchPreviousTickets(prevCount, prevWaves, nextWaves).forEach((from, to) => {
+    if (from == null) return;
+    const selection = prev[from];
+    if (!selection) return;
+
     const kept: Record<string, number> = {};
     for (const [variantId, quantity] of Object.entries(selection)) {
       const cap = capByVariant.get(variantId);
@@ -119,8 +128,8 @@ function reconcileAddOnSelections(
       const clamped = Math.min(quantity, cap);
       if (clamped > 0) kept[variantId] = clamped;
     }
-    if (Object.keys(kept).length > 0) next[index] = kept;
-  }
+    if (Object.keys(kept).length > 0) next[to] = kept;
+  });
   return next;
 }
 
@@ -163,24 +172,9 @@ function reconcileParticipants(
   prevWaves: string[],
   nextWaves: string[]
 ): RegistrationFormData[] {
-  const pool = prev.map((participant, i) => ({ participant, wave: prevWaves[i] ?? null, used: false }));
-  const matched = nextWaves.map((wave) => {
-    const hit = pool.find((entry) => !entry.used && entry.wave === wave);
-    if (hit) {
-      hit.used = true;
-      return hit.participant;
-    }
-    return null;
-  });
-  return matched.map((participant) => {
-    if (participant) return participant;
-    const leftover = pool.find((entry) => !entry.used);
-    if (leftover) {
-      leftover.used = true;
-      return leftover.participant;
-    }
-    return createEmptyParticipant();
-  });
+  return matchPreviousTickets(prev.length, prevWaves, nextWaves).map((index) =>
+    index == null ? createEmptyParticipant() : prev[index],
+  );
 }
 
 const continueBtnCls =
@@ -370,7 +364,15 @@ function RegisterContent() {
   // Computed in whole cents and divided only at render. The ticket figures above
   // are floats for historical reasons; add-on money must not join them, because
   // the server compares its own integer arithmetic against the charge.
-  const addOnCatalogue = useMemo(() => availability?.addOns ?? [], [availability]);
+  // Only products with an option to choose. A product whose every variant has
+  // been retired comes back from the catalogue with none, and AddOnPicker
+  // renders nothing for it - so without this the ticket step would tease an
+  // extra by name that the details step never offers. A product whose options
+  // are merely sold out still has variants, and still shows, as it should.
+  const addOnCatalogue = useMemo(
+    () => (availability?.addOns ?? []).filter((addOn) => addOn.variants.length > 0),
+    [availability],
+  );
   const addOnVariantIndex = useMemo(() => {
     const map = new Map<string, { addOn: AddOnProduct; label: string }>();
     for (const addOn of addOnCatalogue) {
@@ -436,7 +438,13 @@ function RegisterContent() {
     });
   }, []);
 
-  const total = subtotal + feeTotal + addOnTotal;
+  // What the entry alone costs. Kept apart from `total` because the refund
+  // policy applies to the entry and never to merchandise: add-on money is not
+  // written to Registration.amountCents, and entryPaidCents reads only those
+  // columns, so quoting a refund against a total that includes a t-shirt would
+  // promise money the refund path will never return.
+  const ticketTotal = subtotal + feeTotal;
+  const total = ticketTotal + addOnTotal;
   // A free order: tickets chosen, nothing to pay. It skips Stripe entirely and
   // is written by /api/registrations/free when the athlete confirms.
   const freeOrder = totalTickets > 0 && total === 0;
@@ -450,11 +458,11 @@ function RegisterContent() {
   const refundTiers = parseTiers(event?.refundTiers);
   const refundLines = freeEvent ? [] : describeTiers(refundTiers);
   const daysToEvent = event ? daysUntil(event.eventDate, new Date().toISOString().slice(0, 10)) : 0;
-  const refundIfCancelledNow = refundAmountCents(refundTiers, Math.round(total * 100), daysToEvent) / 100;
+  const refundIfCancelledNow = refundAmountCents(refundTiers, Math.round(ticketTotal * 100), daysToEvent) / 100;
   const refundHeadline = freeEvent
     ? ""
     : refundIfCancelledNow > 0
-      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(total)} back. The amount drops as the event gets closer.`
+      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(ticketTotal)} back on your entry.${addOnLines.length > 0 ? " Extras are not covered by this policy and are refunded separately." : ""} The amount drops as the event gets closer.`
       : `This event's policy does not cover a refund at this date, so treat this entry as final.`;
 
   const isMulti = participants.length > 1;
@@ -626,7 +634,9 @@ function RegisterContent() {
       for (let i = 0; i < (quantities[wave.label] ?? 0); i++) nextWaves.push(wave.label);
     }
     setParticipants((prev) => reconcileParticipants(prev, ticketWaves, nextWaves));
-    setAddOnSelections((prev) => reconcileAddOnSelections(prev, nextWaves.length, addOnCatalogue));
+    setAddOnSelections((prev) =>
+      reconcileAddOnSelections(prev, participants.length, ticketWaves, nextWaves, addOnCatalogue),
+    );
     setTicketWaves(nextWaves);
     setFieldErrors({});
     setEmergencyContactErrors({});
@@ -1228,6 +1238,7 @@ function RegisterContent() {
                   onBack={() => {
                     setError("");
                     setClientSecret("");
+                    setServerTotal(null);
                     setStep(1);
                   }}
                   onConfirmed={onConfirmed}
