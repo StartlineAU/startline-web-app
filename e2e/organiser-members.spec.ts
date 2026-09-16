@@ -9,7 +9,9 @@ test.describe("organiser members", () => {
 
     await expect(page.getByRole("heading", { name: /members/i })).toBeVisible();
     await expect(page.getByText("sarah.mitchell@startline.test")).toBeVisible();
-    await expect(page.getByText("Owner", { exact: true })).toBeVisible();
+    // Scoped to main: the sidebar renders its own "Owner" badge, so an unscoped
+    // locator is a strict-mode violation the moment the nav finishes rendering.
+    await expect(page.getByRole("main").getByText("Owner", { exact: true })).toBeVisible();
     await expect(page.getByText("tom.whitfield@startline.test")).toBeVisible();
     await expect(page.getByText("Manager", { exact: true }).first()).toBeVisible();
   });
