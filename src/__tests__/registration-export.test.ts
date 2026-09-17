@@ -12,6 +12,8 @@ import {
   parseExportColumns,
   safeExportFilename,
   toExportRow,
+  formatAddOnsCell,
+  addOnsPaidCents,
   type ExportRegistrationInput,
 } from "@/lib/registration-export";
 import { parseCsvTable } from "@/lib/registration-csv";
@@ -160,5 +162,104 @@ describe("excel column projection", () => {
     const keys = parseExportColumns("bib,name,startWave");
     expect(excelHeadersFor(keys)).toEqual(["Bib", "Name", "Start wave"]);
     expect(excelCellValues(row, keys)).toEqual(["42", "Alex Turner", "Wave A"]);
+  });
+});
+
+// ─── Paid add-ons ────────────────────────────────────────────────────────────
+
+/** A $25.00 tee with the athlete-borne percentage fee, so the payer gave 2599. */
+function tee(overrides: Partial<NonNullable<ExportRegistrationInput["addOns"]>[number]> = {}) {
+  return {
+    nameSnapshot: "Event tee",
+    variantLabelSnapshot: "M",
+    quantity: 1,
+    amountCents: 2500,
+    platformFeeCents: 99,
+    feeStructure: "athlete",
+    status: "PURCHASED",
+    ...overrides,
+  };
+}
+
+describe("formatAddOnsCell", () => {
+  it("is empty when nothing was bought, and when the caller never loaded add-ons", () => {
+    expect(formatAddOnsCell([])).toBe("");
+    expect(formatAddOnsCell(undefined)).toBe("");
+  });
+
+  it("joins items with a hyphen and a quantity", () => {
+    expect(formatAddOnsCell([tee({ quantity: 2 })])).toBe("Event tee - M x2");
+  });
+
+  it("drops the option when the product has no variant label", () => {
+    expect(formatAddOnsCell([tee({ nameSnapshot: "Cap", variantLabelSnapshot: "" })])).toBe("Cap x1");
+  });
+
+  it("separates multiple items with a semicolon, so a comma cannot break the CSV", () => {
+    const cell = formatAddOnsCell([tee(), tee({ nameSnapshot: "Parking pass", variantLabelSnapshot: "Saturday" })]);
+    expect(cell).toBe("Event tee - M x1; Parking pass - Saturday x1");
+    expect(cell).not.toContain(",");
+  });
+
+  // The organiser still has to hand over an item whose refund is undecided, so
+  // it stays on the picking list until they actually approve it.
+  it("counts a pending refund but drops a settled one", () => {
+    expect(formatAddOnsCell([tee({ status: "REFUND_REQUESTED" })])).toBe("Event tee - M x1");
+    expect(formatAddOnsCell([tee({ status: "REFUNDED" })])).toBe("");
+    expect(formatAddOnsCell([tee({ status: "CANCELLED" })])).toBe("");
+  });
+});
+
+describe("addOnsPaidCents", () => {
+  it("includes the booking fee only when the athlete paid it", () => {
+    expect(addOnsPaidCents([tee()])).toBe(2599);
+    expect(addOnsPaidCents([tee({ feeStructure: "organiser" })])).toBe(2500);
+  });
+
+  it("sums live items and excludes refunded ones", () => {
+    expect(addOnsPaidCents([tee(), tee({ status: "REFUNDED" })])).toBe(2599);
+  });
+
+  it("is zero when the caller never loaded add-ons", () => {
+    expect(addOnsPaidCents(undefined)).toBe(0);
+  });
+});
+
+describe("add-on export columns", () => {
+  it("puts the cell and the money on the row, entry money untouched", () => {
+    const row = toExportRow(base({ addOns: [tee({ quantity: 2, amountCents: 5000, platformFeeCents: 198 })] }));
+    expect(row.addOns).toBe("Event tee - M x2");
+    expect(row.addOnsPaidAud).toBe("51.98");
+    // paidAud is the entry alone and must not absorb merchandise money.
+    expect(row.paidAud).toBe("55.00");
+  });
+
+  it("is blank on an entry that bought nothing", () => {
+    const row = toExportRow(base());
+    expect(row.addOns).toBe("");
+    expect(row.addOnsPaidAud).toBe("0.00");
+  });
+
+  it("carries both columns on the machine CSV", () => {
+    const csv = exportRowsToCsv(mapAndSortExportRows([base({ addOns: [tee()] })]));
+    const { header, rows } = parseCsvTable(csv);
+    expect(header).toContain("addons");
+    expect(header).toContain("addonspaidaud");
+    expect(rows[0][header.indexOf("addons")]).toBe("Event tee - M x1");
+    expect(rows[0][header.indexOf("addonspaidaud")]).toBe("25.99");
+  });
+
+  it("is selectable on a filtered CSV", () => {
+    const csv = exportRowsToCsv(mapAndSortExportRows([base({ addOns: [tee()] })]), ["name", "addOns"]);
+    const { header, rows } = parseCsvTable(csv);
+    expect(header).toEqual(["registrationid", "name", "addons"]);
+    expect(rows[0]).toEqual(["r1", "Alex Turner", "Event tee - M x1"]);
+  });
+
+  it("projects into the Excel sheet under its own headers", () => {
+    const row = toExportRow(base({ addOns: [tee()] }));
+    const keys = parseExportColumns("name,addOns,addOnsPaidAud");
+    expect(excelHeadersFor(keys)).toEqual(["Name", "Add-ons", "Add-ons paid (AUD)"]);
+    expect(excelCellValues(row, keys)).toEqual(["Alex Turner", "Event tee - M x1", "25.99"]);
   });
 });

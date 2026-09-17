@@ -1,6 +1,42 @@
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 
+/**
+ * Add-on rows whose money belongs to the organiser at payout time.
+ *
+ * PURCHASED only. REFUNDED money has gone back to the athlete, and
+ * REFUND_REQUESTED is undecided, so paying it out and then having the organiser
+ * approve the refund would reverse a transfer against a balance that had already
+ * been swept to their bank. This mirrors how entries count only CONFIRMED.
+ */
+const PAYOUT_ADDON_STATUSES = ["PURCHASED"] as const;
+
+/**
+ * The organiser's share of one event: confirmed entry prices plus purchased
+ * add-on prices. Both are the pre-fee amounts, because the Startline fee was
+ * already withheld at charge time as application_fee_amount.
+ *
+ * Merchandise money sits in the organiser's connected balance exactly like
+ * ticket money. If it were left out of this sum it would simply never reach
+ * their bank account.
+ *
+ * Add-ons are summed exactly the way entries already are, which means they
+ * inherit issue #251 rather than fix it: under the "organiser" fee structure the
+ * athlete was charged the price alone and the fee came out of the organiser's
+ * share, so their connected balance holds amountCents MINUS the fee and this sum
+ * asks for more than is there. That is pre-existing behaviour for tickets and is
+ * deliberately not changed here; whatever fixes it for entries has to subtract
+ * the organiser-borne fee from both halves of this sum at once.
+ */
+function netCentsFor(event: {
+  registrations: { amountCents: number }[];
+  addOnPurchases: { amountCents: number }[];
+}): number {
+  const entryCents = event.registrations.reduce((sum, r) => sum + r.amountCents, 0);
+  const addOnCents = event.addOnPurchases.reduce((sum, a) => sum + a.amountCents, 0);
+  return entryCents + addOnCents;
+}
+
 export type PayoutEligibleEvent = {
   id: string;
   title: string;
@@ -34,17 +70,20 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
         where: { status: "CONFIRMED" },
         select: { amountCents: true },
       },
+      addOnPurchases: {
+        where: { status: { in: [...PAYOUT_ADDON_STATUSES] } },
+        select: { amountCents: true },
+      },
     },
   });
 
   return events
-    .map((event) => {
-      const netCents = event.registrations.reduce(
-        (sum, registration) => sum + registration.amountCents,
-        0
-      );
-      return { ...event, registrations: undefined, netCents };
-    })
+    .map((event) => ({
+      ...event,
+      registrations: undefined,
+      addOnPurchases: undefined,
+      netCents: netCentsFor(event),
+    }))
     .filter((event) => event.netCents > 0);
 }
 
@@ -52,7 +91,8 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
  * Push the organiser's full net earnings for an event from their Stripe
  * Express balance to their nominated bank account, then mark the event paid.
  * The platform fee was already withheld at charge time (application_fee_amount),
- * so the payout amount is simply the sum of confirmed ticket amounts.
+ * so the payout amount is the sum of confirmed ticket amounts plus purchased
+ * add-on amounts.
  */
 export async function runPayoutForEvent(eventId: string): Promise<{ netCents: number }> {
   const event = await prisma.event.findUnique({
@@ -64,6 +104,10 @@ export async function runPayoutForEvent(eventId: string): Promise<{ netCents: nu
         where: { status: "CONFIRMED" },
         select: { amountCents: true },
       },
+      addOnPurchases: {
+        where: { status: { in: [...PAYOUT_ADDON_STATUSES] } },
+        select: { amountCents: true },
+      },
     },
   });
 
@@ -71,11 +115,10 @@ export async function runPayoutForEvent(eventId: string): Promise<{ netCents: nu
   if (event.payoutTriggered) throw new Error("Payout already triggered for this event.");
   if (!event.organiser.stripeAccountId) throw new Error("Organiser has no Stripe account.");
 
-  const netCents = event.registrations.reduce(
-    (sum, registration) => sum + registration.amountCents,
-    0
-  );
-  if (netCents <= 0) throw new Error("No confirmed registrations to pay out.");
+  const netCents = netCentsFor(event);
+  // Entries and merchandise both count toward this, so the message cannot claim
+  // registrations are what is missing.
+  if (netCents <= 0) throw new Error("Nothing to pay out for this event.");
 
   await getStripe().payouts.create(
     { amount: netCents, currency: "aud" },

@@ -7,6 +7,7 @@ loadEnvLocal({ path: ".env.local", override: true });
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { DEFAULT_REFUND_TIERS } from "../lib/refund-policy";
+import { calculateAddOnPlatformFee } from "../lib/platform-fee";
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
@@ -760,6 +761,129 @@ async function main() {
     }
   }
 
+  // Sold merchandise, so the picking list, the refund queue and the export
+  // columns all have something in them from a plain `pnpm dev` rather than
+  // needing a card payment to look at. Same event as the catalogue above, which
+  // no spec touches.
+  //
+  // Add-ons are charged the percentage only, with no fixed component. The real
+  // fee function is used rather than the rate restated, so a seeded purchase can
+  // never drift from what checkout would actually charge. Fixed ids so re-seeding
+  // is idempotent.
+  const addOnBuyers = [
+    { email: "harper.jones@startline.test", name: "Harper Jones" },
+    { email: "mateo.silva@startline.test",  name: "Mateo Silva" },
+    { email: "aria.kapoor@startline.test",  name: "Aria Kapoor" },
+    // The __e2e_bypass "user" identity, so e2e/add-ons-fulfilment.spec.ts has
+    // merchandise it can actually request a refund on from Activity.
+    { email: "jade.nguyen@startline.test",  name: "Jade Nguyen" },
+  ];
+
+  // Only what is specific to the purchase. Product name, option label and price
+  // are read back out of seedAddOns below rather than restated here, so editing
+  // the catalogue cannot leave a purchase describing a product that no longer
+  // matches it.
+  const addOnPurchases = [
+    // Two sizes of tee plus a parking pass, so the picking list groups by option.
+    { buyer: 0, variantId: "seed-addon-tee-m",      qty: 1, status: "PURCHASED" as const },
+    { buyer: 0, variantId: "seed-addon-parking-sat", qty: 1, status: "PURCHASED" as const },
+    { buyer: 1, variantId: "seed-addon-tee-l",      qty: 2, status: "PURCHASED" as const },
+    // An open request, so the Add-ons tab badge and the refund queue are not
+    // empty. Still holds its stock and still appears on the picking list: until
+    // the organiser decides, the shirt is still the athlete's.
+    { buyer: 2, variantId: "seed-addon-tee-s",      qty: 1, status: "REFUND_REQUESTED" as const },
+    // Already settled, so the refunded state is visible too. Off the picking
+    // list, off the exports, and out of the payout.
+    { buyer: 2, variantId: "seed-addon-parking-sat", qty: 1, status: "REFUNDED" as const },
+    // Two for the e2e athlete. The tee carries the reversible round trip
+    // (request, decline, request again) and the parking pass is the one the
+    // approve test consumes, since REFUNDED is terminal.
+    { buyer: 3, variantId: "seed-addon-tee-m",      qty: 1, status: "PURCHASED" as const },
+    { buyer: 3, variantId: "seed-addon-parking-sat", qty: 1, status: "PURCHASED" as const },
+  ];
+
+  /** The catalogue entry a purchase points at, so its snapshots cannot drift. */
+  const catalogueFor = (variantId: string) => {
+    for (const addOn of seedAddOns) {
+      const variant = addOn.variants.find((v) => v.id === variantId);
+      if (variant) return { addOn, variant };
+    }
+    throw new Error(`Seed add-on purchase references unknown variant ${variantId}.`);
+  };
+
+  const addOnEventOwner = (
+    await prisma.event.findUnique({ where: { id: ADDON_EVENT_ID }, select: { organiserId: true } })
+  )?.organiserId;
+
+  let addOnPurchaseCount = 0;
+  if (addOnEventOwner) {
+    for (let i = 0; i < addOnBuyers.length; i++) {
+      const buyer = addOnBuyers[i];
+      const buyerUserId = userBySub[subsByEmail[buyer.email]] ?? null;
+      const registrationId = `seed-addon-reg-${i}`;
+      const amountCents = 6500; // Uluru Sunset Run, General wave.
+
+      await prisma.registration.upsert({
+        where: { id: registrationId },
+        update: {},
+        create: {
+          id: registrationId,
+          eventId: ADDON_EVENT_ID,
+          organiserId: addOnEventOwner,
+          userId: buyerUserId,
+          athleteName: buyer.name,
+          athleteEmail: buyer.email,
+          waveLabel: "General",
+          amountCents,
+          platformFeeCents: platformFeeCents(amountCents),
+          feeStructure: "athlete",
+          status: "CONFIRMED",
+        },
+      });
+    }
+
+    for (let i = 0; i < addOnPurchases.length; i++) {
+      const purchase = addOnPurchases[i];
+      const { addOn, variant } = catalogueFor(purchase.variantId);
+      const lineCents = addOn.priceCents * purchase.qty;
+      const feeCents = calculateAddOnPlatformFee(lineCents);
+      const data = {
+        registrationId: `seed-addon-reg-${purchase.buyer}`,
+        eventId: ADDON_EVENT_ID,
+        addOnId: addOn.id,
+        variantId: variant.id,
+        // Snapshots, exactly as the webhook writes them at purchase time.
+        nameSnapshot: addOn.name,
+        optionLabelSnapshot: addOn.optionLabel,
+        variantLabelSnapshot: variant.label,
+        imageUrlSnapshot: addOn.imageUrl,
+        unitPriceCents: addOn.priceCents,
+        quantity: purchase.qty,
+        amountCents: lineCents,
+        platformFeeCents: feeCents,
+        feeStructure: "athlete",
+        status: purchase.status,
+        // The athlete paid the fee, so it comes back with the item.
+        ...(purchase.status === "REFUND_REQUESTED"
+          ? { refundRequestedAt: new Date(), refundAmountCents: lineCents + feeCents }
+          : {}),
+        ...(purchase.status === "REFUNDED"
+          ? {
+              refundRequestedAt: new Date(),
+              refundAmountCents: lineCents + feeCents,
+              refundDecidedAt: new Date(),
+            }
+          : {}),
+      };
+      await prisma.registrationAddOn.upsert({
+        where: { id: `seed-addon-purchase-${i}` },
+        update: {},
+        create: { id: `seed-addon-purchase-${i}`, ...data },
+      });
+      addOnPurchaseCount++;
+    }
+    console.log(`  Add-on purchases: ${addOnPurchaseCount} across ${addOnBuyers.length} entries on ${ADDON_EVENT_ID}`);
+  }
 
   console.log(`  Events: ${4 + seedEvents.length} (including 1 pending, 1 draft, 1 rejected, 6 past Apex events)`);
 

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { wavesWithCounts } from "@/lib/start-waves";
 import type { RegistrationStatus, Prisma } from "@prisma/client";
 import { idParams } from "@/lib/schemas";
+import { addOnsPaidCents } from "@/lib/registration-export";
 import { z } from "zod";
 
 const STATUSES = new Set(["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "CANCELLED"]);
@@ -24,7 +25,7 @@ const registrationPatchSchema = z.object({
 async function assertOwnedEvent(eventId: string, organiserId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organiserId: true, waves: true, title: true },
+    select: { id: true, organiserId: true, waves: true, title: true, feeStructure: true },
   });
   if (!event) return { error: NextResponse.json({ error: "Not found." }, { status: 404 }) };
   if (event.organiserId !== organiserId) {
@@ -78,6 +79,28 @@ export async function GET(
       resultPlacement: true,
       isPersonalBest: true,
       isTopResult: true,
+      addOns: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          nameSnapshot: true,
+          optionLabelSnapshot: true,
+          variantLabelSnapshot: true,
+          imageUrlSnapshot: true,
+          variantId: true,
+          quantity: true,
+          unitPriceCents: true,
+          amountCents: true,
+          platformFeeCents: true,
+          feeStructure: true,
+          status: true,
+          refundRequestedAt: true,
+          refundReason: true,
+          refundAmountCents: true,
+          refundDeclinedAt: true,
+          refundDeclineReason: true,
+        },
+      },
     },
   });
 
@@ -88,6 +111,7 @@ export async function GET(
     event: {
       id: owned.event!.id,
       title: owned.event!.title,
+      feeStructure: owned.event!.feeStructure,
       waves,
       startWaves,
     },
@@ -120,6 +144,35 @@ export async function GET(
       resultPlacement: r.resultPlacement,
       isPersonalBest: r.isPersonalBest,
       isTopResult: r.isTopResult,
+      // Merchandise, kept separate from `amount` above. `amount` stays the entry
+      // alone so every existing refund and reporting figure keeps its meaning,
+      // and addOnAmount below is its counterpart rather than an addition to it.
+      // The Add-ons tab totals the lines itself, so nothing renders addOnAmount
+      // today; it is here so a caller that wants the per-athlete merchandise
+      // total never has to re-derive the fee rule.
+      addOns: r.addOns.map((a) => ({
+        id: a.id,
+        name: a.nameSnapshot,
+        optionLabel: a.optionLabelSnapshot,
+        variantLabel: a.variantLabelSnapshot,
+        imageUrl: a.imageUrlSnapshot,
+        variantId: a.variantId,
+        quantity: a.quantity,
+        unitPriceCents: a.unitPriceCents,
+        amountCents: a.amountCents,
+        platformFeeCents: a.platformFeeCents,
+        feeStructure: a.feeStructure,
+        status: a.status,
+        refundRequestedAt: a.refundRequestedAt,
+        refundReason: a.refundReason,
+        refundAmountCents: a.refundAmountCents,
+        refundDeclinedAt: a.refundDeclinedAt,
+        refundDeclineReason: a.refundDeclineReason,
+      })),
+      // Shared with the export rather than recomputed, so the figure in the
+      // table and the figure in the CSV can never disagree about which statuses
+      // count or who bore the booking fee.
+      addOnAmount: addOnsPaidCents(r.addOns) / 100,
     })),
   });
 }

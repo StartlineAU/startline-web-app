@@ -9,6 +9,7 @@ import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({
   getAdminSession: vi.fn(),
   registration: { findUnique: vi.fn(), update: vi.fn() },
+  registrationAddOn: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   userNotification: { create: vi.fn() },
   retrievePaymentIntent: vi.fn(),
   createRefund: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@/lib/amplify-server", () => ({ getAdminSession: mocks.getAdminSession 
 vi.mock("@/lib/prisma", () => ({
   default: {
     registration: mocks.registration,
+    registrationAddOn: mocks.registrationAddOn,
     userNotification: mocks.userNotification,
   },
 }));
@@ -127,6 +129,19 @@ describe("admin refund route", () => {
 
     const [params] = mocks.createRefund.mock.calls[0];
     expect(params.amount).toBe(10000);
+  });
+
+  // An entry refund and an add-on refund are separate transactions on the same
+  // charge. Refunding the entry must leave the merchandise sold, which is also
+  // what keeps the shirt off the derived stock count and on the picking list.
+  it("leaves merchandise untouched", async () => {
+    const res = await refund();
+    expect(res.status).toBe(200);
+
+    expect(mocks.registrationAddOn.update).not.toHaveBeenCalled();
+    expect(mocks.registrationAddOn.updateMany).not.toHaveBeenCalled();
+    // And the refund it sent was for this entry alone, not the whole charge.
+    expect(mocks.createRefund.mock.calls[0][0].amount).toBe(10540);
   });
 
   it("refuses without touching Stripe when the policy owes nothing", async () => {
