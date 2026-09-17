@@ -65,15 +65,18 @@ const styles = StyleSheet.create({
   colGender: { width: "12%" },
   colPhone: { width: "24%" },
   colMed: { width: "10%", textAlign: "right" },
-  // The seven-column layout, used only when the event actually sold
+  // The eight-column layout, used only when the event actually sold
   // merchandise. An event with no add-ons keeps the widths above rather than
-  // carrying an empty column across every page of its start list.
+  // carrying two empty columns across every page of its start list.
   colBibNarrow: { width: "7%" },
-  colNameNarrow: { width: "22%" },
-  colCategoryNarrow: { width: "14%" },
-  colGenderNarrow: { width: "9%" },
-  colPhoneNarrow: { width: "18%" },
-  colExtras: { width: "22%" },
+  colNameNarrow: { width: "19%" },
+  colCategoryNarrow: { width: "13%" },
+  colGenderNarrow: { width: "8%" },
+  colPhoneNarrow: { width: "15%" },
+  colExtras: { width: "20%" },
+  // Right aligned like every other money column, so the cents line up down the
+  // page and the tent can total a column by eye.
+  colExtrasPaid: { width: "10%", textAlign: "right" },
   colMedNarrow: { width: "8%", textAlign: "right" },
   headerCell: {
     fontFamily: "Helvetica-Bold",
@@ -158,7 +161,12 @@ function StartListDoc(props: {
               <Text style={[col.gender, styles.headerCell]}>Gender</Text>
               <Text style={[col.phone, styles.headerCell]}>Emergency phone</Text>
               {withExtras && (
-                <Text style={[styles.colExtras, styles.headerCell]}>Add-ons</Text>
+                <>
+                  <Text style={[styles.colExtras, styles.headerCell]}>Add-ons</Text>
+                  <Text style={[styles.colExtrasPaid, styles.headerCell]}>
+                    Add-ons paid (AUD)
+                  </Text>
+                </>
               )}
               <Text style={[col.med, styles.headerCell]}>Medical</Text>
             </View>
@@ -169,7 +177,14 @@ function StartListDoc(props: {
                 <Text style={col.category}>{r.category || "-"}</Text>
                 <Text style={col.gender}>{r.gender || "-"}</Text>
                 <Text style={col.phone}>{r.emergencyPhone || "-"}</Text>
-                {withExtras && <Text style={styles.colExtras}>{r.addOns || "-"}</Text>}
+                {withExtras && (
+                  <>
+                    <Text style={styles.colExtras}>{r.addOns || "-"}</Text>
+                    {/* Dash rather than 0.00 on an athlete who bought nothing, so
+                        a real zero-priced add-on still reads as a figure. */}
+                    <Text style={styles.colExtrasPaid}>{r.addOns ? r.addOnsPaidAud : "-"}</Text>
+                  </>
+                )}
                 <Text style={col.med}>{r.hasMedical ? "Yes" : ""}</Text>
               </View>
             ))}
