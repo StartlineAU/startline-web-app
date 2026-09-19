@@ -13,6 +13,8 @@ import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
 import SignInModal from "@/components/SignInModal";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 
 type NavItem = { href: string; label: string };
 
@@ -183,15 +185,20 @@ export default function OrganiserNavBar() {
   const activePage  = ORGANISER_NAV.find(({ href }) =>
     pathname === href || (pathname?.startsWith(href + "/") ?? false)
   );
+  // The Startline home page. A bare "/" is wrong in production: the organiser
+  // host rewrites it to the organiser landing page, not the athlete site.
+  const homeHref    = customerHref("/", usePortalHost());
 
   return (
     <>
       <nav className="fixed top-0 left-0 right-0 z-50 bg-dark-darker/80 backdrop-blur-xl border-b-2 border-primary">
         <div className="flex items-center justify-between h-14 max-w-[1200px] mx-auto px-4 sm:px-6 gap-4">
 
-          {/* ── Logo ── */}
+          {/* ── Logo ── Goes to the Startline home page, like the logo on the
+              athlete and admin sites. It used to point at the dashboard, so on
+              the dashboard it did nothing (#338). Dashboard is the first nav link. */}
           <div className="shrink-0 flex items-center gap-3 min-w-0">
-            <Link href="/organiser/dashboard" className="py-1 flex items-center gap-2">
+            <Link href={homeHref} aria-label="Startline home" className="py-1 flex items-center gap-2">
               <Image src="/images/logo-title.svg" alt="Startline" width={110} height={28} className="h-6 w-auto" />
             </Link>
           </div>
@@ -393,7 +400,7 @@ export default function OrganiserNavBar() {
                     <Settings className="w-4 h-4" /> Settings
                   </button>
                   <div className="border-t border-white/10 my-1" />
-                  <Link href="/" onClick={() => setIsUserOpen(false)}
+                  <Link href={homeHref} onClick={() => setIsUserOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
                     <House className="w-4 h-4" /> Startline home
                     <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />
@@ -471,7 +478,7 @@ export default function OrganiserNavBar() {
                 className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                 <UserCircle className="w-4 h-4" /> My profile
               </Link>
-              <Link href="/" onClick={() => setIsMenuOpen(false)}
+              <Link href={homeHref} onClick={() => setIsMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
                 <House className="w-4 h-4" /> Startline home
                 <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />

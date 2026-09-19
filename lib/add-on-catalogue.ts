@@ -119,6 +119,8 @@ export interface CatalogueAddOnView {
   priceCents: number;
   imageUrl: string | null;
   optionLabel: string;
+  /** The organiser's profile item this was copied from or published to. */
+  merchandiseId: string | null;
   sortOrder: number;
   active: boolean;
   variants: CatalogueVariantView[];
@@ -155,6 +157,7 @@ export async function catalogueForEvent(
     priceCents: addOn.priceCents,
     imageUrl: addOn.imageUrl,
     optionLabel: addOn.optionLabel,
+    merchandiseId: addOn.merchandiseId,
     sortOrder: addOn.sortOrder,
     active: addOn.active,
     variants: addOn.variants.map((variant) => {

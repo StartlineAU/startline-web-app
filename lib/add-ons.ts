@@ -120,6 +120,11 @@ export interface AddOnInput {
   imageUrl: string | null;
   optionLabel: string;
   variants: AddOnVariantInput[];
+  /**
+   * The organiser's profile item this was copied from or published to. The
+   * route drops it unless that item belongs to the same organiser.
+   */
+  merchandiseId?: string;
 }
 
 /**
@@ -197,8 +202,11 @@ export function sanitizeAddOnInput(input: unknown): AddOnInput[] | { error: stri
     }
 
     const id = String(a.id ?? "").trim();
+    const merchandiseId = String(a.merchandiseId ?? "").trim();
+    if (merchandiseId.length > 64) return { error: "Invalid merchandise link." };
     out.push({
       ...(id ? { id } : {}),
+      ...(merchandiseId ? { merchandiseId } : {}),
       name,
       description: description || null,
       priceCents: priceRaw,

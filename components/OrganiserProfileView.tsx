@@ -10,7 +10,10 @@ import OrganiserReviewsClient from "@/components/OrganiserReviewsClient";
 import OrganiserRating from "@/components/OrganiserRating";
 import OrganiserFollowSection from "@/components/OrganiserFollowSection";
 import OrganiserEditProfileButton from "@/components/OrganiserEditProfileButton";
-import EventMap from "@/components/EventMap";
+import OrganiserEventsMap from "@/components/OrganiserEventsMap";
+import MerchandiseShowcase from "@/components/MerchandiseShowcase";
+import MerchandiseManager from "@/components/organiser/MerchandiseManager";
+import type { PublicMerchandiseView } from "@/lib/merchandise";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
 
 export type OrganiserProfileData = {
@@ -30,6 +33,7 @@ type Props = {
   past: UserEvent[];
   reviews: PublicReview[];
   reviewEvents: ReviewEventOption[];
+  merchandise: PublicMerchandiseView[];
   stats: OrganiserPublicStats;
   rating: { average: number; count: number } | null;
   action: "follow" | "edit";
@@ -79,6 +83,7 @@ export default function OrganiserProfileView({
   past,
   reviews,
   reviewEvents,
+  merchandise,
   stats,
   rating,
   action,
@@ -190,10 +195,25 @@ export default function OrganiserProfileView({
             </div>
 
             <div className="lg:sticky lg:top-20 h-[320px] lg:h-[min(70vh,640px)] rounded-2xl border border-dark-lighter bg-dark overflow-hidden">
-              <EventMap events={upcoming} selectedId={null} />
+              <OrganiserEventsMap events={upcoming} />
             </div>
           </div>
         </div>
+
+        {/* ── Merchandise (#338) ── The organiser always sees the section so
+            they can add to it; athletes only see it once there is something. */}
+        {action === "edit" ? (
+          <div className="mt-10">
+            <MerchandiseManager initial={merchandise} />
+          </div>
+        ) : merchandise.length > 0 && (
+          <div className="mt-10">
+            <h2 className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">
+              Merchandise ({merchandise.length})
+            </h2>
+            <MerchandiseShowcase items={merchandise} />
+          </div>
+        )}
 
         {/* ── Previous events ── */}
         {past.length > 0 && (

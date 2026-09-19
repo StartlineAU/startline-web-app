@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, startTransition } from "react";
 import Image from "next/image";
-import { Plus, Trash2, ImagePlus, ShoppingBag, Lock, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, ImagePlus, ShoppingBag, Lock, ChevronUp, ChevronDown, Globe, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   type AddOnDraft,
@@ -10,8 +10,11 @@ import {
   emptyVariantDraft,
   parsePriceToCents,
   hasPurchaseHistory,
+  draftFromMerchandise,
+  draftToMerchandiseItem,
 } from "@/lib/add-on-drafts";
 import { MAX_ADD_ONS, MAX_ADDON_VARIANTS } from "@/lib/add-ons";
+import { MAX_PROFILE_MERCHANDISE, type MerchandiseView } from "@/lib/merchandise";
 import { PLATFORM_FEE_PERCENT, calculateAddOnTotalWithFee } from "@/lib/platform-fee";
 import { TYPE_MIMES, uploadSizeError } from "@/lib/upload-limits";
 import { uploadFile, UploadError } from "@/lib/upload-client";
@@ -119,24 +122,60 @@ function AddOnPhoto({
 }
 
 /**
+ * The organiser's profile merchandise, for the event editor's "Add from your
+ * profile" picker. Loaded by the editor itself because both of its event
+ * callers (the wizard and the race management panel) need it and neither
+ * otherwise has any reason to know the profile exists.
+ */
+function useProfileMerchandise(enabled: boolean): MerchandiseView[] {
+  const [items, setItems] = useState<MerchandiseView[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    fetch("/api/organiser/merchandise")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.merchandise)) setItems(data.merchandise);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [enabled]);
+  return items;
+}
+
+/**
  * The add-on catalogue editor, shared by the event wizard and the race
  * management panel so an organiser sees the same thing before and after their
  * event goes live.
  *
  * Products that have sold cannot be deleted, only retired: purchase history has
  * to survive, and the database enforces the same rule with onDelete: Restrict.
+ *
+ * `mode="profile"` edits the organiser's public profile merchandise instead
+ * (#338). Same product fields, but no stock, sales or fee: those belong to an
+ * event's sale, not to the profile.
  */
 export default function AddOnEditor({
   addOns,
   onChange,
-  feeStructure,
+  feeStructure = "athlete",
   disabled = false,
+  mode = "event",
 }: {
   addOns: AddOnDraft[];
   onChange: (next: AddOnDraft[]) => void;
-  feeStructure: "athlete" | "organiser";
+  feeStructure?: "athlete" | "organiser";
   disabled?: boolean;
+  mode?: "event" | "profile";
 }) {
+  const isEvent = mode === "event";
+  const maxItems = isEvent ? MAX_ADD_ONS : MAX_PROFILE_MERCHANDISE;
+  const itemNoun = isEvent ? "add-on" : "item";
+  const profileItems = useProfileMerchandise(isEvent);
+  // Profile items already in this event, whether imported or published from it.
+  const linked = new Set(addOns.map((a) => a.merchandiseId).filter(Boolean));
+  const importable = profileItems.filter((item) => !linked.has(item.id));
+
   const updateAddOn = (index: number, patch: Partial<AddOnDraft>) => {
     onChange(addOns.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   };
@@ -165,6 +204,36 @@ export default function AddOnEditor({
 
   return (
     <div className="space-y-3">
+      {isEvent && (
+        <div className="flex gap-2.5 rounded-lg border border-dark-lighter bg-dark-light px-4 py-3">
+          <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <p className="text-[13px] text-muted leading-relaxed">
+            Merchandise you add here is exclusive to this event&apos;s checkout. Tick{" "}
+            <span className="text-light">Also show on my public profile</span> on an item to publish a
+            copy to your organiser profile, where anyone can see it.
+          </p>
+        </div>
+      )}
+
+      {isEvent && importable.length > 0 && addOns.length < maxItems && (
+        <div data-testid="addon-profile-picker">
+          <span className={labelCls}>Add from your profile</span>
+          <div className="flex flex-wrap gap-2">
+            {importable.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange([...addOns, draftFromMerchandise(item)])}
+                className="inline-flex items-center gap-1.5 rounded-full border border-dark-lighter px-3 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-light hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40"
+              >
+                <Plus className="w-3 h-3" /> {item.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {addOns.map((addOn, index) => {
         const locked = hasPurchaseHistory(addOn);
         const priceCents = parsePriceToCents(addOn.price);
@@ -177,7 +246,7 @@ export default function AddOnEditor({
             <div className="flex items-center justify-between gap-3 px-5 py-3 bg-dark-light">
               <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-light flex items-center gap-2">
                 <ShoppingBag className="w-3.5 h-3.5 text-primary" />
-                {addOn.name.trim() || `Add-on ${index + 1}`}
+                {addOn.name.trim() || `${isEvent ? "Add-on" : "Item"} ${index + 1}`}
               </div>
               <div className="flex items-center gap-1">
                 {/* The order here is the order athletes see; the route writes it
@@ -185,7 +254,7 @@ export default function AddOnEditor({
                 <button
                   type="button"
                   disabled={disabled || index === 0}
-                  aria-label={`Move ${addOn.name.trim() || `add-on ${index + 1}`} up`}
+                  aria-label={`Move ${addOn.name.trim() || `${itemNoun} ${index + 1}`} up`}
                   onClick={() => onChange(moved(addOns, index, index - 1))}
                   className={moveBtnCls}
                 >
@@ -194,7 +263,7 @@ export default function AddOnEditor({
                 <button
                   type="button"
                   disabled={disabled || index === addOns.length - 1}
-                  aria-label={`Move ${addOn.name.trim() || `add-on ${index + 1}`} down`}
+                  aria-label={`Move ${addOn.name.trim() || `${itemNoun} ${index + 1}`} down`}
                   onClick={() => onChange(moved(addOns, index, index + 1))}
                   className={moveBtnCls}
                 >
@@ -211,7 +280,7 @@ export default function AddOnEditor({
                   title={
                     locked
                       ? "This has been bought, so removing it retires it. Existing orders are kept."
-                      : "Remove this add-on"
+                      : `Remove this ${itemNoun}`
                   }
                 >
                   {locked ? <Lock className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
@@ -225,7 +294,7 @@ export default function AddOnEditor({
                 <AddOnPhoto
                   file={addOn.image}
                   imageUrl={addOn.imageUrl}
-                  label={`Photo for add-on ${index + 1}`}
+                  label={`Photo for ${itemNoun} ${index + 1}`}
                   disabled={disabled}
                   onPick={(file) => updateAddOn(index, { image: file })}
                 />
@@ -296,11 +365,13 @@ export default function AddOnEditor({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className={cn(labelCls, "mb-0")}>
-                    {addOn.optionLabel.trim() || "Options"} and stock
+                    {addOn.optionLabel.trim() || "Options"}{isEvent ? " and stock" : ""}
                   </span>
-                  <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
-                    Units available
-                  </span>
+                  {isEvent && (
+                    <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+                      Units available
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {addOn.variants.map((variant, variantIndex) => {
@@ -316,22 +387,26 @@ export default function AddOnEditor({
                           placeholder="M"
                           onChange={(e) => updateVariant(index, variantIndex, { label: e.target.value })}
                         />
-                        <input
-                          aria-label={`Units available for option ${variantIndex + 1}`}
-                          className={cn(inputCls, "w-[110px]")}
-                          value={variant.stock}
-                          disabled={disabled}
-                          inputMode="numeric"
-                          placeholder="0"
-                          onChange={(e) => updateVariant(index, variantIndex, { stock: e.target.value })}
-                        />
-                        <div className="w-[74px] shrink-0 text-right">
-                          {variant.sold > 0 && (
-                            <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
-                              {variant.sold} sold
-                            </span>
-                          )}
-                        </div>
+                        {isEvent && (
+                          <>
+                            <input
+                              aria-label={`Units available for option ${variantIndex + 1}`}
+                              className={cn(inputCls, "w-[110px]")}
+                              value={variant.stock}
+                              disabled={disabled}
+                              inputMode="numeric"
+                              placeholder="0"
+                              onChange={(e) => updateVariant(index, variantIndex, { stock: e.target.value })}
+                            />
+                            <div className="w-[74px] shrink-0 text-right">
+                              {variant.sold > 0 && (
+                                <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+                                  {variant.sold} sold
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
                         <button
                           type="button"
                           disabled={disabled || variantIndex === 0}
@@ -393,7 +468,7 @@ export default function AddOnEditor({
                 )}
               </div>
 
-              {fee != null && priceCents != null && priceCents > 0 && (
+              {isEvent && fee != null && priceCents != null && priceCents > 0 && (
                 <div className="rounded-lg bg-dark-light px-4 py-3">
                   <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-1">
                     Startline fee on this item
@@ -407,23 +482,87 @@ export default function AddOnEditor({
                   </div>
                 </div>
               )}
+
+              {isEvent && (addOn.merchandiseId ? (
+                <p className="flex items-start gap-2 text-[12px] text-muted leading-relaxed">
+                  <Globe className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  <span>
+                    <span className="text-light">On your public profile.</span> Edits here change this
+                    event&apos;s checkout only, not the profile item.
+                  </span>
+                </p>
+              ) : (
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-[#B3E153]"
+                    checked={!!addOn.publishToProfile}
+                    disabled={disabled}
+                    onChange={(e) => updateAddOn(index, { publishToProfile: e.target.checked })}
+                  />
+                  <span className="text-[12px] text-muted leading-relaxed">
+                    <span className="text-light">Also show on my public profile.</span> A copy is
+                    published when you save, and anyone can see it. Stock stays with this event.
+                  </span>
+                </label>
+              ))}
             </div>
           </div>
         );
       })}
 
-      {addOns.length < MAX_ADD_ONS && (
+      {addOns.length < maxItems && (
         <button
           type="button"
           disabled={disabled}
           onClick={() => onChange([...addOns, emptyAddOnDraft()])}
           className="w-full border border-dashed border-dark-lighter rounded-md py-3 font-headline text-[12px] uppercase tracking-widest text-light hover:text-primary hover:border-primary/40 flex items-center justify-center gap-2 transition-colors disabled:opacity-40"
         >
-          <Plus className="w-4 h-4" /> Add merchandise
+          <Plus className="w-4 h-4" /> {isEvent ? "Add merchandise" : "Add item"}
         </button>
       )}
     </div>
   );
+}
+
+/** Thrown by publishAddOnsToProfile, carrying the links made before it failed. */
+export class PublishToProfileError extends Error {
+  constructor(message: string, readonly drafts: AddOnDraft[]) {
+    super(message);
+  }
+}
+
+/**
+ * Publish a copy of every add-on ticked "Also show on my public profile", and
+ * link each one to the profile item it created. Both event callers run this
+ * after uploadAddOnImages (the profile needs the photo URL) and before saving
+ * the catalogue, so the link is saved along with it.
+ *
+ * On failure the error carries the drafts with the links already made, so the
+ * caller can keep them and a retry does not publish the same item twice.
+ */
+export async function publishAddOnsToProfile(drafts: AddOnDraft[]): Promise<AddOnDraft[]> {
+  const out = [...drafts];
+  for (let i = 0; i < out.length; i++) {
+    const draft = out[i];
+    if (!draft.publishToProfile || draft.merchandiseId) continue;
+    // The draft's id is the event add-on's, which means nothing to the profile.
+    const { name, description, priceCents, imageUrl, optionLabel, options } = draftToMerchandiseItem(draft);
+    const res = await fetch("/api/organiser/merchandise", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item: { name, description, priceCents, imageUrl, optionLabel, options } }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data.id !== "string") {
+      throw new PublishToProfileError(
+        data.error ?? `"${name}" could not be added to your profile.`,
+        out,
+      );
+    }
+    out[i] = { ...draft, merchandiseId: data.id, publishToProfile: false };
+  }
+  return out;
 }
 
 /**

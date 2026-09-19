@@ -15,6 +15,7 @@ import {
   addOnStockLabel,
 } from "@/lib/add-ons";
 import type { CatalogueAddOnView } from "@/lib/add-on-catalogue";
+import { MAX_PROFILE_MERCHANDISE, type MerchandiseInput, type MerchandiseView } from "@/lib/merchandise";
 
 /**
  * A key that identifies a row for as long as it is being edited, including
@@ -57,6 +58,16 @@ export interface AddOnDraft {
   imageUrl: string;
   optionLabel: string;
   variants: AddOnVariantDraft[];
+  /**
+   * Event add-ons only: the profile item this was copied from or published
+   * to. Set means it is already on the organiser's public profile.
+   */
+  merchandiseId?: string;
+  /**
+   * Event add-ons only: publish a copy to the organiser's public profile on
+   * the next save. Cleared once merchandiseId is set.
+   */
+  publishToProfile?: boolean;
 }
 
 export function emptyVariantDraft(label = ""): AddOnVariantDraft {
@@ -90,6 +101,7 @@ export function draftsFromCatalogue(catalogue: CatalogueAddOnView[]): AddOnDraft
     image: null,
     imageUrl: addOn.imageUrl ?? "",
     optionLabel: addOn.optionLabel,
+    ...(addOn.merchandiseId ? { merchandiseId: addOn.merchandiseId } : {}),
     variants: addOn.variants.map((variant) => ({
       uid: variant.id,
       id: variant.id,
@@ -99,6 +111,51 @@ export function draftsFromCatalogue(catalogue: CatalogueAddOnView[]): AddOnDraft
       purchased: variant.purchased,
     })),
   }));
+}
+
+/**
+ * A profile item → a new event add-on. Stock starts blank because the profile
+ * holds none: how many shirts this event has is the organiser's call. Keeps the
+ * link, so the editor shows it as already on the profile.
+ */
+export function draftFromMerchandise(item: MerchandiseView): AddOnDraft {
+  return {
+    uid: draftKey(),
+    name: item.name,
+    description: item.description ?? "",
+    price: (item.priceCents / 100).toFixed(2),
+    image: null,
+    imageUrl: item.imageUrl ?? "",
+    optionLabel: item.optionLabel,
+    variants: item.options.map((label) => emptyVariantDraft(label)),
+    merchandiseId: item.id,
+  };
+}
+
+/**
+ * The organiser's profile list → editable drafts. Same shape as an event's
+ * add-ons so the one editor serves both; stock is unused here.
+ */
+export function draftsFromMerchandise(items: MerchandiseView[]): AddOnDraft[] {
+  return items.map((item) => ({
+    ...draftFromMerchandise(item),
+    uid: item.id,
+    id: item.id,
+    merchandiseId: undefined,
+  }));
+}
+
+/** One draft → a profile item, for the merchandise routes. */
+export function draftToMerchandiseItem(draft: AddOnDraft): MerchandiseInput {
+  return {
+    ...(draft.id ? { id: draft.id } : {}),
+    name: draft.name.trim(),
+    description: draft.description.trim() || null,
+    priceCents: parsePriceToCents(draft.price) ?? 0,
+    imageUrl: draft.imageUrl.trim() || null,
+    optionLabel: draft.optionLabel.trim() || "Size",
+    options: draft.variants.map((variant) => variant.label.trim()),
+  };
 }
 
 /** Dollars as typed → whole cents. Returns null for anything not a real amount. */
@@ -134,9 +191,19 @@ export function hasPurchaseHistory(draft: AddOnDraft): boolean {
  * it, or null when the catalogue is ready to save. Mirrors the server's
  * sanitizeAddOnInput so the editor can block a save that would 400 anyway.
  */
-export function draftValidationError(drafts: AddOnDraft[]): string | null {
-  if (drafts.length > MAX_ADD_ONS) {
+export function draftValidationError(
+  drafts: AddOnDraft[],
+  /**
+   * "profile" validates the organiser's profile list instead of an event's
+   * add-ons: a different item limit, and no stock, which the profile has none of.
+   */
+  mode: "event" | "profile" = "event",
+): string | null {
+  if (mode === "event" && drafts.length > MAX_ADD_ONS) {
     return `An event can offer at most ${MAX_ADD_ONS} add-ons.`;
+  }
+  if (mode === "profile" && drafts.length > MAX_PROFILE_MERCHANDISE) {
+    return `Your profile can show at most ${MAX_PROFILE_MERCHANDISE} items.`;
   }
 
   const seenNames = new Set<string>();
@@ -171,6 +238,7 @@ export function draftValidationError(drafts: AddOnDraft[]): string | null {
         return `"${name}" has two options called "${label}".`;
       }
       seenLabels.add(label.toLowerCase());
+      if (mode === "profile") continue;
 
       const stock = parseStock(variant.stock);
       if (stock == null) {
@@ -196,6 +264,7 @@ export interface AddOnPayloadItem {
   imageUrl: string | null;
   optionLabel: string;
   variants: { id?: string; label: string; stock: number }[];
+  merchandiseId?: string;
 }
 
 /**
@@ -216,5 +285,6 @@ export function draftsToPayload(drafts: AddOnDraft[]): AddOnPayloadItem[] {
       label: variant.label.trim(),
       stock: parseStock(variant.stock) ?? 0,
     })),
+    ...(draft.merchandiseId ? { merchandiseId: draft.merchandiseId } : {}),
   }));
 }

@@ -103,6 +103,21 @@ export async function PUT(
     }
   }
 
+  // A link to a profile item is only kept when the item is this organiser's.
+  // Anything else is dropped rather than refused: it is provenance, not money,
+  // and a profile item deleted mid-edit should not block restocking a shirt.
+  const linkedIds = [...new Set(sanitized.map((a) => a.merchandiseId).filter(Boolean) as string[])];
+  const ownMerchandise = new Set(
+    linkedIds.length === 0
+      ? []
+      : (
+          await prisma.organiserMerchandise.findMany({
+            where: { id: { in: linkedIds }, organiserId: session.sub },
+            select: { id: true },
+          })
+        ).map((m) => m.id),
+  );
+
   try {
     await prisma.$transaction(async (tx) => {
       const existingAddOns = await tx.eventAddOn.findMany({
@@ -145,6 +160,8 @@ export async function PUT(
           priceCents: input.priceCents,
           imageUrl: input.imageUrl,
           optionLabel: input.optionLabel,
+          merchandiseId:
+            input.merchandiseId && ownMerchandise.has(input.merchandiseId) ? input.merchandiseId : null,
           sortOrder: i,
           active: true,
         };

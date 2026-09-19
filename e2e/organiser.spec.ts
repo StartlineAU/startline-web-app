@@ -348,3 +348,22 @@ test.describe("organiser pages", () => {
     await argosScreenshot(page, "organiser-profile");
   });
 });
+
+// On the dashboard the logo used to link to the dashboard, so clicking it did
+// nothing. It goes to the Startline home page, like the athlete and admin
+// logos (#338).
+test.describe("organiser header logo", () => {
+  test("takes an organiser from the dashboard to the Startline home page", async ({ page }) => {
+    await organiserLogin(page);
+    const logo = page.locator("nav").getByRole("link", { name: "Startline home" }).first();
+    await expect(logo).toHaveAttribute("href", "/");
+    await logo.click();
+    await expect(page).toHaveURL(/localhost:\d+\/$/);
+  });
+
+  // Already in the organiser portal, so its footer has no organiser login.
+  test("the organiser portal footer has no organiser login button", async ({ page }) => {
+    await organiserLogin(page);
+    await expect(page.locator("footer").getByRole("link", { name: "Organiser Login" })).toHaveCount(0);
+  });
+});

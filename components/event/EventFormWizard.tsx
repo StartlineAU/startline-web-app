@@ -24,7 +24,11 @@ import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
 import DatePicker           from "@/components/ui/DatePicker";
 import SelectMenu           from "@/components/ui/SelectMenu";
 import TimePicker           from "@/components/ui/TimePicker";
-import AddOnEditor, { uploadAddOnImages } from "@/components/organiser/AddOnEditor";
+import AddOnEditor, {
+  uploadAddOnImages,
+  publishAddOnsToProfile,
+  PublishToProfileError,
+} from "@/components/organiser/AddOnEditor";
 import {
   type AddOnDraft,
   draftsFromCatalogue,
@@ -1831,10 +1835,13 @@ export default function EventFormWizard({
         try {
           const withImages = await uploadAddOnImages(addOns);
           setAddOns(withImages);
+          // Before the catalogue save, so the profile links are saved with it.
+          const published = await publishAddOnsToProfile(withImages);
+          setAddOns(published);
           const addOnRes = await fetch(`${apiBase}/events/${savedEventId}/add-ons`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ addOns: draftsToPayload(withImages) }),
+            body: JSON.stringify({ addOns: draftsToPayload(published) }),
           });
           if (!addOnRes.ok) {
             const addOnData = await addOnRes.json().catch(() => ({}));
@@ -1849,12 +1856,16 @@ export default function EventFormWizard({
             return false;
           }
         } catch (err) {
-          // UploadError already names the product and the reason. Anything else
-          // is a dropped connection, where the browser's own text says nothing
-          // useful to an organiser.
+          // Keep the profile items already published, so a retry does not
+          // publish them a second time.
+          if (err instanceof PublishToProfileError) setAddOns(err.drafts);
+          // UploadError and PublishToProfileError already name the product and
+          // the reason. Anything else is a dropped connection, where the
+          // browser's own text says nothing useful to an organiser.
           setApiError(
-            (err instanceof UploadError ? err.message : "Could not save your merchandise.") +
-              " Your event details were saved.",
+            (err instanceof UploadError || err instanceof PublishToProfileError
+              ? err.message
+              : "Could not save your merchandise.") + " Your event details were saved.",
           );
           return false;
         }
