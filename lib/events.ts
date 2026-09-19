@@ -107,11 +107,27 @@ const publicEventSelect = {
 
 /** Single public event by id or slug — live or archived (past) listings. */
 export async function getPublicEventById(id: string): Promise<PublicEvent | null> {
+  return findEventById(id, { publicOnly: true });
+}
+
+/**
+ * The same shape at any status, for the admin preview (issue #321). Never
+ * call this from anything an athlete can reach: pending, rejected and draft
+ * listings are not public.
+ */
+export async function getEventByIdForAdmin(id: string): Promise<PublicEvent | null> {
+  return findEventById(id, { publicOnly: false });
+}
+
+async function findEventById(
+  id: string,
+  { publicOnly }: { publicOnly: boolean },
+): Promise<PublicEvent | null> {
   try {
     const event = await prisma.event.findFirst({
       where: {
         OR: [{ id }, { slug: id }],
-        status: { in: ["APPROVED", "ARCHIVED"] },
+        ...(publicOnly ? { status: { in: ["APPROVED", "ARCHIVED"] } } : {}),
       },
       select: publicEventSelect,
     });

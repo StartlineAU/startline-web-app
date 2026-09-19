@@ -6,12 +6,13 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp,
-  Pin, PinOff, Trash2, CheckSquare, Square, Plus, Pencil, AlertTriangle,
+  Pin, PinOff, Trash2, CheckSquare, Square, Plus, Pencil, AlertTriangle, Eye,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { hasAbn } from "@/lib/abn";
+import RejectPanel from "@/components/admin/RejectPanel";
+import { approvalBlocker } from "@/lib/event-approval";
 
 export const dynamic = "force-dynamic";
 
@@ -40,17 +41,6 @@ interface AdminEventRow {
     abn: string | null;
     stripeOnboardingComplete: boolean;
   };
-}
-
-// Why a marketplace listing cannot be approved yet, or null when it can. The
-// organiser is allowed to submit with these missing, so the review queue is
-// where the gap has to be visible: without this an admin only finds out by
-// clicking approve and reading a 422.
-function approvalBlocker(event: AdminEventRow): string | null {
-  if (event.registrationType !== "startline") return null;
-  if (!hasAbn(event.organiser.abn)) return "No ABN on file";
-  if (!event.organiser.stripeOnboardingComplete) return "Stripe onboarding incomplete";
-  return null;
 }
 
 const TABS: { status: EventStatus; label: string }[] = [
@@ -87,48 +77,6 @@ function formatSubmitted(iso: string) {
   }
 }
 
-interface RejectPanelProps {
-  onConfirm: (reason: string) => void;
-  onCancel: () => void;
-  loading: boolean;
-}
-
-function RejectPanel({ onConfirm, onCancel, loading }: RejectPanelProps) {
-  const [reason, setReason] = useState("");
-  return (
-    <div className="mt-3 p-4 bg-red-500/[0.08] border border-red-500/20 rounded-lg">
-      <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-red-400 block mb-2">
-        Rejection reason <span className="text-red-400">*</span>
-      </label>
-      <textarea
-        className="w-full text-[14px] text-light bg-dark border border-red-500/30 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-red-400 placeholder:text-placeholder"
-        rows={3}
-        placeholder="Explain why the event is being rejected…"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
-      <div className="flex items-center gap-2 mt-2 justify-end">
-        <button
-          onClick={onCancel}
-          disabled={loading}
-          className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-3 py-1.5 rounded transition-colors disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => reason.trim() && onConfirm(reason.trim())}
-          disabled={loading || !reason.trim()}
-          className="font-headline text-[12px] font-bold uppercase tracking-widest bg-red-600 text-white px-4 py-1.5 rounded hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-        >
-          {loading
-            ? <><span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> Rejecting…</>
-            : <><X className="w-3 h-3" /> Reject</>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function EventRow({
   event,
   selected,
@@ -156,6 +104,7 @@ function EventRow({
 
   const organiserName =
     event.organiser.orgName || event.organiser.contactName || event.organiser.email;
+  const previewHref = `/admin/events/${event.id}`;
 
   const handleApprove = async () => {
     setApproving(true);
@@ -234,19 +183,27 @@ function EventRow({
             : <Square className="w-4 h-4" />}
         </button>
 
-        {/* Cover thumbnail */}
-        <div className="relative w-14 h-14 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden">
+        {/* Cover thumbnail: opens the athlete-eye preview, like the title */}
+        <Link
+          href={previewHref}
+          tabIndex={-1}
+          aria-hidden
+          className="relative w-14 h-14 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden hover:ring-1 hover:ring-primary/60 transition-shadow"
+        >
           {event.coverImageUrl
             ? <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover" sizes="56px" />
             : <div className="font-mono text-[9px] text-muted-dark uppercase">{event.discipline.slice(0, 4)}</div>}
-        </div>
+        </Link>
 
         {/* Details */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-start gap-x-3 gap-y-1 mb-1">
-            <span className="font-headline text-[15px] font-black italic tracking-tighter text-light truncate">
+            <Link
+              href={previewHref}
+              className="font-headline text-[15px] font-black italic tracking-tighter text-light truncate hover:text-primary transition-colors"
+            >
               {event.title}
-            </span>
+            </Link>
             <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0 shrink-0`}>
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
               {s.label}
@@ -324,6 +281,14 @@ function EventRow({
                   : <><Pin className="w-3.5 h-3.5" /> Pin</>}
             </button>
           )}
+
+          {/* Preview: the listing as athletes will see it (issue #321) */}
+          <Link
+            href={previewHref}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-dark-lighter text-muted px-3 py-2 rounded-md hover:border-primary/40 hover:text-light transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" /> Preview
+          </Link>
 
           {/* Edit */}
           <Link

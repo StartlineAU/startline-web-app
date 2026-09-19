@@ -4,6 +4,7 @@ import { getServerSession } from "@/lib/amplify-server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import { archivePastEvents } from "@/lib/archive-events";
 import { getEventCoords } from "@/lib/australia-coords";
+import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserEventPayloadSchema } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
@@ -179,6 +180,12 @@ export async function POST(req: NextRequest) {
           }),
         )
         .catch((err) => console.error("Follower notify failed:", err));
+    }
+
+    if (event.status === "PENDING") {
+      // Awaited for the same reason as the follower notify above.
+      await notifyAdminsEventSubmitted(event.id)
+        .catch((err) => console.error("Admin review notify failed:", err));
     }
 
     // The organiser finds out here, once the work is saved, rather than being

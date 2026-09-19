@@ -276,3 +276,50 @@ test.describe("admin audit log page", () => {
     await argosScreenshot(page, "admin-audit");
   });
 });
+
+// Issue #321: the queue alone was not enough to judge a listing, and the public
+// page 404s until approval, so admins could not see an event as athletes would.
+test.describe("admin event preview", () => {
+  test("preview opens from the pending queue and shows the athlete view", async ({ page }) => {
+    await adminLogin(page);
+    await page.goto("/admin/events?status=PENDING");
+    await page.waitForLoadState("networkidle");
+
+    const row = page.locator("div.border-b", { hasText: "Hybrid Hustle Series" }).first();
+    await row.getByRole("link", { name: "Preview" }).click();
+    await page.waitForURL("**/admin/events/seed-event-002", { timeout: 30000 });
+
+    const bar = page.getByTestId("admin-event-review-bar");
+    await expect(bar).toBeVisible({ timeout: 15000 });
+    await expect(bar.getByText("Athlete preview")).toBeVisible();
+    await expect(bar.getByText("Pending", { exact: true })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Approve" })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Reject" })).toBeVisible();
+
+    // The same screen athletes get: title in the banner and the overview section.
+    await expect(page.getByRole("heading", { level: 1, name: /Hybrid Hustle Series/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Event Overview" })).toBeVisible();
+    // The athlete back link would leave the admin portal.
+    await expect(page.getByRole("link", { name: "Back to Events" })).toHaveCount(0);
+  });
+
+  test("event title in the queue links to the preview", async ({ page }) => {
+    await adminLogin(page);
+    await page.goto("/admin/events?status=PENDING");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByRole("link", { name: /Hybrid Hustle Series/ }).first())
+      .toHaveAttribute("href", "/admin/events/seed-event-002");
+  });
+
+  test("the pending event is still not public", async ({ page }) => {
+    const res = await page.goto("/events/seed-event-002");
+    expect(res?.status()).toBe(404);
+  });
+
+  test("unknown event id shows not found", async ({ page }) => {
+    await adminLogin(page);
+    const res = await page.goto("/admin/events/does-not-exist");
+    expect(res?.status()).toBe(404);
+  });
+});
