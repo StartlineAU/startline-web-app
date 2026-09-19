@@ -127,6 +127,11 @@ export async function middleware(req: NextRequest) {
         || pathname.startsWith("/api/waitlist")
         || pathname.startsWith("/checkin")
         || pathname.startsWith("/api/checkin")
+        // Stripe posts to the apex domain, and the rewrite below would answer
+        // with the waitlist page: a 200 Stripe reads as delivered while no
+        // payment is ever confirmed and no onboarding ever completes. Safe to
+        // expose — the handler verifies the Stripe signature before anything.
+        || pathname === "/api/stripe/webhook"
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")

@@ -38,6 +38,43 @@ export function organiserHref(path: string, host: string | null | undefined): st
   return portalsAreSplit(host) ? `https://${ORGANISER_DOMAIN}${path}` : path;
 }
 
+/** A link to `path` on the admin portal, from a page served on `host`. */
+export function adminHref(path: string, host: string | null | undefined): string {
+  return portalsAreSplit(host) ? `https://${ADMIN_DOMAIN}${path}` : path;
+}
+
+// Emails and Stripe redirects need an absolute URL and have no request host to
+// go on, only NEXT_PUBLIC_SITE_URL. In production that is the athlete site, and
+// the athlete host rewrites every /organiser and /admin path to the waitlist, so
+// `${SITE}/organiser/...` is a dead end there. These resolve the portal from
+// the site URL instead: the portal's own hostname in production, the site
+// itself on single-host deployments.
+function portalUrl(
+  toHref: (path: string, host: string) => string,
+  path: string,
+  siteUrl: string,
+): string {
+  const origin = siteUrl.replace(/\/+$/, "");
+  let host = "";
+  try {
+    host = new URL(origin).host;
+  } catch {
+    // Not a URL; fall through to prefixing it as-is.
+  }
+  const href = toHref(path, host);
+  return href.startsWith("/") ? `${origin}${href}` : href;
+}
+
+/** An absolute URL for `path` on the organiser portal, given NEXT_PUBLIC_SITE_URL. */
+export function organiserUrl(path: string, siteUrl: string): string {
+  return portalUrl(organiserHref, path, siteUrl);
+}
+
+/** An absolute URL for `path` on the admin portal, given NEXT_PUBLIC_SITE_URL. */
+export function adminUrl(path: string, siteUrl: string): string {
+  return portalUrl(adminHref, path, siteUrl);
+}
+
 // Cognito cookies are written by Amplify in the browser, and a host-only cookie
 // set on startlineau.com is never sent to organiser.startlineau.com — which left
 // the organiser portal permanently signed out in production. Scoping them to the
