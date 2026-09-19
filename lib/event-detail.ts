@@ -1,4 +1,4 @@
-import { getPublicEventById } from "@/lib/events";
+import { getEventByIdForAdmin, getPublicEventById } from "@/lib/events";
 import { parsePrizePool, type PrizePool } from "@/lib/prize-pool";
 import { averageOverallRating, getPublishedOrganiserReviews, type OrganiserRating, type PublicReview } from "@/lib/reviews";
 import { toUserEvent } from "@/lib/user-events";
@@ -18,8 +18,13 @@ export type EventDetailData = {
   organiserReviews: PublicReview[];
 };
 
-export async function getEventDetail(id: string): Promise<EventDetailData | null> {
-  const found = await getPublicEventById(id);
+export async function getEventDetail(
+  id: string,
+  // Admin preview only (issue #321): resolves the event whatever its status,
+  // so a listing can be seen as athletes will see it before it is approved.
+  { anyStatus = false }: { anyStatus?: boolean } = {},
+): Promise<EventDetailData | null> {
+  const found = anyStatus ? await getEventByIdForAdmin(id) : await getPublicEventById(id);
   if (!found) return null;
 
   const event = toUserEvent(found);

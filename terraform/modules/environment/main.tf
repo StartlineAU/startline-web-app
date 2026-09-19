@@ -459,6 +459,14 @@ locals {
     for name, value in local.runtime_secrets : name => value
     if try(trimspace(value), "") != ""
   }
+
+  # Names only, so safe to unmark. Left sensitive, Terraform refuses to print
+  # the precondition's message and the failed apply never says which key is
+  # missing, which is how Stripe stayed off both environments unnoticed (#322).
+  missing_prod_runtime_secrets = var.name != "prod" ? [] : sort(nonsensitive(tolist(setsubtract(
+    ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "RESEND_API_KEY", "ABR_GUID"],
+    keys(local.runtime_secret_variables),
+  ))))
 }
 
 resource "aws_amplify_branch" "this" {
@@ -495,16 +503,10 @@ resource "aws_amplify_branch" "this" {
     # could quietly take payments and email offline, fail the plan instead and
     # say which key is missing from startline/ci-bootstrap.
     precondition {
-      condition = var.name != "prod" || length(setsubtract(
-        ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "RESEND_API_KEY", "ABR_GUID"],
-        keys(local.runtime_secret_variables),
-      )) == 0
+      condition = length(local.missing_prod_runtime_secrets) == 0
       error_message = format(
         "Missing prod runtime secrets: %s. Add the matching keys to the startline/ci-bootstrap secret (stripe_secret_key_prod, stripe_webhook_secret_prod, resend_api_key, abr_guid) — applying without them would strip the values from the Amplify branch and break checkout, email and ABN lookup.",
-        join(", ", setsubtract(
-          ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "RESEND_API_KEY", "ABR_GUID"],
-          keys(local.runtime_secret_variables),
-        )),
+        join(", ", local.missing_prod_runtime_secrets),
       )
     }
   }

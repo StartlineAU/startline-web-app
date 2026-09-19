@@ -35,9 +35,12 @@ import {
 export default function EventDetailView({
   data,
   variant = "page",
+  hideBackLink = false,
 }: {
   data: EventDetailData;
   variant?: "page" | "panel";
+  /** The admin preview supplies its own way back to the review queue. */
+  hideBackLink?: boolean;
 }) {
   const { event, prizePool, organiserName, organiserRating, organiserReviews } = data;
   const isPanel = variant === "panel";
@@ -111,7 +114,7 @@ export default function EventDetailView({
           >
             Open full page <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
-        ) : (
+        ) : hideBackLink ? null : (
           <BackToEventsLink />
         )}
 

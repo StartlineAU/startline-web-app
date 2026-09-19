@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  adminUrl,
   authCookieDomain,
   customerHref,
   organiserHref,
+  organiserUrl,
   portalsAreSplit,
 } from "@/lib/portal-domains";
 
@@ -47,6 +49,33 @@ describe("cross-portal links", () => {
     expect(customerHref("/organiser-setup", STAGING)).toBe("/organiser-setup");
     expect(customerHref("/organiser-setup", PREVIEW)).toBe("/organiser-setup");
     expect(organiserHref("/organiser/dashboard", "localhost:3000")).toBe("/organiser/dashboard");
+  });
+});
+
+describe("absolute portal URLs", () => {
+  // Production's site URL is the athlete host, which rewrites /organiser/* to
+  // the waitlist: a Stripe return_url built from it stranded the organiser
+  // there after onboarding (issue #322).
+  it("uses the portal's own hostname in production", () => {
+    expect(organiserUrl("/organiser/payments/return", "https://startlineau.com")).toBe(
+      "https://organiser.startlineau.com/organiser/payments/return",
+    );
+    expect(adminUrl("/admin/events/evt-1", "https://startlineau.com")).toBe(
+      "https://admin.startlineau.com/admin/events/evt-1",
+    );
+  });
+
+  it("stays on the site where one host serves every portal", () => {
+    expect(organiserUrl("/organiser/payments", `https://${STAGING}`)).toBe(
+      `https://${STAGING}/organiser/payments`,
+    );
+    expect(adminUrl("/admin/events/evt-1", "http://localhost:3000/")).toBe(
+      "http://localhost:3000/admin/events/evt-1",
+    );
+  });
+
+  it("still prefixes a site URL it cannot parse", () => {
+    expect(adminUrl("/admin/events", "not a url")).toBe("not a url/admin/events");
   });
 });
 

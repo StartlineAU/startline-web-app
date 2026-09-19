@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { getEventCoords } from "@/lib/australia-coords";
+import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
@@ -155,6 +156,12 @@ export async function PATCH(
           }),
         )
         .catch((err) => console.error("Follower notify failed:", err));
+    }
+
+    // Existing was DRAFT, so this is the moment the listing joins the queue.
+    if (updated.status === "PENDING") {
+      await notifyAdminsEventSubmitted(updated.id)
+        .catch((err) => console.error("Admin review notify failed:", err));
     }
 
     return NextResponse.json({
