@@ -46,6 +46,7 @@ const nextConfig: NextConfig = {
               // Without it the browser blocks the upload with no server-side trace.
               "connect-src 'self' https://js.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://cognito-idp.ap-southeast-2.amazonaws.com https://*.s3.ap-southeast-2.amazonaws.com https://*.s3.amazonaws.com capacitor:// http://localhost",
               "img-src 'self' data: blob: https://*.tiles.mapbox.com https://api.mapbox.com https:",
+              "media-src 'self'",
               "worker-src blob: 'self'",
               "style-src 'self' 'unsafe-inline' https://api.mapbox.com",
               "font-src 'self' data: https://api.mapbox.com",

@@ -1,53 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
+import { useEffect, useRef } from "react";
 
-const SLIDES = [
-  { url: "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?w=1920&q=80", alt: "Runners racing" },
-  { url: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=1920&q=80", alt: "CrossFit competition" },
-  { url: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1920&q=80", alt: "Fitness athletes" },
-  { url: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1920&q=80", alt: "Road race" },
-  { url: "https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=1920&q=80", alt: "Fitness race event" },
-];
-
-const INTERVAL_MS = 5000;
-const FADE_MS = 1000;
+const VIDEO_SRC = "/videos/hero.mp4?v=6";
+const POSTER_SRC = "/videos/hero-poster.jpg?v=6";
 
 export default function HeroCarousel() {
-  const [current, setCurrent] = useState(0);
-  const [fading, setFading] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setFading(true);
-      setTimeout(() => {
-        setCurrent((prev) => (prev + 1) % SLIDES.length);
-        setFading(false);
-      }, FADE_MS);
-    }, INTERVAL_MS);
-    return () => clearInterval(timer);
+    const video = videoRef.current;
+    if (!video) return;
+
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => {
+      if (motion.matches) {
+        video.pause();
+        video.currentTime = 0;
+      } else {
+        video.play().catch(() => {
+          // Autoplay blocked — poster stays visible.
+        });
+      }
+    };
+
+    sync();
+    motion.addEventListener("change", sync);
+    return () => motion.removeEventListener("change", sync);
   }, []);
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
-      {SLIDES.map((slide, i) => (
-        <Image
-          key={slide.url}
-          src={slide.url}
-          alt={slide.alt}
-          fill
-          className="object-cover"
-          style={{
-            opacity: i === current ? (fading ? 0 : 1) : 0,
-            transition: `opacity ${FADE_MS}ms ease-in-out`,
-            filter: "grayscale(40%) brightness(0.45)",
-          }}
-          sizes="100vw"
-        />
-      ))}
-      <div className="absolute inset-0 bg-gradient-to-r from-darker/90 via-darker/60 to-darker/20" />
-      <div className="absolute inset-0 bg-gradient-to-t from-darker via-transparent to-darker/40" />
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <video
+        ref={videoRef}
+        className="absolute inset-0 h-full w-full object-cover"
+        style={{
+          filter: "brightness(0.70)",
+          objectPosition: "50% 60%",
+          WebkitMaskImage: "linear-gradient(to bottom, #000 70%, transparent)",
+          maskImage: "linear-gradient(to bottom, #000 70%, transparent)",
+        }}
+        src={VIDEO_SRC}
+        poster={POSTER_SRC}
+        muted
+        loop
+        playsInline
+        autoPlay
+        preload="metadata"
+        disablePictureInPicture
+        aria-hidden
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-darker/75 via-darker/50 to-darker/15" />
+      <div className="absolute inset-0 bg-gradient-to-t from-darker from-[12%] via-transparent to-darker/35" />
     </div>
   );
 }

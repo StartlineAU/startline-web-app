@@ -21,6 +21,14 @@ test.describe("homepage", () => {
     await argosScreenshot(page, "homepage");
   });
 
+  test("hero banner plays the looping video", async ({ page }) => {
+    await goToHomepage(page);
+    const video = page.locator("video");
+    await expect(video).toBeAttached();
+    await expect(video).toHaveAttribute("src", "/videos/hero.mp4?v=6");
+    await expect(video).toHaveAttribute("poster", "/videos/hero-poster.jpg?v=6");
+  });
+
   test("shows main headings and navigation", async ({ page }) => {
     await goToHomepage(page);
     await expect(page.getByRole("link", { name: "HOME", exact: true })).toBeVisible();

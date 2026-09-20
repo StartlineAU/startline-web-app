@@ -135,6 +135,7 @@ export async function middleware(req: NextRequest) {
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")
+        || pathname.startsWith("/videos")
         || pathname.startsWith("/favicon")) {
       return NextResponse.next();
     }
@@ -164,6 +165,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|images/|favicon.ico).*)",
+    "/((?!_next/static|_next/image|images/|videos/|favicon.ico).*)",
   ],
 };
