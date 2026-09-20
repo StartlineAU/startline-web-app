@@ -1,6 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
 
+const linkCls =
+  "font-headline text-[10px] font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors";
+
 /**
  * The one-row footer. The organiser and admin portals use it as is; the
  * athlete site's app screens pass `organiserLoginHref` to add a way into the
@@ -21,23 +24,13 @@ export default function PortalFooter({ organiserLoginHref }: { organiserLoginHre
               { href: "/privacy", label: "Privacy" },
               { href: "/terms", label: "Terms" },
               { href: "/contact", label: "Contact" },
+              // Athlete site only; the portals are already inside one.
+              ...(organiserLoginHref ? [{ href: organiserLoginHref, label: "Organiser Login" }] : []),
             ].map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted hover:text-primary transition-colors"
-              >
+              <Link key={link.href} href={link.href} className={linkCls}>
                 {link.label}
               </Link>
             ))}
-            {organiserLoginHref && (
-              <Link
-                href={organiserLoginHref}
-                className="inline-flex items-center font-headline text-[10px] font-bold uppercase tracking-widest text-primary border border-primary/40 rounded-md px-2.5 py-1.5 hover:bg-primary/10 transition-colors"
-              >
-                Organiser Login
-              </Link>
-            )}
           </div>
 
           <p className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
