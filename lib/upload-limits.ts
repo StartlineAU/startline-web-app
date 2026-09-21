@@ -3,12 +3,16 @@
 // the event wizard are deferred to submit, so without the client-side check an
 // oversized file is accepted silently and only fails five steps later.
 
-export type UploadType = "logo" | "cover" | "photo" | "video" | "avatar" | "document";
+export type UploadType = "logo" | "cover" | "photo" | "merch" | "video" | "avatar" | "document";
 
 export const UPLOAD_LIMITS: Record<UploadType, { bytes: number; label: string }> = {
   logo:     { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   cover:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   photo:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
+  // Merchandise photos are shown at a few hundred pixels on a card, so a
+  // tighter cap than the 10 MB gallery one is plenty and keeps an organiser
+  // from uploading a 9 MB camera original per t-shirt (#338).
+  merch:    { bytes: 5 * 1024 * 1024,   label: "Photo must be 5 MB or smaller."   },
   avatar:   { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   video:    { bytes: 200 * 1024 * 1024, label: "Video must be 200 MB or smaller." },
   document: { bytes: 15 * 1024 * 1024,  label: "PDF must be 15 MB or smaller."    },
@@ -32,6 +36,8 @@ export const TYPE_MIMES: Record<UploadType, string[]> = {
   logo:     ["image/jpeg", "image/png", "image/webp", "image/gif"],
   cover:    ["image/jpeg", "image/png", "image/webp", "image/gif"],
   photo:    ["image/jpeg", "image/png", "image/webp", "image/gif"],
+  // Photos only, and no GIF: a product shot on a card has no reason to animate.
+  merch:    ["image/jpeg", "image/png", "image/webp"],
   avatar:   ["image/jpeg", "image/png", "image/webp", "image/gif"],
   video:    ["video/mp4", "video/webm", "video/quicktime", "video/avi", "video/ogg"],
   document: ["application/pdf"],

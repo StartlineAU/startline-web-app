@@ -1,10 +1,18 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
-import { getOrganiserSession } from "@/lib/amplify-server";
+import { getOrganiserSession, getServerSession } from "@/lib/amplify-server";
 import { customerHref } from "@/lib/portal-domains";
 import OrganiserLandingActions from "@/components/organiser/OrganiserLandingActions";
 
+/**
+ * The way into the organiser portal, for anyone who is not already in it.
+ *
+ * Where it sends you depends only on what you have (#338):
+ *   - an organisation, owned or joined -> straight to your dashboard
+ *   - signed in with none              -> straight into setting one up
+ *   - signed out                       -> this page, to sign in or start one
+ */
 export default async function OrganiserLandingPage() {
   const session = await getOrganiserSession();
   if (session) redirect("/organiser/dashboard");
@@ -14,6 +22,10 @@ export default async function OrganiserLandingPage() {
   // host, where an absolute customer URL points at a hostname that doesn't
   // resolve (issue #302).
   const setupHref = customerHref("/organiser-setup", (await headers()).get("host"));
+
+  // Signed in, but no organisation: this page would only ask them to sign in
+  // again. Setting one up is the whole of what is left to do.
+  if (await getServerSession()) redirect(setupHref);
 
   return (
     <main className="min-h-screen bg-dark-darker flex items-center justify-center px-6">

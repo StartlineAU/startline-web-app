@@ -70,6 +70,9 @@ export async function getServerSession(): Promise<ServerSession | null> {
         "admin":    { sub: "dev-bypass-admin",     email: "marcus.stirling@startline.test", groups: ["admins"] },
         "user":     { sub: "dev-bypass-user",      email: "jade.nguyen@startline.test",      groups: [] },
         "avery":    { sub: "dev-bypass-avery-quinn", email: "avery.quinn@startline.test",    groups: [] },
+        // Belongs to no organisation, for the "become an organiser" paths.
+        // Every other identity here owns or manages one.
+        "athlete":  { sub: "dev-bypass-harper-jones", email: "harper.jones@startline.test", groups: [] },
       };
       const identity = identities[bypass];
       if (identity) return identity;

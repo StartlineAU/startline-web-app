@@ -5,6 +5,8 @@
  * so a limit or a label is defined exactly once.
  */
 
+import { isAllowedImageUrl } from "@/lib/image-urls";
+
 /** Products one event may offer. Keeps the wizard section and the picker short. */
 export const MAX_ADD_ONS = 6;
 
@@ -168,6 +170,10 @@ export function sanitizeAddOnInput(input: unknown): AddOnInput[] | { error: stri
 
     const imageUrl = String(a.imageUrl ?? "").trim();
     if (imageUrl.length > 2000) return { error: "An add-on image URL is too long." };
+    // Same rule as the profile's: only a photo we host renders on the page.
+    if (imageUrl && !isAllowedImageUrl(imageUrl)) {
+      return { error: `The photo for "${name}" must be one you uploaded.` };
+    }
 
     if (!Array.isArray(a.variants) || a.variants.length === 0) {
       return { error: `"${name}" needs at least one ${optionLabel.toLowerCase()} option.` };

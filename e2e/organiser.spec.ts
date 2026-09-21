@@ -1,12 +1,41 @@
 import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { organiserLogin, pickTime, expectOrganiserDashboard } from "./helpers";
+import { organiserLogin, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
+
+ensureDatabaseUrl();
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
+
+// Harper Jones (the __e2e_bypass "athlete" identity) belongs to no
+// organisation, which this flow needs: everyone who has one is now sent to
+// their portal instead of being offered the form (#338). The organisation the
+// test creates is deleted afterwards, so the run repeats.
+const SETUP_EMAIL = "harper.jones@startline.test";
+
+async function deleteOrganisersCreatedBy(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) return;
+  const memberships = await prisma.organiserMember.findMany({
+    where: { userId: user.id },
+    select: { organiserId: true },
+  });
+  await prisma.organiser.deleteMany({
+    where: { id: { in: memberships.map((m) => m.organiserId) } },
+  });
+}
 
 test.describe("organiser setup", () => {
+  test.afterEach(async () => {
+    await deleteOrganisersCreatedBy(SETUP_EMAIL);
+  });
+
   test("requires contact details when creating a profile", async ({ page }) => {
-    // 'user' bypass maps to a seeded authenticated account.
     await page.context().addCookies([
-      { name: "__e2e_bypass", value: "user", domain: "localhost", path: "/", sameSite: "Lax" },
+      { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
     ]);
     await page.goto("/organiser-setup");
     await page.waitForLoadState("networkidle");
@@ -28,12 +57,22 @@ test.describe("organiser setup", () => {
 
   test("setup API rejects missing contact details", async ({ request }) => {
     const res = await request.post("/api/organiser/setup", {
-      headers: { Cookie: "__e2e_bypass=user" },
+      headers: { Cookie: "__e2e_bypass=athlete" },
       data: { orgName: "X" },
     });
     expect(res.status()).toBe(400);
     const data = await res.json();
     expect(data.error).toMatch(/contact details are required/i);
+  });
+
+  // Someone who already has one never gets a second, whatever they send.
+  test("setup API returns the existing organisation instead of creating another", async ({ request }) => {
+    const res = await request.post("/api/organiser/setup", {
+      headers: { Cookie: "__e2e_bypass=organiser" },
+      data: { orgName: "Should Not Be Created", contactName: "X", contactEmail: "x@e.com", phone: "0400000000" },
+    });
+    expect(res.ok()).toBeTruthy();
+    expect((await res.json()).orgName).toBe("Apex Endurance Events");
   });
 });
 

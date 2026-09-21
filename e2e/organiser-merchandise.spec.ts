@@ -82,7 +82,6 @@ test.describe("organiser profile merchandise", () => {
 
     await page.goto(`/organiser/new-listing?id=${EVENT_ID}`);
     await expect(page).toHaveURL(/\/organiser\/new-listing/);
-    await page.waitForLoadState("networkidle");
     await page.getByText("Tickets & Pricing").first().click();
 
     await expect(page.getByText(/exclusive to this event's checkout/i)).toBeVisible();
@@ -126,14 +125,52 @@ test.describe("organiser profile merchandise", () => {
     await expect(showcase.locator(`a[href="/events/${EVENT_ID}"]`)).toBeVisible();
   });
 
+  // Product photos only, and small ones: the picker refuses anything else
+  // before it is ever uploaded (#338).
+  test("the photo picker takes only photos, up to 5 MB", async ({ page }) => {
+    await page.goto("/organiser/profile");
+    const section = page.getByTestId("merchandise-manager");
+    await section.getByRole("button", { name: /add your first item/i }).click();
+    await expect(section.getByText(/JPG, PNG or WebP, up to 5 MB/i)).toBeVisible();
+
+    const input = section.locator('input[type="file"]').first();
+
+    await input.setInputFiles({
+      name: "flyer.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 not a photo"),
+    });
+    await expect(section.getByText(/JPG, PNG or WebP, up to 5 MB/i)).toHaveClass(/text-red-400/);
+
+    await input.setInputFiles({
+      name: "huge.png",
+      mimeType: "image/png",
+      buffer: Buffer.alloc(5 * 1024 * 1024 + 1),
+    });
+    await expect(section.getByText(/Photo must be 5 MB or smaller/i)).toBeVisible();
+
+    // A real photo within the cap is accepted, and the rule stops reading as an error.
+    await input.setInputFiles({
+      name: "tee.png",
+      mimeType: "image/png",
+      buffer: Buffer.alloc(1024),
+    });
+    await expect(section.getByText(/JPG, PNG or WebP, up to 5 MB/i)).not.toHaveClass(/text-red-400/);
+  });
+
   test("ticking 'also show on my profile' publishes a copy when the event saves", async ({ page }) => {
     // The race management dashboard is the heaviest page in the portal.
     test.slow();
     await page.goto(`/organiser/events/${EVENT_ID}/dashboard?panel=manage`);
-    await page.waitForLoadState("networkidle");
-    await page.getByRole("button", { name: /^add-ons/i }).click();
+    // The navbar polls for notifications, so this page never reaches
+    // networkidle; wait for the panel itself instead.
+    const addOnsTab = page.getByRole("button", { name: /^add-ons/i });
+    await expect(addOnsTab).toBeVisible({ timeout: 60000 });
+    await addOnsTab.click();
+    await expect(page.getByText(/what to bring/i)).toBeVisible({ timeout: 60000 });
 
     await page.getByRole("button", { name: /add merchandise/i }).click();
+    await expect(page.locator("#addon-name-0")).toBeVisible({ timeout: 30000 });
     await page.locator("#addon-name-0").fill("Finisher cap");
     await page.locator("#addon-price-0").fill("20");
     for (let i = 1; i <= 3; i++) await page.getByLabel(`Units available for option ${i}`).fill("5");

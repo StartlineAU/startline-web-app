@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { existsSync, readFileSync } from "fs";
 
 export async function goToHomepage(page: Page): Promise<void> {
   await page.goto("/");
@@ -126,4 +127,27 @@ export async function expectOrganiserDashboard(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/organiser\/dashboard/);
   await expect(page.getByText("All time", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /add listing/i })).toBeVisible();
+}
+
+/**
+ * Point Prisma at the same database the dev server uses, for specs that set up
+ * or clean up rows directly.
+ *
+ * Reads DATABASE_URL from .env.local, then .env: a worktree keeps its own in
+ * .env.local, while a plain checkout has only .env. Quotes are stripped, since
+ * dotenv allows them and a connection string carrying them fails to parse.
+ * Only this one variable is read — loading a whole env file would leak
+ * NEXT_PUBLIC_* values (e.g. a real Cognito pool id) into the shared worker
+ * env and make auth.spec's hasCognito guard run its real-Cognito tests.
+ */
+export function ensureDatabaseUrl(): void {
+  if (process.env.DATABASE_URL) return;
+  for (const file of [".env.local", ".env"]) {
+    if (!existsSync(file)) continue;
+    const value = readFileSync(file, "utf8").match(/^DATABASE_URL=(.+)$/m)?.[1]?.trim();
+    if (value) {
+      process.env.DATABASE_URL = value.replace(/^["']|["']$/g, "");
+      return;
+    }
+  }
 }

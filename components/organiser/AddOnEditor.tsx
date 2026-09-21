@@ -16,7 +16,7 @@ import {
 import { MAX_ADD_ONS, MAX_ADDON_VARIANTS } from "@/lib/add-ons";
 import { MAX_PROFILE_MERCHANDISE, type MerchandiseView } from "@/lib/merchandise";
 import { PLATFORM_FEE_PERCENT, calculateAddOnTotalWithFee } from "@/lib/platform-fee";
-import { TYPE_MIMES, uploadSizeError } from "@/lib/upload-limits";
+import { TYPE_MIMES, UPLOAD_LIMITS, uploadSizeError } from "@/lib/upload-limits";
 import { uploadFile, UploadError } from "@/lib/upload-client";
 
 const inputCls =
@@ -24,6 +24,10 @@ const inputCls =
 
 const labelCls =
   "font-headline text-[10px] uppercase tracking-widest text-light mb-1.5 block";
+
+/** What an organiser may upload for a product, stated once. */
+const MERCH_PHOTO_RULE =
+  `JPG, PNG or WebP, up to ${UPLOAD_LIMITS.merch.bytes / (1024 * 1024)} MB.`;
 
 const moveBtnCls =
   "w-7 h-7 grid place-items-center rounded-md text-muted hover:text-primary transition-colors disabled:opacity-25 disabled:pointer-events-none";
@@ -75,9 +79,16 @@ function AddOnPhoto({
 
   const pick = (chosen: File | null) => {
     if (!chosen) return;
+    // The file dialog filters on `accept`, but a drag or a "show all files"
+    // dialog does not, so the type is checked here too. The upload routes
+    // check it again, and verify the bytes really are an image.
+    if (!TYPE_MIMES.merch.includes(chosen.type)) {
+      setError(MERCH_PHOTO_RULE);
+      return;
+    }
     // Uploads are deferred to save, so an oversized photo has to be refused
     // here rather than five steps later (issue #300).
-    const tooBig = uploadSizeError("photo", chosen.size);
+    const tooBig = uploadSizeError("merch", chosen.size);
     if (tooBig) {
       setError(tooBig);
       return;
@@ -105,18 +116,16 @@ function AddOnPhoto({
       <input
         ref={input}
         type="file"
-        accept={TYPE_MIMES.photo.join(",")}
+        accept={TYPE_MIMES.merch.join(",")}
         className="hidden"
         onChange={(e) => {
           pick(e.target.files?.[0] ?? null);
           e.target.value = "";
         }}
       />
-      {error && (
-        <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5 w-[92px]">
-          {error}
-        </p>
-      )}
+      <p className={`font-headline text-[10px] uppercase tracking-widest mt-1.5 w-[92px] leading-relaxed ${error ? "text-red-400" : "text-muted-dark"}`}>
+        {error || MERCH_PHOTO_RULE}
+      </p>
     </div>
   );
 }
@@ -580,7 +589,7 @@ export async function uploadAddOnImages(drafts: AddOnDraft[]): Promise<AddOnDraf
     drafts.map(async (draft) => {
       if (!draft.image) return draft;
       try {
-        return { ...draft, image: null, imageUrl: await uploadFile(draft.image, "photo") };
+        return { ...draft, image: null, imageUrl: await uploadFile(draft.image, "merch") };
       } catch (err) {
         // Name the product: an organiser with six of them cannot act on "a photo
         // failed". The status is carried through so the caller can still tell an

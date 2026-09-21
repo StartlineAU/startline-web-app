@@ -12,6 +12,7 @@
  */
 
 import { MAX_ADDON_PRICE_CENTS, MAX_ADDON_VARIANTS } from "@/lib/add-ons";
+import { isAllowedImageUrl } from "@/lib/image-urls";
 
 /** Items one organiser can show on their profile. */
 export const MAX_PROFILE_MERCHANDISE = 24;
@@ -71,6 +72,11 @@ export function sanitizeMerchandiseItem(raw: unknown): MerchandiseInput | { erro
 
   const imageUrl = String(a.imageUrl ?? "").trim();
   if (imageUrl.length > 2000) return { error: "An item image URL is too long." };
+  // A photo from anywhere else would throw while the profile renders, so it is
+  // refused here rather than breaking the page for everyone.
+  if (imageUrl && !isAllowedImageUrl(imageUrl)) {
+    return { error: `The photo for "${name}" must be one you uploaded.` };
+  }
 
   if (!Array.isArray(a.options) || a.options.length === 0) {
     return { error: `"${name}" needs at least one ${optionLabel.toLowerCase()} option.` };

@@ -101,8 +101,22 @@ export default function NavBar() {
   const initial     = displayName[0]?.toUpperCase() ?? "A";
   const isAdmin      = role === "admin";
 
+  // The role fetch fills memberships; until it lands, "no organisation" is not
+  // yet known, and offering to set one up would flash at an organiser.
+  const rolesLoaded = role !== null;
+
   const portalLinks = (
     <>
+      {rolesLoaded && memberships.length === 0 && (
+        <>
+          <div className="border-t border-white/10 my-1" />
+          <Link href="/organiser-setup" onClick={() => setIsUserOpen(false)}
+            className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+            <Building2 className="w-4 h-4 text-primary/70" /> Become an organiser
+            <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />
+          </Link>
+        </>
+      )}
       {(memberships.length > 0 || isAdmin) && (
         <>
           <div className="border-t border-white/10 my-1" />
@@ -188,7 +202,7 @@ export default function NavBar() {
             {/* Desktop: authenticated user menu */}
             {status === "authenticated" && (
               <div ref={userRef} className="hidden md:block relative">
-                <button onClick={() => setIsUserOpen(o => !o)}
+                <button onClick={() => setIsUserOpen(o => !o)} data-testid="user-menu" aria-label="Account menu"
                   className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                   {profilePic ? (
                     <Image src={profilePic} alt="" width={28} height={28} className="w-7 h-7 rounded-lg object-cover shrink-0" />
@@ -204,7 +218,7 @@ export default function NavBar() {
                 </button>
 
                 {isUserOpen && (
-                  <div className="absolute right-0 top-full mt-1 min-w-[200px] bg-dark-darker border border-white/[0.05] rounded-xl shadow-2xl overflow-hidden">
+                  <div data-testid="user-menu-panel" className="absolute right-0 top-full mt-1 min-w-[200px] bg-dark-darker border border-white/[0.05] rounded-xl shadow-2xl overflow-hidden">
                     <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">My athlete account</div>
                     <Link href="/profile" onClick={() => setIsUserOpen(false)}
                       className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
