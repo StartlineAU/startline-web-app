@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import type { UserEvent } from "@/types";
 import EventMap from "@/components/EventMap";
+import { nextMapSelection } from "@/lib/map-events";
 
 /**
  * The map on an organiser's profile.
@@ -17,8 +18,7 @@ export default function OrganiserEventsMap({ events }: { events: UserEvent[] }) 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const handleMarkerClick = useCallback((id: string) => {
-    // EventMap reports a click on empty map as "".
-    setSelectedId((prev) => (!id || prev === id ? null : id));
+    setSelectedId((prev) => nextMapSelection(prev, id));
   }, []);
 
   return (

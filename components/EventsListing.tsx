@@ -16,6 +16,7 @@ import { selectionLabel } from "@/lib/divisions";
 import { toUserEvents } from "@/lib/user-events";
 import { eventDistance, formatDistance, DEFAULT_RADIUS_KM } from "@/lib/distance";
 import { getEventCoords } from "@/lib/australia-coords";
+import { nextMapSelection } from "@/lib/map-events";
 import { useAuthContext } from "@/context/AuthContext";
 import EventMap from "@/components/EventMap";
 import type { EventMapHandle } from "@/components/EventMap";
@@ -386,12 +387,8 @@ function EventsListingInner() {
   }, [filterSheet]);
 
   const handleSelect = useCallback((id: string) => {
-    if (!id) {
-      setSelectedId(null);
-      return;
-    }
     setSelectedId((prev) => {
-      const next = prev === id ? null : id;
+      const next = nextMapSelection(prev, id);
       if (next) {
         mapRef.current?.flyTo(next);
         mapRef.current?.stopSpin();
