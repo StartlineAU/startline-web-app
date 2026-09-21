@@ -200,6 +200,7 @@ describe("hasBuyableAddOns", () => {
     priceCents: 2500,
     imageUrl: null,
     optionLabel: "Size",
+    merchandiseId: null,
     sortOrder: 0,
     active: true,
     variants: [

@@ -96,6 +96,7 @@ describe("draftsFromCatalogue", () => {
         priceCents: 2500,
         imageUrl: "/u/tee.png",
         optionLabel: "Size",
+        merchandiseId: null,
         sortOrder: 0,
         active: true,
         variants: [
@@ -118,6 +119,7 @@ describe("draftsFromCatalogue", () => {
         priceCents: 2500,
         imageUrl: null,
         optionLabel: "Size",
+        merchandiseId: null,
         sortOrder: 0,
         active: true,
         variants: [

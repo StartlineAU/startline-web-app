@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShoppingBag, RefreshCw, Package, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CardListSkeleton } from "@/components/ui/skeleton";
-import AddOnEditor, { uploadAddOnImages } from "@/components/organiser/AddOnEditor";
+import AddOnEditor, {
+  uploadAddOnImages,
+  publishAddOnsToProfile,
+  PublishToProfileError,
+} from "@/components/organiser/AddOnEditor";
 import {
   type AddOnDraft,
   draftsFromCatalogue,
@@ -70,11 +74,25 @@ export default function AddOnsTab({
   const [error, setError] = useState("");
   const [deciding, setDeciding] = useState<string | null>(null);
 
+  // Counts edits made in the editor. A catalogue response that was already in
+  // flight when the organiser started typing must not replace what they have
+  // written: it arrives holding the server's older products and would take the
+  // unsaved one with it. Saving reloads explicitly, which is what publishes
+  // their work.
+  const edits = useRef(0);
+
+  const editDrafts = useCallback((next: AddOnDraft[]) => {
+    edits.current++;
+    setDrafts(next);
+  }, []);
+
   const loadCatalogue = useCallback(() => {
+    const editsAtStart = edits.current;
     fetch(`/api/organiser/events/${eventId}/add-ons`)
       .then(async (r) => {
         const json = await r.json();
         if (!r.ok) throw new Error(json.error ?? "Failed to load add-ons.");
+        if (edits.current !== editsAtStart) return;
         setDrafts(draftsFromCatalogue(json.addOns ?? []));
       })
       .catch((e: Error) => setError(e.message))
@@ -95,16 +113,20 @@ export default function AddOnsTab({
     try {
       const withImages = await uploadAddOnImages(drafts);
       setDrafts(withImages);
+      const published = await publishAddOnsToProfile(withImages);
+      setDrafts(published);
       const res = await fetch(`/api/organiser/events/${eventId}/add-ons`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addOns: draftsToPayload(withImages) }),
+        body: JSON.stringify({ addOns: draftsToPayload(published) }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not save your add-ons.");
       setDrafts(draftsFromCatalogue(json.addOns ?? []));
       setMessage("Add-ons saved.");
     } catch (e) {
+      // Keep the profile items already published, so a retry does not repeat them.
+      if (e instanceof PublishToProfileError) setDrafts(e.drafts);
       setError(e instanceof Error ? e.message : "Could not save your add-ons.");
     } finally {
       setSaving(false);
@@ -304,7 +326,7 @@ export default function AddOnsTab({
 
           <AddOnEditor
             addOns={drafts}
-            onChange={setDrafts}
+            onChange={editDrafts}
             feeStructure={feeStructure}
             disabled={saving}
           />

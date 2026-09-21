@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   variantUpdate: vi.fn(),
   variantUpdateMany: vi.fn(),
   variantDelete: vi.fn(),
+  merchandiseFindMany: vi.fn(),
 }));
 
 vi.mock("@/lib/organiser-api-auth", () => ({ requireOrganiser: mocks.requireOrganiser }));
@@ -25,6 +26,7 @@ vi.mock("@/lib/organiser-api-auth", () => ({ requireOrganiser: mocks.requireOrga
 vi.mock("@/lib/prisma", () => ({
   default: {
     event: { findUnique: mocks.eventFindUnique },
+    organiserMerchandise: { findMany: mocks.merchandiseFindMany },
     $transaction: mocks.transaction,
   },
 }));
@@ -98,6 +100,7 @@ beforeEach(() => {
   mocks.addOnCreate.mockResolvedValue({ id: "new-addon" });
   mocks.addOnUpdate.mockImplementation(({ where }: { where: { id: string } }) => ({ id: where.id }));
   mocks.transaction.mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
+  mocks.merchandiseFindMany.mockResolvedValue([]);
 });
 
 describe("GET /api/organiser/events/[id]/add-ons", () => {
@@ -299,5 +302,36 @@ describe("PUT /api/organiser/events/[id]/add-ons", () => {
     });
     expect((await put([tee()])).status).toBe(403);
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+});
+
+// The link from an event's product to the organiser's profile item it came
+// from (#338). Provenance only, so an unusable link is dropped, never refused.
+describe("PUT add-ons: profile merchandise links", () => {
+  it("keeps a link to the organiser's own profile item", async () => {
+    mocks.merchandiseFindMany.mockResolvedValue([{ id: "m1" }]);
+    expect((await put([tee({ merchandiseId: "m1" })])).status).toBe(200);
+    expect(mocks.merchandiseFindMany).toHaveBeenCalledWith({
+      where: { id: { in: ["m1"] }, organiserId: ORGANISER },
+      select: { id: true },
+    });
+    expect(mocks.addOnCreate.mock.calls[0][0].data.merchandiseId).toBe("m1");
+  });
+
+  it("drops a link to another organiser's item instead of saving it", async () => {
+    mocks.merchandiseFindMany.mockResolvedValue([]);
+    expect((await put([tee({ merchandiseId: "not-mine" })])).status).toBe(200);
+    expect(mocks.addOnCreate.mock.calls[0][0].data.merchandiseId).toBeNull();
+  });
+
+  it("clears the link when the client no longer sends one", async () => {
+    mocks.addOnFindMany.mockResolvedValue([{ id: "a1", variants: [] }]);
+    await put([tee({ id: "a1" })]);
+    expect(mocks.addOnUpdate.mock.calls[0][0].data.merchandiseId).toBeNull();
+  });
+
+  it("skips the lookup when nothing is linked", async () => {
+    await put([tee()]);
+    expect(mocks.merchandiseFindMany).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,7 @@ import { selectionLabel } from "@/lib/divisions";
 import { toUserEvents } from "@/lib/user-events";
 import { eventDistance, formatDistance, DEFAULT_RADIUS_KM } from "@/lib/distance";
 import { getEventCoords } from "@/lib/australia-coords";
+import { nextMapSelection } from "@/lib/map-events";
 import { useAuthContext } from "@/context/AuthContext";
 import EventMap from "@/components/EventMap";
 import type { EventMapHandle } from "@/components/EventMap";
@@ -27,6 +28,17 @@ import EventAutocomplete from "@/components/ui/EventAutocomplete";
 
 /** Cards in the "Other events you may like" row under a set of results. */
 const OTHER_EVENTS_LIMIT = 6;
+
+/**
+ * Every list of event cards on this page: one column, one card width. Results,
+ * "Other events you may like" and the empty-search suggestions all used to
+ * pick their own column count, so the same card came out at two or three
+ * different sizes depending on where it was (#338).
+ */
+const CARD_LIST = "grid grid-cols-1 gap-4";
+
+/** The card width inside the 372px desktop column, used on every layout. */
+const CARD_COLUMN_WIDTH = "w-full max-w-[340px]";
 
 const DISCIPLINE_OPTIONS = EVENT_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
 const STATE_CHIP_OPTIONS  = STATE_OPTIONS.map((o) => ({ value: o.value, label: o.shortLabel }));
@@ -375,12 +387,8 @@ function EventsListingInner() {
   }, [filterSheet]);
 
   const handleSelect = useCallback((id: string) => {
-    if (!id) {
-      setSelectedId(null);
-      return;
-    }
     setSelectedId((prev) => {
-      const next = prev === id ? null : id;
+      const next = nextMapSelection(prev, id);
       if (next) {
         mapRef.current?.flyTo(next);
         mapRef.current?.stopSpin();
@@ -892,16 +900,13 @@ function EventsListingInner() {
   }, [displayEvents, allEvents]);
 
   /** "Other events you may like", shown under a set of results. */
-  const otherEventsBlock = (size: "lg" | "sm") => (
+  const otherEventsBlock = () => (
     otherEvents.length > 0 ? (
-      <div className={`mt-8 pt-6 border-t border-dark-lighter ${size === "sm" ? "px-1" : ""}`}>
+      <div className="mt-8 pt-6 border-t border-dark-lighter">
         <p className="font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark mb-3">
           Other events you may like
         </p>
-        <div
-          className={size === "lg" ? "grid gap-4 sm:gap-5" : "grid grid-cols-1 lg:grid-cols-2 gap-2"}
-          style={size === "lg" ? { gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" } : undefined}
-        >
+        <div data-testid="other-events" className={CARD_LIST}>
           {otherEvents.map((event) => (
             <EventCard key={event.id} event={event} className="w-full" />
           ))}
@@ -910,25 +915,32 @@ function EventsListingInner() {
     ) : null
   );
 
-  /** Shared "nothing matched" block, sized for the full grid or the map list. */
+  /**
+   * Shared "nothing matched" block, sized for the full list or a side column.
+   * Only the message is padded: the suggested cards sit at the full width of
+   * the column, the same as real results. Padding them too shrank every card
+   * whenever a search came up empty (#338).
+   */
   const noResults = (size: "lg" | "sm") => (
-    <div className={size === "lg" ? "p-10 text-center" : "p-8 text-center"}>
-      <p className={`font-headline font-black italic tracking-tighter text-light mb-2 ${size === "lg" ? "text-2xl" : "text-lg"}`}>
-        No events matched your search.
-      </p>
-      <p className="font-headline text-[13px] text-muted mb-4">
-        Nothing here fits every filter you have set. Try removing one, or take a look at these.
-      </p>
-      <button onClick={clearFilters}
-        className={`font-headline font-medium uppercase tracking-widest border border-primary text-primary hover:bg-primary hover:text-dark transition-colors rounded-full ${size === "lg" ? "text-sm px-5 py-2.5" : "text-xs px-4 py-2"}`}
-      >Clear Filters</button>
+    <div>
+      <div className={size === "lg" ? "p-10 text-center" : "px-4 py-8 text-center"}>
+        <p className={`font-headline font-black italic tracking-tighter text-light mb-2 ${size === "lg" ? "text-2xl" : "text-lg"}`}>
+          No events matched your search.
+        </p>
+        <p className="font-headline text-[13px] text-muted mb-4">
+          Nothing here fits every filter you have set. Try removing one, or take a look at these.
+        </p>
+        <button onClick={clearFilters}
+          className={`font-headline font-medium uppercase tracking-widest border border-primary text-primary hover:bg-primary hover:text-dark transition-colors rounded-full ${size === "lg" ? "text-sm px-5 py-2.5" : "text-xs px-4 py-2"}`}
+        >Clear Filters</button>
+      </div>
 
       {suggestions && (
-        <div className="mt-8 text-left">
+        <div>
           <p className="font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark mb-3">
             All events
           </p>
-          <div className={`grid gap-2 ${size === "lg" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
+          <div data-testid="suggested-events" className={CARD_LIST}>
             {suggestions.map((event) => (
               <EventCard key={event.id} event={event} className="w-full" />
             ))}
@@ -955,21 +967,23 @@ function EventsListingInner() {
     </div>
   );
 
-  /* Phones and tablets: the plain card grid, unchanged. Rendered instead of
-     the split, never alongside it, so the listing holds one copy of the
-     results rather than two with one hidden. */
+  /* Phones and tablets: one centred column of cards. Rendered instead of the
+     split, never alongside it, so the listing holds one copy of the results
+     rather than two with one hidden. A tablet used to fit two columns here. */
   const gridContent = (
     <div className={view === "list" ? "flex-1 overflow-y-auto px-3 py-4" : "hidden"}>
-      {displayEvents.length === 0 ? emptyState : (
-        <>
-          <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
-            {displayEvents.map((event) => (
-              <EventCard key={event.id} event={event} className="w-full" />
-            ))}
-          </div>
-          {otherEventsBlock("lg")}
-        </>
-      )}
+      <div className={`${CARD_COLUMN_WIDTH} mx-auto`}>
+        {displayEvents.length === 0 ? emptyState : (
+          <>
+            <div className={CARD_LIST}>
+              {displayEvents.map((event) => (
+                <EventCard key={event.id} event={event} className="w-full" />
+              ))}
+            </div>
+            {otherEventsBlock()}
+          </>
+        )}
+      </div>
     </div>
   );
 
@@ -983,7 +997,7 @@ function EventsListingInner() {
           noResults("sm")
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4">
+            <div className={CARD_LIST}>
               {displayEvents.map((event) => (
                 <EventCard
                   key={event.id}
@@ -994,7 +1008,7 @@ function EventsListingInner() {
                 />
               ))}
             </div>
-            {otherEventsBlock("sm")}
+            {otherEventsBlock()}
           </>
         )}
       </div>
@@ -1027,17 +1041,17 @@ function EventsListingInner() {
     <div className={view === "map" ? "flex flex-col lg:flex-row flex-1 min-h-0" : "hidden"}>
       {/* Phones show the map alone in this tab — a 32vh list on top of a short
           map left neither usable. The List tab is the list. */}
-      <div ref={listRef} className="hidden lg:flex flex-col w-full lg:flex-1 lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-dark-lighter bg-dark-darker overflow-y-auto lg:max-h-none px-4 py-3 lg:py-4">
+      <div ref={listRef} className="hidden lg:flex flex-col lg:w-[372px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-dark-lighter bg-dark-darker overflow-y-auto lg:max-h-none px-4 py-3 lg:py-4">
         {displayEvents.length === 0 ? (
           noResults("sm")
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            <div className={CARD_LIST}>
               {displayEvents.map((event) => (
                 <EventCard key={event.id} event={event} className="w-full" selected={selectedId === event.id} onSelect={() => handleSelect(event.id)} />
               ))}
             </div>
-            {otherEventsBlock("sm")}
+            {otherEventsBlock()}
           </>
         )}
       </div>

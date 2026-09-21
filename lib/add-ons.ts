@@ -5,6 +5,8 @@
  * so a limit or a label is defined exactly once.
  */
 
+import { isAllowedImageUrl } from "@/lib/image-urls";
+
 /** Products one event may offer. Keeps the wizard section and the picker short. */
 export const MAX_ADD_ONS = 6;
 
@@ -120,6 +122,11 @@ export interface AddOnInput {
   imageUrl: string | null;
   optionLabel: string;
   variants: AddOnVariantInput[];
+  /**
+   * The organiser's profile item this was copied from or published to. The
+   * route drops it unless that item belongs to the same organiser.
+   */
+  merchandiseId?: string;
 }
 
 /**
@@ -163,6 +170,10 @@ export function sanitizeAddOnInput(input: unknown): AddOnInput[] | { error: stri
 
     const imageUrl = String(a.imageUrl ?? "").trim();
     if (imageUrl.length > 2000) return { error: "An add-on image URL is too long." };
+    // Same rule as the profile's: only a photo we host renders on the page.
+    if (imageUrl && !isAllowedImageUrl(imageUrl)) {
+      return { error: `The photo for "${name}" must be one you uploaded.` };
+    }
 
     if (!Array.isArray(a.variants) || a.variants.length === 0) {
       return { error: `"${name}" needs at least one ${optionLabel.toLowerCase()} option.` };
@@ -197,8 +208,11 @@ export function sanitizeAddOnInput(input: unknown): AddOnInput[] | { error: stri
     }
 
     const id = String(a.id ?? "").trim();
+    const merchandiseId = String(a.merchandiseId ?? "").trim();
+    if (merchandiseId.length > 64) return { error: "Invalid merchandise link." };
     out.push({
       ...(id ? { id } : {}),
+      ...(merchandiseId ? { merchandiseId } : {}),
       name,
       description: description || null,
       priceCents: priceRaw,

@@ -83,6 +83,13 @@ The browser uploads straight to S3 instead:
 | 2 | `POST` to the S3 URL | Browser sends the bytes. No size ceiling |
 | 3 | `POST /api/upload/complete` | Ranged GET of the first 16 bytes, magic-byte check, deletes the object if it fails |
 
+Each upload type carries its own MIME allowlist and size cap in
+`lib/upload-limits.ts`, and both upload routes read them, so adding a type is
+enough to enforce it everywhere. Every image type takes JPEG, PNG or WebP —
+**no GIF anywhere** — and a file picker's `accept` must come from `TYPE_MIMES`
+rather than `image/*`, or the dialog offers files the routes then refuse.
+Merchandise photos (`merch`) cap at 5 MB against 10 MB for every other image.
+
 `lib/upload-client.ts` (`uploadFile`) drives all three and is the only thing
 UI should call. `/api/upload` still exists and still reads bytes itself, but
 only serves local dev and the Docker image, where there is no bucket — presign
@@ -126,11 +133,30 @@ All seed users share password `Password123!`.
 |---|---|
 | `marcus.stirling@startline.test` | Admin (`admins` group), MFA enabled in seed |
 | `sarah.mitchell@startline.test` | User + Organiser (Apex Endurance Events, verified) |
-| `jade.nguyen@startline.test` | User only |
+| `jade.nguyen@startline.test` | User + Organiser (Coastal Fitness Collective) |
+| `harper.jones@startline.test` | User only — the seed's one account with no organisation |
 
 Old Cognito users from previous seeds not auto-removed — delete manually or via Terraform reset.
 
 `middleware.ts` routes by hostname in production. Dev mode (`NODE_ENV=development`) skips all domain checks — everything at `localhost:3000`. Protects path lists: `ORGANISER_PROTECTED`, `ADMIN_PROTECTED`.
+
+### Getting into the organiser portal
+
+"Organiser Login" (`/organiser`) and "Become an organiser" (`/organiser-setup`)
+are two doors to one journey. Neither asks the visitor which they are; both
+resolve it server-side from what they already have (#338):
+
+| Visitor | `/organiser` | `/organiser-setup` |
+|---|---|---|
+| Owns or belongs to an organisation | `/organiser/dashboard` | `/organiser/dashboard` |
+| Signed in, no organisation | `/organiser-setup` | the setup form |
+| Signed out | the landing page | sign-in prompt, then the form |
+
+`getOrganiserSession()` is what "has an organisation" means, so a MANAGER on
+someone else's organisation counts and is never offered a second one. Keep both
+gates server-side: `AuthContext` only learns about memberships after a fetch, so
+a client-side check flashes the wrong page first. The athlete header dropdown
+carries the same fork, listing each organisation or offering to set one up.
 
 ### MFA + Passkeys
 
@@ -181,6 +207,31 @@ Admin and organiser E2E tests use a `__e2e_bypass` cookie instead of real Cognit
 | `mfa.spec.ts`, `checkout.spec.ts`, etc. | None | No |
 
 The bypass works in middleware, `getServerSession()`, and `AuthContext` via `document.cookie.includes("__e2e_bypass=1")`. No env var needed.
+
+The cookie's **value** picks the identity, from the table in `lib/amplify-server.ts`:
+
+| Value | Who | Organisations |
+|---|---|---|
+| `organiser` | Sarah Mitchell | Owns Apex Endurance Events |
+| `member` | Tom Whitfield | Manages Apex Endurance Events |
+| `avery` | Avery Quinn | Manages two |
+| `user` | Jade Nguyen | Owns Coastal Fitness Collective |
+| `admin` | Marcus Stirling | None, in the `admins` group |
+| `athlete` | Harper Jones | **None** |
+
+Only `athlete` has no organisation, so it is the one for "become an organiser"
+paths: every other identity is now redirected to its portal instead of being
+offered the setup form. A spec that creates an organisation for it must delete
+it again (see `organiser.spec.ts`), or the next run is redirected too.
+
+Specs that read or clean up the database directly call `ensureDatabaseUrl()`
+from `e2e/helpers.ts` first. `DATABASE_URL` lives in `.env.local` in a worktree
+and in `.env` in a plain checkout, and dotenv allows it to be quoted, so
+reading one file without stripping quotes leaves Prisma with no password.
+
+Avoid `waitForLoadState("networkidle")` on organiser portal pages: the navbar
+polls for notifications every 30 seconds, so the network never goes idle and
+the wait burns the whole test timeout. Wait for an element instead.
 
 **Run E2E without Cognito:** `npx playwright test` — 93+ tests pass, 2 auth signup tests skip.
 

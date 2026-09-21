@@ -64,6 +64,86 @@ test.describe("events page", () => {
     expect(await cards.count()).toBeGreaterThan(5);
   });
 
+  // Every list of cards on this page is one column at one width (#338). It
+  // used to depend on where the list was: two squashed columns under "Other
+  // events", narrower cards when a search came up empty, two columns in the
+  // map tab and on a tablet.
+  const cardWidths = (page: Page) =>
+    page.getByTestId("event-card").filter({ visible: true }).evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: Math.round(r.left), width: Math.round(r.width) };
+      }));
+
+  const expectOneColumn = async (page: Page) => {
+    const cards = await cardWidths(page);
+    expect(cards.length).toBeGreaterThan(1);
+    expect(new Set(cards.map((c) => c.left)).size).toBe(1);
+    expect(new Set(cards.map((c) => c.width)).size).toBe(1);
+    return cards[0].width;
+  };
+
+  test("other events sit in a single column beside the detail pane", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/events?view=list&type=running");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("other-events").filter({ visible: true })).toBeVisible({ timeout: 10000 });
+    await expectOneColumn(page);
+  });
+
+  test("an empty search suggests cards at the same size as real results", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/events?view=list");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("event-card").filter({ visible: true }).first()).toBeVisible({ timeout: 10000 });
+    const resultWidth = await expectOneColumn(page);
+
+    await page.goto("/events?view=list&what=zzzznomatch");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("suggested-events").filter({ visible: true })).toBeVisible({ timeout: 10000 });
+    expect(await expectOneColumn(page)).toBe(resultWidth);
+  });
+
+  test("the map tab lists cards in a single column", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/events?view=map");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("event-card").filter({ visible: true }).first()).toBeVisible({ timeout: 10000 });
+    await expectOneColumn(page);
+  });
+
+  test("a tablet lists cards in a single column", async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 1100 });
+    await page.goto("/events?view=list");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("event-card").filter({ visible: true }).first()).toBeVisible({ timeout: 10000 });
+    await expectOneColumn(page);
+  });
+
+  // On a phone the full footer covered most of the screen under the listing
+  // (#338). App screens get the one-row portal footer; marketing pages keep
+  // the full one.
+  test("uses the compact footer on the events page and the full one on the home page", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const tagline = page.locator("footer").getByText(/Fitness\s*Event Calendar/i);
+
+    await page.goto("/events");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("footer")).toBeAttached();
+    await expect(tagline).toHaveCount(0);
+    const height = await page.locator("footer").evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBeLessThan(260);
+
+    // The compact footer keeps the way into the organiser portal.
+    const organiserLogin = page.locator("footer").getByRole("link", { name: "Organiser Login" });
+    await expect(organiserLogin).toBeVisible();
+    await expect(organiserLogin).toHaveAttribute("href", "/organiser");
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await expect(tagline).toHaveCount(1);
+  });
+
   test("omits the other-events row when every event is already listed", async ({ page }) => {
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");

@@ -85,6 +85,7 @@ model Organiser {
   registrations Registration[]
   follows       OrganiserFollow[]
   members       OrganiserMember[]
+  merchandise   OrganiserMerchandise[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -446,6 +447,12 @@ model EventAddOn {
   // still resolve; they just leave the athlete's picker.
   active    Boolean @default(true)
 
+  // The profile item this was copied from or published to, if any. Only a
+  // provenance link: the two are edited independently, so changing the event's
+  // copy never changes the public profile and vice versa.
+  merchandiseId String?
+  merchandise   OrganiserMerchandise? @relation(fields: [merchandiseId], references: [id], onDelete: SetNull)
+
   variants  EventAddOnVariant[]
   purchases RegistrationAddOn[]
 
@@ -453,7 +460,40 @@ model EventAddOn {
   updatedAt DateTime @updatedAt
 
   @@index([eventId])
+  @@index([merchandiseId])
   @@map("event_add_ons")
+}
+
+// An organiser's public merchandise, shown on their profile (#338).
+//
+// A showcase and a template, not a point of sale. Nothing here is bought
+// directly and nothing here holds stock: an organiser copies an item into an
+// event's checkout (EventAddOn), which is where price, stock and purchases
+// live. Keeping the two apart is what lets an event sell a variant exclusively
+// without it appearing on the profile.
+model OrganiserMerchandise {
+  id          String    @id @default(uuid())
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  // Usual price, integer cents (AUD). An event's copy may charge differently.
+  priceCents  Int
+  imageUrl    String?
+  optionLabel String   @default("Size")
+  // The option values, in display order, e.g. ["S", "M", "L"].
+  options     String[]
+
+  sortOrder Int @default(0)
+
+  eventAddOns EventAddOn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organiserId])
+  @@map("organiser_merchandise")
 }
 
 // One choosable value of a product's option group, e.g. the "M" of a tee.

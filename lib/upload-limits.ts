@@ -3,12 +3,16 @@
 // the event wizard are deferred to submit, so without the client-side check an
 // oversized file is accepted silently and only fails five steps later.
 
-export type UploadType = "logo" | "cover" | "photo" | "video" | "avatar" | "document";
+export type UploadType = "logo" | "cover" | "photo" | "merch" | "video" | "avatar" | "document";
 
 export const UPLOAD_LIMITS: Record<UploadType, { bytes: number; label: string }> = {
   logo:     { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   cover:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   photo:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
+  // Merchandise photos are shown at a few hundred pixels on a card, so a
+  // tighter cap than the 10 MB gallery one is plenty and keeps an organiser
+  // from uploading a 9 MB camera original per t-shirt (#338).
+  merch:    { bytes: 5 * 1024 * 1024,   label: "Photo must be 5 MB or smaller."   },
   avatar:   { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   video:    { bytes: 200 * 1024 * 1024, label: "Video must be 200 MB or smaller." },
   document: { bytes: 15 * 1024 * 1024,  label: "PDF must be 15 MB or smaller."    },
@@ -24,15 +28,20 @@ export function uploadSizeError(type: string, size: number): string | null {
 }
 
 // The MIME allowlist per upload type, and the extension each MIME maps to.
+//
+// Still photos only: no GIF anywhere on the site. matchesMagicBytes still
+// sniffs GIF, and MIME_EXT still maps it, so re-allowing it stays a one-line
+// change that is verified rather than waved through by the sniffer's default.
 // Shared by /api/upload (which reads the bytes itself) and /api/upload/presign
 // (which signs a direct-to-S3 POST). Keeping one copy matters: the presign
 // route pins Content-Type as a signature condition, so a divergence here would
 // let S3 reject an upload the route had already approved.
 export const TYPE_MIMES: Record<UploadType, string[]> = {
-  logo:     ["image/jpeg", "image/png", "image/webp", "image/gif"],
-  cover:    ["image/jpeg", "image/png", "image/webp", "image/gif"],
-  photo:    ["image/jpeg", "image/png", "image/webp", "image/gif"],
-  avatar:   ["image/jpeg", "image/png", "image/webp", "image/gif"],
+  logo:     ["image/jpeg", "image/png", "image/webp"],
+  cover:    ["image/jpeg", "image/png", "image/webp"],
+  photo:    ["image/jpeg", "image/png", "image/webp"],
+  merch:    ["image/jpeg", "image/png", "image/webp"],
+  avatar:   ["image/jpeg", "image/png", "image/webp"],
   video:    ["video/mp4", "video/webm", "video/quicktime", "video/avi", "video/ogg"],
   document: ["application/pdf"],
 };

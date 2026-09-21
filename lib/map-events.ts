@@ -26,3 +26,17 @@ export function hasCoordinates(event: UserEvent): boolean {
 export function filterMapEvents(events: UserEvent[]): UserEvent[] {
   return events.filter(hasCoordinates);
 }
+
+/**
+ * The selection a map click leaves behind. EventMap reports a click on empty
+ * map as "", and only the selected pin draws the expanded card with its More
+ * Info and Register buttons, so this is what decides whether that card is open
+ * (#338).
+ *
+ * Tapping the open pin again closes it, which is what makes a pin a toggle
+ * rather than a one-way trip.
+ */
+export function nextMapSelection(previous: string | null, clicked: string): string | null {
+  if (!clicked) return null;
+  return previous === clicked ? null : clicked;
+}

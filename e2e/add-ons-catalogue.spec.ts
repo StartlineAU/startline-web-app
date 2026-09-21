@@ -141,10 +141,10 @@ test.describe("organiser add-on catalogue", () => {
       .setInputFiles({
         name: "huge.png",
         mimeType: "image/png",
-        buffer: Buffer.alloc(11 * 1024 * 1024, 1),
+        buffer: Buffer.alloc(6 * 1024 * 1024, 1),
       });
 
-    await expect(page.getByText(/image must be 10 MB or smaller/i)).toBeVisible();
+    await expect(page.getByText(/photo must be 5 MB or smaller/i)).toBeVisible();
     await expect(page.locator('button[aria-label="Photo for add-on 1"] img')).toHaveCount(0);
   });
 
@@ -168,7 +168,7 @@ test.describe("organiser add-on catalogue", () => {
       .setInputFiles({
         name: "huge.png",
         mimeType: "image/png",
-        buffer: Buffer.alloc(11 * 1024 * 1024, 1),
+        buffer: Buffer.alloc(6 * 1024 * 1024, 1),
       });
 
     // The rejection message is a sibling of its own product's photo button, so
@@ -178,8 +178,9 @@ test.describe("organiser add-on catalogue", () => {
     const photo = (slot: number) => page.locator(`button[aria-label="Photo for add-on ${slot}"] img`);
 
     await expect(photo(1)).toBeVisible();
-    await expect(rejection(1)).toHaveCount(0);
-    await expect(rejection(2)).toHaveText(/image must be 10 MB or smaller/i);
+    // Every photo slot states the rule; only a rejected one turns red.
+    await expect(rejection(1)).toHaveText(/JPG, PNG or WebP, up to 5 MB/i);
+    await expect(rejection(2)).toHaveText(/photo must be 5 MB or smaller/i);
 
     // Move the cap above the tee. Rows are keyed on a stable draft key, so both
     // the preview and the rejection follow their product. Keyed on the array
@@ -189,12 +190,12 @@ test.describe("organiser add-on catalogue", () => {
     await expect(page.locator("#addon-name-0")).toHaveValue("Cap");
 
     // Slot 1 is now the cap: its rejection came with it, and it still has no photo.
-    await expect(rejection(1)).toHaveText(/image must be 10 MB or smaller/i);
+    await expect(rejection(1)).toHaveText(/photo must be 5 MB or smaller/i);
     await expect(photo(1)).toHaveCount(0);
 
     // Slot 2 is the tee, photo intact and no rejection of its own.
     await expect(photo(2)).toBeVisible();
-    await expect(rejection(2)).toHaveCount(0);
+    await expect(rejection(2)).toHaveText(/JPG, PNG or WebP, up to 5 MB/i);
     await expect
       .poll(() => photo(2).evaluate((img: HTMLImageElement) => img.naturalWidth))
       .toBeGreaterThan(0);
