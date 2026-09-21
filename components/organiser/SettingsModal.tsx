@@ -11,6 +11,7 @@ import {
 import { useSettings, type SettingsSection } from "@/context/SettingsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { uploadFile } from "@/lib/upload-client";
+import { TYPE_MIMES } from "@/lib/upload-limits";
 
 // ── shared form primitives ──────────────────────────────────────────────────
 
@@ -348,7 +349,7 @@ function PersonalInfoForm() {
             onDone={handleSave}
             fileRef={coverRef}
           />
-          <input ref={coverRef} type="file" accept="image/*" className="sr-only"
+          <input ref={coverRef} type="file" accept={TYPE_MIMES.cover.join(",")} className="sr-only"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleCoverUpload(f); }} />
         </div>
         <div>
@@ -358,7 +359,7 @@ function PersonalInfoForm() {
             uploading={logoUploading} onUpload={handleLogoUpload}
             onPositionChange={pos => patch({ logoPosition: pos })} onDone={handleSave} fileRef={logoRef}
           />
-          <input ref={logoRef} type="file" accept="image/*" className="sr-only"
+          <input ref={logoRef} type="file" accept={TYPE_MIMES.logo.join(",")} className="sr-only"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); }} />
         </div>
       </div>

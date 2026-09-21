@@ -13,7 +13,7 @@ import {
   AlignLeft, Trophy, FileText, AlertTriangle,
 } from "lucide-react";
 import { encodePrizePool, parsePrizePool, normalisePrizeAmount } from "@/lib/prize-pool";
-import { UPLOAD_LIMITS } from "@/lib/upload-limits";
+import { UPLOAD_LIMITS, TYPE_MIMES } from "@/lib/upload-limits";
 import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
@@ -964,7 +964,7 @@ function MediaStep({ form, update }: { form: FormState; update: (p: Partial<Form
               <span className="font-headline text-[10px] uppercase tracking-widest text-light mt-1">JPG · PNG · WEBP · 1920×1080</span>
             </div>
           )}
-          <input type="file" accept="image/*" className="sr-only"
+          <input type="file" accept={TYPE_MIMES.cover.join(",")} className="sr-only"
             onChange={e => { pickCover(e.target.files?.[0] ?? null); e.target.value = ""; }} />
         </label>
         {coverError && (
@@ -986,7 +986,7 @@ function MediaStep({ form, update }: { form: FormState; update: (p: Partial<Form
             <label className="aspect-square rounded-md border-2 border-dashed border-dark-lighter hover:border-primary/40 bg-dark-light flex flex-col items-center justify-center cursor-pointer transition-colors">
               <Plus className="w-5 h-5 text-primary mb-1" />
               <span className="font-headline text-[9px] font-bold uppercase tracking-widest text-light">Add photos</span>
-              <input type="file" accept="image/*" multiple className="sr-only"
+              <input type="file" accept={TYPE_MIMES.photo.join(",")} multiple className="sr-only"
                 onChange={e => { addGalleryFiles(e.target.files); e.target.value = ""; }} />
             </label>
           )}

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { AlertCircle, Check, CheckCircle, Upload, X } from "lucide-react";
 import { GENDER_OPTIONS, maxDateOfBirthForMinAge } from "@/lib/registration-form";
 import { uploadFile } from "@/lib/upload-client";
+import { TYPE_MIMES } from "@/lib/upload-limits";
 
 const inputCls =
   "w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
@@ -318,7 +319,7 @@ export default function UserEditProfileModal({ open, initial, onClose, onSaved }
                 <input
                   ref={avatarRef}
                   type="file"
-                  accept="image/*"
+                  accept={TYPE_MIMES.avatar.join(",")}
                   className="sr-only"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
