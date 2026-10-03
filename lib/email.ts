@@ -101,7 +101,9 @@ export async function sendGuestRegistrationVerificationEmail(details: GuestRegis
 }
 
 // ── Event approved ────────────────────────────────────────────────────────────
-export async function sendEventApprovedEmail(email: string, eventTitle: string) {
+// `to` is every recipient on one message. They all belong to the same
+// organisation, so seeing each other's address is expected.
+export async function sendEventApprovedEmail(email: string | string[], eventTitle: string) {
   const resend = getResend();
   if (!resend) return;
   await resend.emails.send({
@@ -276,7 +278,7 @@ export async function sendFollowedOrganiserEventEmail(
 }
 
 // ── Event rejected ────────────────────────────────────────────────────────────
-export async function sendEventRejectedEmail(email: string, eventTitle: string, reason?: string) {
+export async function sendEventRejectedEmail(email: string | string[], eventTitle: string, reason?: string) {
   const resend = getResend();
   if (!resend) return;
   await resend.emails.send({

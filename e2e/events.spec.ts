@@ -52,6 +52,27 @@ test.describe("events page", () => {
     await expect(page).toHaveURL(/\/events\/[^?]+$/);
   });
 
+  // Back used to land on the list whichever tab the visitor had left (#340).
+  test("back from an event opened on the map returns to the map", async ({ page }) => {
+    await page.goto("/events");
+    await expect(page.getByTestId("event-card").filter({ visible: true }).first()).toBeVisible({ timeout: 20000 });
+
+    await viewToggle(page, "map").click();
+    await expect(page).toHaveURL(/[?&]view=map/);
+
+    await page.locator("div.cursor-pointer").filter({ visible: true }).first().click();
+    await page.getByTestId("event-more-info").filter({ visible: true }).first().click();
+    await expect(page).toHaveURL(/\/events\/[^?]+$/);
+
+    await page.getByRole("link", { name: "Back to Events" }).click();
+    await expect(page).toHaveURL(/\/events\?.*view=map/);
+    await expect(viewToggle(page, "list")).toBeVisible();
+
+    // Switching back drops the marker, so the list stays the default tab.
+    await viewToggle(page, "list").click();
+    await expect(page).not.toHaveURL(/view=map/);
+  });
+
   test("offers other events beneath a set of results", async ({ page }) => {
     await page.goto("/events?view=list&type=running");
     await page.waitForLoadState("networkidle");

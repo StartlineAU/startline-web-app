@@ -78,6 +78,10 @@ model Organiser {
   stripeAccountId          String? @unique
   stripeOnboardingComplete Boolean @default(false)
 
+  // Whether MANAGER members see the organisation's notifications and are
+  // copied on its emails. Owners always are. Only an OWNER can change it.
+  notifyManagers Boolean @default(true)
+
   events        Event[]
   reviews       Review[]
   announcements Announcement[]

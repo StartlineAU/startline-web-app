@@ -17,7 +17,9 @@ export interface GeocodeResult {
  * Resolve free text to a place via AWS Location Service.
  *
  * Returns null rather than throwing when the lookup fails or credentials are
- * absent, so callers can fall back to whatever they can compute locally. This
+ * absent, so callers can fall back to whatever they can compute locally. The
+ * failure is logged first: a refused call used to look exactly like a place
+ * with no match, which hid a missing IAM permission for weeks (issue #311). This
  * is the only place that talks to the geocoder, so callers on the server can
  * use it directly instead of making an HTTP round trip to /api/places/geocode.
  */
@@ -26,7 +28,12 @@ export async function geocodePlace(q: string): Promise<GeocodeResult | null> {
   if (!query) return null;
 
   try {
-    const res = await client.send(new GeocodeCommand({ QueryText: query }));
+    // Australia only, as autocomplete is. Unfiltered, "St Kilda" resolves to
+    // the one in Scotland and every event ends up 17,000km away.
+    const res = await client.send(new GeocodeCommand({
+      QueryText: query,
+      Filter: { IncludeCountries: ["AUS"] },
+    }));
     const item = res.ResultItems?.[0];
     if (!item?.Address) return null;
 
@@ -40,7 +47,8 @@ export async function geocodePlace(q: string): Promise<GeocodeResult | null> {
       latitude: item.Position?.[1] ?? null,
       longitude: item.Position?.[0] ?? null,
     };
-  } catch {
+  } catch (err) {
+    console.error("[geocode] AWS Location Service lookup failed:", err);
     return null;
   }
 }

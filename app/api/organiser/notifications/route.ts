@@ -4,6 +4,18 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 
 const markReadSchema = z.object({ ids: z.array(z.string().min(1).max(255)).optional() });
+
+// Notifications belong to the organisation, so every member used to see them.
+// The owner can now keep them to owners (Organiser.notifyManagers).
+async function managerIsExcluded(session: { sub: string; role: string }): Promise<boolean> {
+  if (session.role === "OWNER") return false;
+  const organiser = await prisma.organiser.findUnique({
+    where:  { id: session.sub },
+    select: { notifyManagers: true },
+  });
+  return organiser?.notifyManagers === false;
+}
+
 // GET /api/organiser/notifications
 // Returns the 30 most recent notifications; includes unread count in header
 export async function GET() {
@@ -12,6 +24,10 @@ export async function GET() {
   const session = auth.session;
 
   try {
+    if (await managerIsExcluded(session)) {
+      return NextResponse.json({ notifications: [], unreadCount: 0 });
+    }
+
     const notifications = await prisma.notification.findMany({
       where:   { organiserId: session.sub },
       orderBy: { createdAt: "desc" },
@@ -40,6 +56,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid input." }, { status: 400 });
     }
     const ids = parsed.data.ids;
+
+    // Read state is shared across the organisation, so a manager who cannot
+    // see the notifications must not be able to clear them for the owner.
+    if (await managerIsExcluded(session)) return NextResponse.json({ ok: true });
 
     await prisma.notification.updateMany({
       where: {

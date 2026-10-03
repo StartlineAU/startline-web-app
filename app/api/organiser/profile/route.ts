@@ -23,6 +23,8 @@ const organiserProfileSchema = z.object({
   dob: z.string().max(20).nullable().optional(),
 });
 
+const notificationSettingsSchema = z.object({ notifyManagers: z.boolean() });
+
 export async function GET() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -38,6 +40,7 @@ export async function GET() {
         bio: true, logoUrl: true, logoPosition: true, coverImageUrl: true, coverPosition: true, photos: true,
         legalName: true, insuranceDeclared: true, dob: true,
         stripeAccountId: true, stripeOnboardingComplete: true,
+        notifyManagers: true,
         _count: { select: { follows: true } },
       },
     });
@@ -47,7 +50,9 @@ export async function GET() {
     }
 
     const { _count, ...rest } = organiser;
-    return NextResponse.json({ ...rest, followerCount: _count.follows });
+    // `role` is the caller's own, so the settings UI knows whether to offer
+    // owner-only controls. The server still enforces them.
+    return NextResponse.json({ ...rest, followerCount: _count.follows, role: session.role });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
@@ -104,6 +109,37 @@ export async function PUT(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+}
+
+// PATCH /api/organiser/profile
+// Body: { notifyManagers: boolean }. Owner only: it decides what the
+// organisation's managers are told, so a manager cannot grant it to themselves.
+export async function PATCH(req: NextRequest) {
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
+
+  const parsed = notificationSettingsSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+  }
+
+  if (session.role !== "OWNER") {
+    return NextResponse.json(
+      { error: "Only an Owner can change who receives notifications." },
+      { status: 403 },
+    );
+  }
+
+  try {
+    await prisma.organiser.update({
+      where: { id: session.sub },
+      data:  { notifyManagers: parsed.data.notifyManagers },
+    });
+    return NextResponse.json({ ok: true, notifyManagers: parsed.data.notifyManagers });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }

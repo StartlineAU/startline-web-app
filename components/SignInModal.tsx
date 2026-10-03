@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 import Image from "next/image";
 import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, ChevronDown, Check, AtSign, ShieldAlert } from "lucide-react";
 import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
@@ -38,6 +40,8 @@ function totpUri(details: unknown): string | null {
 }
 
 export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalProps) {
+  // The modal also opens on the organiser portal, where /contact does not exist.
+  const contactHref = customerHref("/contact", usePortalHost());
   const router      = useRouter();
   const { refresh } = useAuthContext();
 
@@ -729,7 +733,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
               <p className="text-muted text-[14px] leading-relaxed">
                 {mfaStep === "select" && "Select how you'd like to verify your identity."}
                 {mfaStep === "setup"  && "Scan the QR code with your authenticator app, then enter the code shown."}
-                {mfaStep === "challenge" && "Enter the 6-digit code from your authenticator app."}
+                {mfaStep === "challenge" && "Open the authenticator app you set up for Startline and enter the 6-digit code it shows. This code is never sent by email or text."}
               </p>
             </div>
 
@@ -802,6 +806,12 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                 <button type="submit" disabled={loading || totpCode.length < 6} className={btnCls}>
                   {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Verifying…</> : <>Verify & sign in <ArrowRight className="w-4 h-4" /></>}
                 </button>
+                {/* Nothing can be resent here: the code only exists in the app
+                    (issue #320). Someone without it needs a person to help. */}
+                <p className="text-muted text-[13px] leading-relaxed text-center">
+                  Lost access to your authenticator app?{" "}
+                  <Link href={contactHref} onClick={onClose} className="text-primary hover:underline">Contact us</Link>
+                </p>
               </form>
             )}
           </>

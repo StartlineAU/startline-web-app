@@ -430,7 +430,85 @@ function PersonalInfoForm() {
 
 // ── Section content ──────────────────────────────────────────────────────────
 
+// These rows report a fixed state. They used to draw a switch, which read as
+// a control that was broken (issue #346).
+function FixedState({ on, children }: { on: boolean; children: React.ReactNode }) {
+  return (
+    <span className={`shrink-0 font-headline text-[10px] font-bold uppercase tracking-widest border rounded-full px-2.5 py-1 ${on ? "border-primary/40 text-primary" : "border-dark-lighter text-muted-dark"}`}>
+      {children}
+    </span>
+  );
+}
+
+// The one notification setting that is a real control: whether the people who
+// help manage the organisation are told what the owner is told. Only an owner
+// can change it, and the API enforces that; a manager sees the current state.
+function NotifyManagersSetting() {
+  const [state, setState] = useState<{ on: boolean; isOwner: boolean } | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState("");
+
+  useEffect(() => {
+    fetch("/api/organiser/profile")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) { setLoadFailed(true); return; }
+        setState({ on: data.notifyManagers !== false, isOwner: data.role === "OWNER" });
+      })
+      .catch(() => setLoadFailed(true));
+  }, []);
+
+  const toggle = async () => {
+    if (!state || !state.isOwner || saving) return;
+    const next = !state.on;
+    setSaving(true); setError("");
+    setState({ ...state, on: next });
+    try {
+      const res = await fetch("/api/organiser/profile", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notifyManagers: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setState({ ...state, on: !next });
+        setError(data.error ?? "Could not save. Please try again.");
+      }
+    } catch {
+      setState({ ...state, on: !next });
+      setError("Could not save. Please try again.");
+    } finally { setSaving(false); }
+  };
+
+  // Without the current value there is nothing honest to show.
+  if (loadFailed) return null;
+  if (!state) return <Skeleton className="h-16 w-full rounded-lg mt-6" />;
+
+  return (
+    <div className="mt-6 border border-dark-lighter rounded-lg p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div id="notify-managers-label" className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">Include managers</div>
+          <div className="text-[11px] text-muted-dark mt-0.5">
+            Managers of this organisation see these notifications and are copied on the emails.
+          </div>
+        </div>
+        <button type="button" role="switch" aria-checked={state.on} aria-labelledby="notify-managers-label"
+          onClick={toggle} disabled={!state.isOwner || saving}
+          className={`relative w-9 h-5 rounded-full shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${state.on ? "bg-primary" : "bg-white/10"}`}>
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform ${state.on ? "translate-x-4 bg-dark" : "bg-muted"}`} />
+        </button>
+      </div>
+      {!state.isOwner && (
+        <p className="text-[11px] text-muted-dark mt-3">Only the owner can change this.</p>
+      )}
+      {error && <p className="text-[11px] text-red-400 mt-3">{error}</p>}
+    </div>
+  );
+}
+
 function SectionContent({ section }: { section: SettingsSection }) {
+  const { close } = useSettings();
   switch (section) {
     case "personal":
       return <PersonalInfoForm />;
@@ -450,7 +528,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
       return (
         <div>
           <p className="text-[13px] text-muted leading-relaxed mb-6">
-            You receive notifications when events are approved or rejected, and when new registrations come in.
+            You receive notifications when events are approved or rejected, and when new registrations come in. These cannot be turned off yet. Approval and rejection emails also go to your contact email.
           </p>
           <div className="space-y-1">
             {[
@@ -463,10 +541,11 @@ function SectionContent({ section }: { section: SettingsSection }) {
                   <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">{label}</div>
                   <div className="text-[11px] text-muted-dark mt-0.5">{desc}</div>
                 </div>
-                <div className="w-8 h-4 bg-primary rounded-full shrink-0" />
+                <FixedState on>On</FixedState>
               </div>
             ))}
           </div>
+          <NotifyManagersSetting />
         </div>
       );
     case "payments":
@@ -475,7 +554,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
           <p className="text-[13px] text-muted leading-relaxed mb-6">
             Manage your Stripe Express account for payouts, view payout history, and update banking details.
           </p>
-          <Link href="/organiser/payments"
+          <Link href="/organiser/payments" onClick={close}
             className="inline-flex items-center gap-2 border border-primary/40 bg-primary/10 text-primary font-headline text-[11px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md hover:bg-primary/20 transition-colors">
             Manage payments <ChevronRight className="w-3.5 h-3.5" />
           </Link>
@@ -489,15 +568,15 @@ function SectionContent({ section }: { section: SettingsSection }) {
           </p>
           <div className="space-y-1">
             {[
-              { label: "Essential cookies", desc: "Required for the platform to function",       enabled: true,  locked: true  },
-              { label: "Analytics",         desc: "Help us understand how the platform is used", enabled: false, locked: false },
-            ].map(({ label, desc, enabled, locked }) => (
+              { label: "Essential cookies", desc: "Required for the platform to function",       enabled: true  },
+              { label: "Analytics",         desc: "Help us understand how the platform is used", enabled: false },
+            ].map(({ label, desc, enabled }) => (
               <div key={label} className="flex items-center justify-between py-3 border-b border-dark-lighter last:border-0">
                 <div>
                   <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">{label}</div>
                   <div className="text-[11px] text-muted-dark mt-0.5">{desc}</div>
                 </div>
-                <div className={`w-8 h-4 rounded-full shrink-0 ${enabled ? "bg-primary" : "bg-white/10"} ${locked ? "opacity-50 cursor-not-allowed" : ""}`} />
+                <FixedState on={enabled}>{enabled ? "On" : "Off"}</FixedState>
               </div>
             ))}
           </div>
@@ -534,7 +613,8 @@ export default function SettingsModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
 
-      <div className="relative w-full max-w-2xl bg-dark border border-dark-lighter rounded-2xl shadow-2xl flex overflow-hidden modal-in"
+      <div role="dialog" aria-modal="true" aria-label="Settings"
+        className="relative w-full max-w-2xl bg-dark border border-dark-lighter rounded-2xl shadow-2xl flex overflow-hidden modal-in"
         style={{ height: "85vh" }}>
 
         {/* Close */}

@@ -45,6 +45,18 @@ test.describe("user profile: race history", () => {
     await page.context().addCookies([BYPASS_COOKIE]);
   });
 
+  // A typed space was rejected with a message that never mentioned spaces (#347).
+  test("username field turns a typed space into a hyphen", async ({ page }) => {
+    await page.goto("/profile");
+    await page.getByRole("button", { name: /edit profile/i }).click();
+
+    const username = page.getByPlaceholder("e.g. john-doe");
+    await username.fill("");
+    await username.pressSequentially("Hugo Shrowder");
+    await expect(username).toHaveValue("hugo-shrowder");
+    await expect(page.getByText(/no spaces or symbols/i)).toHaveCount(0);
+  });
+
   test("shows KStats and chronological race history from completed registrations", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/profile");

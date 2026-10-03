@@ -195,6 +195,19 @@ function EventsListingInner() {
   // once and then just toggles visibility (avoids re-init/re-fetch on every tab switch).
   const [mapEverViewed, setMapEverViewed] = useState(view === "map");
 
+  // The tab is mirrored into the URL so that stepping back from an event page
+  // returns to the tab the visitor left, not always the list (issue #340).
+  // replaceState rather than a push: switching tabs is not a page to go back to.
+  const changeView = useCallback((next: "list" | "map") => {
+    setView(next);
+    if (next === "map") setMapEverViewed(true);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "map") params.set("view", "map");
+    else params.delete("view");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  }, []);
+
   const locateMe = useCallback(() => {
     if (!("geolocation" in navigator)) return;
     setIsGeocoding(true);
@@ -460,10 +473,7 @@ function EventsListingInner() {
      pushed off the edge was the toggle itself (issue #309). */
   const mobileViewToggle = (
     <button
-      onClick={() => {
-        if (view === "list") { setView("map"); setMapEverViewed(true); }
-        else setView("list");
-      }}
+      onClick={() => changeView(view === "list" ? "map" : "list")}
       data-testid={view === "list" ? "view-mode-map" : "view-mode-list"}
       className="flex-shrink-0 flex items-center gap-1.5 h-11 px-3.5 rounded-xl bg-dark border border-dark-lighter text-light font-headline text-xs font-bold uppercase tracking-widest transition-colors hover:border-primary hover:text-primary"
     >
@@ -475,12 +485,12 @@ function EventsListingInner() {
 
   const viewToggle = (
     <div className="flex items-center gap-0.5 bg-dark rounded-xl border border-dark-lighter p-0.5 flex-shrink-0">
-      <button onClick={() => { setView("map"); setMapEverViewed(true); }} data-testid="view-mode-map"
+      <button onClick={() => changeView("map")} data-testid="view-mode-map"
         className={`flex items-center gap-1.5 px-2.5 lg:px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "map" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
       >
         <MapPin className="w-3.5 h-3.5" /> Map
       </button>
-      <button onClick={() => setView("list")} data-testid="view-mode-list"
+      <button onClick={() => changeView("list")} data-testid="view-mode-list"
         className={`flex items-center gap-1.5 px-2.5 lg:px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "list" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
       >
         <LayoutGrid className="w-3.5 h-3.5" /> List
@@ -532,7 +542,7 @@ function EventsListingInner() {
           </div>
           {isGeocoding
             ? <Loader2 data-testid="geocoding-spinner" className="w-3.5 h-3.5 text-muted animate-spin flex-shrink-0" />
-            : <button type="button" onClick={locateMe} aria-label="Use my location" title="Use my location" className="text-muted hover:text-primary flex-shrink-0"><Locate className="w-3.5 h-3.5" /></button>}
+            : <button type="button" onClick={locateMe} aria-label="Use my current location" title="Use my current location" className="text-muted hover:text-primary flex-shrink-0"><Locate className="w-3.5 h-3.5" /></button>}
           {whereQuery && <button type="button" onClick={clearWhere} aria-label="Clear where" className="text-muted hover:text-light flex-shrink-0"><X className="w-3.5 h-3.5" /></button>}
         </div>
       </div>
@@ -571,7 +581,7 @@ function EventsListingInner() {
             </div>
             {isGeocoding
               ? <Loader2 data-testid="geocoding-spinner" className="w-4 h-4 text-muted animate-spin flex-shrink-0" />
-              : <button onClick={locateMe} aria-label="Use my location" title="Use my location" className="text-muted hover:text-primary flex-shrink-0"><Locate className="w-4 h-4" /></button>}
+              : <button onClick={locateMe} aria-label="Use my current location" title="Use my current location" className="text-muted hover:text-primary flex-shrink-0"><Locate className="w-4 h-4" /></button>}
             {whereQuery && <button onClick={clearWhere} aria-label="Clear where" className="text-muted"><X className="w-4 h-4" /></button>}
           </div>
           <button onClick={() => setMobileSearch(false)} className="text-center font-headline text-xs uppercase tracking-widest text-muted py-1">Done</button>

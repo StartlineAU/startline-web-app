@@ -144,7 +144,7 @@ test.describe("distance-based search", () => {
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Use my location" }).first().click();
+    await page.getByRole("button", { name: "Use my current location" }).first().click();
 
     // GPS resolves to the device position — distance badges appear.
     await expect(page.locator('[data-testid="event-distance"]').first()).toBeVisible({ timeout: 10000 });

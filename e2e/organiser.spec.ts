@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { organiserLogin, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, organiserMemberLogin, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
 
 ensureDatabaseUrl();
 
@@ -314,6 +314,69 @@ test.describe("organiser pages", () => {
 
     // Done now commits the change rather than silently dropping it.
     await expect(page.getByText("Saved")).toBeVisible();
+  });
+
+  // The notification rows drew switches that did nothing, and following
+  // Manage payments left the modal open over the page it had loaded (#346).
+  test("settings modal shows fixed notification states and closes on Manage payments", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/profile");
+
+    await page.getByRole("button", { name: "Edit Profile" }).click();
+    // The navbar has its own Notifications button and Payments link.
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.getByRole("button", { name: "Notifications", exact: true }).click();
+    await expect(settings.getByText("On", { exact: true })).toHaveCount(3);
+
+    await settings.getByRole("button", { name: "Payments", exact: true }).click();
+    await settings.getByRole("link", { name: "Manage payments" }).click();
+    await expect(page).toHaveURL(/\/organiser\/payments/);
+    await expect(settings).toHaveCount(0);
+  });
+
+  // Managers are told what the owner is told only while the owner allows it,
+  // and only the owner can change that (#348).
+  test("only the owner can change whether managers are notified", async ({ page, browser }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/profile");
+    await page.getByRole("button", { name: "Edit Profile" }).click();
+
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.getByRole("button", { name: "Notifications", exact: true }).click();
+    const toggle = settings.getByRole("switch", { name: "Include managers" });
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    try {
+      await Promise.all([
+        page.waitForResponse(r => r.url().includes("/api/organiser/profile") && r.request().method() === "PATCH" && r.ok()),
+        toggle.click(),
+      ]);
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+
+      // Tom manages the same organisation: he is shown the setting, cannot
+      // change it, and no longer receives the organisation's notifications.
+      const managerContext = await browser.newContext();
+      const manager = await managerContext.newPage();
+      await organiserMemberLogin(manager);
+
+      const refused = await manager.request.patch("/api/organiser/profile", { data: { notifyManagers: true } });
+      expect(refused.status()).toBe(403);
+      const feed = await (await manager.request.get("/api/organiser/notifications")).json();
+      expect(feed.notifications).toEqual([]);
+
+      await manager.goto("/organiser/profile");
+      await manager.getByRole("button", { name: "Edit Profile" }).click();
+      const managerSettings = manager.getByRole("dialog", { name: "Settings" });
+      await managerSettings.getByRole("button", { name: "Notifications", exact: true }).click();
+      await expect(managerSettings.getByRole("switch", { name: "Include managers" })).toBeDisabled();
+      await expect(managerSettings.getByText("Only the owner can change this.")).toBeVisible();
+      await managerContext.close();
+    } finally {
+      // Leave the seeded organisation as the other specs expect to find it.
+      const restored = await page.request.patch("/api/organiser/profile", { data: { notifyManagers: true } });
+      expect(restored.ok()).toBe(true);
+    }
   });
 
   test("organiser payments page visual snapshot", async ({ page }) => {

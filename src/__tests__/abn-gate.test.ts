@@ -68,15 +68,19 @@ const pendingEvent = (over: Record<string, unknown> = {}) => ({
   registrationType: "startline",
   eventDate: "2026-11-01",
   city: "Melbourne",
+  ...over,
+  // After the spread, so an override of one organiser field keeps the rest.
   organiser: {
     id: "org-1",
     email: "sarah@startline.test",
     orgName: "Apex",
     stripeOnboardingComplete: true,
     abn: ABN,
+    contactEmail: null,
+    notifyManagers: true,
+    members: [],
     ...(over.organiser as object ?? {}),
   },
-  ...over,
 });
 
 beforeEach(() => {
