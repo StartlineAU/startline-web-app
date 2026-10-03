@@ -171,7 +171,7 @@ locals {
       # value is computed from the Amplify branch domain below. Kept here as the
       # intended hostname for whenever that DNS record is created.
       site_url          = "https://staging.startlineau.com"
-      enable_daily_stop = false
+      enable_daily_stop = true
     }
   }
 
