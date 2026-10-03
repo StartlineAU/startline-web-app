@@ -1,7 +1,7 @@
-variable "database_ssl_mode" {
-  description = "PostgreSQL SSL mode (require, no-verify, verify-full, etc.)"
+variable "database_url" {
+  description = "Full PostgreSQL connection URL (Neon) for this environment, used at runtime and by the build's prisma migrate deploy."
   type        = string
-  default     = "require"
+  sensitive   = true
 }
 
 variable "name" {
@@ -44,80 +44,6 @@ variable "extra_branch_environment_variables" {
   description = "Extra env vars to set on the Amplify branch in addition to DATABASE_URL."
   type        = map(string)
   default     = {}
-}
-
-# --- Networking ---
-
-variable "vpc_cidr" {
-  description = "CIDR for this environment's dedicated VPC. Must not overlap other environments."
-  type        = string
-}
-
-# --- RDS ---
-
-variable "database_name" {
-  description = "PostgreSQL database name (path segment in DATABASE_URL)."
-  type        = string
-}
-
-variable "database_username" {
-  description = "Master username for RDS."
-  type        = string
-}
-
-variable "database_engine_version" {
-  description = "PostgreSQL major version."
-  type        = string
-}
-
-variable "database_instance_class" {
-  description = "RDS instance class."
-  type        = string
-}
-
-variable "database_allocated_storage" {
-  description = "Initial allocated storage (GB)."
-  type        = number
-}
-
-variable "database_max_allocated_storage" {
-  description = "Autoscaling cap (GB). 0 disables autoscaling."
-  type        = number
-}
-
-variable "database_publicly_accessible" {
-  description = "If true, RDS gets a public address."
-  type        = bool
-}
-
-variable "database_allowed_cidr_blocks" {
-  description = "CIDRs allowed to reach PostgreSQL on 5432."
-  type        = list(string)
-}
-
-variable "database_skip_final_snapshot" {
-  description = "If true, destroying the instance skips a final snapshot."
-  type        = bool
-}
-
-variable "database_backup_retention_period" {
-  description = "Days of automated backups."
-  type        = number
-}
-
-variable "database_deletion_protection" {
-  description = "Enable deletion protection on the RDS instance."
-  type        = bool
-}
-
-variable "database_performance_insights_enabled" {
-  description = "Enable RDS Performance Insights."
-  type        = bool
-}
-
-variable "database_secret_recovery_window_days" {
-  description = "Secrets Manager recovery window when deleting the secret (0 = immediate)."
-  type        = number
 }
 
 # --- Cognito ---
@@ -201,14 +127,6 @@ variable "turnstile_secret_key" {
 variable "bucket_cors_allowed_origins" {
   description = "CORS allowed origins for the uploads bucket."
   type        = list(string)
-}
-
-# --- RDS daily stop (staging only) ---
-
-variable "enable_daily_stop" {
-  description = "Schedule RDS to stop at midnight Melbourne time nightly. For staging to save ~$15/mo."
-  type        = bool
-  default     = false
 }
 
 # --- CloudFront CDN ---

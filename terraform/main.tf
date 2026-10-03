@@ -141,37 +141,25 @@ resource "aws_amplify_app" "this" {
 locals {
   environments = {
     prod = {
-      branch_name                      = "prod"
-      amplify_stage                    = "PRODUCTION"
-      auto_build_enabled               = false
-      enable_pull_request_preview      = true
-      vpc_cidr                         = "10.20.0.0/16"
-      database_name                    = "${var.project_name}_prod"
-      database_skip_final_snapshot     = false
-      database_deletion_protection     = true
-      database_backup_retention_period = 30
-      cognito_deletion_protection      = true
-      bucket_cors_allowed_origins      = ["https://startlineau.com", "https://organiser.startlineau.com", "https://admin.startlineau.com"]
-      site_url                         = "https://startlineau.com"
-      enable_daily_stop                = false
+      branch_name                     = "prod"
+      amplify_stage                   = "PRODUCTION"
+      auto_build_enabled              = false
+      enable_pull_request_preview     = true
+      cognito_deletion_protection     = true
+      bucket_cors_allowed_origins     = ["https://startlineau.com", "https://organiser.startlineau.com", "https://admin.startlineau.com"]
+      site_url                        = "https://startlineau.com"
     }
     staging = {
-      branch_name                      = "main"
-      amplify_stage                    = "BETA"
-      auto_build_enabled               = false
-      enable_pull_request_preview      = true
-      vpc_cidr                         = "10.21.0.0/16"
-      database_name                    = "${var.project_name}_staging"
-      database_skip_final_snapshot     = true
-      database_deletion_protection     = false
-      database_backup_retention_period = 0
-      cognito_deletion_protection      = false
-      bucket_cors_allowed_origins      = ["*"]
+      branch_name                     = "main"
+      amplify_stage                   = "BETA"
+      auto_build_enabled              = false
+      enable_pull_request_preview     = true
+      cognito_deletion_protection     = false
+      bucket_cors_allowed_origins     = ["*"]
       # Ignored — staging.startlineau.com has never been delegated, so the real
       # value is computed from the Amplify branch domain below. Kept here as the
       # intended hostname for whenever that DNS record is created.
-      site_url          = "https://staging.startlineau.com"
-      enable_daily_stop = true
+      site_url                        = "https://staging.startlineau.com"
     }
   }
 
@@ -190,23 +178,7 @@ module "env" {
   auto_build_enabled          = each.value.auto_build_enabled
   enable_pull_request_preview = each.value.enable_pull_request_preview
 
-  vpc_cidr      = each.value.vpc_cidr
-  database_name = each.value.database_name
-
-  database_engine_version               = var.database_engine_version
-  database_instance_class               = var.database_instance_class
-  database_allocated_storage            = var.database_allocated_storage
-  database_max_allocated_storage        = var.database_max_allocated_storage
-  database_username                     = var.database_username
-  database_publicly_accessible          = var.database_publicly_accessible
-  database_allowed_cidr_blocks          = var.database_allowed_cidr_blocks
-  database_skip_final_snapshot          = each.value.database_skip_final_snapshot
-  database_backup_retention_period      = each.value.database_backup_retention_period
-  database_deletion_protection          = each.value.database_deletion_protection
-  database_performance_insights_enabled = var.database_performance_insights_enabled
-  database_secret_recovery_window_days  = var.database_secret_recovery_window_days
-  enable_daily_stop                     = each.value.enable_daily_stop
-  database_ssl_mode                     = each.key == "staging" ? "no-verify" : "require"
+  database_url = each.key == "prod" ? neon_project.prod.connection_uri : neon_project.staging.connection_uri
 
   cognito_deletion_protection = each.value.cognito_deletion_protection
 

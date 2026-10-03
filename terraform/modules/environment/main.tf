@@ -6,177 +6,12 @@ data "aws_caller_identity" "current" {}
 # Amplify app, IAM roles, Route 53 zone, and apex-domain records stay in the
 # root module — only resources whose lifecycle is environment-scoped live here.
 
-# ===== Networking =====
-
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
-resource "aws_vpc" "database" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = {
-    Name        = "${var.project_name}-${var.name}"
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_internet_gateway" "database" {
-  vpc_id = aws_vpc.database.id
-
-  tags = {
-    Name        = "${var.project_name}-${var.name}"
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_subnet" "database_public" {
-  count                   = 2
-  vpc_id                  = aws_vpc.database.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index + 1)
-  availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name        = "${var.project_name}-${var.name}-public-${count.index}"
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_route_table" "database_public" {
-  vpc_id = aws_vpc.database.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.database.id
-  }
-
-  tags = {
-    Name        = "${var.project_name}-${var.name}-public"
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_route_table_association" "database_public" {
-  count          = 2
-  subnet_id      = aws_subnet.database_public[count.index].id
-  route_table_id = aws_route_table.database_public.id
-}
-
-resource "aws_db_subnet_group" "postgres" {
-  name       = "${var.project_name}-${var.name}-postgres"
-  subnet_ids = aws_subnet.database_public[*].id
-
-  tags = {
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_security_group" "rds" {
-  name_prefix = "${var.project_name}-${var.name}-rds-"
-  vpc_id      = aws_vpc.database.id
-  description = "PostgreSQL ingress for ${var.project_name} ${var.name}"
-
-  dynamic "ingress" {
-    for_each = var.database_allowed_cidr_blocks
-    content {
-      description = "PostgreSQL"
-      from_port   = 5432
-      to_port     = 5432
-      protocol    = "tcp"
-      cidr_blocks = [ingress.value]
-    }
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = {
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-# ===== RDS (PostgreSQL) =====
-
-resource "random_password" "db_master" {
-  length  = 32
-  special = false
-}
-
-resource "aws_db_instance" "postgres" {
-  identifier     = "${var.project_name}-${var.name}-postgres"
-  engine         = "postgres"
-  engine_version = var.database_engine_version
-  instance_class = var.database_instance_class
-
-  allocated_storage     = var.database_allocated_storage
-  max_allocated_storage = var.database_max_allocated_storage > 0 ? var.database_max_allocated_storage : null
-  storage_type          = "gp3"
-  storage_encrypted     = true
-
-  db_name  = var.database_name
-  username = var.database_username
-  password = random_password.db_master.result
-
-  db_subnet_group_name   = aws_db_subnet_group.postgres.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
-
-  publicly_accessible             = var.database_publicly_accessible
-  skip_final_snapshot             = var.database_skip_final_snapshot
-  final_snapshot_identifier       = var.database_skip_final_snapshot ? null : "${var.project_name}-${var.name}-postgres-final"
-  backup_retention_period         = var.database_backup_retention_period
-  deletion_protection             = var.database_deletion_protection
-  performance_insights_enabled    = var.database_performance_insights_enabled
-  copy_tags_to_snapshot           = true
-  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-
-  tags = {
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_secretsmanager_secret" "database" {
-  name_prefix             = "${var.project_name}/${var.name}/database/"
-  recovery_window_in_days = var.database_secret_recovery_window_days
-
-  tags = {
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
+# ===== Database =====
+# Postgres runs on Neon (managed outside AWS); this module only receives the
+# connection string and passes it on to the app secret + Amplify branch.
 
 locals {
   environment_tag = var.name == "prod" ? "Prod" : "Stage"
-  database_url    = "postgresql://${var.database_username}:${urlencode(random_password.db_master.result)}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.database_name}?schema=public&sslmode=${var.database_ssl_mode}"
-}
-
-resource "aws_secretsmanager_secret_version" "database" {
-  secret_id = aws_secretsmanager_secret.database.id
-  secret_string = jsonencode({
-    username     = var.database_username
-    password     = random_password.db_master.result
-    host         = aws_db_instance.postgres.address
-    port         = tostring(aws_db_instance.postgres.port)
-    dbname       = var.database_name
-    DATABASE_URL = local.database_url
-  })
 }
 
 resource "random_password" "guest_email_verification" {
@@ -203,7 +38,7 @@ resource "aws_secretsmanager_secret_version" "app" {
     AWS_S3_BUCKET                    = aws_s3_bucket.uploads.id
     AWS_S3_REGION                    = "ap-southeast-2"
     NEXT_PUBLIC_CDN_URL              = var.cdn_custom_domain != null ? "https://${var.cdn_custom_domain}" : "https://${aws_cloudfront_distribution.cdn.domain_name}"
-    DATABASE_URL                     = local.database_url
+    DATABASE_URL                     = var.database_url
     NEXT_PUBLIC_SITE_URL             = var.site_url
     NEXT_PUBLIC_BASE_URL             = var.site_url
     NEXT_PUBLIC_AWS_REGION           = "ap-southeast-2"
@@ -211,62 +46,6 @@ resource "aws_secretsmanager_secret_version" "app" {
     NEXT_PUBLIC_TURNSTILE_SITE_KEY   = var.turnstile_site_key
     TURNSTILE_SECRET_KEY             = var.turnstile_secret_key
   })
-}
-
-# ===== RDS daily stop scheduler (staging only) =====
-
-resource "aws_iam_role" "scheduler" {
-  count = var.enable_daily_stop ? 1 : 0
-  name  = "${var.project_name}-${var.name}-rds-scheduler"
-
-  assume_role_policy = jsonencode({
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "scheduler.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-
-  tags = {
-    Environment = local.environment_tag
-    Service     = var.project_name
-  }
-}
-
-resource "aws_iam_role_policy" "scheduler" {
-  count = var.enable_daily_stop ? 1 : 0
-  role  = aws_iam_role.scheduler[0].id
-
-  policy = jsonencode({
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["rds:StopDBInstance"]
-      Resource = aws_db_instance.postgres.arn
-    }]
-  })
-}
-
-resource "aws_scheduler_schedule" "daily_stop" {
-  count = var.enable_daily_stop ? 1 : 0
-  name  = "${var.project_name}-${var.name}-rds-daily-stop"
-
-  flexible_time_window { mode = "OFF" }
-
-  schedule_expression          = "cron(0 0 * * ? *)"
-  schedule_expression_timezone = "Australia/Melbourne"
-
-  target {
-    arn      = "arn:aws:scheduler:::aws-sdk:rds:stopDBInstance"
-    role_arn = aws_iam_role.scheduler[0].arn
-
-    input = jsonencode({
-      DbInstanceIdentifier = aws_db_instance.postgres.identifier
-    })
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
 }
 
 # ===== Cognito custom message Lambda =====
@@ -479,7 +258,7 @@ resource "aws_amplify_branch" "this" {
 
   environment_variables = merge(
     {
-      DATABASE_URL                    = local.database_url
+      DATABASE_URL                    = var.database_url
       UPLOADS_BUCKET                  = aws_s3_bucket.uploads.id
       UPLOADS_BUCKET_REGIONAL_DOMAIN  = aws_s3_bucket.uploads.bucket_regional_domain_name
       CDN_URL                         = var.cdn_custom_domain != null ? "https://${var.cdn_custom_domain}" : "https://${aws_cloudfront_distribution.cdn.domain_name}"

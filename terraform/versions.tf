@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.0"
     }
+    neon = {
+      source  = "kislerdm/neon"
+      version = "~> 0.18"
+    }
   }
 
   backend "s3" {
