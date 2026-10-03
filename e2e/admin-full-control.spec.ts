@@ -167,12 +167,15 @@ test.describe("admin event editing", () => {
     await page.waitForURL("**/admin/events**", { timeout: 20000 });
 
     // Still APPROVED — shows on the Approved tab with the new title.
-    // The list is fetched client-side in a useEffect, so the document is ready
-    // well before the rows are. Without this wait the assertion races that fetch
-    // and fails under load, which is what made this test flaky in CI.
+    // The list is fetched client-side in a useEffect after hydration, so
+    // networkidle can resolve before the row renders. Wait for the fetch itself
+    // instead of racing it on a timer, which is what made this flaky in CI.
+    const listResponse = page.waitForResponse(
+      (res) => res.url().includes("/api/admin/events?status=APPROVED") && res.ok(),
+    );
     await page.goto("/admin/events?status=APPROVED");
-    await page.waitForLoadState("networkidle");
-    await expect(page.getByText(newTitle, { exact: false })).toBeVisible({ timeout: 15000 });
+    await listResponse;
+    await expect(page.getByText(newTitle, { exact: false })).toBeVisible();
   });
 
   test("can edit a draft event", async ({ page }) => {
