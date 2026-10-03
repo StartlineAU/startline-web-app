@@ -23,11 +23,11 @@ Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
 
 | Secret | Contents |
 |---|---|
-| `startline/ci-bootstrap` | CI/CD bootstrap tokens |
+| `startline/ci-bootstrap` | CI/CD bootstrap tokens + Neon API key/org + prod runtime secrets (`stripe_secret_key_prod`, `stripe_webhook_secret_prod`, `abr_guid`) |
 | `startline/prod/app` | Prod env vars (Cognito, Stripe live, S3) |
-| `startline/staging/app` | Staging env vars (non-prod Cognito, RDS, S3) |
+| `startline/staging/app` | Staging env vars (non-prod Cognito, Neon, S3) |
 
-**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`) if not using staging RDS.
+**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`terraform/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/ci-bootstrap`. Org plan is Free — 6 h PITR only.
 
 ### Runtime vs build-time variables
 
@@ -320,7 +320,7 @@ flip it back in the same sitting.
 `README.md` has known inaccuracies. Cross-reference with AGENTS.md and codebase:
 - **License:** README says MIT, actual is All Rights Reserved.
 - **`.envrc`:** README says it exists at root — it's gitignored, devs use direnv + local config.
-- **Scripts:** README table missing `typecheck`, `prisma:generate`, `test:watch`, `stripe:*`, `start`, `test:registration`, `staging:db:start`.
+- **Scripts:** README table missing `typecheck`, `prisma:generate`, `test:watch`, `stripe:*`, `start`, `test:registration`.
 - **Site state:** README describes live platform; site is in waitlist mode.
 - **Admin domain:** README implies shared domain; admin is now `admin.startlineau.com`.
 

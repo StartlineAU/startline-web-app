@@ -20,8 +20,7 @@
     "stripe:validate": "node scripts/validate-stripe-connect.mjs",
     "stripe:lifecycle": "node scripts/validate-stripe-lifecycle.mjs",
     "test:registration": "node scripts/test-registration-payment.mjs",
-    "upload:probe": "node scripts/probe-upload-ceiling.mjs",
-    "staging:db:start": "aws rds start-db-instance --db-instance-identifier startline-staging-postgres"
+    "upload:probe": "node scripts/probe-upload-ceiling.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1073.0",

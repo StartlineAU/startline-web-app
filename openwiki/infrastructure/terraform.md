@@ -1,20 +1,21 @@
 ---
 type: Reference
 title: Infrastructure & CI/CD
-description: Terraform-managed AWS infrastructure for Startline — including RDS, Cognito, Amplify hosting, VPC networking, GitHub Actions CI/CD, and secrets management.
-tags: [startline, infrastructure, terraform, aws, amplify, ci-cd, deployments]
+description: Terraform-managed AWS infrastructure for Startline — including Neon-managed Postgres, Cognito, Amplify hosting, GitHub Actions CI/CD, and secrets management.
+tags: [startline, infrastructure, terraform, aws, amplify, neon, ci-cd, deployments]
 resource: /terraform/main.tf
 ---
 
 # Infrastructure & CI/CD
 
-Startline's infrastructure is fully defined in **Terraform** with a unified state, deployed via GitHub Actions. The application is hosted on **AWS Amplify** with per-environment databases and Cognito pools.
+Startline's infrastructure is fully defined in **Terraform** with a unified state, deployed via GitHub Actions. The application is hosted on **AWS Amplify** with per-environment Postgres databases on **Neon** and Cognito pools.
 
 ## Infrastructure Overview
 
 - **Terraform state**: Unified, single state file. `main` branch is the sole source of truth — only pushes to `main` trigger Terraform apply.
 - **Root module** (`/terraform/main.tf`): Amplify app, IAM roles, Route 53 DNS, Cloudflare DNS, ACM certificates
-- **Environment module** (`/terraform/modules/environment/`): Per-environment VPC + networking, RDS PostgreSQL, Cognito user pool, Amplify branch
+- **Environment module** (`/terraform/modules/environment/`): Per-environment Amplify branch, Cognito user pool, uploads bucket
+- **Neon** (`/terraform/neon.tf`): Two `neon_project` resources (`startline-prod`, `startline-staging`, Sydney, Postgres 16) managed via the `kislerdm/neon` provider; connection strings flow to the Amplify branch `DATABASE_URL`
 - **Two environments**: `prod` and `staging` (defined in `main.tf` → `local.environments`)
 
 ## Terraform Structure
@@ -22,7 +23,8 @@ Startline's infrastructure is fully defined in **Terraform** with a unified stat
 | File | Purpose |
 |---|---|
 | `main.tf` | Root module — Amplify app, IAM roles, build spec, environment module instances |
-| `modules/environment/main.tf` | VPC, subnets, RDS, Cognito, Amplify branch |
+| `neon.tf` | Neon `neon_project` resources (prod + staging Postgres) + provider |
+| `modules/environment/main.tf` | Amplify branch, Cognito, uploads bucket |
 | `dns.tf` | Cloudflare DNS records for apex and subdomains |
 | `cloudflare-dns.tf` | Additional Cloudflare DNS resources |
 | `acm.tf` | ACM certificates |
@@ -102,9 +104,9 @@ All secrets are stored in **AWS Secrets Manager** and never committed to the rep
 
 | Secret | Contents |
 |---|---|
-| `startline/ci-bootstrap` | CI/CD bootstrap secrets (Amplify PAT, Cloudflare token, Resend key, DigitalOcean token, Gitleaks license) |
+| `startline/ci-bootstrap` | CI/CD bootstrap secrets (Amplify PAT, Cloudflare token, Resend key, Neon API key/org, Stripe prod keys, ABR GUID) |
 | `startline/prod/app` | Production env vars (Cognito IDs, Stripe live keys, S3 credentials, etc.) |
-| `startline/staging/app` | Staging env vars (non-production Cognito, RDS, S3) |
+| `startline/staging/app` | Staging env vars (non-production Cognito, Neon, S3) |
 
 **Loading mechanism**: `.envrc` (gitignored) + direnv fetches the appropriate secret and exports to the shell. In CI, the composite action at `.github/actions/load-env/` assumes an OIDC role, fetches secrets, and exports them.
 

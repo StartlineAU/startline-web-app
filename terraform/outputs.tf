@@ -23,16 +23,6 @@ output "aws_account_id" {
   value       = data.aws_caller_identity.current.account_id
 }
 
-output "database_secret_arn" {
-  description = "Secrets Manager secret ARN for the database."
-  value       = try(module.env["prod"].database_secret_arn, null)
-}
-
-output "database_host" {
-  description = "RDS hostname."
-  value       = try(module.env["prod"].database_host, null)
-}
-
 output "cognito_user_pool_id" {
   description = "Cognito User Pool ID."
   value       = try(module.env["prod"].cognito_user_pool_id, null)
@@ -119,16 +109,6 @@ output "staging_cognito_app_client_id" {
 output "staging_cognito_issuer_url" {
   description = "Staging OIDC issuer URL."
   value       = try(module.env["staging"].cognito_issuer_url, null)
-}
-
-output "staging_database_host" {
-  description = "Staging RDS hostname."
-  value       = try(module.env["staging"].database_host, null)
-}
-
-output "staging_database_secret_arn" {
-  description = "Staging Secrets Manager secret ARN for the database."
-  value       = try(module.env["staging"].database_secret_arn, null)
 }
 
 output "staging_uploads_bucket_id" {
