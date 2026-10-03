@@ -50,6 +50,17 @@ resource "aws_iam_role_policy" "amplify_secrets" {
   })
 }
 
+# The Amplify role is also the compute role, so this is what the deployed
+# server-side routes call AWS Location Service as.
+resource "aws_iam_role_policy" "amplify_geo_places" {
+  role = aws_iam_role.amplify.name
+
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [local.geo_places_statement]
+  })
+}
+
 locals {
   connect_repository = var.amplify_repository_url != null ? trimspace(var.amplify_repository_url) != "" : false
 

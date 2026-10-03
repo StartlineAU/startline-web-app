@@ -151,8 +151,11 @@ export default function UserEditProfileModal({ open, initial, onClose, onSaved }
     if (!val || val === (initial.currentUsername ?? "")) return { status: "idle" as const, error: "" };
     if (val.length < 3) return { status: "invalid" as const, error: "Username must be at least 3 characters." };
     if (val.length > 30) return { status: "invalid" as const, error: "Username must be 30 characters or less." };
-    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/.test(val)) {
-      return { status: "invalid" as const, error: "Only lowercase letters, numbers, and hyphens allowed." };
+    if (/^-|-$/.test(val)) {
+      return { status: "invalid" as const, error: "Username cannot start or end with a hyphen." };
+    }
+    if (!/^[a-z0-9-]+$/.test(val)) {
+      return { status: "invalid" as const, error: "No spaces or symbols. Use letters, numbers and hyphens." };
     }
     return null;
   }, [form.username, initial.currentUsername]);
@@ -348,8 +351,10 @@ export default function UserEditProfileModal({ open, initial, onClose, onSaved }
                           : ""
                     }`}
                     value={form.username}
-                    onChange={(e) => patch({ username: e.target.value.toLowerCase() })}
-                    placeholder="e.g. johndoe"
+                    // A username is one word, so a typed space becomes the hyphen
+                    // it would have to be anyway (issue #347).
+                    onChange={(e) => patch({ username: e.target.value.toLowerCase().replace(/-?\s+/g, "-") })}
+                    placeholder="e.g. john-doe"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2">
                     {usernameStatus === "checking" && (
@@ -365,7 +370,7 @@ export default function UserEditProfileModal({ open, initial, onClose, onSaved }
                   </p>
                 ) : (
                   <p className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-1">
-                    Your public identity — letters, numbers, and hyphens.
+                    One word, no spaces. Letters, numbers and hyphens.
                   </p>
                 )}
               </div>

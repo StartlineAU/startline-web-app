@@ -4,6 +4,7 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { sendEventApprovedEmail, sendEventRejectedEmail } from "@/lib/email";
 import { writeAuditLog } from "@/lib/audit";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
+import { organiserNotificationRecipients } from "@/lib/organiser-notification-recipients";
 import { idParams } from "@/lib/schemas";
 import { hasAbn } from "@/lib/abn";
 import { z } from "zod";
@@ -42,7 +43,13 @@ export async function POST(
       select: {
         id: true, title: true, status: true, registrationType: true,
         eventDate: true, city: true,
-        organiser: { select: { id: true, email: true, orgName: true, stripeOnboardingComplete: true, abn: true } },
+        organiser: {
+          select: {
+            id: true, email: true, orgName: true, stripeOnboardingComplete: true, abn: true,
+            contactEmail: true, notifyManagers: true,
+            members: { select: { role: true, user: { select: { email: true } } } },
+          },
+        },
       },
     });
 
@@ -79,7 +86,7 @@ export async function POST(
 
     const newStatus = action === "approve" ? "APPROVED" : "REJECTED";
 
-    const organiserEmail = event.organiser.email;
+    const organiserEmail = organiserNotificationRecipients(event.organiser);
     const organiserId    = event.organiser.id;
 
     const notifData = action === "approve"

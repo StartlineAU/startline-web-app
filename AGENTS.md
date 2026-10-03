@@ -127,6 +127,13 @@ JWT verification in `middleware.ts` via `jose`. Tokens in Cognito-managed cookie
 
 Every user has a **User** record (created on first login). Users can create an **Organiser** profile (1:1). Organiser records can be verified (auto-publish events) or unverified (admin approval needed). See `lib/amplify-server.ts` for session helpers (`ServerSession`, `UserSession`, `OrganiserSession`, `AdminSession`).
 
+Organiser notifications belong to the organisation, not to a person. Event
+approved/rejected emails go to the list built by
+`lib/organiser-notification-recipients.ts`: the account email, the onboarding
+contact email and every OWNER, plus MANAGERs while `Organiser.notifyManagers`
+is on. The same flag decides whether a MANAGER sees the in-app feed. Only an
+OWNER can change it (`PATCH /api/organiser/profile`).
+
 All seed users share password `Password123!`.
 
 | Email | Notes |

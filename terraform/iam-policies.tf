@@ -1,3 +1,19 @@
+# Address search and geocoding run on the standalone geo-places service, whose
+# actions sit in their own namespace: neither the older `geo:` grants nor
+# AdministratorAccess-Amplify cover them (issue #311). Every identity the app
+# runs as needs this statement, or place search returns nothing at all.
+locals {
+  geo_places_statement = {
+    Sid    = "GeoPlacesSearch"
+    Effect = "Allow"
+    Action = [
+      "geo-places:Autocomplete",
+      "geo-places:Geocode",
+    ]
+    Resource = "arn:aws:geo-places:${var.aws_region}::provider/default"
+  }
+}
+
 # Custom policy for the MCP server — broad read + focused write on Startline infra.
 # Secrets Manager access is scoped to nonprod only (prod secrets require the CI role).
 resource "aws_iam_policy" "mcp_server" {
@@ -115,26 +131,32 @@ resource "aws_iam_policy" "mcp_server" {
           "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:startline/ci-bootstrap*",
         ]
       },
+      # Local credentials currently resolve to this user rather than
+      # startline-dev, so it needs place search too.
+      local.geo_places_statement,
     ]
   })
 }
 
-# Minimal policy for human developers — read secrets only.
+# Minimal policy for human developers: read secrets, and search places.
 resource "aws_iam_policy" "startline_dev" {
   name        = "StartlineDevAccess"
   description = "Minimal permissions for local dev"
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:ListSecrets",
-      ]
-      Resource = [
-        "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:startline/ci-bootstrap*",
-      ]
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:ListSecrets",
+        ]
+        Resource = [
+          "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:startline/ci-bootstrap*",
+        ]
+      },
+      local.geo_places_statement,
+    ]
   })
 }
 

@@ -12,11 +12,12 @@ import { usePathname } from "next/navigation";
 const CURRENT = "startline:path";
 const PREVIOUS = "startline:previous-path";
 
-export function hasInAppHistory(): boolean {
+// The page visited before this one, or null on a direct visit.
+export function previousInAppPath(): string | null {
   try {
-    return !!sessionStorage.getItem(PREVIOUS);
+    return sessionStorage.getItem(PREVIOUS);
   } catch {
-    return false;
+    return null;
   }
 }
 

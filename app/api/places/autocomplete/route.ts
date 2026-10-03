@@ -26,7 +26,9 @@ export async function GET(req: NextRequest) {
       placeType: item.PlaceType,
     }));
     return NextResponse.json({ results });
-  } catch {
+  } catch (err) {
+    // Still an empty list for the caller, but no longer a silent one (#311).
+    console.error("[places/autocomplete] AWS Location Service lookup failed:", err);
     return NextResponse.json({ results: [] });
   }
 }
