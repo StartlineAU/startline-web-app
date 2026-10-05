@@ -9,9 +9,6 @@ const organiserProfileSchema = z.object({
   contactEmail: z.string().max(255),
   phone: z.string().max(50),
   abn: z.string().max(20).nullable().optional(),
-  website: z.string().max(500).nullable().optional(),
-  instagram: z.string().max(500).nullable().optional(),
-  facebook: z.string().max(500).nullable().optional(),
   bio: z.string().max(5000).nullable().optional(),
   logoUrl: z.string().max(3000).nullable().optional(),
   logoPosition: z.string().max(100).nullable().optional(),
@@ -23,7 +20,19 @@ const organiserProfileSchema = z.object({
   dob: z.string().max(20).nullable().optional(),
 });
 
-const notificationSettingsSchema = z.object({ notifyManagers: z.boolean() });
+// One setting at a time. The images are here so that uploading a logo or
+// dragging a cover into place saves that image alone: sending them through PUT
+// took the whole form with it and committed whatever was half typed.
+const settingsPatchSchema = z.object({
+  notifyManagers:        z.boolean().optional(),
+  notifyEventApproved:   z.boolean().optional(),
+  notifyEventRejected:   z.boolean().optional(),
+  notifyNewRegistration: z.boolean().optional(),
+  logoUrl:        z.string().max(3000).nullable().optional(),
+  logoPosition:   z.string().max(100).nullable().optional(),
+  coverImageUrl:  z.string().max(3000).nullable().optional(),
+  coverPosition:  z.string().max(100).nullable().optional(),
+}).strict().refine(v => Object.keys(v).length > 0);
 
 export async function GET() {
   const auth = await requireOrganiser();
@@ -36,11 +45,12 @@ export async function GET() {
       select: {
         id: true, email: true, status: true,
         orgName: true, contactName: true, contactEmail: true, phone: true,
-        abn: true, website: true, instagram: true, facebook: true,
+        abn: true,
         bio: true, logoUrl: true, logoPosition: true, coverImageUrl: true, coverPosition: true, photos: true,
         legalName: true, insuranceDeclared: true, dob: true,
         stripeAccountId: true, stripeOnboardingComplete: true,
         notifyManagers: true,
+        notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
         _count: { select: { follows: true } },
       },
     });
@@ -72,7 +82,7 @@ export async function PUT(req: NextRequest) {
   }
   const {
     orgName, contactName, contactEmail, phone,
-    abn, website, instagram, facebook, bio,
+    abn, bio,
     logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
     legalName, insuranceDeclared, dob,
   } = parsed.data;
@@ -100,7 +110,7 @@ export async function PUT(req: NextRequest) {
       where: { id: session.sub },
       data: {
         orgName, contactName, contactEmail, phone,
-        abn, website, instagram, facebook, bio,
+        abn, bio,
         logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
         ...(legalName !== undefined        ? { legalName }         : {}),
         ...(insuranceDeclared !== undefined ? { insuranceDeclared } : {}),
@@ -115,19 +125,25 @@ export async function PUT(req: NextRequest) {
 }
 
 // PATCH /api/organiser/profile
-// Body: { notifyManagers: boolean }. Owner only: it decides what the
-// organisation's managers are told, so a manager cannot grant it to themselves.
+// Body: any of the notification switches (notifyManagers, notifyEventApproved,
+// notifyEventRejected, notifyNewRegistration) and the images (logoUrl,
+// logoPosition, coverImageUrl, coverPosition). The notification switches are
+// owner only: they decide what the whole organisation is told, so a manager
+// cannot change them. The images follow PUT, which a manager may also use.
 export async function PATCH(req: NextRequest) {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
   const session = auth.session;
 
-  const parsed = notificationSettingsSchema.safeParse(await req.json().catch(() => null));
+  const parsed = settingsPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
-  if (session.role !== "OWNER") {
+  const { notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration } = parsed.data;
+  const changesNotifications = [notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration]
+    .some(v => v !== undefined);
+  if (changesNotifications && session.role !== "OWNER") {
     return NextResponse.json(
       { error: "Only an Owner can change who receives notifications." },
       { status: 403 },
@@ -137,9 +153,9 @@ export async function PATCH(req: NextRequest) {
   try {
     await prisma.organiser.update({
       where: { id: session.sub },
-      data:  { notifyManagers: parsed.data.notifyManagers },
+      data:  parsed.data,
     });
-    return NextResponse.json({ ok: true, notifyManagers: parsed.data.notifyManagers });
+    return NextResponse.json({ ok: true, ...parsed.data });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }

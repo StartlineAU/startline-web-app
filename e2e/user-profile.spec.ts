@@ -79,7 +79,11 @@ test.describe("user profile: race history", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(/profile photo/i)).toBeVisible();
     await expect(dialog.getByText(/^Public profile$/).first()).toBeVisible();
-    await expect(dialog.getByText(/private details/i)).toBeVisible();
+    await expect(dialog.getByText(/user id/i)).toHaveCount(0);
+    await expect(dialog.getByText(/location/i)).toHaveCount(0);
+    // Private details have their own section, apart from the public profile.
+    await expect(dialog.getByLabel(/full name/i)).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Personal details" }).click();
     await expect(dialog.getByText(/prefill your own event registrations/i)).toBeVisible();
     await expect(dialog.getByLabel(/full name/i)).toBeVisible();
     await expect(dialog.getByLabel(/^phone$/i)).toBeVisible();
@@ -87,12 +91,14 @@ test.describe("user profile: race history", () => {
     await expect(dialog.getByLabel(/^gender$/i)).toBeVisible();
     await expect(dialog.getByLabel(/emergency contact name/i)).toBeVisible();
     await expect(dialog.getByLabel(/emergency contact phone/i)).toBeVisible();
-    await expect(dialog.getByText(/user id/i)).toHaveCount(0);
-    await expect(dialog.getByText(/location/i)).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Profile", exact: true }).click();
 
     await dialog.getByPlaceholder("A short line about you as an athlete").fill("#testing");
     await dialog.getByRole("button", { name: /^save$/i }).click();
-    await expect(dialog).toBeHidden({ timeout: 10000 });
+    // The settings menu stays open after a save and says so.
+    await expect(dialog.getByText("Saved")).toBeVisible({ timeout: 10000 });
+    await dialog.getByRole("button", { name: "Close settings" }).click();
+    await expect(dialog).toBeHidden();
     await expect(page.getByText("#testing").last()).toBeVisible();
   });
 

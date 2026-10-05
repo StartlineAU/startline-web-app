@@ -218,7 +218,7 @@ export default function HowItWorksPage() {
                   Before your first event goes live, set up your organiser profile. Athletes don&apos;t just sign up for events — they choose organisers they trust.
                 </p>
                 <p className="text-muted text-[16px] leading-relaxed mb-8">
-                  Upload your logo, write a short bio, and link your website and socials. Your profile appears on every event you list, building credibility with every click.
+                  Upload your logo and cover photo, and write a short bio. Your profile appears on every event you list, building credibility with every click.
                 </p>
                 <div className="space-y-3 mb-8">
                   {[

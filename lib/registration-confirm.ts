@@ -292,15 +292,30 @@ export async function announceRegistrations(
     ? `${names[0]} registered for ${event.title}`
     : `${entries.length} participants registered for ${event.title}: ${names.join(", ")}`;
 
-  await prisma.notification.create({
-    data: {
-      organiserId,
-      eventId: event.id,
-      type: "NEW_REGISTRATION",
-      title: entries.length === 1 ? "New registration" : "New group registration",
-      body: notificationBody,
-    },
-  }).catch((err: unknown) => console.error("Failed to create notification:", err));
+  // The organisation can turn registration notifications off. If the lookup
+  // fails, tell them anyway: a missed notification is worse than an extra one.
+  let notifyOrganiser = true;
+  try {
+    const organiser = await prisma.organiser.findUnique({
+      where: { id: organiserId },
+      select: { notifyNewRegistration: true },
+    });
+    notifyOrganiser = organiser?.notifyNewRegistration !== false;
+  } catch (err) {
+    console.error("Failed to read notification preferences:", err);
+  }
+
+  if (notifyOrganiser) {
+    await prisma.notification.create({
+      data: {
+        organiserId,
+        eventId: event.id,
+        type: "NEW_REGISTRATION",
+        title: entries.length === 1 ? "New registration" : "New group registration",
+        body: notificationBody,
+      },
+    }).catch((err: unknown) => console.error("Failed to create notification:", err));
+  }
 
   // When the athlete absorbs the platform fee, the amount charged is
   // price + fee — the email total must reflect that, not just the ticket

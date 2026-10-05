@@ -61,23 +61,23 @@ test.describe("organiser portal entry", () => {
     await page.getByTestId("user-menu").click();
     const menu = page.getByTestId("user-menu-panel");
 
-    await expect(menu.getByText(/switch to organiser portal/i)).toBeVisible();
+    await expect(menu.getByText(/my organiser account/i)).toBeVisible();
     await expect(menu.getByRole("link", { name: /become an organiser/i })).toHaveCount(0);
     await menu.getByRole("button", { name: /apex endurance/i }).click();
     await expect(page).toHaveURL(/\/organiser\/dashboard/, { timeout: 30000 });
   });
 
-  test("the header dropdown offers to set one up for someone who has none", async ({ page }) => {
+  // The dropdown is for the account you have. Setting up an organisation is
+  // offered from the footer and the organiser landing page instead.
+  test("the header dropdown does not offer to set one up for someone who has none", async ({ page }) => {
     test.slow();
     await signInAs(page, "athlete");
     await page.goto("/events");
     await page.getByTestId("user-menu").click();
     const menu = page.getByTestId("user-menu-panel");
 
-    await expect(menu.getByText(/switch to organiser portal/i)).toHaveCount(0);
-    const become = menu.getByRole("link", { name: /become an organiser/i });
-    await expect(become).toBeVisible();
-    await become.click();
-    await expect(page).toHaveURL(/\/organiser-setup/, { timeout: 30000 });
+    await expect(menu.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(menu.getByText(/my organiser account/i)).toHaveCount(0);
+    await expect(menu.getByRole("link", { name: /become an organiser/i })).toHaveCount(0);
   });
 });

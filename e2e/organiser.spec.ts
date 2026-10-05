@@ -316,9 +316,10 @@ test.describe("organiser pages", () => {
     await expect(page.getByText("Saved")).toBeVisible();
   });
 
-  // The notification rows drew switches that did nothing, and following
-  // Manage payments left the modal open over the page it had loaded (#346).
-  test("settings modal shows fixed notification states and closes on Manage payments", async ({ page }) => {
+  // The notification rows drew switches that did nothing (#346). They are
+  // real now: each one saves, and off stays off. Following Manage payments
+  // also used to leave the modal open over the page it had loaded.
+  test("settings modal notification switches save, and it closes on Manage payments", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/profile");
 
@@ -326,7 +327,33 @@ test.describe("organiser pages", () => {
     // The navbar has its own Notifications button and Payments link.
     const settings = page.getByRole("dialog", { name: "Settings" });
     await settings.getByRole("button", { name: "Notifications", exact: true }).click();
-    await expect(settings.getByText("On", { exact: true })).toHaveCount(3);
+    const registrations = settings.getByRole("switch", { name: "New registration" });
+    await expect(settings.getByRole("switch", { name: "Event approved" })).toHaveAttribute("aria-checked", "true");
+    await expect(settings.getByRole("switch", { name: "Event rejected" })).toHaveAttribute("aria-checked", "true");
+    await expect(registrations).toHaveAttribute("aria-checked", "true");
+
+    try {
+      // Nothing is sent until Save, like every other section.
+      const save = settings.getByRole("button", { name: /^save$/i });
+      await expect(save).toBeDisabled();
+      await registrations.click();
+      await expect(registrations).toHaveAttribute("aria-checked", "false");
+      const unsaved = await (await page.request.get("/api/organiser/profile")).json();
+      expect(unsaved.notifyNewRegistration).toBe(true);
+
+      await Promise.all([
+        page.waitForResponse(r => r.url().includes("/api/organiser/profile") && r.request().method() === "PATCH" && r.ok()),
+        save.click(),
+      ]);
+      await expect(settings.getByText("Saved")).toBeVisible();
+      // Saved, not just drawn: the server says the same after a fresh read.
+      const profile = await (await page.request.get("/api/organiser/profile")).json();
+      expect(profile.notifyNewRegistration).toBe(false);
+      expect(profile.notifyEventApproved).toBe(true);
+    } finally {
+      const restored = await page.request.patch("/api/organiser/profile", { data: { notifyNewRegistration: true } });
+      expect(restored.ok()).toBe(true);
+    }
 
     await settings.getByRole("button", { name: "Payments", exact: true }).click();
     await settings.getByRole("link", { name: "Manage payments" }).click();
@@ -348,11 +375,12 @@ test.describe("organiser pages", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
 
     try {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
       await Promise.all([
         page.waitForResponse(r => r.url().includes("/api/organiser/profile") && r.request().method() === "PATCH" && r.ok()),
-        toggle.click(),
+        settings.getByRole("button", { name: /^save$/i }).click(),
       ]);
-      await expect(toggle).toHaveAttribute("aria-checked", "false");
 
       // Tom manages the same organisation: he is shown the setting, cannot
       // change it, and no longer receives the organisation's notifications.
@@ -370,7 +398,11 @@ test.describe("organiser pages", () => {
       const managerSettings = manager.getByRole("dialog", { name: "Settings" });
       await managerSettings.getByRole("button", { name: "Notifications", exact: true }).click();
       await expect(managerSettings.getByRole("switch", { name: "Include managers" })).toBeDisabled();
+      await expect(managerSettings.getByRole("switch", { name: "New registration" })).toBeDisabled();
+      const refusedKind = await manager.request.patch("/api/organiser/profile", { data: { notifyNewRegistration: false } });
+      expect(refusedKind.status()).toBe(403);
       await expect(managerSettings.getByText("Only the owner can change this.")).toBeVisible();
+      await expect(managerSettings.getByRole("button", { name: /^save$/i })).toHaveCount(0);
       await managerContext.close();
     } finally {
       // Leave the seeded organisation as the other specs expect to find it.

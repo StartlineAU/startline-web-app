@@ -10,6 +10,7 @@ import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
 import { isNative, openExternal } from "@/lib/capacitor";
+import { useSettings } from "@/context/SettingsContext";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,7 @@ function PaymentsContent() {
   const [abn,               setAbn]               = useState("");
   const [dob,               setDob]               = useState("");
   const [insuranceDeclared, setInsuranceDeclared] = useState(false);
+  const { open: openSettings, profileSavedAt } = useSettings();
 
   useEffect(() => {
     fetch("/api/organiser/profile")
@@ -70,6 +72,18 @@ function PaymentsContent() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  // The declaration is made in Settings, over this page. Pick up the new value
+  // when that saves, without disturbing what has been typed into the form here.
+  useEffect(() => {
+    if (profileSavedAt === 0) return;
+    let cancelled = false;
+    fetch("/api/organiser/profile")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: Profile | null) => { if (data && !cancelled) setInsuranceDeclared(data.insuranceDeclared ?? false); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [profileSavedAt]);
 
   const profileIncomplete =
     !profile?.orgName || !profile?.contactName || !profile?.contactEmail || !profile?.phone;
@@ -90,7 +104,7 @@ function PaymentsContent() {
       return;
     }
     if (!insuranceDeclared) {
-      setError("You must declare that you hold current public liability insurance ($10M minimum) before connecting.");
+      setError("Declare your public liability insurance under Settings, Organisation profile, before connecting.");
       return;
     }
 
@@ -107,7 +121,6 @@ function PaymentsContent() {
           legalName,
           abn,
           dob: dob || undefined,
-          insuranceDeclared,
         }),
       });
 
@@ -337,40 +350,26 @@ function PaymentsContent() {
                 </div>
               </div>
 
-              {/* Insurance declaration */}
-              <div className="mt-6 bg-white/[0.03] border border-dark-lighter rounded-xl p-5">
-                <div className="flex items-start gap-4">
+              {/* The insurance declaration is not a payments matter, so it is
+                  made under Settings > Organisation profile. Connecting Stripe
+                  still waits on it, and says where to go. */}
+              {!insuranceDeclared && (
+                <div className="mt-6 bg-white/[0.03] border border-dark-lighter rounded-xl p-5 flex items-start gap-4">
                   <ShieldCheck className="w-5 h-5 text-muted mt-0.5 shrink-0" />
                   <div className="flex-1">
                     <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted-light mb-2">
-                      Public liability insurance declaration
+                      Insurance declaration needed
                     </div>
-                    <p className="text-[13px] text-muted leading-relaxed mb-4">
-                      Before listing events on Startline, you must hold and maintain current public liability insurance with a minimum coverage of <strong className="text-muted-light">$10 million per occurrence</strong>, underwritten by an APRA-registered insurer, covering the full duration of each event. Startline does not collect or verify insurance certificates — this is a self-declaration on your honour (ToS §5.3).
+                    <p className="text-[13px] text-muted leading-relaxed mb-3">
+                      Before connecting Stripe, declare that you hold public liability insurance for your events. It takes one tick, in your organisation profile.
                     </p>
-                    <label className="flex items-start gap-3 cursor-pointer group">
-                      <div className="relative flex-shrink-0 mt-0.5">
-                        <input
-                          type="checkbox"
-                          checked={insuranceDeclared}
-                          onChange={(e) => setInsuranceDeclared(e.target.checked)}
-                          className="sr-only"
-                        />
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${insuranceDeclared ? "bg-primary border-primary" : "bg-dark-light border-dark-lighter group-hover:border-muted"}`}>
-                          {insuranceDeclared && (
-                            <svg className="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-[13px] text-muted leading-relaxed">
-                        I declare that I currently hold public liability insurance meeting Startline&apos;s minimum requirements, and I will maintain this coverage for the full duration of every event I list.
-                      </span>
-                    </label>
+                    <button type="button" onClick={() => openSettings("organisation")}
+                      className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:underline">
+                      Open organisation profile
+                    </button>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Connect / update button */}
               {!isConnected && (
