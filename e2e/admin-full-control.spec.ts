@@ -161,6 +161,10 @@ test.describe("admin event editing", () => {
     await page.goto(`/admin/events/${eventId}/edit`);
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { name: /edit event/i })).toBeVisible();
+    // Wait for the event to load into the form before typing. The wizard fills
+    // its state from a fetch, and typing first lets that reply overwrite the
+    // new title, so the save persists the old one and the edit looks ignored.
+    await expect(page.getByPlaceholder(/Apex Throwdown/i)).toHaveValue(originalTitle);
 
     await page.getByPlaceholder(/Apex Throwdown/i).fill(newTitle);
     await page.getByRole("button", { name: /save draft/i }).click();

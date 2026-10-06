@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { organiserLogin, organiserMemberLogin, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, organiserMemberLogin, openOrganiserSettings, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
 
 ensureDatabaseUrl();
 
@@ -377,9 +377,7 @@ test.describe("organiser pages", () => {
     }).toBe(true);
 
     await page.goto("/organiser/profile");
-    await page.getByRole("button", { name: "Edit Profile" }).click();
-
-    const settings = page.getByRole("dialog", { name: "Settings" });
+    const settings = await openOrganiserSettings(page);
     await settings.getByRole("button", { name: "Notifications", exact: true }).click();
     const toggle = settings.getByRole("switch", { name: "Include managers" });
     await expect(toggle).toBeEnabled();
@@ -405,8 +403,7 @@ test.describe("organiser pages", () => {
       expect(feed.notifications).toEqual([]);
 
       await manager.goto("/organiser/profile");
-      await manager.getByRole("button", { name: "Edit Profile" }).click();
-      const managerSettings = manager.getByRole("dialog", { name: "Settings" });
+      const managerSettings = await openOrganiserSettings(manager);
       await managerSettings.getByRole("button", { name: "Notifications", exact: true }).click();
       await expect(managerSettings.getByRole("switch", { name: "Include managers" })).toBeDisabled();
       await expect(managerSettings.getByRole("switch", { name: "New registration" })).toBeDisabled();

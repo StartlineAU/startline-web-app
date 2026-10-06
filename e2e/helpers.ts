@@ -39,6 +39,25 @@ export async function organiserMemberLogin(page: Page): Promise<void> {
   await page.waitForURL("**/organiser/dashboard**", { timeout: 15000 });
 }
 
+/**
+ * Open the settings dialog from an already-loaded organiser page.
+ *
+ * "Edit Profile" is server-rendered: a click that lands before React hydrates
+ * focuses the button but never fires onClick, so no dialog appears. Under CI
+ * load that happens often, so retry the open until the dialog is actually up
+ * rather than hoping the first click won.
+ */
+export async function openOrganiserSettings(page: Page) {
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(async () => {
+    if (!(await settings.isVisible())) {
+      await page.getByRole("button", { name: "Edit Profile" }).click();
+    }
+    await expect(settings).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
+  return settings;
+}
+
 // Avery Quinn — MANAGER of both Apex Endurance Events and Coastal Fitness
 // Collective (no OWNER role). The only seeded user whose active organiser is
 // decided purely by the startline_active_org cookie (issue #231).
