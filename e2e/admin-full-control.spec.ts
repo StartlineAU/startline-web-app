@@ -166,16 +166,16 @@ test.describe("admin event editing", () => {
     await page.getByRole("button", { name: /save draft/i }).click();
     await page.waitForURL("**/admin/events**", { timeout: 20000 });
 
-    // Still APPROVED — shows on the Approved tab with the new title.
-    // The list is fetched client-side in a useEffect after hydration, so
-    // networkidle can resolve before the row renders. Wait for the fetch itself
-    // instead of racing it on a timer, which is what made this flaky in CI.
-    const listResponse = page.waitForResponse(
-      (res) => res.url().includes("/api/admin/events?status=APPROVED") && res.ok(),
-    );
-    await page.goto("/admin/events?status=APPROVED");
-    await listResponse;
-    await expect(page.getByText(newTitle, { exact: false })).toBeVisible();
+    // Still APPROVED, with the new title. Assert it on the event itself: the
+    // list is ordered createdAt desc and paged at 50, so under parallel CI load
+    // a freshly-edited event can fall off page one, and the rendered list is not
+    // a reliable oracle. Polling the API also absorbs the save's async tail.
+    await expect.poll(async () => {
+      const res = await page.request.get(`/api/admin/events/${eventId}`);
+      if (!res.ok()) return null;
+      const ev = await res.json() as { title: string; status: string };
+      return `${ev.status}:${ev.title}`;
+    }, { timeout: 15000 }).toBe(`APPROVED:${newTitle}`);
   });
 
   test("can edit a draft event", async ({ page }) => {

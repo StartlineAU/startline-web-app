@@ -365,6 +365,17 @@ test.describe("organiser pages", () => {
   // and only the owner can change that (#348).
   test("only the owner can change whether managers are notified", async ({ page, browser }) => {
     await organiserLogin(page);
+
+    // The switch reads shared seed state, and a cleanup that lost its
+    // connection in an earlier run can leave it off — which then fails the
+    // assertion below and every retry after it. Establish the precondition
+    // instead of inheriting it.
+    await expect.poll(async () => {
+      try {
+        return (await page.request.patch("/api/organiser/profile", { data: { notifyManagers: true } })).ok();
+      } catch { return false; }
+    }).toBe(true);
+
     await page.goto("/organiser/profile");
     await page.getByRole("button", { name: "Edit Profile" }).click();
 
@@ -406,8 +417,12 @@ test.describe("organiser pages", () => {
       await managerContext.close();
     } finally {
       // Leave the seeded organisation as the other specs expect to find it.
-      const restored = await page.request.patch("/api/organiser/profile", { data: { notifyManagers: true } });
-      expect(restored.ok()).toBe(true);
+      // Poll so a dropped connection cannot fail the test at its last step.
+      await expect.poll(async () => {
+        try {
+          return (await page.request.patch("/api/organiser/profile", { data: { notifyManagers: true } })).ok();
+        } catch { return false; }
+      }).toBe(true);
     }
   });
 
