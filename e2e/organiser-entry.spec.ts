@@ -57,11 +57,15 @@ test.describe("organiser portal entry", () => {
   test("the header dropdown offers the organisation to someone who has one", async ({ page }) => {
     test.slow();
     await signInAs(page, "organiser");
+    // The organisation rows come from one role fetch after sign-in. Waiting on
+    // it says whether a missing row is a slow reply or a failed one.
+    const role = page.waitForResponse((r) => r.url().includes("/api/user/role"), { timeout: 30000 });
     await page.goto("/events");
+    expect((await role).status()).toBe(200);
     await page.getByTestId("user-menu").click();
     const menu = page.getByTestId("user-menu-panel");
 
-    await expect(menu.getByText(/my organiser account/i)).toBeVisible();
+    await expect(menu.getByText(/my organiser account/i)).toBeVisible({ timeout: 30000 });
     await expect(menu.getByRole("link", { name: /become an organiser/i })).toHaveCount(0);
     await menu.getByRole("button", { name: /apex endurance/i }).click();
     await expect(page).toHaveURL(/\/organiser\/dashboard/, { timeout: 30000 });
