@@ -55,12 +55,10 @@ variable "cognito_deletion_protection" {
 
 # Runtime server-side secrets.
 #
-# These are read by the running app, not by the build, so they have to live on
-# the Amplify branch environment. The build writes Secrets Manager into
-# .env.production, but `output: "standalone"` ships only `.next` — that file
-# never reaches the server, so a value that exists only in Secrets Manager is
-# undefined at runtime. NEXT_PUBLIC_* is exempt because Next inlines it at
-# build time; everything below is not.
+# These are read by the running app, not only by the build. The module puts
+# each one on the Amplify branch environment and in the app secret, which the
+# build writes into .env.production; Next copies that file into the standalone
+# output, and that copy is the one the server reads (#363).
 
 variable "resend_api_key" {
   description = "Resend API key. Sends every transactional email; without it lib/email.ts silently skips them and /api/contact 500s."
@@ -79,6 +77,12 @@ variable "stripe_secret_key" {
   description = "Stripe secret key for this environment (live for prod, test for staging). lib/stripe.ts throws without it, so checkout and refunds fail closed."
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "stripe_publishable_key" {
+  description = "Stripe publishable key for this environment (pk_live on prod, pk_test on staging). Without it the checkout page shows no card form."
+  type        = string
   default     = ""
 }
 

@@ -10,6 +10,7 @@
 # Secrets Manager reaches the build, not the deployed artefact.
 #   - stripe_secret_key_prod / stripe_secret_key_staging
 #   - stripe_webhook_secret_prod / stripe_webhook_secret_staging
+#   - stripe_publishable_key_prod / stripe_publishable_key_staging
 #   - resend_api_key
 #   - resend_from            (optional; falls back to the address in lib/email.ts)
 #   - abr_guid
