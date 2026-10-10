@@ -29,23 +29,31 @@ resource "aws_secretsmanager_secret" "app" {
   }
 }
 
+# The build writes this secret into .env.production, and Next copies that file
+# into .next/standalone, so it is what the running server reads. The runtime
+# secrets are merged in for that reason: on the Amplify branch alone,
+# STRIPE_SECRET_KEY was listed in the console and still undefined in the route
+# handlers (#363). This resource owns the whole payload, so a key added by hand
+# in Secrets Manager is dropped the next time any value here changes.
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
-  secret_string = jsonencode({
-    NEXT_PUBLIC_COGNITO_USER_POOL_ID = aws_cognito_user_pool.this.id
-    NEXT_PUBLIC_COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.web.id
-    GUEST_EMAIL_VERIFICATION_SECRET  = random_password.guest_email_verification.result
-    AWS_S3_BUCKET                    = aws_s3_bucket.uploads.id
-    AWS_S3_REGION                    = "ap-southeast-2"
-    NEXT_PUBLIC_CDN_URL              = var.cdn_custom_domain != null ? "https://${var.cdn_custom_domain}" : "https://${aws_cloudfront_distribution.cdn.domain_name}"
-    DATABASE_URL                     = var.database_url
-    NEXT_PUBLIC_SITE_URL             = var.site_url
-    NEXT_PUBLIC_BASE_URL             = var.site_url
-    NEXT_PUBLIC_AWS_REGION           = "ap-southeast-2"
-    NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN  = var.mapbox_access_token
-    NEXT_PUBLIC_TURNSTILE_SITE_KEY   = var.turnstile_site_key
-    TURNSTILE_SECRET_KEY             = var.turnstile_secret_key
-  })
+  secret_string = jsonencode(merge(
+    {
+      NEXT_PUBLIC_COGNITO_USER_POOL_ID = aws_cognito_user_pool.this.id
+      NEXT_PUBLIC_COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.web.id
+      AWS_S3_BUCKET                    = aws_s3_bucket.uploads.id
+      AWS_S3_REGION                    = "ap-southeast-2"
+      NEXT_PUBLIC_CDN_URL              = var.cdn_custom_domain != null ? "https://${var.cdn_custom_domain}" : "https://${aws_cloudfront_distribution.cdn.domain_name}"
+      DATABASE_URL                     = var.database_url
+      NEXT_PUBLIC_SITE_URL             = var.site_url
+      NEXT_PUBLIC_BASE_URL             = var.site_url
+      NEXT_PUBLIC_AWS_REGION           = "ap-southeast-2"
+      NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN  = var.mapbox_access_token
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY   = var.turnstile_site_key
+    },
+    local.runtime_secret_variables,
+    local.stripe_publishable_key_variable,
+  ))
 }
 
 # ===== Cognito custom message Lambda =====
@@ -216,10 +224,9 @@ resource "aws_cognito_user_group" "this" {
 # ===== Amplify branch =====
 
 locals {
-  # Server-only values the running app reads from process.env. They cannot come
-  # from Secrets Manager: the build writes that into .env.production, and
-  # `output: "standalone"` ships only .next, so the file never reaches the
-  # server. See the note above the variables in variables.tf.
+  # Server-only values the running app reads from process.env. They go to both
+  # places: the branch environment, where the build reads them, and the app
+  # secret above, which is the copy that reaches the server.
   runtime_secrets = {
     GUEST_EMAIL_VERIFICATION_SECRET = random_password.guest_email_verification.result
     TURNSTILE_SECRET_KEY            = var.turnstile_secret_key
@@ -238,6 +245,14 @@ locals {
     for name, value in local.runtime_secrets : name => value
     if try(trimspace(value), "") != ""
   }
+
+  # The card form's key. Inlined by `pnpm build` from .env.production, so it
+  # belongs in the app secret and nowhere else. Blank is left out, like the rest.
+  stripe_publishable_key_variable = (
+    trimspace(var.stripe_publishable_key) != ""
+    ? { NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = var.stripe_publishable_key }
+    : {}
+  )
 
   # Names only, so safe to unmark. Left sensitive, Terraform refuses to print
   # the precondition's message and the failed apply never says which key is
