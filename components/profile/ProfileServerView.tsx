@@ -104,32 +104,10 @@ export default async function ProfileServerView({
     },
   };
 
-  const ownerData = isOwner
-    ? {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        username: user.username,
-        bio: user.bio,
-        isPublic: user.isPublic,
-        city: user.city,
-        state: user.state,
-        profilePicUrl: user.profilePicUrl,
-        mobile: user.mobile,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        emergencyContactName: user.emergencyContactName,
-        emergencyContactPhone: user.emergencyContactPhone,
-        createdAt: user.createdAt,
-        organiser: user.memberships[0]?.organiser ?? null,
-      }
-    : null;
-
   return (
     <ProfilePageClient
       profile={profile}
       isOwner={isOwner}
-      ownerData={ownerData}
     />
   );
 }

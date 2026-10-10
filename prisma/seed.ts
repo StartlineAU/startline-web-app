@@ -439,7 +439,7 @@ async function main() {
 
   // ── Organiser ────────────────────────────────────────────────────────
   const orgSub = subsByEmail["sarah.mitchell@startline.test"];
-  let orgRecord: { id: string; email: string; orgName: string | null; instagram: string | null; facebook: string | null } | null = null;
+  let orgRecord: { id: string; email: string; orgName: string | null } | null = null;
 
   if (orgSub) {
     const userId = userBySub[orgSub];
@@ -455,9 +455,6 @@ async function main() {
           contactEmail: "sarah.mitchell@startline.test",
           phone: "+61 400 000 000",
           abn: "51 824 753 556",
-          website: "https://startlineau.com",
-          instagram: "apexenduranceevents",
-          facebook: "apexenduranceevents",
           bio: "Melbourne-based crew behind The Apex Throwdown and the Hybrid Hustle Series. We've been putting on functional fitness and endurance events across Victoria since 2019 — athlete-first programming, tight heat schedules, and a finish-line party worth staying for.",
           logoUrl: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&q=80",
           coverImageUrl: "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1600&q=80",
@@ -504,9 +501,6 @@ async function main() {
         contactEmail: "jade.nguyen@startline.test",
         phone: "+61 400 000 001",
         abn: "12 345 678 901",
-        website: "https://startlineau.com",
-        instagram: "coastalfitnesscollective",
-        facebook: "coastalfitnesscollective",
         bio: "Coastal race organisers running ocean swims, triathlons and running events up and down the east coast.",
         logoUrl: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=400&q=80",
         coverImageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600&q=80",

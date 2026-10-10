@@ -218,13 +218,13 @@ export default function HowItWorksPage() {
                   Before your first event goes live, set up your organiser profile. Athletes don&apos;t just sign up for events — they choose organisers they trust.
                 </p>
                 <p className="text-muted text-[16px] leading-relaxed mb-8">
-                  Upload your logo, write a short bio, and link your website and socials. Your profile appears on every event you list, building credibility with every click.
+                  Upload your logo and cover photo, and write a short bio. Your profile appears on every event you list, building credibility with every click.
                 </p>
                 <div className="space-y-3 mb-8">
                   {[
                     { icon: UserCircle2, text: "Your logo on every event card"     },
                     { icon: Star,        text: "Bio & credentials for athletes"    },
-                    { icon: Globe,       text: "Website, Instagram & Facebook"     },
+                    { icon: Award,       text: "Ratings and reviews from athletes" },
                     { icon: BarChart2,   text: "Boosts event visibility in search" },
                   ].map(({ icon: Icon, text }) => (
                     <div key={text} className="flex items-center gap-3">
@@ -267,18 +267,11 @@ export default function HowItWorksPage() {
                       <p className="text-muted text-[13px] leading-relaxed mb-5">
                         Australia&apos;s leading ultra-distance event series, specialising in trail running and hybrid events across all states.
                       </p>
-                      <div className="grid grid-cols-3 gap-3 mb-5">
+                      <div className="grid grid-cols-3 gap-3">
                         {[{ v: "12", l: "Events" }, { v: "3.2K", l: "Athletes" }, { v: "4.8★", l: "Rating" }].map(({ v, l }) => (
                           <div key={l} className="bg-dark-light border border-dark-lighter rounded-xl p-3 text-center">
                             <div className="font-headline text-[20px] font-black italic tracking-tighter text-primary">{v}</div>
                             <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">{l}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        {["Website", "Instagram", "Facebook"].map(l => (
-                          <div key={l} className="flex-1 py-2 rounded-lg border border-dark-lighter text-center font-headline text-[10px] uppercase tracking-widest text-muted hover:border-primary hover:text-primary transition-colors cursor-pointer">
-                            {l}
                           </div>
                         ))}
                       </div>

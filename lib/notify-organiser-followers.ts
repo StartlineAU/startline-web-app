@@ -18,8 +18,9 @@ export type NotifyOrganiserFollowersInput = {
 export async function notifyOrganiserFollowers(
   input: NotifyOrganiserFollowersInput,
 ): Promise<{ notified: number; emailed: number }> {
+  // Followers who turned these off get neither the feed entry nor the email.
   const follows = await prisma.organiserFollow.findMany({
-    where: { organiserId: input.organiserId },
+    where: { organiserId: input.organiserId, user: { notifyFollowedOrganiserEvents: true } },
     select: {
       userId: true,
       user: { select: { email: true, name: true } },

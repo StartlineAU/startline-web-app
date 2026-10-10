@@ -125,6 +125,13 @@ resource "aws_cognito_user_pool" "this" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  # Changing email from Settings: the old address stays in force until the
+  # code sent to the new one is entered. Without this Cognito switches the
+  # address straight away, and a typo locks the person out of their account.
+  user_attribute_update_settings {
+    attributes_require_verification_before_update = ["email"]
+  }
+
   password_policy {
     minimum_length                   = 8
     require_lowercase                = true
@@ -188,7 +195,6 @@ resource "aws_cognito_user_pool_client" "web" {
   generate_secret = false
 
   explicit_auth_flows = [
-    "ALLOW_USER_AUTH",
     "ALLOW_USER_SRP_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH",
   ]

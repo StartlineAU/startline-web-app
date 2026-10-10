@@ -64,7 +64,7 @@ test.describe("image upload", () => {
 
     // The modal saves the returned URL onto the profile straight away.
     await page.route("**/api/organiser/profile", async route => {
-      if (route.request().method() !== "PUT") return route.fallback();
+      if (route.request().method() !== "PATCH") return route.fallback();
       await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     });
 
