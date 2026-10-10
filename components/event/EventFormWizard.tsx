@@ -486,7 +486,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
             Overall start. Per-wave start times can be set in Tickets & Pricing.
           </p>
         </Field>
-        <Field label="Cut-off time" hint="Last finisher">
+        <Field label="Cut-off time (if required)">
           <TimePicker value={form.endTime} onChange={v => update({ endTime: v })} placeholder="Select end time" ariaLabel="Cut-off time" />
           {timeInvalid && (
             <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">
@@ -1616,6 +1616,17 @@ export default function EventFormWizard({
   const originalFields = useRef<Record<string, unknown>>({});
 
   const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
+
+  // Every step change lands at the top of the new step. Continue sits at the
+  // bottom of a long form, so without this the next step opened at its footer.
+  // The glide runs alongside the step's slide-in; reduced motion jumps instead.
+  const previousStep = useRef(step);
+  useEffect(() => {
+    if (previousStep.current === step) return;
+    previousStep.current = step;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "instant" : "smooth" });
+  }, [step]);
 
   useEffect(() => {
     const id = eventIdProp ?? new URLSearchParams(window.location.search).get("id");

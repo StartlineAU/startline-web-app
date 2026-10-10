@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import FormSelect from "@/components/ui/FormSelect";
-import { formatAudFromCents } from "@/lib/organiser-dashboard";
+import { formatAudFromCents, trendAxisTicks } from "@/lib/organiser-dashboard";
 
 export type TrendDay = {
   date: string;
@@ -70,6 +70,18 @@ export default function DashboardTrendChart({
     () => chartData.reduce((sum, d) => sum + d.value, 0),
     [chartData],
   );
+
+  const formatAxisValue = (v: number) =>
+    metric === "revenue" ? `$${Math.round(v).toLocaleString()}` : String(Math.round(v));
+
+  const axisTicks = useMemo(
+    () => trendAxisTicks(Math.max(0, ...chartData.map((d) => d.value))),
+    [chartData],
+  );
+  // Only as wide as the longest label needs, so the axis sits against the
+  // card edge instead of floating in a fixed gutter.
+  const axisWidth =
+    Math.max(...axisTicks.map((t) => formatAxisValue(t).length)) * 7 + 10;
 
   const eventOptions = [
     { value: "", label: "All events" },
@@ -167,13 +179,10 @@ export default function DashboardTrendChart({
               tick={{ fill: "#F5F7FA", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              width={48}
-              domain={[0, (max: number) => (max > 0 ? max : 1)]}
-              tickFormatter={(v: number) =>
-                metric === "revenue"
-                  ? `$${Math.round(v).toLocaleString()}`
-                  : String(Math.round(v))
-              }
+              width={axisWidth}
+              ticks={axisTicks}
+              domain={[0, axisTicks[axisTicks.length - 1]]}
+              tickFormatter={formatAxisValue}
             />
             <Tooltip
               contentStyle={{

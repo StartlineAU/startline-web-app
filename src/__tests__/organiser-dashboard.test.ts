@@ -5,7 +5,32 @@ import {
   computeCurrentStats,
   isWithinNextDays,
   toDayKey,
+  trendAxisTicks,
 } from "@/lib/organiser-dashboard";
+
+describe("trendAxisTicks", () => {
+  it.each([
+    [0, [0, 1, 2, 3, 4]],
+    [1, [0, 1]],
+    [3, [0, 1, 2, 3]],
+    [4, [0, 1, 2, 3, 4]],
+    [7, [0, 2, 4, 6, 8]],
+    [37, [0, 10, 20, 30, 40]],
+    [100, [0, 50, 100]],
+    [1234.5, [0, 500, 1000, 1500]],
+  ])("max %d gives %j", (max, expected) => {
+    expect(trendAxisTicks(max)).toEqual(expected);
+  });
+
+  it("never repeats a tick and always covers the maximum", () => {
+    for (const max of [0, 0.4, 1, 2, 9, 11, 99, 250, 4821, 120000]) {
+      const ticks = trendAxisTicks(max);
+      expect(new Set(ticks).size).toBe(ticks.length);
+      expect(ticks.every(Number.isInteger)).toBe(true);
+      expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(max);
+    }
+  });
+});
 
 describe("organiser-dashboard helpers", () => {
   const now = new Date("2026-08-09T12:00:00");

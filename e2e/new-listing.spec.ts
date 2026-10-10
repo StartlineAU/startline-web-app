@@ -28,6 +28,22 @@ test.describe("new listing wizard", () => {
     await expect(page.getByText(/when and where/i).first()).toBeVisible();
   });
 
+  // Continue is at the foot of the step, so the next step used to open
+  // scrolled to its own footer.
+  test("continue lands at the top of the next step", async ({ page }) => {
+    await organiserLogin(page);
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto("/organiser/new-listing");
+
+    const next = page.getByRole("button", { name: /continue/i });
+    await next.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await next.click();
+
+    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
   test("address autocomplete shows suggestions", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
