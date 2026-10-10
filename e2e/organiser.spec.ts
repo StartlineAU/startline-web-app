@@ -434,12 +434,15 @@ test.describe("organiser pages", () => {
     await expect(page.getByText(/rules\.pdf/i)).toBeVisible();
   });
 
-  test("organiser how it works page visual snapshot", async ({ page }) => {
+  test("organiser guide page is gone from the nav and the route", async ({ page }) => {
 
     await organiserLogin(page);
-    await page.goto("/organiser/how-it-works");
-    await page.waitForLoadState("networkidle");
-    await argosScreenshot(page, "organiser-how-it-works");
+    await page.goto("/organiser/dashboard");
+    await expect(page.getByRole("link", { name: "Listings", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Guide", exact: true })).toHaveCount(0);
+
+    const res = await page.goto("/organiser/how-it-works");
+    expect(res?.status()).toBe(404);
   });
 
   test("organiser profile page visual snapshot", async ({ page }) => {

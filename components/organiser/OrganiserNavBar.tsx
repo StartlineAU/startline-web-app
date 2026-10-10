@@ -24,7 +24,6 @@ const ORGANISER_NAV: NavItem[] = [
   { href: "/organiser/profile", label: "Organisation" },
   { href: "/organiser/members", label: "Members" },
   { href: "/organiser/payments", label: "Payments" },
-  { href: "/organiser/how-it-works", label: "Guide" },
 ];
 
 interface Notification {

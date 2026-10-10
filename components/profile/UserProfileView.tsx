@@ -34,7 +34,8 @@ export type ProfileRaceHistory = {
 };
 
 export type UserProfileViewProps = {
-  username: string;
+  /** Heading beside the avatar: the handle, or the owner's fallback name. */
+  displayName: string;
   bio: string | null;
   profilePicUrl: string | null;
   history: ProfileRaceHistory | null;
@@ -203,14 +204,14 @@ function RaceHistoryCard({ reg }: { reg: HistoryRegistration }) {
 }
 
 export default function UserProfileView({
-  username,
+  displayName,
   bio,
   profilePicUrl,
   history,
   headerActions,
   loading = false,
 }: UserProfileViewProps) {
-  const initial = username[0]?.toUpperCase() ?? "A";
+  const initial = displayName[0]?.toUpperCase() ?? "A";
 
   return (
     <main className="min-h-screen bg-dark-darker pt-14">
@@ -230,7 +231,7 @@ export default function UserProfileView({
                 {profilePicUrl ? (
                   <Image
                     src={profilePicUrl}
-                    alt={username}
+                    alt={displayName}
                     fill
                     className="object-cover"
                     sizes="160px"
@@ -245,7 +246,7 @@ export default function UserProfileView({
               <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:items-end gap-4 sm:gap-5 pb-1">
                 <div className="min-w-0 flex flex-wrap items-end gap-x-5 gap-y-2">
                   <h1 className="font-headline text-4xl sm:text-5xl font-black tracking-tighter text-light leading-none">
-                    {username}
+                    {displayName}
                   </h1>
                   {bio && (
                     <p className="basis-full mt-1 text-lg sm:text-xl font-medium text-light leading-relaxed max-w-3xl sm:hidden">

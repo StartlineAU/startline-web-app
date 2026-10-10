@@ -6,6 +6,7 @@ import {
   draftsToPayload,
   draftValidationError,
   parsePriceToCents,
+  formatPriceInput,
   parseStock,
   hasPurchaseHistory,
   draftKey,
@@ -47,6 +48,22 @@ describe("parsePriceToCents", () => {
 
   it.each(["", "abc", "25.005", "-5", "1e3", "25,00"])("rejects %s", (input) => {
     expect(parsePriceToCents(input)).toBeNull();
+  });
+});
+
+describe("formatPriceInput", () => {
+  it.each([
+    ["35", "35.00"],
+    ["35.5", "35.50"],
+    ["$35", "35.00"],
+    ["  35.00 ", "35.00"],
+    ["0", "0.00"],
+  ])("formats %s as %s", (input, expected) => {
+    expect(formatPriceInput(input)).toBe(expected);
+  });
+
+  it.each(["", "abc", "35.005", "35,00"])("leaves %s untouched", (input) => {
+    expect(formatPriceInput(input)).toBe(input);
   });
 });
 

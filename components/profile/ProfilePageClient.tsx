@@ -10,6 +10,8 @@ import UserEditProfileModal from "@/components/UserEditProfileModal";
 
 export type PublicProfileData = {
   username: string;
+  /** Heading text: the handle, or a fallback for owners who have not set one. */
+  displayName: string;
   bio: string | null;
   profilePicUrl: string | null;
   history: ProfileRaceHistory;
@@ -47,7 +49,7 @@ export default function ProfilePageClient({ profile, isOwner, ownerData }: Props
   return (
     <>
       <UserProfileView
-        username={profile.username}
+        displayName={profile.displayName}
         bio={profile.bio}
         profilePicUrl={profile.profilePicUrl}
         history={profile.history}

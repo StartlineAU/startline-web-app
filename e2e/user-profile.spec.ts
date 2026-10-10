@@ -1,4 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureDatabaseUrl } from "./helpers";
+
+ensureDatabaseUrl();
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 const BYPASS_COOKIE = { name: "__e2e_bypass", value: "1", domain: "localhost", path: "/", sameSite: "Lax" as const };
 
@@ -37,6 +46,43 @@ test.describe("public profile", () => {
     await expect(page.getByRole("button", { name: /edit profile/i })).toHaveCount(0);
     // Public view must not use the old "Events Attended" list layout
     await expect(page.getByText(/events attended/i)).toHaveCount(0);
+  });
+});
+
+// An account that never picked a handle used to get an empty heading beside
+// the avatar. Harper Jones (the "athlete" bypass identity) has the handle and
+// name cleared for the test and put back afterwards.
+test.describe("user profile: heading without a handle", () => {
+  const EMAIL = "harper.jones@startline.test";
+  let original: { username: string | null; name: string | null } | null = null;
+
+  test.beforeAll(async () => {
+    original = await prisma.user.findUnique({
+      where: { email: EMAIL },
+      select: { username: true, name: true },
+    });
+  });
+
+  test.afterAll(async () => {
+    if (original) await prisma.user.update({ where: { email: EMAIL }, data: original });
+    await prisma.$disconnect();
+  });
+
+  test.beforeEach(async ({ page }) => {
+    test.skip(!original, "seed user harper.jones@startline.test is missing");
+    await page.context().addCookies([{ ...BYPASS_COOKIE, value: "athlete" }]);
+  });
+
+  test("falls back to the account name", async ({ page }) => {
+    await prisma.user.update({ where: { email: EMAIL }, data: { username: null, name: "Harper Jones" } });
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "Harper Jones", exact: true })).toBeVisible();
+  });
+
+  test("falls back to the email prefix when there is no name either", async ({ page }) => {
+    await prisma.user.update({ where: { email: EMAIL }, data: { username: null, name: null } });
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "harper.jones", exact: true })).toBeVisible();
   });
 });
 

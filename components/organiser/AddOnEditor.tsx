@@ -9,6 +9,7 @@ import {
   emptyAddOnDraft,
   emptyVariantDraft,
   parsePriceToCents,
+  formatPriceInput,
   hasPurchaseHistory,
   draftFromMerchandise,
   draftToMerchandiseItem,
@@ -20,10 +21,10 @@ import { TYPE_MIMES, UPLOAD_LIMITS, uploadSizeError } from "@/lib/upload-limits"
 import { uploadFile, UploadError } from "@/lib/upload-client";
 
 const inputCls =
-  "w-full h-11 px-3.5 rounded-lg bg-dark border border-dark-lighter text-light text-[14px] placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
+  "w-full h-11 px-3.5 rounded-lg bg-dark border border-dark-lighter text-light text-[14px] md:text-[15px] placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
 
 const labelCls =
-  "font-headline text-[10px] uppercase tracking-widest text-light mb-1.5 block";
+  "font-headline text-[10px] md:text-xs uppercase tracking-widest text-light mb-1.5 block";
 
 /** What an organiser may upload for a product, stated once. */
 const MERCH_PHOTO_RULE =
@@ -123,7 +124,7 @@ function AddOnPhoto({
           e.target.value = "";
         }}
       />
-      <p className={`font-headline text-[10px] uppercase tracking-widest mt-1.5 w-[92px] leading-relaxed ${error ? "text-red-400" : "text-muted-dark"}`}>
+      <p className={`text-[11px] md:text-xs mt-1.5 w-[92px] leading-snug ${error ? "text-red-400" : "text-muted"}`}>
         {error || MERCH_PHOTO_RULE}
       </p>
     </div>
@@ -216,7 +217,7 @@ export default function AddOnEditor({
       {isEvent && (
         <div className="flex gap-2.5 rounded-lg border border-dark-lighter bg-dark-light px-4 py-3">
           <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-          <p className="text-[13px] text-muted leading-relaxed">
+          <p className="text-[13px] md:text-sm text-muted leading-relaxed">
             Merchandise you add here is exclusive to this event&apos;s checkout. Tick{" "}
             <span className="text-light">Also show on my public profile</span> on an item to publish a
             copy to your organiser profile, where anyone can see it.
@@ -253,7 +254,7 @@ export default function AddOnEditor({
         return (
           <div key={addOn.uid} className="border border-dark-lighter rounded-xl overflow-hidden">
             <div className="flex items-center justify-between gap-3 px-5 py-3 bg-dark-light">
-              <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-light flex items-center gap-2">
+              <div className="font-headline text-[11px] md:text-[13px] font-bold uppercase tracking-widest text-light flex items-center gap-2">
                 <ShoppingBag className="w-3.5 h-3.5 text-primary" />
                 {addOn.name.trim() || `${isEvent ? "Add-on" : "Item"} ${index + 1}`}
               </div>
@@ -283,7 +284,7 @@ export default function AddOnEditor({
                   disabled={disabled}
                   onClick={() => onChange(addOns.filter((_, i) => i !== index))}
                   className={cn(
-                    "ml-1 inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors disabled:opacity-40",
+                    "ml-1 inline-flex items-center gap-1.5 font-headline text-[10px] md:text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-40",
                     locked ? "text-amber-400 hover:text-amber-300" : "text-muted hover:text-red-400",
                   )}
                   title={
@@ -328,15 +329,27 @@ export default function AddOnEditor({
                       <label className={labelCls} htmlFor={`addon-price-${index}`}>
                         Price <span className="text-primary">*</span>
                       </label>
-                      <input
-                        id={`addon-price-${index}`}
-                        className={inputCls}
-                        value={addOn.price}
-                        disabled={disabled}
-                        inputMode="decimal"
-                        placeholder="25.00"
-                        onChange={(e) => updateAddOn(index, { price: e.target.value })}
-                      />
+                      <div className="relative">
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-[14px] md:text-[15px] text-muted"
+                        >
+                          $
+                        </span>
+                        <input
+                          id={`addon-price-${index}`}
+                          className={cn(inputCls, "pl-7")}
+                          value={addOn.price}
+                          disabled={disabled}
+                          inputMode="decimal"
+                          placeholder="25.00"
+                          onChange={(e) => updateAddOn(index, { price: e.target.value })}
+                          onBlur={(e) => {
+                            const formatted = formatPriceInput(e.target.value);
+                            if (formatted !== addOn.price) updateAddOn(index, { price: formatted });
+                          }}
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className={labelCls} htmlFor={`addon-option-${index}`}>
@@ -377,7 +390,7 @@ export default function AddOnEditor({
                     {addOn.optionLabel.trim() || "Options"}{isEvent ? " and stock" : ""}
                   </span>
                   {isEvent && (
-                    <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+                    <span className="font-headline text-[10px] md:text-xs uppercase tracking-widest text-muted-dark">
                       Units available
                     </span>
                   )}
@@ -409,7 +422,7 @@ export default function AddOnEditor({
                             />
                             <div className="w-[74px] shrink-0 text-right">
                               {variant.sold > 0 && (
-                                <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+                                <span className="font-headline text-[10px] md:text-xs uppercase tracking-widest text-muted-dark">
                                   {variant.sold} sold
                                 </span>
                               )}
@@ -470,7 +483,7 @@ export default function AddOnEditor({
                         ),
                       )
                     }
-                    className="mt-2 inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors disabled:opacity-40"
+                    className="mt-2 inline-flex items-center gap-1.5 font-headline text-[10px] md:text-xs font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors disabled:opacity-40"
                   >
                     <Plus className="w-3 h-3" /> Add {addOn.optionLabel.trim().toLowerCase() || "option"}
                   </button>
@@ -479,10 +492,10 @@ export default function AddOnEditor({
 
               {isEvent && fee != null && priceCents != null && priceCents > 0 && (
                 <div className="rounded-lg bg-dark-light px-4 py-3">
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mb-1">
+                  <div className="font-headline text-[10px] md:text-xs uppercase tracking-widest text-muted-dark mb-1">
                     Startline fee on this item
                   </div>
-                  <div className="text-[13px] text-muted">
+                  <div className="text-[13px] md:text-sm text-muted">
                     {(PLATFORM_FEE_PERCENT * 100).toFixed(2)}% of ${(priceCents / 100).toFixed(2)} is $
                     {(fee.platformFeeCents / 100).toFixed(2)}. No fixed charge applies to add-ons.{" "}
                     {feeStructure === "athlete"
@@ -493,7 +506,7 @@ export default function AddOnEditor({
               )}
 
               {isEvent && (addOn.merchandiseId ? (
-                <p className="flex items-start gap-2 text-[12px] text-muted leading-relaxed">
+                <p className="flex items-start gap-2 text-[12px] md:text-[13px] text-muted leading-relaxed">
                   <Globe className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
                   <span>
                     <span className="text-light">On your public profile.</span> Edits here change this
@@ -509,7 +522,7 @@ export default function AddOnEditor({
                     disabled={disabled}
                     onChange={(e) => updateAddOn(index, { publishToProfile: e.target.checked })}
                   />
-                  <span className="text-[12px] text-muted leading-relaxed">
+                  <span className="text-[12px] md:text-[13px] text-muted leading-relaxed">
                     <span className="text-light">Also show on my public profile.</span> A copy is
                     published when you save, and anyone can see it. Stock stays with this event.
                   </span>

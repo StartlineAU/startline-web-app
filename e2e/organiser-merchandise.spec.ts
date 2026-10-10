@@ -57,6 +57,9 @@ test.describe("organiser profile merchandise", () => {
 
     await section.locator("#addon-name-0").fill("Club tee");
     await section.locator("#addon-price-0").fill("35");
+    // Leaving the field tidies the amount to dollars and cents.
+    await section.locator("#addon-price-0").blur();
+    await expect(section.locator("#addon-price-0")).toHaveValue("35.00");
     await section.getByRole("button", { name: /save merchandise/i }).click();
 
     await expect(section.getByTestId("merchandise-showcase")).toContainText("Club tee");

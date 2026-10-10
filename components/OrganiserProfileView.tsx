@@ -48,7 +48,8 @@ function formatCount(n: number) {
 
 function ProfileStats({ stats }: { stats: OrganiserPublicStats }) {
   return (
-    <div className="flex items-end gap-4 sm:gap-5">
+    // Top-aligned so the numbers share a line and a label that wraps hangs below.
+    <div className="flex items-start gap-4 sm:gap-5">
       <div className="text-center">
         <div className="font-headline text-xl sm:text-2xl font-black tracking-tighter text-light leading-none">
           {formatCount(stats.registrations)}

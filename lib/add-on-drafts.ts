@@ -167,6 +167,16 @@ export function parsePriceToCents(price: string): number | null {
   return Number.isFinite(cents) ? cents : null;
 }
 
+/**
+ * A typed price tidied to dollars and cents ("35" → "35.00") once the organiser
+ * leaves the field. Anything that is not a real amount comes back untouched, so
+ * the validation message still has their own input to point at.
+ */
+export function formatPriceInput(price: string): string {
+  const cents = parsePriceToCents(price);
+  return cents == null ? price : (cents / 100).toFixed(2);
+}
+
 /** Stock as typed → whole units. Returns null for anything not a count. */
 export function parseStock(stock: string): number | null {
   const trimmed = stock.trim();

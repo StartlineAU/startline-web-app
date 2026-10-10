@@ -15,7 +15,7 @@ import {
 import type { PublicMerchandiseView } from "@/lib/merchandise";
 
 const buttonCls =
-  "inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest rounded-lg px-3.5 h-9 transition-colors disabled:opacity-40";
+  "inline-flex items-center gap-1.5 font-headline text-[11px] md:text-xs font-bold uppercase tracking-widest rounded-lg px-3.5 h-9 transition-colors disabled:opacity-40";
 
 /**
  * The Merchandise section of the organiser's own profile (#338): what the
@@ -82,7 +82,7 @@ export default function MerchandiseManager({ initial }: { initial: PublicMerchan
 
       {editing ? (
         <div className="max-w-3xl">
-          <p className="text-[13px] text-muted leading-relaxed mb-4">
+          <p className="text-[13px] md:text-sm text-muted leading-relaxed mb-4">
             Everything here is public on your profile. To sell an item, add it to an event&apos;s
             checkout from the event&apos;s Merchandise section, where you set its stock for that event.
           </p>
