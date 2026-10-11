@@ -162,6 +162,7 @@ export default function OrganiserNavBar() {
     const opening = !notifOpen;
     setNotifOpen(o => !o);
     setIsUserOpen(false);
+    setIsMenuOpen(false);
     if (opening) setFreshIds(new Set(notifications.filter(n => !n.read).map(n => n.id)));
     if (unreadCount > 0) {
       fetch("/api/organiser/notifications", {
@@ -263,7 +264,10 @@ export default function OrganiserNavBar() {
                 )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1.5rem))] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+                // On a phone the bell is not at the screen edge, so a panel hung
+                // off its right side ran off the left of the screen. There it is
+                // pinned to the viewport instead; from sm up it drops from the bell.
+                <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
                   <div className="flex items-center justify-between pl-3.5 pr-2 py-2 border-b border-white/[0.06]">
                     <span className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
                       Notifications
@@ -322,8 +326,10 @@ export default function OrganiserNavBar() {
               )}
             </div>
 
-            {/* User menu */}
-            <div ref={userRef} className="relative">
+            {/* User menu. Desktop only: on a phone it sat beside the hamburger
+                and the two menus listed much the same things, so everything
+                here is in the one mobile menu below instead. */}
+            <div ref={userRef} className="relative hidden md:block">
               <button onClick={() => { setIsUserOpen(o => !o); setNotifOpen(false); }}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                 {orgLogo ? (
@@ -428,15 +434,18 @@ export default function OrganiserNavBar() {
         {isMenuOpen && (
           <div className="md:hidden bg-dark-darker/95 backdrop-blur-xl border-t border-white/[0.05] max-h-[calc(100dvh-3.5rem)] overflow-y-auto">
             <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-1.5">
-              <div className="flex items-center gap-1.5 px-4 py-2 mb-1">
-                <Building2 className="w-3.5 h-3.5 text-primary" />
-                <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">{orgName || "Organiser"}</span>
-                {roleLabel && (
-                  <span className={`font-headline text-[9px] uppercase tracking-widest rounded px-1 py-0.5 border
-                    ${role === "OWNER" ? "text-primary border-primary/40" : "text-white/40 border-white/15"}`}>
-                    {roleLabel}
-                  </span>
-                )}
+              <div className="px-4 py-2 mb-1">
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">{orgName || "Organiser"}</span>
+                  {roleLabel && (
+                    <span className={`font-headline text-[9px] uppercase tracking-widest rounded px-1 py-0.5 border
+                      ${role === "OWNER" ? "text-primary border-primary/40" : "text-white/40 border-white/15"}`}>
+                      {roleLabel}
+                    </span>
+                  )}
+                </div>
+                {user?.email && <div className="font-headline text-[12px] text-white/70 truncate mt-1">{user.email}</div>}
               </div>
 
               {ORGANISER_NAV.map(({ href, label }) => {
@@ -452,19 +461,31 @@ export default function OrganiserNavBar() {
                 );
               })}
 
+              <Link href="/organiser/new-listing" onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                <Plus className="w-4 h-4" /> Post an Event
+              </Link>
+
               {memberships.length > 1 && (
                 <>
                   <div className="border-t border-white/10 my-1.5" />
                   <div className="px-4 pt-1 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">Switch organisation</div>
-                  {memberships.map((m) => (
-                    <button key={m.organiserId} onClick={() => { setIsMenuOpen(false); switchOrganiser(m.organiserId); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[12px] font-bold uppercase tracking-widest text-primary hover:bg-white/10 transition-colors text-left">
-                      {m.logoUrl
-                        ? <Image src={m.logoUrl} alt="" width={20} height={20} className="w-5 h-5 rounded object-cover shrink-0" />
-                        : <Users className="w-4 h-4 shrink-0" />}
-                      {m.organiserName ?? "Organisation"}
-                    </button>
-                  ))}
+                  {memberships.map((m) => {
+                    const isActive = m.organiserId === activeOrgId;
+                    return (
+                      <button key={m.organiserId} onClick={() => { setIsMenuOpen(false); switchOrganiser(m.organiserId); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest transition-colors text-left
+                          ${isActive ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                        {m.logoUrl
+                          ? <Image src={m.logoUrl} alt="" width={20} height={20} className="w-5 h-5 rounded object-cover shrink-0" />
+                          : <Users className="w-4 h-4 shrink-0" />}
+                        <span className="truncate flex-1">{m.organiserName ?? "Organisation"}</span>
+                        {m.role === "OWNER"
+                          ? <span className="shrink-0 text-[9px] text-primary border border-primary/40 rounded px-1.5 py-0.5">OWNER</span>
+                          : <span className="shrink-0 text-[9px] text-white/40 border border-white/15 rounded px-1.5 py-0.5">MANAGER</span>}
+                      </button>
+                    );
+                  })}
                 </>
               )}
 
@@ -477,6 +498,15 @@ export default function OrganiserNavBar() {
                 className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
                 <UserCircle className="w-4 h-4" /> My profile
               </Link>
+              <Link href="/settings/security" onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                <Shield className="w-4 h-4" /> Security
+              </Link>
+              <button onClick={() => { setIsMenuOpen(false); openSettingsModal("personal"); }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+                <Settings className="w-4 h-4" /> Settings
+              </button>
+              <div className="border-t border-white/10 my-1.5" />
               <Link href={homeHref} onClick={() => setIsMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
                 <House className="w-4 h-4" /> Startline home

@@ -398,6 +398,27 @@ test.describe("organiser pages", () => {
     ]);
   });
 
+  // A phone used to show an account dropdown and a hamburger side by side,
+  // listing much the same things. Now the hamburger is the only menu.
+  test("phone nav has one menu holding everything", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await organiserLogin(page);
+    await page.goto("/organiser/dashboard");
+
+    const nav = page.locator("nav");
+    const toggle = nav.getByRole("button", { name: "Toggle menu" });
+    await expect(toggle).toBeVisible();
+    // Bell and hamburger only: the account dropdown's trigger is gone.
+    await expect(nav.locator("button:visible")).toHaveCount(2);
+
+    await toggle.click();
+    for (const name of ["Dashboard", "Listings", "Post an Event", "My profile", "Security", "Startline home"]) {
+      await expect(nav.getByRole("link", { name, exact: true }).last()).toBeVisible();
+    }
+    await expect(nav.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
+  });
+
   test("payments page shows ABN field for Stripe connection", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/payments");

@@ -44,6 +44,53 @@ test.describe("new listing wizard", () => {
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   });
 
+  // A long value in the review table used to widen the whole step past the
+  // screen, and the notifications panel hung off the left edge.
+  test("review step and notifications fit a phone screen", async ({ page }) => {
+    await organiserLogin(page);
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto("/organiser/new-listing");
+
+    await page.getByPlaceholder(/Apex Throwdown/i)
+      .fill("The Very Long Named Coastal Endurance Championship Weekend 2026");
+    await page.locator("button", { hasText: /^05/ }).first().click();
+    await expect(page.getByText(/hit publish/i)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+    await page.getByRole("button", { name: "Notifications", exact: true }).click();
+    const panel = page.getByText(/^Notifications/).locator("xpath=ancestor::div[contains(@class,'rounded-xl')][1]");
+    const box = (await panel.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  });
+
+  // The preview fills a phone screen, so the back swipe is how people leave
+  // it. That used to leave the wizard altogether and lose the event.
+  test("back from the preview returns to the wizard with the event intact", async ({ page }) => {
+    await organiserLogin(page);
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto("/organiser/new-listing");
+
+    const title = page.getByPlaceholder(/Apex Throwdown/i);
+    await title.fill("Back Swipe Classic");
+    const openPreview = page.getByRole("button", { name: "Preview", exact: true });
+    const banner = page.getByText("Athlete view preview");
+
+    await openPreview.click();
+    await expect(banner).toBeVisible();
+    await page.goBack();
+    await expect(banner).toHaveCount(0);
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+    await expect(title).toHaveValue("Back Swipe Classic");
+
+    // Closing with the button leaves no extra history entry behind either.
+    await openPreview.click();
+    await page.getByRole("button", { name: /close preview/i }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+    await expect(title).toHaveValue("Back Swipe Classic");
+  });
+
   test("address autocomplete shows suggestions", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
@@ -241,18 +288,37 @@ test.describe("new listing wizard", () => {
       .toBe(true);
   });
 
-  test("shows validation errors on empty submit", async ({ page }) => {
+  // What is missing shows in the review table itself, before any click, rather
+  // than as a warning that only appeared after Publish was pressed.
+  test("review table flags missing required fields and blocks publish", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
 
     // Advance through all 5 steps without filling anything
     for (let i = 0; i < 4; i++) {
       await page.getByRole("button", { name: /continue/i }).click();
     }
 
+    await expect(page.getByText(/required items still need fixing/i)).toBeVisible();
+    await expect(page.getByText("Add an event name of at least 3 characters")).toBeVisible();
+    await expect(page.getByText("Upload a cover image")).toBeVisible();
+    await expect(page.getByText(/ready to publish/i)).toHaveCount(0);
+
+    // Optional extras stay out of the table until something is added to them.
+    for (const optional of ["Prize money", "Info PDFs", "Gallery"]) {
+      await expect(page.getByText(optional, { exact: true })).toHaveCount(0);
+    }
+
+    // Ticking the confirmation is not enough while rows are still flagged.
     await page.locator('input[type="checkbox"]').check();
-    await page.getByRole("button", { name: /publish listing/i }).click();
-    await expect(page.getByText(/please complete the following/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /publish listing/i })).toBeDisabled();
+
+    // Fix takes them to the step, and the row clears once the field is filled.
+    await page.locator('[data-missing="true"]', { hasText: "Title" }).getByRole("button", { name: /fix/i }).click();
+    await page.getByPlaceholder(/Apex Throwdown/i).fill("Review Table Classic");
+    await page.getByRole("button", { name: /Final Review/i }).click();
+    await expect(page.getByText("Add an event name of at least 3 characters")).toHaveCount(0);
+    await expect(page.getByText("Review Table Classic").first()).toBeVisible();
   });
 });
