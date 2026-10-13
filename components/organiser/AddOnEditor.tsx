@@ -309,7 +309,7 @@ export default function AddOnEditor({
                   onPick={(file) => updateAddOn(index, { image: file })}
                 />
 
-                <div className="flex-1 space-y-3">
+                <div className="flex-1 min-w-0 space-y-3">
                   <div>
                     <label className={labelCls} htmlFor={`addon-name-${index}`}>
                       Name <span className="text-primary">*</span>
@@ -324,7 +324,8 @@ export default function AddOnEditor({
                       onChange={(e) => updateAddOn(index, { name: e.target.value })}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Side by side, these leave a price too narrow to read on the smallest phones. */}
+                  <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls} htmlFor={`addon-price-${index}`}>
                         Price <span className="text-primary">*</span>
@@ -399,10 +400,14 @@ export default function AddOnEditor({
                   {addOn.variants.map((variant, variantIndex) => {
                     const variantLocked = variant.purchased > 0;
                     return (
-                      <div key={variant.uid} className="flex items-center gap-2">
+                      // Everything but the name is a fixed width, so on a phone
+                      // those widths are kept small and the empty "sold" slot is
+                      // dropped. Otherwise they add up to more than the card and
+                      // the name box is squeezed to nothing.
+                      <div key={variant.uid} className="flex items-center gap-1.5 sm:gap-2">
                         <input
                           aria-label={`Option name ${variantIndex + 1}`}
-                          className={cn(inputCls, "flex-1")}
+                          className={cn(inputCls, "flex-1 min-w-0")}
                           value={variant.label}
                           disabled={disabled}
                           maxLength={60}
@@ -413,14 +418,14 @@ export default function AddOnEditor({
                           <>
                             <input
                               aria-label={`Units available for option ${variantIndex + 1}`}
-                              className={cn(inputCls, "w-[110px]")}
+                              className={cn(inputCls, "w-18 sm:w-[110px] shrink-0")}
                               value={variant.stock}
                               disabled={disabled}
                               inputMode="numeric"
                               placeholder="0"
                               onChange={(e) => updateVariant(index, variantIndex, { stock: e.target.value })}
                             />
-                            <div className="w-[74px] shrink-0 text-right">
+                            <div className={cn("shrink-0 text-right sm:w-[74px]", variant.sold === 0 && "hidden sm:block")}>
                               {variant.sold > 0 && (
                                 <span className="font-headline text-[10px] md:text-xs uppercase tracking-widest text-muted-dark">
                                   {variant.sold} sold
@@ -464,7 +469,7 @@ export default function AddOnEditor({
                               ? "This option has been bought, so it cannot be removed."
                               : "Remove this option"
                           }
-                          className="w-9 h-9 grid place-items-center rounded-lg text-muted hover:text-red-400 transition-colors disabled:opacity-25 disabled:pointer-events-none"
+                          className="w-7 h-7 sm:w-9 sm:h-9 shrink-0 grid place-items-center rounded-lg text-muted hover:text-red-400 transition-colors disabled:opacity-25 disabled:pointer-events-none"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

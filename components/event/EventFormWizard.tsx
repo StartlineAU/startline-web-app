@@ -2119,9 +2119,9 @@ export default function EventFormWizard({
                   className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light flex items-center gap-2 transition-colors">
                   <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Cancel" : "Back"}
                 </button>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 sm:gap-3">
                   <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
-                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-5 py-3 transition-colors disabled:opacity-40">
+                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
                     Save draft
                   </button>
                   <button onClick={next} disabled={saving || (step === STEPS.length - 1 && (!confirmed || missing.length > 0))}
