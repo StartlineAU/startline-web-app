@@ -356,6 +356,25 @@ Use `gh` CLI — **not** GitHub MCP (fails for this private org repo).
 
 PR conventions: scan open issues, link with `Closes #N`. Follow `.github/PULL_REQUEST_TEMPLATE.md`. CI runs are informational, non-blocking.
 
+### Commit authorship
+
+**Every commit must be authored by a person, not by an agent or automation.**
+Commit with the identity already configured in this repo (`git config user.name`
+/ `user.email`) and never invent one.
+
+- No `git -c user.name=… -c user.email=…`, no `GIT_AUTHOR_*`/`GIT_COMMITTER_*`,
+  no commits as `opencode`, `agent`, or a bot address. Agents: this applies to
+  you, and it applies to merge commits too.
+- Check before pushing, not after:
+  `git log --format='%h %an <%ae>' origin/main..HEAD` must list only real
+  authors.
+- A wrong author is one local `--amend` if it has not been pushed. Once pushed
+  it needs a force-push that invalidates every review and CI run on the PR, so
+  only rewrite a pushed branch when its author says so. Then rewrite with
+  `git filter-branch -f --env-filter '…' origin/main..HEAD` (match the wrong
+  `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` and export the right ones) and push
+  with `--force-with-lease`.
+
 ### Issue fields (Priority / Effort)
 
 Issues use GitHub's Task-type custom fields (`Priority`, `Effort`). They are
