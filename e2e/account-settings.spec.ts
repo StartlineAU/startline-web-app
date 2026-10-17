@@ -158,43 +158,20 @@ test.describe("deleting an account", () => {
   });
 });
 
+// Organisers confirm they hold the insurance and permits each time they publish
+// an event (the review step of the listing wizard), so there is no separate
+// declaration in the organisation profile and none holding up Stripe.
 test.describe("insurance declaration", () => {
-  test("is made in the organisation profile, by the owner only", async ({ page, browser }) => {
+  test("is not asked for in the organisation profile or before connecting Stripe", async ({ page }) => {
     test.slow();
     await organiserLogin(page);
     const settings = await openSettings(page, "organisation");
+    await expect(settings.getByLabel("Contact name")).toBeVisible({ timeout: 30000 });
+    await expect(settings.getByText(/insurance/i)).toHaveCount(0);
 
-    const declaration = settings.getByRole("checkbox", { name: /I declare that I currently hold public liability insurance/i });
-    await expect(declaration).toBeEnabled();
-    const before = (await (await page.request.get("/api/organiser/profile")).json()).insuranceDeclared as boolean;
-    await expect(declaration).toBeChecked({ checked: before });
-
-    try {
-      await declaration.setChecked(!before, { force: true });
-      await Promise.all([
-        page.waitForResponse(r => r.url().includes("/api/organiser/profile") && r.request().method() === "PUT" && r.ok()),
-        settings.getByRole("button", { name: /^save$/i }).click(),
-      ]);
-      const saved = await (await page.request.get("/api/organiser/profile")).json();
-      expect(saved.insuranceDeclared).toBe(!before);
-
-      const managerContext = await browser.newContext();
-      const manager = await managerContext.newPage();
-      await organiserMemberLogin(manager);
-      const managerSettings = await openSettings(manager, "organisation");
-      await expect(managerSettings.getByRole("checkbox", { name: /I declare/i })).toBeDisabled();
-      await expect(managerSettings.getByText("Only the owner can make this declaration.")).toBeVisible();
-      await managerContext.close();
-    } finally {
-      const profile = await (await page.request.get("/api/organiser/profile")).json();
-      const restored = await page.request.put("/api/organiser/profile", {
-        data: {
-          orgName: profile.orgName, contactName: profile.contactName,
-          contactEmail: profile.contactEmail, phone: profile.phone, insuranceDeclared: before,
-        },
-      });
-      expect(restored.ok()).toBe(true);
-    }
+    await page.goto("/organiser/payments");
+    await expect(page.getByText(/legal name/i).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/insurance declaration/i)).toHaveCount(0);
   });
 });
 
@@ -219,7 +196,6 @@ test.describe("organisation summaries", () => {
 
     await expect(settings.getByText("Stripe payouts")).toBeVisible();
     await expect(settings.getByText("ABN or ACN")).toBeVisible();
-    // Insurance is not a payments matter: it is declared in the organisation profile.
     await expect(settings.getByText(/insurance/i)).toHaveCount(0);
     await expect(settings.getByRole("link", { name: "Manage payments" })).toBeVisible();
   });

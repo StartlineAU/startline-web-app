@@ -91,8 +91,9 @@ const SECTIONS: LegalSection[] = [
             images, and who its owners and managers are. To take paid entries we also collect the
             legal name and date of birth of the person responsible, which we need for identity
             checks and for tax reporting to the Australian Taxation Office under the Sharing Economy
-            Reporting Regime. We record whether the organisation has declared that it holds public
-            liability insurance, but we do not collect insurance documents. We may check an ABN
+            Reporting Regime. Each time an organisation publishes an event it confirms that it holds
+            the public liability insurance and permits the event needs, but we do not collect
+            insurance documents. We may check an ABN
             against the Australian Business Register.
           </p>
         </Clause>
