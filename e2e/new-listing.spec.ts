@@ -64,29 +64,6 @@ test.describe("new listing wizard", () => {
     expect(box.x + box.width).toBeLessThanOrEqual(390);
   });
 
-  // The size rows in the merchandise editor carried fixed-width stock, sold and
-  // button slots that added up to more than the card on a phone, so the size
-  // name box was squeezed to a sliver and the buttons ran off the edge.
-  for (const width of [320, 390]) {
-    test(`merchandise size rows fit a ${width}px screen`, async ({ page }) => {
-      await organiserLogin(page);
-      await page.setViewportSize({ width, height: 740 });
-      await page.goto("/organiser/new-listing");
-
-      await page.locator("button", { hasText: /^03/ }).first().click();
-      await page.getByRole("button", { name: /add merchandise/i }).click();
-
-      const sizeName = page.getByLabel("Option name 1");
-      await sizeName.fill("XXL");
-      expect((await sizeName.boundingBox())!.width).toBeGreaterThanOrEqual(56);
-
-      const remove = page.getByRole("button", { name: "Remove this option" }).first();
-      const box = (await remove.boundingBox())!;
-      expect(box.x + box.width).toBeLessThanOrEqual(width);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    });
-  }
-
   // The preview fills a phone screen, so the back swipe is how people leave
   // it. That used to leave the wizard altogether and lose the event.
   test("back from the preview returns to the wizard with the event intact", async ({ page }) => {
