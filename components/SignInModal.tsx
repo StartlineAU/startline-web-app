@@ -7,7 +7,7 @@ import Link from "next/link";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import Image from "next/image";
-import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, ChevronDown, Check, AtSign, ShieldAlert } from "lucide-react";
+import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, Check, AtSign, ShieldAlert } from "lucide-react";
 import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
@@ -41,7 +41,10 @@ function totpUri(details: unknown): string | null {
 
 export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalProps) {
   // The modal also opens on the organiser portal, where /contact does not exist.
-  const contactHref = customerHref("/contact", usePortalHost());
+  const portalHost = usePortalHost();
+  const contactHref = customerHref("/contact", portalHost);
+  const termsHref = customerHref("/terms", portalHost);
+  const privacyHref = customerHref("/privacy", portalHost);
   const router      = useRouter();
   const { refresh } = useAuthContext();
 
@@ -54,8 +57,6 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [dobYear,         setDobYear]         = useState("");
 
   const [acceptedTerms,   setAcceptedTerms]   = useState(false);
-  const [showTerms,       setShowTerms]       = useState(false);
-  const [showPrivacy,     setShowPrivacy]     = useState(false);
   const [password,        setPassword]        = useState("");
   const [confirm,         setConfirm]         = useState("");
   const [pwFocused,       setPwFocused]       = useState(false);
@@ -96,7 +97,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setView("signin");
       setEmail(""); setFirstName(""); setLastName("");
       setDobDay(""); setDobMonth(""); setDobYear("");
-      setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
+      setAcceptedTerms(false);
       setPassword(""); setConfirm("");
       setError(""); setShowPw(false); setPwFocused(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
@@ -408,7 +409,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     if (!isPasswordValid(password)) { setError("Password must be " + PASSWORD_POLICY_SUMMARY); return; }
     if (password !== confirm) { setError("Passwords do not match."); return; }
     setFirstName(""); setLastName(""); setDobDay(""); setDobMonth(""); setDobYear("");
-    setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
+    setAcceptedTerms(false);
     setView("onboarding");
   };
 
@@ -438,7 +439,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     if (age < 13)  { setError("You must be at least 13 years old to create an account."); return; }
     if (age > 120) { setError("Please enter a valid date of birth."); return; }
 
-    if (!acceptedTerms) { setError("You must accept the Terms & Conditions and Privacy Policy to continue."); return; }
+    if (!acceptedTerms) { setError("Please agree to the Terms of Service to continue."); return; }
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
 
@@ -973,41 +974,15 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                   </div>
                   <span className="font-headline text-[11px] uppercase tracking-widest text-muted leading-relaxed">
                     I agree to the{" "}
-                    <button type="button" onClick={(e) => { e.preventDefault(); setShowTerms(s => !s); setShowPrivacy(false); }} className="text-primary hover:underline">
-                      Terms &amp; Conditions
-                    </button>
-                    {" "}and{" "}
-                    <button type="button" onClick={(e) => { e.preventDefault(); setShowPrivacy(s => !s); setShowTerms(false); }} className="text-primary hover:underline">
+                    <a href={termsHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Terms of Service
+                    </a>
+                    {" "}and have read the{" "}
+                    <a href={privacyHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                       Privacy Policy
-                    </button>
+                    </a>
                   </span>
                 </label>
-
-                {showTerms && (
-                  <div className="rounded-lg border border-dark-lighter bg-dark overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Terms &amp; Conditions</span>
-                      <button type="button" onClick={() => setShowTerms(false)}><ChevronDown className="w-4 h-4 text-muted rotate-180" /></button>
-                    </div>
-                    <div className="px-4 py-3 max-h-36 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-                      <p>Terms and Conditions content coming soon.</p>
-                      <p>By creating an account you agree to use this platform in accordance with our guidelines and applicable laws.</p>
-                    </div>
-                  </div>
-                )}
-
-                {showPrivacy && (
-                  <div className="rounded-lg border border-dark-lighter bg-dark overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Privacy Policy</span>
-                      <button type="button" onClick={() => setShowPrivacy(false)}><ChevronDown className="w-4 h-4 text-muted rotate-180" /></button>
-                    </div>
-                    <div className="px-4 py-3 max-h-36 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-                      <p>Privacy Policy content coming soon.</p>
-                      <p>We are committed to protecting your personal information and will only use your data in accordance with applicable privacy legislation.</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <button onClick={handleContinueOnboarding} disabled={loading} className={btnCls}>

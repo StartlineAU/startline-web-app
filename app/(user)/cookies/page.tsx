@@ -93,8 +93,8 @@ export default function CookiesPage() {
               </h2>
               <p>
                 For questions about our use of cookies, contact us at{" "}
-                <a href="mailto:privacy@startline.com.au" className="text-primary hover:underline">
-                  privacy@startline.com.au
+                <a href="mailto:admin@startlineau.com" className="text-primary hover:underline">
+                  admin@startlineau.com
                 </a>.
               </p>
             </section>

@@ -62,16 +62,16 @@ model Organiser {
   coverPosition String?  @default("50% 50%")
   photos        String[]
 
-  // Legal & compliance — required for ATO SERR reporting (ToS §3.2, Privacy Policy §2.1)
+  // Legal & compliance — required for ATO SERR reporting (ToS §5.5, Privacy Policy §2.4)
   legalName         String?
-  // Insurance self-declaration only — no documents collected (ToS §5.3, Privacy Policy §4.4)
+  // Insurance self-declaration only — no documents collected (ToS §5.3, Privacy Policy §2.4)
   insuranceDeclared Boolean @default(false)
   // Date of birth (ISO 8601 yyyy-mm-dd) — used for identity verification and ATO SERR reporting.
   // Not required for organisers who only list external-link events.
   dob               String?
 
   // Stripe Express Connect — Startline stores only the account reference ID.
-  // Bank account details (BSB + account number) are collected and held by Stripe directly (ToS §3.3, Privacy Policy §4.2).
+  // Bank account details (BSB + account number) are collected and held by Stripe directly (ToS §5.4, Privacy Policy §4.2).
   stripeAccountId          String? @unique
   stripeOnboardingComplete Boolean @default(false)
 

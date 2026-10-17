@@ -18,6 +18,8 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
 import SuburbAutocomplete   from "@/components/ui/SuburbAutocomplete";
 import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
@@ -1041,6 +1043,7 @@ function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice }: {
   form: FormState; setStep: (n: number) => void; confirmed: boolean; onConfirm: (v: boolean) => void;
   showAbnNotice: boolean;
 }) {
+  const termsHref = customerHref("/terms#organisers", usePortalHost());
   const rows: { k: string; v: string; step: number }[] = [
     { k: "Title",          v: form.title || "—",                                                                   step: 0 },
     { k: "Discipline",     v: form.discipline ? form.discipline.toUpperCase() : "—",                               step: 0 },
@@ -1107,10 +1110,9 @@ function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice }: {
         <input type="checkbox" checked={confirmed} onChange={e => onConfirm(e.target.checked)}
           className="accent-primary w-4 h-4 mt-1 cursor-pointer" />
         <span className="font-headline text-[13px] text-light leading-relaxed">
-          I confirm I have the rights to host this event and the information provided is accurate.
-          I agree to the{" "}
-          <span className="text-primary hover:underline cursor-pointer">Organiser Terms</span> and{" "}
-          <span className="text-primary hover:underline cursor-pointer">Event Listing Policy</span>.
+          I confirm I have the right to run this event, that it is covered by our public liability
+          insurance, and that these details are accurate. I agree to the organiser terms in the{" "}
+          <a href={termsHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>.
         </span>
       </label>
     </div>
