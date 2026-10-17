@@ -30,6 +30,11 @@ const ADMIN_PROTECTED = [
 ];
 
 const USER_DOMAIN = "startlineau.com";
+
+// Readable on the apex domain even while it shows the waitlist: the legal
+// pages have to be public before launch, and the waitlist footer links to
+// them. They are served from app/waitlist/(legal), which drops the site header.
+const LEGAL_PATHS = ["/terms", "/privacy", "/cookies"];
 const ORGANISER_DOMAIN = "organiser.startlineau.com";
 
 async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> {
@@ -109,6 +114,9 @@ export async function middleware(req: NextRequest) {
         || pathname.startsWith("/images")
         || pathname.startsWith("/favicon")) {
       return NextResponse.next();
+    }
+    if (LEGAL_PATHS.includes(pathname)) {
+      return NextResponse.rewrite(new URL(`/waitlist${pathname}`, req.url));
     }
     return NextResponse.rewrite(new URL("/waitlist", req.url));
   }
