@@ -48,7 +48,7 @@ Domain routing is handled by `middleware.ts` in production. In development mode,
 | Library | `/lib/` — auth, events, platform fee, registration, email, S3, stripe |
 | Prisma schema | `/prisma/schema.prisma` |
 | Tests | `/src/__tests__/` (unit), `/e2e/` (Playwright) |
-| Infrastructure | `/terraform/` |
+| Infrastructure | `StartlineAU/startline-infra` (`web-app/`) |
 | CI/CD | `/.github/workflows/` |
 | Design | `/design/design.md` |
 | Email templates | `/emails/` (React Email) |

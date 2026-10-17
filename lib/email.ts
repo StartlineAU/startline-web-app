@@ -32,8 +32,6 @@ export interface RegistrationEmailData {
   serviceFee: string;
   total: string;
   userEmail: string;
-  /** Merchandise bought with this entry. Omitted when the athlete bought none. */
-  addOns?: { label: string; amount: string }[];
 }
 
 export async function sendRegistrationConfirmationEmail(to: string, data: RegistrationEmailData) {
