@@ -52,23 +52,36 @@ export default function NavBar() {
     if (status === "authenticated") startTransition(() => setIsSignInOpen(false));
   }, [status]);
 
+  // Keyed on the account, not just status: signing out of one account and into
+  // another in the same tab, or in another tab, never unmounts the nav. Writing
+  // only the fields the reply had left the previous account's name and photo in
+  // the header for an account that has none yet, so both are replaced outright.
+  const sub = user?.sub ?? null;
   useEffect(() => {
-    if (status === "authenticated") {
-      try {
-        fetch("/api/user/profile")
-          .then(r => (r.ok ? r.json() : null))
-          .then(data => {
-            if (!data) return;
-            startTransition(() => {
-              if (data.name) setProfileName(data.name);
-              if (data.profilePicUrl) setProfilePic(data.profilePicUrl);
-            });
-          })
-          .catch(() => {});
-      } catch {}
-    }
+    startTransition(() => {
+      setProfileName(null);
+      setProfilePic(null);
+    });
+  }, [sub]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !sub) return;
+    let cancelled = false;
+    fetch("/api/user/profile")
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !data) return;
+        startTransition(() => {
+          setProfileName(data.name || null);
+          setProfilePic(data.profilePicUrl || null);
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
     // profileSavedAt: the settings menu changed the name or photo shown here.
-  }, [status, profileSavedAt]);
+  }, [status, sub, profileSavedAt]);
 
   useEffect(() => {
     if (!isUserOpen && !isMenuOpen) return;

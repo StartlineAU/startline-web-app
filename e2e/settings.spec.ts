@@ -23,6 +23,31 @@ async function openFromAthleteMenu(page: Page) {
 const ACCOUNT_MENU_ROWS = ["Home", "Athlete profile", "Apex Endurance Events", "Settings", "Sign Out"];
 
 test.describe("account menu", () => {
+  // Tabs share one set of auth cookies, so a sign-in in another tab changes the
+  // account under this one without a reload. The header used to keep the old
+  // account's name and admin rows when the new account had no name of its own.
+  test("follows a switch to another account made outside the tab", async ({ page }) => {
+    test.slow();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAs(page, "admin");
+    await page.goto("/events");
+
+    const trigger = page.getByTestId("user-menu");
+    await expect(trigger).toContainText("Marcus Stirling", { timeout: 30000 });
+    await trigger.click();
+    const menu = page.getByTestId("user-menu-panel");
+    await expect(menu.locator('a[href="/admin/dashboard"]')).toBeVisible({ timeout: 30000 });
+    await trigger.click();
+
+    // An account with no profile yet, so nothing it fetches overwrites the old name.
+    await loginAs(page, "profile");
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+
+    await expect(trigger).not.toContainText("Marcus Stirling", { timeout: 30000 });
+    await trigger.click();
+    await expect(menu.locator('a[href="/admin/dashboard"]')).toHaveCount(0, { timeout: 30000 });
+  });
+
   for (const [portal, path] of [["athlete site", "/events"], ["organiser portal", "/organiser/dashboard"]] as const) {
     test(`lists the same rows in the same order on the ${portal}`, async ({ page }) => {
       test.slow();
