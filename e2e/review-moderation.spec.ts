@@ -94,10 +94,13 @@ test.describe("review moderation (#374)", () => {
     await page.goto(`/organisers/${await apexOrganiserId()}`);
 
     const card = page.locator(`[data-review-id="${REPORTED_REVIEW}"]`);
-    await card.getByRole("button", { name: "Report" }).click();
-
     const dialog = page.getByRole("dialog", { name: "Report review" });
-    await expect(dialog).toBeVisible();
+    // The cards are server-rendered: a click before hydration does nothing,
+    // so keep clicking until the overlay is actually up.
+    await expect(async () => {
+      if (!(await dialog.isVisible())) await card.getByRole("button", { name: "Report" }).click();
+      await expect(dialog).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30000 });
     await dialog.getByRole("button", { name: "Send report" }).click();
     await expect(dialog.getByText("Choose a reason for the report.")).toBeVisible();
 
@@ -152,8 +155,14 @@ test.describe("review moderation (#374)", () => {
     const reviews = page.locator("#reviews");
     await expect(reviews.getByText(/^Showing all \d+ reviews$/)).toBeVisible();
 
-    await reviews.getByRole("combobox", { name: "Filter reviews by event" }).click();
-    await page.getByRole("option", { name: new RegExp(`^${eventTitle} \\(\\d+\\)$`) }).click();
+    const option = page.getByRole("option", { name: new RegExp(`^${eventTitle} \\(\\d+\\)$`) });
+    await expect(async () => {
+      if (!(await option.isVisible())) {
+        await reviews.getByRole("combobox", { name: "Filter reviews by event" }).click();
+      }
+      await expect(option).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30000 });
+    await option.click();
 
     await expect(reviews.getByText(/^Showing \d+ of \d+ reviews$/)).toBeVisible();
     await expect(reviews.getByText("Challenging but rewarding")).toBeVisible();

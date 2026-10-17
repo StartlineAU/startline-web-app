@@ -663,7 +663,10 @@ export default function ReviewsSection({
   }
 
   function openReport(r: Review) {
-    if (status !== "authenticated") {
+    // Only a known signed-out visitor is sent to sign in. While the session is
+    // still loading the form opens, and the API's 401 shows inside it, so a
+    // signed-in person clicking early is never asked to sign in again.
+    if (status === "unauthenticated") {
       setAfterSignIn({ kind: "report", review: r });
       setSignInOpen(true);
       return;

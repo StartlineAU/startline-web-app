@@ -305,7 +305,7 @@ test.describe("organiser pages", () => {
     await organiserLogin(page);
     await page.goto("/organiser/profile");
 
-    await page.getByRole("button", { name: "Edit Profile" }).click();
+    await openOrganiserSettings(page);
     await expect(page.getByText("Cover photo")).toBeVisible();
 
     // The cover has an image in seed data, so Reposition is available.
@@ -323,9 +323,8 @@ test.describe("organiser pages", () => {
     await organiserLogin(page);
     await page.goto("/organiser/profile");
 
-    await page.getByRole("button", { name: "Edit Profile" }).click();
     // The navbar has its own Notifications button and Payments link.
-    const settings = page.getByRole("dialog", { name: "Settings" });
+    const settings = await openOrganiserSettings(page);
     await settings.getByRole("button", { name: "Notifications", exact: true }).click();
     const registrations = settings.getByRole("switch", { name: "New registration" });
     await expect(settings.getByRole("switch", { name: "Event approved" })).toHaveAttribute("aria-checked", "true");
