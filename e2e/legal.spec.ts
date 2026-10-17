@@ -63,6 +63,29 @@ test.describe("legal pages", () => {
   });
 });
 
+test.describe("legal pages while in waitlist mode", () => {
+  // Production rewrites /terms, /privacy and /cookies on the apex domain to
+  // /waitlist/<page>. Dev skips host routing, so the targets are visited directly.
+  test("the waitlist footer names the company and links to all three pages", async ({ page }) => {
+    await page.goto("/waitlist");
+    const footer = page.locator("footer").filter({ hasText: "ABN 85 775 067 904" });
+    await expect(footer).toContainText("Startline Pty Ltd");
+    for (const [label, path] of [["Terms", "/terms"], ["Privacy", "/privacy"], ["Cookies", "/cookies"]] as const) {
+      await expect(footer.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", path);
+    }
+  });
+
+  test("the waitlist copy of each page has the logo but no site navigation", async ({ page }) => {
+    for (const { path, heading } of PAGES) {
+      await page.goto(`/waitlist${path}`);
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Startline home" })).toHaveAttribute("href", "/");
+      await expect(page.getByRole("button", { name: /sign in/i })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: /^events$/i })).toHaveCount(0);
+    }
+  });
+});
+
 test.describe("agreeing to the legal pages", () => {
   test("sign-up links to the terms and privacy policy", async ({ page }) => {
     await goToHomepage(page);
