@@ -18,6 +18,7 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
@@ -1984,7 +1985,7 @@ export default function EventFormWizard({
                 {step === 1 && <WhenStep    form={form} update={update} />}
                 {step === 2 && <TicketsStep form={form} update={update} />}
                 {step === 3 && <MediaStep   key={loadingEvent ? "loading" : (eventId ?? "new")} form={form} update={update} />}
-                {step === 4 && <ReviewStep  form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} onLeave={askToLeave} missing={missing} showAbnNotice={!organiserHasAbn && form.registrationType === "startline"} />}
+                {step === 4 && <ReviewStep  form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} onLeave={askToLeave} missing={missing} showAbnNotice={!organiserHasAbn && takesPayments(form.registrationType, form.waves)} />}
 
                 {apiError && (
                   <div className="mt-4 px-4 py-3 rounded-md bg-red-400/10 border border-red-400/20 text-red-300 font-headline text-[13px]">
