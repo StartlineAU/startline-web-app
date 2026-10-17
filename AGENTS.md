@@ -15,7 +15,7 @@ Next.js 15 (App Router) fitness event discovery platform. Three portals:
 - **Docker:** PostgreSQL 15 on :5432 + Mailpit (SMTP :1025, UI :8026). Start: `docker compose up -d` on main checkout only.
 - **Worktree?** `git worktree list`. If worktree, Docker infra runs on main checkout — just `pnpm dev`, never `docker compose up`.
 - **Per-worktree DB:** run `./scripts/dev-db.sh` on first use of a new worktree (creates an isolated `startline_<branch>` DB, applies migrations, points `.env.local` at it). Then **always run `pnpm prisma:seed`** — skip only if you specifically need an empty DB.
-- **Env vars:** Loaded from `.env.local` (gitignored). See `.env.example` + `terraform/` for setup steps.
+- **Env vars:** Loaded from `.env.local` (gitignored). See `.env.example` and `StartlineAU/startline-infra` for setup steps.
 
 ## Environment variables
 
@@ -27,7 +27,7 @@ Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
 | `startline/prod/app` | Prod env vars (Cognito, Stripe live, S3) |
 | `startline/staging/app` | Staging env vars (non-prod Cognito, Neon, S3) |
 
-**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`terraform/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/ci-bootstrap`. Org plan is Free — 6 h PITR only.
+**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`startline-infra/web-app/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/ci-bootstrap`. Org plan is Free — 6 h PITR only.
 
 ### Runtime vs build-time variables
 
@@ -45,7 +45,7 @@ So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
 `TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
-`terraform/modules/environment/main.tf`; add a new one there.
+`startline-infra/web-app/modules/environment/main.tf`; add a new one there.
 
 Terraform owns the whole app secret and the whole branch variable map, so a
 value added by hand in Secrets Manager or the Amplify console is deleted on a
@@ -88,7 +88,7 @@ accounts. Per Stripe mode, once:
 1. `STRIPE_SECRET_KEY=sk_... pnpm stripe:account-events https://<host>`
    creates the destination and prints its signing secret (the Dashboard can reveal it again later).
 2. Store it in `startline/ci-bootstrap` as `stripe_account_events_secret_<env>`,
-   apply Terraform, rebuild.
+   run the apply in `startline-infra` (manual there), then rebuild.
 
 Locally, `pnpm stripe:listen:accounts` forwards the same events. Without the
 secret the route answers 503 and onboarding only completes when the organiser
@@ -133,7 +133,6 @@ Each upload type carries its own MIME allowlist and size cap in
 enough to enforce it everywhere. Every image type takes JPEG, PNG or WebP —
 **no GIF anywhere** — and a file picker's `accept` must come from `TYPE_MIMES`
 rather than `image/*`, or the dialog offers files the routes then refuse.
-Merchandise photos (`merch`) cap at 5 MB against 10 MB for every other image.
 
 `lib/upload-client.ts` (`uploadFile`) drives all three and is the only thing
 UI should call. `/api/upload` still exists and still reads bytes itself, but
@@ -144,8 +143,9 @@ Two things break this silently if forgotten:
 
 - **CSP.** `connect-src` in `next.config.ts` must list the S3 origin. Without
   it the browser blocks the upload and nothing reaches the server logs.
-- **Bucket CORS.** `bucket_cors_allowed_origins` in `terraform/main.tf` must
-  cover the portal origins. Prod lists the three domains; staging is `*`.
+- **Bucket CORS.** `bucket_cors_allowed_origins` in
+  `startline-infra/web-app/main.tf` must cover the portal origins. Prod lists the
+  three domains; staging is `*`.
 
 Step 3 is not optional. Direct-to-S3 means the server never sees the bytes in
 flight, so it is the only remaining check that a file matching an image
@@ -373,12 +373,19 @@ Configured in `opencode.json`: stripe, resend, aws, cloudflare.
 
 ## Terraform + CI/CD
 
-Infra in `terraform/`. Unified state. Only `main` triggers Terraform apply.
+Infra lives in `StartlineAU/startline-infra`, stack at `web-app/`. Same unified
+state as before (S3 key `startline/terraform.tfstate`), so applying from the new
+repo does not recreate anything.
 
-| Workflow | Trigger | Scope |
-|---|---|---|
-| `terraform-plan.yml` | PR to `main` | Plan both environments |
-| `terraform-apply.yml` | Push to `main` | Apply both environments |
+| Workflow | Repo | Trigger | Scope |
+|---|---|---|---|
+| `terraform-plan.yml` | `startline-infra` | PR touching `web-app/**` | Plan + Infracost |
+| `terraform-apply.yml` | `startline-infra` | Manual, or `main` once `TF_AUTO_APPLY=true` | Apply the saved plan |
+| `deploy.yml` | this repo | Push to `main`/`prod` | Amplify build + deploy |
+
+Terraform apply is manual until the first apply has been reviewed. Auto-apply
+on `main` resumes by setting the `TF_AUTO_APPLY` repo variable to `true` in
+`startline-infra`.
 
 Environments:
 

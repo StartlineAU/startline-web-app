@@ -14,7 +14,7 @@ Startline helps performance-driven fitness individuals discover competitive even
 - **Email**: Resend (transactional) + Mailpit (local dev)
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Hosting**: AWS Amplify
-- **Infrastructure**: Terraform
+- **Infrastructure**: Terraform ([`StartlineAU/startline-infra`](https://github.com/StartlineAU/startline-infra))
 
 ## Architecture
 

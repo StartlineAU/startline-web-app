@@ -35,7 +35,7 @@ In **development mode** (`NODE_ENV=development`), all domain checks are skipped 
 ## Hosting & Build
 
 - **Hosting**: AWS Amplify with `standalone` output mode (`next.config.ts`)
-- **Build spec**: Defined in Terraform (`terraform/main.tf`) — runs `pnpm install`, `prisma generate`, fetches secrets from AWS Secrets Manager, runs migrations, seeds (non-prod only), then builds
+- **Build spec**: Defined in Terraform (`startline-infra/web-app/main.tf`) — runs `pnpm install`, `prisma generate`, fetches secrets from AWS Secrets Manager, runs migrations, seeds (non-prod only), then builds
 - **Output**: Standalone `.next` directory deployed by Amplify
 
 ## Key Infrastructure Components
