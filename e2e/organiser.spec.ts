@@ -443,7 +443,9 @@ test.describe("organiser pages", () => {
   });
 
   // A phone used to show an account dropdown and a hamburger side by side,
-  // listing much the same things. Now the hamburger is the only menu.
+  // listing much the same things. Now the hamburger is the only menu, and it
+  // carries the same AccountMenu the desktop dropdown uses (Home, Athlete
+  // profile, the visitor's organisations, Settings, Sign Out).
   test("phone nav has one menu holding everything", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await organiserLogin(page);
@@ -456,9 +458,11 @@ test.describe("organiser pages", () => {
     await expect(nav.locator("button:visible")).toHaveCount(2);
 
     await toggle.click();
-    for (const name of ["Dashboard", "Listings", "Post an Event", "My profile", "Security", "Startline home"]) {
+    for (const name of ["Dashboard", "Listings", "Organisation", "Members", "Payments", "Home", "Athlete profile"]) {
       await expect(nav.getByRole("link", { name, exact: true }).last()).toBeVisible();
     }
+    // The organisation switcher and the rest of the account menu came with it.
+    await expect(nav.getByRole("button", { name: "Apex Endurance Events", exact: true })).toBeVisible();
     await expect(nav.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
     await expect(nav.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
   });

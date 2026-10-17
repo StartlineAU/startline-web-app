@@ -272,7 +272,10 @@ export default function OrganiserNavBar() {
                 )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1.5rem))] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+                // On a phone the bell is not at the screen edge, so a panel hung
+                // off its right side ran off the left of the screen. There it is
+                // pinned to the viewport instead; from sm up it drops from the bell.
+                <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
                   <div className="flex items-center justify-between pl-3.5 pr-2 py-2 border-b border-white/[0.06]">
                     <span className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
                       Notifications

@@ -337,11 +337,18 @@ test.describe("new listing wizard", () => {
   test("review table shows saved categories for a discipline with no picker", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
-    await page.goto("/organiser/new-listing?id=seed-event-022");
 
-    await page.getByRole("button", { name: /Final Review/i }).click();
+    // The wizard loads the event after hydration, and on a cold dev server that
+    // can lose the race with the server-rendered step rail — a click before
+    // hydration focuses the button but never fires. Retry the load until the
+    // review table shows the event's categories.
+    await expect(async () => {
+      await page.goto("/organiser/new-listing?id=seed-event-022");
+      await page.getByRole("button", { name: /Final Review/i }).click();
+      await expect(page.getByText("Rx, Scaled", { exact: true })).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 30000 });
+
     await expect(page.getByText("Categories", { exact: true })).toBeVisible();
-    await expect(page.getByText("Rx, Scaled", { exact: true })).toBeVisible();
   });
 });
 
