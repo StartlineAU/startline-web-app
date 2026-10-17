@@ -34,12 +34,48 @@ const STEPS = [
   { k: "review",   n: "05", label: "Final Review",        sub: "Review & Publish"       },
 ] as const;
 
-const STEP_ERRORS: Record<number, string> = {
-  0: "Event name, format, discipline, intensity level, participant cap and minimum age are required.",
-  1: "Date, start time, street address, city and state are required.",
-  2: "Registration platform, a name and price for every ticket category, and refund policy are required.",
-  3: "A cover image and full description are required.",
-};
+/**
+ * One required thing the organiser has not finished: the review-table row it
+ * belongs to, the step that fixes it, and what to tell them.
+ */
+type Requirement = { row: string; step: number; message: string };
+
+/**
+ * Everything still standing between this form and publishing. The one source
+ * for both the step rail's error marks and the review table, so the two cannot
+ * disagree about what is missing.
+ */
+function missingRequirements(form: FormState): Requirement[] {
+  const missing: Requirement[] = [];
+  const need = (row: string, step: number, message: string) => missing.push({ row, step, message });
+
+  if (form.title.trim().length <= 2) need("Title", 0, "Add an event name of at least 3 characters");
+  if (!form.discipline) need("Discipline", 0, "Choose a discipline");
+  if (!form.format) need("Format", 0, "Choose a format");
+  if (!form.level) need("Intensity", 0, "Choose an intensity level");
+  if (form.cap === "" || form.minAge === "") need("Cap / Min age", 0, "Set a participant cap and a minimum age");
+  if (DISCIPLINE_CATS[form.discipline as Discipline] && form.categories.length === 0) {
+    need("Categories", 0, "Choose at least one category");
+  }
+
+  if (!form.date) need("Date", 1, "Choose the event date");
+  if (!form.startTime) need("Start / End", 1, "Set a start time");
+  else if (form.endTime && form.endTime <= form.startTime) need("Start / End", 1, "Cut-off time must be after the start time");
+  if (!(form.address.trim() && form.city.trim() && form.state)) need("Venue", 1, "Add the street address, city and state");
+
+  if (form.waves.length === 0 || !form.waves.every(waveIsComplete)) {
+    need("Tickets", 2, "Every ticket category needs a name and a price");
+  }
+  if (form.registrationType !== "startline" && !form.registrationUrl.trim()) {
+    need("Registration", 2, "Add your registration link");
+  }
+  if (!tiersAreValid(form.refundTiers)) need("Refund policy", 2, "Finish the refund policy");
+
+  if (!(form.coverImage || form.coverImageUrl)) need("Cover image", 3, "Upload a cover image");
+  if (stripHtml(form.description).length === 0) need("Description", 3, "Write the event description");
+
+  return missing;
+}
 
 type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "other" | "";
 type Format     = "individual" | "team" | "both" | "";
@@ -475,7 +511,7 @@ function WhenStep({ form, update }: { form: FormState; update: (p: Partial<FormS
             Overall start. Per-wave start times can be set in Tickets & Pricing.
           </p>
         </Field>
-        <Field label="Cut-off time" hint="Last finisher">
+        <Field label="Cut-off time (if required)">
           <TimePicker value={form.endTime} onChange={v => update({ endTime: v })} placeholder="Select end time" ariaLabel="Cut-off time" />
           {timeInvalid && (
             <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">
@@ -1037,16 +1073,20 @@ const INTENSITY_LABELS: Record<string, string> = {
   low: "Low", moderate: "Moderate", high: "High", extreme: "Extreme",
 };
 
-function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice }: {
+function ReviewStep({ form, setStep, confirmed, onConfirm, onLeave, showAbnNotice, missing }: {
   form: FormState; setStep: (n: number) => void; confirmed: boolean; onConfirm: (v: boolean) => void;
+  onLeave: (destination: string) => void;
   showAbnNotice: boolean;
+  missing: Requirement[];
 }) {
-  const rows: { k: string; v: string; step: number }[] = [
+  const hasCategories = !!DISCIPLINE_CATS[form.discipline as Discipline];
+  const allRows: { k: string; v: string; step: number }[] = [
     { k: "Title",          v: form.title || "—",                                                                   step: 0 },
     { k: "Discipline",     v: form.discipline ? form.discipline.toUpperCase() : "—",                               step: 0 },
     { k: "Format",         v: form.format || "—",                                                                  step: 0 },
     { k: "Intensity",      v: form.level ? INTENSITY_LABELS[form.level] : "—",                                    step: 0 },
     { k: "Cap / Min age",  v: `${form.cap === "0" ? "Open" : form.cap ? parseInt(form.cap).toLocaleString() : "—"} · ${form.minAge === "0" ? "Open to all" : form.minAge ? `${form.minAge}+` : "—"}`, step: 0 },
+    { k: "Categories",     v: form.categories.length ? form.categories.join(", ") : "—",                           step: 0 },
     { k: "Date",           v: form.date
         ? form.endDate && form.endDate !== form.date
           ? `${new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })} — ${new Date(form.endDate + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })}`
@@ -1064,40 +1104,90 @@ function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice }: {
     { k: "Description",    v: form.description ? `${stripHtml(form.description).slice(0, 60)}…` : "—", step: 3 },
   ];
 
+  const missingByRow = new Map(missing.map((m) => [m.row, m.message]));
+
+  // The table shows what is required by default. A row for something optional,
+  // or for a requirement that does not apply to this event, only appears once
+  // there is something in it to review. A flagged row always shows.
+  const hasContent: Record<string, boolean> = {
+    // Saved categories count too: an event from before the picker only offered
+    // running/cycling/swimming divisions still has them on the record, and the
+    // summary must show what the event will publish.
+    "Categories":    hasCategories || form.categories.length > 0,
+    "Refund policy": !isFreeEvent(form.waves),
+    "Prize money":   form.prizeMoney,
+    "Info PDFs":     form.informationPdfs.length > 0,
+    "Gallery":       form.photoUrls.length + form.photos.length > 0,
+  };
+  const rows = allRows.filter((r) => missingByRow.has(r.k) || (hasContent[r.k] ?? true));
+
   return (
     <div>
       <div className="bg-dark border border-dark-lighter rounded-lg overflow-hidden mb-6">
-        {rows.map((r, i) => (
-          <div key={r.k} className={`flex items-center gap-4 px-5 py-4 ${i === rows.length - 1 ? "" : "border-b border-white/5"}`}>
-            <div className="font-headline text-[11px] uppercase tracking-widest text-light w-32 flex-shrink-0">{r.k}</div>
-            <div className="flex-1 font-headline text-[14px] text-light truncate">{r.v}</div>
-            <button onClick={() => setStep(r.step)}
-              className="font-headline text-[11px] uppercase tracking-widest text-light hover:text-primary flex items-center gap-1 transition-colors">
-              Edit <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
+        {rows.map((r, i) => {
+          // A row with something required still missing says so in place of its
+          // value, so the table is where the organiser finds out, before they
+          // try to publish, rather than a warning that appears afterwards.
+          const problem = missingByRow.get(r.k);
+          return (
+            // On a phone the label sits above its value and the value wraps; from
+            // sm up they share a line and a long value truncates. min-w-0 is what
+            // lets either happen: without it a long value widened the whole step.
+            <div key={r.k} data-missing={problem ? "true" : undefined}
+              className={`flex items-start sm:items-center gap-4 px-4 sm:px-5 py-4 ${problem ? "bg-orange-500/[0.07]" : ""} ${i === rows.length - 1 ? "" : "border-b border-white/5"}`}>
+              <div className="flex-1 min-w-0 sm:flex sm:items-center sm:gap-4">
+                <div className={`font-headline text-[11px] uppercase tracking-widest mb-1 sm:mb-0 sm:w-32 sm:flex-shrink-0 ${problem ? "text-orange-400" : "text-muted-dark sm:text-light"}`}>{r.k}</div>
+                {problem ? (
+                  <div className="min-w-0 sm:flex-1 flex items-start sm:items-center gap-2 font-headline text-[14px] text-orange-300">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
+                    <span className="break-words">{problem}</span>
+                  </div>
+                ) : (
+                  <div className="min-w-0 sm:flex-1 font-headline text-[14px] text-light break-words sm:truncate">{r.v}</div>
+                )}
+              </div>
+              <button onClick={() => setStep(r.step)}
+                className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest transition-colors ${problem
+                  ? "border-orange-400/50 bg-orange-400/10 text-orange-300 hover:bg-orange-400/20 hover:border-orange-400"
+                  : "border-dark-lighter text-light hover:border-primary/50 hover:text-primary"}`}>
+                {problem ? "Fix" : "Edit"} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="bg-primary/5 border border-primary/30 rounded-md p-5 mb-6">
-        <div className="font-headline text-[14px] font-black italic tracking-tighter text-light mb-1">Your listing is ready to publish.</div>
-        <p className="font-headline text-[13px] text-light leading-relaxed">
-          Once published, athletes will be able to find your event in search and carousels.
-          You&apos;ll receive a notification each time someone registers.
-        </p>
-      </div>
+      {missing.length > 0 ? (
+        <div className="bg-orange-500/[0.07] border border-orange-500/30 rounded-md p-5 mb-6">
+          <div className="font-headline text-[14px] font-black italic tracking-tighter text-orange-300 mb-1">
+            {missing.length === 1 ? "1 required item still needs fixing." : `${missing.length} required items still need fixing.`}
+          </div>
+          <p className="font-headline text-[13px] text-light leading-relaxed">
+            They are highlighted in the table above. Fix each one and you can publish.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-primary/5 border border-primary/30 rounded-md p-5 mb-6">
+          <div className="font-headline text-[14px] font-black italic tracking-tighter text-light mb-1">Your listing is ready to publish.</div>
+          <p className="font-headline text-[13px] text-light leading-relaxed">
+            Once published, athletes will be able to find your event in search and carousels.
+            You&apos;ll receive a notification each time someone registers.
+          </p>
+        </div>
+      )}
 
       {/* Deliberately advisory, not a block. Submitting still works; the event
           waits for review instead of going live, and the organiser is told
           again on the confirmation screen once the work is safely saved. */}
       {showAbnNotice && (
-        <div className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-md p-4 mb-6">
+        <div data-testid="abn-notice" className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-md p-4 mb-6">
           <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="font-headline text-[13px] text-amber-200 leading-relaxed">
             <span className="font-bold">Your organiser profile isn&apos;t finished.</span>{" "}
             You can publish this listing now, but without an ABN it goes to Startline for review
             instead of straight to live. Add yours in{" "}
-            <Link href="/organiser/payments" className="underline hover:text-amber-100">Payments</Link>{" "}
+            <Link href="/organiser/payments" className="underline hover:text-amber-100"
+              onClick={(e) => { e.preventDefault(); onLeave("/organiser/payments"); }}>Payments</Link>{" "}
             to publish immediately.
           </div>
         </div>
@@ -1142,7 +1232,9 @@ function LivePreview({ form }: { form: FormState }) {
 
   return (
     <div>
-      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary/70 block mb-4">
+      {/* Desktop sidebar only. On a phone the card sits inside the "Event
+          preview" toggle, which already names it. */}
+      <span className="hidden lg:block font-headline text-[11px] font-bold uppercase tracking-widest text-primary/70 mb-4">
         Live preview
       </span>
 
@@ -1288,17 +1380,34 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
   const prizeAmount = form.prizeMoney ? normalisePrizeAmount(form.prizeMoneyAmount) : "";
   const cap = form.cap ? parseInt(form.cap) : null;
 
+  // The preview covers the whole screen, so on a phone the back swipe is the
+  // obvious way out of it. Opening adds a history entry for the preview, which
+  // makes Back close the preview instead of leaving the wizard and losing the
+  // event. Close goes through the same entry so none is left behind.
+  const pushedEntry = useRef(false);
+  useEffect(() => {
+    if (!pushedEntry.current && !window.history.state?.eventPreview) {
+      window.history.pushState({ ...window.history.state, eventPreview: true }, "");
+    }
+    pushedEntry.current = true;
+    window.addEventListener("popstate", onClose);
+    return () => window.removeEventListener("popstate", onClose);
+  }, [onClose]);
+  const close = () => window.history.back();
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overlay-in">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+    // Above the site nav (z-50), with an opaque bar: the nav's logo used to
+    // show through the preview's header.
+    <div className="fixed inset-0 z-[60] flex flex-col overlay-in">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
       <div className="relative flex flex-col w-full h-full overflow-hidden modal-in">
-        <div className="relative z-10 flex items-center justify-between px-5 py-3 bg-dark-darker/95 backdrop-blur border-b border-dark-lighter shrink-0">
+        <div className="relative z-10 flex items-center justify-between px-5 py-3 bg-dark-darker border-b border-dark-lighter shrink-0">
           <div className="flex items-center gap-3">
             <Eye className="w-4 h-4 text-primary" />
             <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Athlete view preview</span>
             <span className="font-headline text-[10px] uppercase tracking-widest text-light hidden sm:block">This is how your listing will appear to athletes</span>
           </div>
-          <button onClick={onClose}
+          <button onClick={close}
             className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-light hover:text-light transition-colors">
             <X className="w-4 h-4" /> Close preview
           </button>
@@ -1436,8 +1545,8 @@ function EventFullPreview({ form, onClose }: { form: FormState; onClose: () => v
                     {form.registrationType === "external" ? <ExternalLink className="w-4 h-4" /> : <Ticket className="w-4 h-4" />}
                   </span>
                   <span className="w-full flex items-center justify-center gap-2 border border-dark-lighter text-light font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md cursor-default">
-                    <MapPin className="w-4 h-4" />
                     View on Maps
+                    <MapPin className="w-4 h-4" />
                   </span>
                 </div>
 
@@ -1559,10 +1668,12 @@ export default function EventFormWizard({
   const [loadingEvent,    setLoadingEvent]    = useState(false);
   const [saving,          setSaving]          = useState(false);
   const [apiError,        setApiError]        = useState("");
-  const [submitErrors,    setSubmitErrors]    = useState<number[]>([]);
   const [visited,         setVisited]         = useState<Set<number>>(new Set());
   const [confirmed,       setConfirmed]       = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  // Where the leave prompt sends the organiser when it was opened by a link
+  // out of the wizard rather than by Cancel. Null means the usual redirects.
+  const [leaveTo,         setLeaveTo]         = useState<string | null>(null);
   const [abnNotice,       setAbnNotice]       = useState<string | null>(null);
   const [showFullPreview, setShowFullPreview] = useState(false);
   const [direction,       setDirection]       = useState<"forward" | "back">("forward");
@@ -1571,6 +1682,17 @@ export default function EventFormWizard({
   const originalFields = useRef<Record<string, unknown>>({});
 
   const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
+
+  // Every step change lands at the top of the new step. Continue sits at the
+  // bottom of a long form, so without this the next step opened at its footer.
+  // The glide runs alongside the step's slide-in; reduced motion jumps instead.
+  const previousStep = useRef(step);
+  useEffect(() => {
+    if (previousStep.current === step) return;
+    previousStep.current = step;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "instant" : "smooth" });
+  }, [step]);
 
   useEffect(() => {
     const id = eventIdProp ?? new URLSearchParams(window.location.search).get("id");
@@ -1626,36 +1748,16 @@ export default function EventFormWizard({
       .finally(() => setLoadingEvent(false));
   }, [apiBase, eventIdProp]);
 
-  const stepHasErrors = (s: number): boolean => {
-    if (s === 0) {
-      const hasCatRequirement = !!DISCIPLINE_CATS[form.discipline as Discipline];
-      return !(
-        form.title.trim().length > 2 &&
-        form.format &&
-        form.discipline &&
-        form.level &&
-        form.cap !== "" &&
-        form.minAge !== "" &&
-        (!hasCatRequirement || form.categories.length > 0)
-      );
-    }
-    if (s === 1) return !(form.date && form.startTime && form.address.trim() && form.city.trim() && form.state) ||
-      !!(form.startTime && form.endTime && form.endTime <= form.startTime);
-    if (s === 2) return !(
-      form.waves.length > 0 &&
-      // Every category, not just the first. Each one carries the same required
-      // stars, and a second category left half-filled used to pass this check.
-      form.waves.every(waveIsComplete) &&
-      (form.registrationType === "startline" || !!form.registrationUrl.trim()) &&
-      tiersAreValid(form.refundTiers)
-    );
-    if (s === 3) return !((form.coverImage || form.coverImageUrl) && stripHtml(form.description).length > 0);
-    if (s === 4) return !confirmed;
-    return false;
-  };
+  const missing = missingRequirements(form);
+  const stepHasErrors = (s: number): boolean =>
+    s === 4 ? !confirmed : missing.some((m) => m.step === s);
 
   const goTo = (target: number) => {
-    setVisited(prev => new Set([...prev, step]));
+    // Arriving at the review marks every step as seen, so the rail flags the
+    // unfinished ones alongside the table.
+    setVisited(prev => target === STEPS.length - 1
+      ? new Set(STEPS.map((_, i) => i))
+      : new Set([...prev, step]));
     setDirection(target > step ? "forward" : "back");
     if (target !== STEPS.length - 1) setConfirmed(false);
     setStep(target);
@@ -1669,8 +1771,8 @@ export default function EventFormWizard({
     return reason ? `${fallback} ${reason}` : `${fallback} Please try again or remove it.`;
   };
 
-  const submitToApi = async (asDraft: boolean, overrideTitle?: string): Promise<boolean> => {
-    setSaving(true); setApiError(""); setSubmitErrors([]);
+  const submitToApi = async (asDraft: boolean, overrideTitle?: string, redirectTo?: string): Promise<boolean> => {
+    setSaving(true); setApiError("");
     try {
       if (requireOrganiser && !organiserId) {
         setApiError("Select an organiser to create this event for.");
@@ -1771,7 +1873,7 @@ export default function EventFormWizard({
         setAbnNotice(data.notice ?? "");
         return true;
       }
-      router.push(submitRedirect);
+      router.push(redirectTo ?? submitRedirect);
       return true;
     } catch {
       setApiError("Something went wrong. Please check your connection and try again.");
@@ -1781,11 +1883,17 @@ export default function EventFormWizard({
     }
   };
 
+  // A link out of the wizard goes through the same prompt as Cancel, so
+  // following it cannot silently throw away an unsaved event.
+  const askToLeave = (destination: string) => { setLeaveTo(destination); setShowCancelModal(true); };
+  const closeLeavePrompt = () => { setShowCancelModal(false); setLeaveTo(null); };
+
   const next = () => {
     if (step < STEPS.length - 1) { goTo(step + 1); }
     else {
-      const errs = Array.from({ length: STEPS.length }, (_, i) => i).filter(i => stepHasErrors(i));
-      if (errs.length > 0) { setVisited(new Set(Array.from({ length: STEPS.length }, (_, i) => i))); setSubmitErrors(errs); return; }
+      // The review table already shows what is missing and Publish is disabled
+      // until it is fixed, so this is only a backstop.
+      if (missing.length > 0 || !confirmed) return;
       submitToApi(false);
     }
   };
@@ -1858,7 +1966,7 @@ export default function EventFormWizard({
 
           {/* Two-column layout */}
           <div className="max-w-[1280px] mx-auto grid lg:grid-cols-[1fr_360px]">
-            <div className="p-4 sm:p-6 lg:p-8 pt-8 sm:pt-10 lg:pt-12 pb-32 lg:pb-10">
+            <div className="min-w-0 p-4 sm:p-6 lg:p-8 pt-8 sm:pt-10 lg:pt-12 pb-32 lg:pb-10">
               <div key={step} className={direction === "forward" ? "step-forward" : "step-back"}>
                 <div className="mb-6">
                   <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary mb-2">
@@ -1874,34 +1982,11 @@ export default function EventFormWizard({
                 {step === 1 && <WhenStep    form={form} update={update} />}
                 {step === 2 && <TicketsStep form={form} update={update} />}
                 {step === 3 && <MediaStep   key={loadingEvent ? "loading" : (eventId ?? "new")} form={form} update={update} />}
-                {step === 4 && <ReviewStep  form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} showAbnNotice={!organiserHasAbn && form.registrationType === "startline"} />}
+                {step === 4 && <ReviewStep  form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} onLeave={askToLeave} missing={missing} showAbnNotice={!organiserHasAbn && form.registrationType === "startline"} />}
 
                 {apiError && (
                   <div className="mt-4 px-4 py-3 rounded-md bg-red-400/10 border border-red-400/20 text-red-300 font-headline text-[13px]">
                     {apiError}
-                  </div>
-                )}
-
-                {submitErrors.length > 0 && (
-                  <div className="mt-5 rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
-                    <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-orange-400 mb-3 flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 text-[11px] font-black">!</span>
-                      Before you can submit, please complete the following:
-                    </p>
-                    <ul className="space-y-2.5">
-                      {submitErrors.map(i => (
-                        <li key={i} className="flex items-start justify-between gap-4 py-2.5 px-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
-                          <div>
-                            <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-orange-600">{STEPS[i].n} — {STEPS[i].label}</p>
-                            <p className="font-headline text-orange-500 text-[12px] mt-0.5">{STEP_ERRORS[i]}</p>
-                          </div>
-                          <button onClick={() => { setSubmitErrors([]); goTo(i); }}
-                            className="shrink-0 font-headline text-[11px] font-bold uppercase tracking-widest text-orange-500 hover:text-orange-700 flex items-center gap-1 transition-colors mt-0.5">
-                            Fix now <ArrowRight className="w-3 h-3" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 )}
               </div>
@@ -1914,7 +1999,7 @@ export default function EventFormWizard({
                   <ChevronDown className={`w-4 h-4 text-light transition-transform duration-200 ${showMobilePreview ? "rotate-180" : ""}`} />
                 </button>
                 {showMobilePreview && (
-                  <div className="p-5 pt-0 bg-dark-light border-t border-dark-lighter"><LivePreview form={form} /></div>
+                  <div className="p-5 bg-dark-light border-t border-dark-lighter"><LivePreview form={form} /></div>
                 )}
               </div>
 
@@ -1923,12 +2008,12 @@ export default function EventFormWizard({
                   className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light flex items-center gap-2 transition-colors">
                   <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Cancel" : "Back"}
                 </button>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 sm:gap-3">
                   <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
-                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-5 py-3 transition-colors disabled:opacity-40">
+                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
                     Save draft
                   </button>
-                  <button onClick={next} disabled={saving || (step === STEPS.length - 1 && !confirmed)}
+                  <button onClick={next} disabled={saving || (step === STEPS.length - 1 && (!confirmed || missing.length > 0))}
                     className="bg-machined shadow-machined disabled:opacity-40 disabled:cursor-not-allowed text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform">
                     {saving
                       ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Saving…</>
@@ -1951,23 +2036,23 @@ export default function EventFormWizard({
 
       {showCancelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowCancelModal(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeLeavePrompt} />
           <div className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-sm p-7 modal-in">
             <h2 className="font-headline text-[22px] font-black italic tracking-tight text-light mb-2">Leave without saving?</h2>
             <p className="font-headline text-light text-[14px] leading-relaxed mb-7">
               Your event details haven&apos;t been saved yet. Save as a draft so you can come back and finish it later.
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={async () => { await submitToApi(true, form.title.trim() || "Untitled draft"); setShowCancelModal(false); }}
+              <button onClick={async () => { await submitToApi(true, form.title.trim() || "Untitled draft", leaveTo ?? undefined); closeLeavePrompt(); }}
                 disabled={saving}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                 {saving ? "Saving…" : <><Check className="w-4 h-4" /> Save draft &amp; leave</>}
               </button>
-              <button onClick={() => router.push(cancelRedirect)}
+              <button onClick={() => router.push(leaveTo ?? cancelRedirect)}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:text-light hover:border-primary/40 transition-colors">
                 Discard &amp; leave
               </button>
-              <button onClick={() => setShowCancelModal(false)}
+              <button onClick={closeLeavePrompt}
                 className="font-headline text-[12px] uppercase tracking-widest text-light hover:text-light transition-colors text-center py-1">
                 Keep editing
               </button>

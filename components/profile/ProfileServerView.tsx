@@ -85,8 +85,14 @@ export default async function ProfileServerView({
     registrations.map((r) => r.event.organiser.id),
   );
 
+  // A profile without a handle is only ever rendered to its owner (/profile),
+  // so falling back to the private name or email prefix exposes nothing.
+  const displayName =
+    user.username || user.name?.trim() || user.email.split("@")[0] || "Athlete";
+
   const profile = {
     username: user.username ?? "",
+    displayName,
     bio: user.bio,
     profilePicUrl: user.profilePicUrl,
     history: {

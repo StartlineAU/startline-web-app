@@ -1,5 +1,13 @@
 import { test, expect } from "@playwright/test";
-import { organiserLogin, pickTime } from "./helpers";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { organiserLogin, pickTime, ensureDatabaseUrl } from "./helpers";
+
+ensureDatabaseUrl();
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 test.describe("new listing wizard", () => {
   test("loads the new listing page with 5 steps", async ({ page }) => {
@@ -26,6 +34,69 @@ test.describe("new listing wizard", () => {
     await page.getByRole("button", { name: /continue/i }).click();
 
     await expect(page.getByText(/when and where/i).first()).toBeVisible();
+  });
+
+  // Continue is at the foot of the step, so the next step used to open
+  // scrolled to its own footer.
+  test("continue lands at the top of the next step", async ({ page }) => {
+    await organiserLogin(page);
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto("/organiser/new-listing");
+
+    const next = page.getByRole("button", { name: /continue/i });
+    await next.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await next.click();
+
+    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  // A long value in the review table used to widen the whole step past the
+  // screen, and the notifications panel hung off the left edge.
+  test("review step and notifications fit a phone screen", async ({ page }) => {
+    await organiserLogin(page);
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto("/organiser/new-listing");
+
+    await page.getByPlaceholder(/Apex Throwdown/i)
+      .fill("The Very Long Named Coastal Endurance Championship Weekend 2026");
+    await page.locator("button", { hasText: /^05/ }).first().click();
+    await expect(page.getByText(/hit publish/i)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+    await page.getByRole("button", { name: "Notifications", exact: true }).click();
+    const panel = page.getByText(/^Notifications/).locator("xpath=ancestor::div[contains(@class,'rounded-xl')][1]");
+    const box = (await panel.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  });
+
+  // The preview fills a phone screen, so the back swipe is how people leave
+  // it. That used to leave the wizard altogether and lose the event.
+  test("back from the preview returns to the wizard with the event intact", async ({ page }) => {
+    await organiserLogin(page);
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto("/organiser/new-listing");
+
+    const title = page.getByPlaceholder(/Apex Throwdown/i);
+    await title.fill("Back Swipe Classic");
+    const openPreview = page.getByRole("button", { name: "Preview", exact: true });
+    const banner = page.getByText("Athlete view preview");
+
+    await openPreview.click();
+    await expect(banner).toBeVisible();
+    await page.goBack();
+    await expect(banner).toHaveCount(0);
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+    await expect(title).toHaveValue("Back Swipe Classic");
+
+    // Closing with the button leaves no extra history entry behind either.
+    await openPreview.click();
+    await page.getByRole("button", { name: /close preview/i }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+    await expect(title).toHaveValue("Back Swipe Classic");
   });
 
   test("address autocomplete shows suggestions", async ({ page }) => {
@@ -225,18 +296,136 @@ test.describe("new listing wizard", () => {
       .toBe(true);
   });
 
-  test("shows validation errors on empty submit", async ({ page }) => {
+  // What is missing shows in the review table itself, before any click, rather
+  // than as a warning that only appeared after Publish was pressed.
+  test("review table flags missing required fields and blocks publish", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
 
     // Advance through all 5 steps without filling anything
     for (let i = 0; i < 4; i++) {
       await page.getByRole("button", { name: /continue/i }).click();
     }
 
+    await expect(page.getByText(/required items still need fixing/i)).toBeVisible();
+    await expect(page.getByText("Add an event name of at least 3 characters")).toBeVisible();
+    await expect(page.getByText("Upload a cover image")).toBeVisible();
+    await expect(page.getByText(/ready to publish/i)).toHaveCount(0);
+
+    // Optional extras stay out of the table until something is added to them.
+    for (const optional of ["Prize money", "Info PDFs", "Gallery"]) {
+      await expect(page.getByText(optional, { exact: true })).toHaveCount(0);
+    }
+
+    // Ticking the confirmation is not enough while rows are still flagged.
     await page.locator('input[type="checkbox"]').check();
-    await page.getByRole("button", { name: /publish listing/i }).click();
-    await expect(page.getByText(/please complete the following/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /publish listing/i })).toBeDisabled();
+
+    // Fix takes them to the step, and the row clears once the field is filled.
+    await page.locator('[data-missing="true"]', { hasText: "Title" }).getByRole("button", { name: /fix/i }).click();
+    await page.getByPlaceholder(/Apex Throwdown/i).fill("Review Table Classic");
+    await page.getByRole("button", { name: /Final Review/i }).click();
+    await expect(page.getByText("Add an event name of at least 3 characters")).toHaveCount(0);
+    await expect(page.getByText("Review Table Classic").first()).toBeVisible();
+  });
+
+  // A saved event whose discipline has no picker (crossfit, hybrid, triathlon)
+  // still carries categories on the record. The summary shows what will
+  // publish, so it must list them rather than drop them because the picker
+  // list does not apply. seed-event-022 is a crossfit event owned by Apex.
+  test("review table shows saved categories for a discipline with no picker", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await organiserLogin(page);
+
+    // The wizard loads the event after hydration, and on a cold dev server that
+    // can lose the race with the server-rendered step rail — a click before
+    // hydration focuses the button but never fires. Retry the load until the
+    // review table shows the event's categories.
+    await expect(async () => {
+      await page.goto("/organiser/new-listing?id=seed-event-022");
+      await page.getByRole("button", { name: /Final Review/i }).click();
+      await expect(page.getByText("Rx, Scaled", { exact: true })).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 30000 });
+
+    await expect(page.getByText("Categories", { exact: true })).toBeVisible();
+  });
+});
+
+// A link out of the wizard (Payments, in the ABN notice) goes through the same
+// "Leave without saving?" prompt as Cancel, so following it cannot silently drop
+// an unsaved event, and "Save draft & leave" saves before it navigates.
+//
+// Both seeded organisers have an ABN, so this spec owns an organiser without
+// one rather than mutating seed data other specs depend on.
+test.describe("new listing wizard: leaving for Payments without an ABN", () => {
+  const EMAIL = "noabn.organiser@startline.test";
+  let organiserId = "";
+
+  test.beforeAll(async () => {
+    const user = await prisma.user.upsert({
+      where: { email: EMAIL },
+      update: { cognitoSub: "dev-bypass-noabn-test" },
+      create: { cognitoSub: "dev-bypass-noabn-test", email: EMAIL, name: "No ABN Organiser" },
+    });
+    const org = await prisma.organiser.create({
+      data: {
+        createdBy: user.id,
+        email: EMAIL,
+        orgName: "E2E No ABN Events",
+        contactName: "No ABN",
+        contactEmail: EMAIL,
+        phone: "+61 400 000 002",
+        abn: null,
+        verified: true,
+        status: "APPROVED",
+      },
+    });
+    organiserId = org.id;
+    await prisma.organiserMember.create({
+      data: { organiserId: org.id, userId: user.id, role: "OWNER" },
+    });
+  });
+
+  test.afterAll(async () => {
+    // Event.organiser has no cascade, so the events go before the organiser.
+    await prisma.event.deleteMany({ where: { organiserId } });
+    await prisma.organiser.deleteMany({ where: { email: EMAIL } });
+    await prisma.user.deleteMany({ where: { email: EMAIL } });
+    await prisma.$disconnect();
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "noabn", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+  });
+
+  test("Payments prompts, and Save draft & leave saves the event then continues", async ({ page }) => {
+    await page.goto("/organiser/new-listing");
+    await page.getByPlaceholder(/Apex Throwdown/i).fill("Payments Prompt Classic");
+
+    await page.locator("button", { hasText: /^05/ }).first().click();
+    const notice = page.getByTestId("abn-notice");
+    await expect(notice).toBeVisible();
+
+    // Keep editing closes the prompt and leaves the wizard untouched.
+    await notice.getByRole("link", { name: "Payments", exact: true }).click();
+    await expect(page.getByText(/leave without saving/i)).toBeVisible();
+    await page.getByRole("button", { name: /keep editing/i }).click();
+    await expect(page.getByText(/leave without saving/i)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+
+    // Save draft & leave saves first, then follows the link.
+    await notice.getByRole("link", { name: "Payments", exact: true }).click();
+    await page.getByRole("button", { name: /save draft & leave/i }).click();
+    await expect(page).toHaveURL(/\/organiser\/payments/, { timeout: 30000 });
+
+    const draft = await prisma.event.findFirst({
+      where: { organiserId },
+      orderBy: { createdAt: "desc" },
+      select: { title: true, status: true },
+    });
+    expect(draft).toMatchObject({ title: "Payments Prompt Classic", status: "DRAFT" });
   });
 });

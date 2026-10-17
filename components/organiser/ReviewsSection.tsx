@@ -589,7 +589,9 @@ export default function ReviewsSection({
           ))}
         </div>
       ) : reviews.length === 0 ? (
-        <div className="py-12 text-center border border-dashed border-dark-lighter rounded-xl">
+        // Filled like the page's other empty states: on a scaled viewport the
+        // dashed hairline alone fades on whichever edge lands between pixels.
+        <div className="py-12 text-center bg-dark border border-dashed border-dark-lighter rounded-xl">
           <div className="flex items-center justify-center gap-0.5 mb-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <Star key={i} className="w-6 h-6 text-dark-lighter" />
