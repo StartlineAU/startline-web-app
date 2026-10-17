@@ -58,7 +58,7 @@ const SECTIONS: LegalSection[] = [
         <Clause n="1.4" title="Changes">
           <p>
             We may update these terms as the platform changes. If a change is significant, we will
-            tell you by email or on the platform at least 14 days before it takes effect. If you do
+            email you at least 14 days before it takes effect. If you do
             not agree with a change, you can close your account before then. A change never alters
             the terms of an entry you have already bought.
           </p>
@@ -287,7 +287,9 @@ const SECTIONS: LegalSection[] = [
             if you postpone it or change it significantly you must offer a full refund (3.5).
             Startline processes these refunds from the event’s takings. If a refund or a payment
             dispute arises after you have been paid out, we may recover the amount from your future
-            payouts or ask you to repay it.
+            payouts or ask you to repay it. If you do not repay an amount within 14 days of our
+            request, we may suspend your organisation, unpublish its events or remove it from the
+            platform (see section 8). You still owe the amount after removal.
           </p>
         </Clause>
         <Clause n="5.7" title="Entrants’ personal information">
@@ -395,14 +397,31 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="7.4" title="Limits on our liability">
           <p>
-            Where the law allows us to limit our liability for failing to meet a consumer guarantee,
-            our liability is limited to supplying the service again or paying the cost of having it
-            supplied again. Otherwise, and to the extent the law allows, Startline is not liable for
-            any indirect or consequential loss, or for lost profits or revenue, and our total
-            liability to you is limited to the greater of the booking fees you paid Startline in the
-            12 months before the claim and A$100. These limits do not apply to loss caused by our
-            fraud or wilful misconduct, or to death or personal injury caused by our negligence.
+            The limits in this clause apply only to the extent the law allows, and never reduce what
+            you can recover for a failure to meet a consumer guarantee (7.1).
           </p>
+          <Bullets>
+            <li>
+              Startline is not liable for loss that was not reasonably foreseeable, or that was
+              caused by the organiser, by another user, or by something outside our reasonable
+              control.
+            </li>
+            <li>
+              For athletes, our total liability for all claims is limited to the total you paid
+              through Startline in the 12 months before the claim, or A$500 if that is more.
+            </li>
+            <li>
+              For organisers, who use the platform for business, our total liability is limited to
+              the booking fees Startline earned on your events in the 12 months before the claim. For
+              a failure to meet a consumer guarantee, our liability is limited to supplying the
+              service again or paying the cost of that, where the law allows. We are not liable to
+              organisers for lost profits or revenue.
+            </li>
+            <li>
+              None of these limits apply to loss caused by our fraud, wilful misconduct or breach of
+              our privacy obligations, or to death or personal injury caused by our negligence.
+            </li>
+          </Bullets>
         </Clause>
         <Clause n="7.5" title="Organiser indemnity">
           <p>
@@ -431,8 +450,8 @@ const SECTIONS: LegalSection[] = [
         <Clause n="8.2">
           <p>
             If we close an organisation, its obligations to refund entrants for events that will
-            not go ahead still apply. Sections 3.4 to 3.7, 5.6, 5.7, 7 and 9 continue after an
-            account closes.
+            not go ahead, and any amount it owes Startline, still apply. Sections 3.4 to 3.7, 5.6,
+            5.7, 7 and 9 continue after an account or organisation closes.
           </p>
         </Clause>
       </>

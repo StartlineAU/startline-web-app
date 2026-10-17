@@ -364,7 +364,7 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         We will update this policy when the way we handle personal information changes. If a change
-        is significant, we will tell you by email or on the platform before it takes effect. The date
+        is significant, we will email you before it takes effect. The date
         at the top shows when it was last updated.
       </p>
     ),

@@ -436,7 +436,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     }
 
     const age = calcAge(isoDate);
-    if (age < 13)  { setError("You must be at least 13 years old to create an account."); return; }
+    if (age < 18)  { setError("You must be 18 or older to create an account. A parent or guardian can enter you into events."); return; }
     if (age > 120) { setError("Please enter a valid date of birth."); return; }
 
     if (!acceptedTerms) { setError("Please agree to the Terms of Service to continue."); return; }
