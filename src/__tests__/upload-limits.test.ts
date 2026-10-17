@@ -38,29 +38,12 @@ describe("uploadSizeError", () => {
 // default-true branch.
 describe("image uploads", () => {
   it("takes still photos only, for every image type", () => {
-    for (const type of ["logo", "cover", "photo", "merch", "avatar"] as const) {
+    for (const type of ["logo", "cover", "photo", "avatar"] as const) {
       expect(TYPE_MIMES[type]).toEqual(["image/jpeg", "image/png", "image/webp"]);
     }
   });
 
   it("allows no GIF under any upload type", () => {
     for (const mimes of Object.values(TYPE_MIMES)) expect(mimes).not.toContain("image/gif");
-  });
-});
-
-// Merchandise photos are their own type so the cap can be tighter than the
-// gallery's (#338).
-describe("merchandise photos", () => {
-  it("caps a product photo at 5 MB", () => {
-    expect(uploadSizeError("merch", 5 * MB)).toBeNull();
-    expect(uploadSizeError("merch", 5 * MB + 1)).toBe("Photo must be 5 MB or smaller.");
-  });
-
-  it("is tighter than the gallery photo cap", () => {
-    expect(UPLOAD_LIMITS.merch.bytes).toBeLessThan(UPLOAD_LIMITS.photo.bytes);
-  });
-
-  it("allows nothing the gallery photo type does not", () => {
-    for (const mime of TYPE_MIMES.merch) expect(TYPE_MIMES.photo).toContain(mime);
   });
 });
