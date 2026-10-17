@@ -27,6 +27,7 @@ const row = ({ organiser, ...over }: Record<string, unknown> = {}) => ({
   rejectionReason: null,
   reviewedAt: null,
   registrationType: "startline",
+  waves: [{ label: "General", price: "45", closes: "", startTime: "" }],
   ...over,
   organiser: {
     id: "org-1",
@@ -75,6 +76,21 @@ test.describe("admin review: organiser profile incomplete", () => {
 
   test("still allows approval once the organiser has an ABN", async ({ page }) => {
     await stubQueue(page, [row({ organiser: { abn: "51 824 753 556" } })]);
+
+    await adminLogin(page);
+    await page.goto("/admin/events?status=PENDING");
+
+    await expect(page.getByText("Sunrise Trail Half")).toBeVisible();
+    await expect(page.getByText(/Organiser profile incomplete/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Approve$/i }).first()).toBeEnabled();
+  });
+
+  // A free event takes no money either, so neither the ABN nor Stripe applies.
+  test("does not hold up a free event", async ({ page }) => {
+    await stubQueue(page, [row({
+      waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
+      organiser: { stripeOnboardingComplete: false },
+    })]);
 
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");

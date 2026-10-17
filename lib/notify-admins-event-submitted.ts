@@ -33,7 +33,7 @@ export async function notifyAdminsEventSubmitted(eventId: string): Promise<{ ema
       where:  { id: eventId },
       select: {
         id: true, title: true, status: true, eventDate: true, city: true, state: true,
-        discipline: true, registrationType: true,
+        discipline: true, registrationType: true, waves: true,
         organiser: {
           select: { orgName: true, contactName: true, email: true, abn: true, stripeOnboardingComplete: true },
         },

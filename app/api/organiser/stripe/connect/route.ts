@@ -3,7 +3,9 @@ import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { organiserUrl } from "@/lib/portal-domains";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
-import { createConnectedAccount, createOnboardingLink, ensureManualPayouts } from "@/lib/stripe-connect";
+import {
+  createConnectedAccount, createOnboardingLink, ensureManualPayouts, individualPrefill, prefillExistingAccount,
+} from "@/lib/stripe-connect";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -61,7 +63,7 @@ export async function POST() {
   const organiser = await prisma.organiser
     .findUnique({
       where:  { id: session.sub },
-      select: { stripeAccountId: true, email: true },
+      select: { stripeAccountId: true, email: true, legalName: true, dob: true, stripeOnboardingComplete: true },
     })
     .catch((err: unknown) => {
       console.error("Stripe connect error (organiser lookup):", err);
@@ -71,8 +73,18 @@ export async function POST() {
   if (organiser === undefined) return NextResponse.json({ error: GENERIC_ERROR }, { status: 503 });
   if (!organiser) return NextResponse.json({ error: "Organiser not found." }, { status: 404 });
 
+  // The Payments page saves these just before calling here, so Stripe's form
+  // can open with them rather than asking the organiser a second time.
+  const prefill = individualPrefill(organiser.legalName, organiser.dob);
+
   const newAccount = async () => {
-    const account = await createConnectedAccount(stripe, organiser.email);
+    // A detail Stripe refuses must not cost the organiser their account: make it
+    // without the prefill, and Stripe's form asks for everything instead.
+    const account = await createConnectedAccount(stripe, organiser.email, prefill).catch((err: unknown) => {
+      if (Object.keys(prefill).length === 0) throw err;
+      logStripeError("create account with prefill, retrying without", err);
+      return createConnectedAccount(stripe, organiser.email);
+    });
     await prisma.organiser.update({
       where: { id: session.sub },
       data:  { stripeAccountId: account.id, stripeOnboardingComplete: false },
@@ -86,6 +98,18 @@ export async function POST() {
   } catch (err) {
     logStripeError("create account", err);
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 503 });
+  }
+
+  // An account made before prefilling existed, or before the organiser filled
+  // in the Payments page, gets what it is missing. Only while onboarding is
+  // unfinished, and never at the cost of the link: Stripe asks for anything
+  // this does not manage to fill.
+  if (organiser.stripeAccountId && !organiser.stripeOnboardingComplete) {
+    try {
+      await prefillExistingAccount(stripe, organiser.stripeAccountId, prefill);
+    } catch (err) {
+      logStripeError("prefill", err);
+    }
   }
 
   // Funds wait for lib/payout.ts after the event, so the schedule has to be

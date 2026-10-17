@@ -17,7 +17,6 @@ interface OrganiserRow {
   status: string;
   verified: boolean;
   stripeOnboardingComplete: boolean;
-  insuranceDeclared: boolean;
   createdAt: string;
   eventCount: number;
   liveEventCount: number;

@@ -91,8 +91,9 @@ const SECTIONS: LegalSection[] = [
             images, and who its owners and managers are. To take paid entries we also collect the
             legal name and date of birth of the person responsible, which we need for identity
             checks and for tax reporting to the Australian Taxation Office under the Sharing Economy
-            Reporting Regime. We record whether the organisation has declared that it holds public
-            liability insurance, but we do not collect insurance documents. We may check an ABN
+            Reporting Regime. Each time an organisation publishes an event it confirms that it holds
+            the public liability insurance and permits the event needs, but we do not collect
+            insurance documents. We may check an ABN
             against the Australian Business Register.
           </p>
         </Clause>
@@ -184,9 +185,11 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="4.2" title="Stripe">
           <p>
-            Stripe processes payments, refunds and payouts. Organisers give their bank account and
-            identity details directly to Stripe, which handles them under its own privacy policy.
-            Startline keeps only a reference to the organiser’s Stripe account.
+            Stripe processes payments, refunds and payouts. When an organiser connects Stripe, we
+            pass Stripe the legal name and date of birth they gave us (2.4), so they do not have to
+            enter them twice. Organisers give their bank account and other identity details
+            directly to Stripe, which handles them under its own privacy policy. Startline does not
+            receive those, and keeps only a reference to the organiser’s Stripe account.
           </p>
         </Clause>
         <Clause n="4.3" title="Service providers">
