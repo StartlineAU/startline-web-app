@@ -31,6 +31,18 @@ const nextConfig: NextConfig = {
       process.env.NODE_ENV === "production"
         ? "'self' 'unsafe-inline' https://js.stripe.com https://api.mapbox.com"
         : "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://api.mapbox.com";
+
+    // After a Google or Apple sign-in the browser POSTs the authorization code
+    // to our Cognito hosted domain, which connect-src has to allow or the
+    // callback hangs with no server-side trace. Staging and local dev use the
+    // amazoncognito.com host; production uses its own domain, so the host is
+    // taken from the same variable the app builds its OAuth config from rather
+    // than spelled out here, where it drifts.
+    const cognitoDomain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
+    const cognitoConnectSrc = [
+      "https://*.auth.ap-southeast-2.amazoncognito.com",
+      ...(cognitoDomain ? [`https://${cognitoDomain}`] : []),
+    ].join(" ");
     return [
       {
         source: "/(.*)",
@@ -44,7 +56,7 @@ const nextConfig: NextConfig = {
               // bucket URL rather than through /api/upload, because Amplify's
               // compute runtime rejects a multipart body over roughly 4.4 MB.
               // Without it the browser blocks the upload with no server-side trace.
-              "connect-src 'self' https://js.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://cognito-idp.ap-southeast-2.amazonaws.com https://*.auth.ap-southeast-2.amazoncognito.com https://*.s3.ap-southeast-2.amazonaws.com https://*.s3.amazonaws.com capacitor:// http://localhost",
+              "connect-src 'self' https://js.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://cognito-idp.ap-southeast-2.amazonaws.com " + cognitoConnectSrc + " https://*.s3.ap-southeast-2.amazonaws.com https://*.s3.amazonaws.com capacitor:// http://localhost",
               "img-src 'self' data: blob: https://*.tiles.mapbox.com https://api.mapbox.com https:",
               "worker-src blob: 'self'",
               "style-src 'self' 'unsafe-inline' https://api.mapbox.com",

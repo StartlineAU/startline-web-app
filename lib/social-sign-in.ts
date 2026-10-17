@@ -32,6 +32,22 @@ export async function startSocialSignIn(provider: SocialProvider, returnTo?: str
 }
 
 // Same-site paths only, so a crafted value cannot send someone off-site.
+function sanitiseReturnTo(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/auth/callback")) return "/";
+  return value;
+}
+
+// Reads the return path without consuming it, so a retry can keep it.
+export function peekSocialReturnTo(): string {
+  try {
+    return sanitiseReturnTo(sessionStorage.getItem(RETURN_TO_KEY));
+  } catch {
+    return "/";
+  }
+}
+
+// Consumes the whole flow: the path to land on, plus the provider and retry
+// markers, which must not survive into a later sign-in.
 export function takeSocialReturnTo(): string {
   let value: string | null = null;
   try {
@@ -40,8 +56,7 @@ export function takeSocialReturnTo(): string {
     sessionStorage.removeItem(PROVIDER_KEY);
     sessionStorage.removeItem(RETRIED_KEY);
   } catch {}
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/auth/callback")) return "/";
-  return value;
+  return sanitiseReturnTo(value);
 }
 
 // One automatic retry per sign-in, for the "Already found an entry" reply.
@@ -55,6 +70,27 @@ export function claimSocialRetry(): SocialProvider | null {
   } catch {
     return null;
   }
+}
+
+// What /auth/callback does next, given what Cognito sent back. Kept separate
+// from the component so every branch, including the successful one, is testable.
+export type SocialCallbackPlan =
+  | { kind: "retry"; provider: SocialProvider; returnTo: string }
+  | { kind: "signed-in"; returnTo: string }
+  | { kind: "error"; message: string };
+
+export function planSocialCallback(failure: string | null): SocialCallbackPlan {
+  if (!failure) {
+    return { kind: "signed-in", returnTo: takeSocialReturnTo() };
+  }
+  if (isLinkedAccountRetry(failure)) {
+    const provider = claimSocialRetry();
+    // Keep the page they started from: the retry would otherwise store the
+    // callback URL itself and land them on the home page.
+    if (provider) return { kind: "retry", provider, returnTo: peekSocialReturnTo() };
+  }
+  takeSocialReturnTo();
+  return { kind: "error", message: socialSignInErrorMessage(failure) };
 }
 
 // Cognito reports a pre sign-up refusal as "PreSignUp failed with error

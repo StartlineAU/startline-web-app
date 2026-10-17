@@ -5,15 +5,14 @@ import Link from "next/link";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import {
-  claimSocialRetry,
-  isLinkedAccountRetry,
+  planSocialCallback,
   socialSignInErrorMessage,
   startSocialSignIn,
-  takeSocialReturnTo,
 } from "@/lib/social-sign-in";
 
 // Development runs effects twice. A second pass would find the retry already
-// claimed and show an error while the first is still redirecting.
+// claimed and show an error while the first is still redirecting. A full page
+// load is a fresh module, so this never needs resetting.
 let started = false;
 
 export default function SocialCallback({ failure }: { failure: string | null }) {
@@ -25,19 +24,17 @@ export default function SocialCallback({ failure }: { failure: string | null }) 
     started = true;
 
     (async () => {
-      if (failure) {
+      const plan = planSocialCallback(failure);
+
+      if (plan.kind === "retry") {
         // The first sign-in after the pre sign-up trigger links a provider to
         // an existing account always fails this way; the same sign-in a second
-        // time goes through as the linked user. Retry once, invisibly.
-        if (isLinkedAccountRetry(failure)) {
-          const provider = claimSocialRetry();
-          if (provider) {
-            await startSocialSignIn(provider);
-            return;
-          }
-        }
-        takeSocialReturnTo();
-        setError(socialSignInErrorMessage(failure));
+        // time goes through as the linked user.
+        await startSocialSignIn(plan.provider, plan.returnTo);
+        return;
+      }
+      if (plan.kind === "error") {
+        setError(plan.message);
         return;
       }
 
@@ -45,11 +42,13 @@ export default function SocialCallback({ failure }: { failure: string | null }) 
         // Waits for the code exchange the OAuth listener started.
         const session = await fetchAuthSession();
         if (!session.tokens?.accessToken) throw new Error("No session");
+        // Registers the Prisma row the way the password flow does, so the
+        // account exists whichever page they land on next.
+        await fetch("/api/user/auth/session", { method: "POST" });
         await refresh();
         // A full load, so the server sees the new cookies on the next page.
-        window.location.replace(takeSocialReturnTo());
+        window.location.replace(plan.returnTo);
       } catch {
-        takeSocialReturnTo();
         setError(socialSignInErrorMessage(""));
       }
     })();

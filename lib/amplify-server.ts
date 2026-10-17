@@ -3,6 +3,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { OrganiserRole } from "@prisma/client";
 import prisma from "./prisma";
 import { pickActiveMembership } from "./active-organiser";
+import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
   sub:          string;
@@ -158,21 +159,15 @@ export async function getUserSession(): Promise<UserSession | null> {
     // whoever holds the session, so it needs an email the provider vouched for.
     if (cognitoSession.email && cognitoSession.emailTrusted === false) return null;
 
-    if (cognitoSession.email) {
-      const user = await prisma.user.upsert({
-        where: { email: cognitoSession.email },
-        update: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
-        create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email, name: cognitoSession.name },
-        select: { id: true, email: true, name: true },
-      });
-      return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
-    }
-
-    const user = await prisma.user.create({
-      data: { cognitoSub: cognitoSession.sub, email: cognitoSession.sub, name: cognitoSession.name },
-      select: { id: true, email: true, name: true },
-    });
-    return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
+    const user = await resolveUserRow(cognitoSession.sub, cognitoSession.email, cognitoSession.name);
+    if (!user) return null;
+    return {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      phoneNumber: cognitoSession.phoneNumber,
+      birthdate: cognitoSession.birthdate,
+    };
   } catch {
     return null;
   }
