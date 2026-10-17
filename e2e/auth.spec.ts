@@ -94,7 +94,7 @@ test.describe("auth modal — sign up", () => {
     await expect(submit).toBeEnabled();
   });
 
-  test("onboarding rejects an under-13 date of birth", async ({ page }) => {
+  test("onboarding rejects an under-18 date of birth", async ({ page }) => {
     await openSignInModal(page);
     await page.getByRole("button", { name: "Create Account", exact: true }).click();
     await page.getByPlaceholder("you@example.com").fill(`ux.${Date.now()}@example.com`);
@@ -108,11 +108,11 @@ test.describe("auth modal — sign up", () => {
     const today = new Date();
     await page.locator('input[aria-label="Day"]').fill(String(today.getDate()).padStart(2, "0"));
     await page.locator('input[aria-label="Month"]').fill(String(today.getMonth() + 1).padStart(2, "0"));
-    await page.locator('input[aria-label="Year"]').fill(String(today.getFullYear() - 5));
+    await page.locator('input[aria-label="Year"]').fill(String(today.getFullYear() - 17));
     await page.locator('input[type="checkbox"]').check({ force: true });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
 
-    await expect(page.getByText("You must be at least 13 years old to create an account.")).toBeVisible();
+    await expect(page.getByText(/You must be 18 or older to create an account/)).toBeVisible();
   });
 
   test("completing signup lands on the verify-email page, not a 404", async ({ page }) => {

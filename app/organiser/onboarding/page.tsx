@@ -4,6 +4,8 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ArrowRight, ArrowLeft, Check } from "lucide-react";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 
 const inputCls = (err?: string) =>
   `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:outline-none transition-colors ${
@@ -40,6 +42,7 @@ const STEPS = [
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const portalHost = usePortalHost();
   const [step,      setStep]      = useState(0);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [animating, setAnimating] = useState(false);
@@ -331,9 +334,9 @@ export default function OnboardingPage() {
                   </div>
                   <p className="text-[14px] text-muted leading-relaxed">
                     I agree to the{" "}
-                    <a href="/terms" target="_blank" className="text-primary hover:underline">Terms of Service</a>
-                    {" "}and{" "}
-                    <a href="/privacy" target="_blank" className="text-primary hover:underline">Privacy Policy</a>.
+                    <a href={customerHref("/terms", portalHost)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>
+                    {", "}including the organiser terms, and have read the{" "}
+                    <a href={customerHref("/privacy", portalHost)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>.
                   </p>
                 </label>
               </>

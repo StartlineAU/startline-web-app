@@ -220,7 +220,13 @@ function ReviewForm({
           </button>
           <div className="text-[12.5px] text-muted leading-relaxed">
             <button type="button" onClick={() => setTerms((t) => !t)} className="text-left">
-              I agree to the event{" "}
+              I agree to the Startline{" "}
+            </button>
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              Terms of Service
+            </a>
+            <button type="button" onClick={() => setTerms((t) => !t)} className="text-left">
+              {" "}and this event&apos;s{" "}
             </button>
             <button
               type="button"
@@ -228,10 +234,10 @@ function ReviewForm({
               aria-expanded={showTerms}
               className="text-primary hover:underline"
             >
-              terms &amp; conditions
+              entry terms
             </button>
             <button type="button" onClick={() => setTerms((t) => !t)} className="text-left">
-              {" "}and confirm the above information is correct.
+              , and confirm the details above are correct.
             </button>
           </div>
         </div>
@@ -239,20 +245,25 @@ function ReviewForm({
         {showTerms && (
           <div className="mt-3 rounded-lg border border-dark-lighter bg-dark-light overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-              <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Terms &amp; Conditions</span>
-              <button type="button" onClick={() => setShowTerms(false)} aria-label="Close terms">
+              <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Entry terms</span>
+              <button type="button" onClick={() => setShowTerms(false)} aria-label="Close entry terms">
                 <ChevronDown className="w-4 h-4 text-muted rotate-180" />
               </button>
             </div>
             <div className="px-4 py-3 max-h-40 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-              <p>Event terms and conditions are set by the organiser. By registering you agree to participate in accordance with the organiser&apos;s rules and the Startline platform guidelines.</p>
+              <p>The organiser runs this event and sets its rules. By entering, you agree to take part in line with them and with the event staff&apos;s instructions on the day.</p>
+              <p>
+                Your details, including any medical and emergency contact information, go to the organiser so it can run the event safely. See our{" "}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>.
+              </p>
               {refundLines.length > 0 && (
                 <div>
                   <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary mb-1">Refund policy</p>
                   {refundLines.map((line, i) => <p key={i}>{line}</p>)}
                 </div>
               )}
-              <p>Ensure the details you have provided are accurate before {free ? "registering" : "paying"}.</p>
+              {!free && <p>If the organiser cancels the event, you get a full refund, booking fee included.</p>}
+              <p>Please check your details before you {free ? "register" : "pay"}.</p>
             </div>
           </div>
         )}

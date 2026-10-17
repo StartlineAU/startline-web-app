@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { LEGAL_ENTITY_ABN, LEGAL_ENTITY_NAME } from "@/lib/legal";
 
 type FooterLink = { href: string; label: string; external?: boolean };
 
@@ -105,7 +106,7 @@ export default function Footer() {
 
         <div className="border-t border-dark-lighter pt-5">
           <p className="font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
-            &copy; {new Date().getFullYear()} Startline. All Rights Reserved.
+            {LEGAL_ENTITY_NAME} · ABN {LEGAL_ENTITY_ABN}
           </p>
         </div>
       </div>
