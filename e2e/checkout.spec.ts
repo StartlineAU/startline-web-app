@@ -120,7 +120,9 @@ test.describe("registration flow", () => {
     await expect(page.locator("#p0-medical")).toBeVisible();
   });
 
-  test("details Continue is gated until required fields are filled", async ({ page }) => {
+  test("details Continue explains what is missing instead of greying out", async ({ page }) => {
+    // #374: a disabled Continue gave the athlete no reason. It now stays
+    // clickable, marks the invalid fields and keeps them on the step.
     await page.goto(REG);
     await page.waitForLoadState("networkidle");
     await addTickets(page, 1);
@@ -128,7 +130,11 @@ test.describe("registration flow", () => {
 
     await expect(page.locator("#p0-firstName")).toBeVisible();
     const cont = page.getByRole("button", { name: /^Continue/ });
-    await expect(cont).toBeDisabled();
+    await expect(cont).toBeEnabled();
+    await cont.click();
+    await expect(page.getByText("Please fix the highlighted fields.")).toBeVisible();
+    await expect(page.getByText("First name is required.")).toBeVisible();
+    await expect(page.locator("#p0-firstName")).toBeVisible();
 
     await page.locator("#p0-firstName").fill("Jordan");
     await page.locator("#p0-lastName").fill("Clarke");
@@ -136,7 +142,29 @@ test.describe("registration flow", () => {
     await pickDateOfBirth(page, "1994-03-20");
     await page.locator("#p0-ecName").fill("Sam Clarke");
     await page.locator("#p0-ecPhone").fill("0498 111 222");
-    await expect(cont).toBeEnabled();
+    await cont.click();
+    await expect(page.locator("#p0-firstName")).toHaveCount(0);
+  });
+
+  test("an emergency phone matching the athlete's own is called out on Continue", async ({ page }) => {
+    // The exact case from #374: every field filled, nothing visibly wrong,
+    // Continue greyed out because the two phone numbers were the same.
+    await page.goto(REG);
+    await page.waitForLoadState("networkidle");
+    await addTickets(page, 1);
+    await page.getByRole("button", { name: /^Continue/ }).click();
+
+    await page.locator("#p0-firstName").fill("Jordan");
+    await page.locator("#p0-lastName").fill("Clarke");
+    await page.locator("#p0-email").fill("jordan@example.com");
+    await page.locator("#p0-mobile").fill("0404 127 373");
+    await pickDateOfBirth(page, "1994-03-20");
+    await page.locator("#p0-ecName").fill("Wendy Clarke");
+    await page.locator("#p0-ecPhone").fill("0404127373");
+
+    await page.getByRole("button", { name: /^Continue/ }).click();
+    await expect(page.getByText(/emergency contact number must differ/i)).toBeVisible();
+    await expect(page.locator("#p0-ecPhone")).toBeVisible();
   });
 
   test("multi-ticket order shows one accordion form per ticket", async ({ page }) => {
