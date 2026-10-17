@@ -88,7 +88,6 @@ Each upload type carries its own MIME allowlist and size cap in
 enough to enforce it everywhere. Every image type takes JPEG, PNG or WebP —
 **no GIF anywhere** — and a file picker's `accept` must come from `TYPE_MIMES`
 rather than `image/*`, or the dialog offers files the routes then refuse.
-Merchandise photos (`merch`) cap at 5 MB against 10 MB for every other image.
 
 `lib/upload-client.ts` (`uploadFile`) drives all three and is the only thing
 UI should call. `/api/upload` still exists and still reads bytes itself, but

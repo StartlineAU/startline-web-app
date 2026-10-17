@@ -3,15 +3,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef, startTransition } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Plus, Minus, LogIn, Check, ChevronDown, ShoppingBag } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, Minus, LogIn, Check, ChevronDown } from "lucide-react";
 import SignInModal from "@/components/SignInModal";
 import ParticipantFormSection from "@/components/registration/ParticipantFormSection";
 import SharedEmergencyContactSection from "@/components/registration/SharedEmergencyContactSection";
 import GuestEmailVerificationStep from "@/components/registration/GuestEmailVerificationStep";
 import StepRail from "@/components/registration/StepRail";
 import OrderSummary from "@/components/registration/OrderSummary";
-import AddOnPicker, { type AddOnProduct } from "@/components/registration/AddOnPicker";
-import { addOnSummaryLabel, MAX_ADDON_QUANTITY } from "@/lib/add-ons";
 import ReviewPayStep, { type ReviewRow } from "./ReviewPayStep";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import { useAuthContext } from "@/context/AuthContext";
@@ -84,53 +82,6 @@ interface Availability {
   cap: number | null;
   confirmed: number;
   waves: WaveAvailability[];
-  /** Optional extras on sale, with derived remaining stock. */
-  addOns?: AddOnProduct[];
-}
-
-/** participantIndex -> (variantId -> quantity). */
-type AddOnSelections = Record<number, Record<string, number>>;
-
-/**
- * Move each ticket's extras onto that ticket's new position, dropping the ones
- * whose ticket is gone and clamping what remains to the stock still on offer.
- *
- * Follows exactly the same mapping reconcileParticipants uses, which is what
- * keeps a size with the person who chose it. Pinning extras to their old index
- * instead would, on any change that reorders tickets, quietly hand one
- * participant's shirt to another - and a buyer who removes a ticket must not
- * keep paying for that participant's shirt either.
- */
-function reconcileAddOnSelections(
-  prev: AddOnSelections,
-  prevCount: number,
-  prevWaves: string[],
-  nextWaves: string[],
-  addOns: AddOnProduct[],
-): AddOnSelections {
-  const capByVariant = new Map<string, number>();
-  for (const addOn of addOns) {
-    for (const variant of addOn.variants) {
-      capByVariant.set(variant.id, Math.min(variant.remaining, MAX_ADDON_QUANTITY));
-    }
-  }
-
-  const next: AddOnSelections = {};
-  matchPreviousTickets(prevCount, prevWaves, nextWaves).forEach((from, to) => {
-    if (from == null) return;
-    const selection = prev[from];
-    if (!selection) return;
-
-    const kept: Record<string, number> = {};
-    for (const [variantId, quantity] of Object.entries(selection)) {
-      const cap = capByVariant.get(variantId);
-      if (cap == null || cap <= 0) continue;
-      const clamped = Math.min(quantity, cap);
-      if (clamped > 0) kept[variantId] = clamped;
-    }
-    if (Object.keys(kept).length > 0) next[to] = kept;
-  });
-  return next;
 }
 
 const PLATFORM_FEE_PCT = 0.0395;
@@ -223,7 +174,6 @@ function RegisterContent() {
   const [ticketWaves, setTicketWaves] = useState<string[]>([]);
   const [participants, setParticipants] = useState<RegistrationFormData[]>(() => [createEmptyParticipant()]);
   const [openTicket, setOpenTicket] = useState(0);
-  const [addOnSelections, setAddOnSelections] = useState<AddOnSelections>({});
   const [useSharedContact, setUseSharedContact] = useState(true);
   const [sharedEmergencyContact, setSharedEmergencyContact] = useState<EmergencyContact>({ name: "", phone: "" });
   const [fieldErrors, setFieldErrors] = useState<ParticipantFormErrors>({});
@@ -360,91 +310,11 @@ function RegisterContent() {
     : 0;
   const subtotal = tierLines.reduce((sum, t) => sum + t.price * t.qty, 0);
 
-  // ── Extras ────────────────────────────────────────────────────────────────
-  // Computed in whole cents and divided only at render. The ticket figures above
-  // are floats for historical reasons; add-on money must not join them, because
-  // the server compares its own integer arithmetic against the charge.
-  // Only products with an option to choose. A product whose every variant has
-  // been retired comes back from the catalogue with none, and AddOnPicker
-  // renders nothing for it - so without this the ticket step would tease an
-  // extra by name that the details step never offers. A product whose options
-  // are merely sold out still has variants, and still shows, as it should.
-  const addOnCatalogue = useMemo(
-    () => (availability?.addOns ?? []).filter((addOn) => addOn.variants.length > 0),
-    [availability],
-  );
-  const addOnVariantIndex = useMemo(() => {
-    const map = new Map<string, { addOn: AddOnProduct; label: string }>();
-    for (const addOn of addOnCatalogue) {
-      for (const variant of addOn.variants) map.set(variant.id, { addOn, label: variant.label });
-    }
-    return map;
-  }, [addOnCatalogue]);
-
-  /** Flattened basket, one entry per (participant, variant), in ticket order. */
-  const addOnLines = useMemo(() => {
-    const lines: {
-      participantIndex: number;
-      variantId: string;
-      quantity: number;
-      label: string;
-      amountCents: number;
-    }[] = [];
-    const indexes = Object.keys(addOnSelections)
-      .map(Number)
-      .sort((a, b) => a - b);
-    for (const participantIndex of indexes) {
-      const selection = addOnSelections[participantIndex] ?? {};
-      for (const [variantId, quantity] of Object.entries(selection)) {
-        if (quantity <= 0) continue;
-        const hit = addOnVariantIndex.get(variantId);
-        if (!hit) continue;
-        lines.push({
-          participantIndex,
-          variantId,
-          quantity,
-          // Includes the ticket number, so two participants buying the same
-          // shirt cannot collide on OrderSummary's label-keyed rows.
-          label: addOnSummaryLabel({
-            participantIndex,
-            name: hit.addOn.name,
-            variantLabel: hit.label,
-            quantity,
-          }),
-          amountCents: hit.addOn.priceCents * quantity,
-        });
-      }
-    }
-    return lines;
-  }, [addOnSelections, addOnVariantIndex]);
-
-  const addOnSubtotalCents = addOnLines.reduce((sum, l) => sum + l.amountCents, 0);
-  // Rounded once per line, matching lib/add-on-pricing exactly. Percentage only:
-  // the fixed component covers per-registration cost an extra does not incur.
-  const addOnFeeCents = athletePaysFee
-    ? addOnLines.reduce((sum, l) => sum + Math.round(l.amountCents * PLATFORM_FEE_PCT), 0)
-    : 0;
-  const addOnTotal = (addOnSubtotalCents + addOnFeeCents) / 100;
-
-  const setAddOnQty = useCallback((participantIndex: number, variantId: string, quantity: number) => {
-    setAddOnSelections((prev) => {
-      const selection = { ...(prev[participantIndex] ?? {}) };
-      if (quantity <= 0) delete selection[variantId];
-      else selection[variantId] = quantity;
-      const next = { ...prev };
-      if (Object.keys(selection).length === 0) delete next[participantIndex];
-      else next[participantIndex] = selection;
-      return next;
-    });
-  }, []);
-
-  // What the entry alone costs. Kept apart from `total` because the refund
-  // policy applies to the entry and never to merchandise: add-on money is not
-  // written to Registration.amountCents, and entryPaidCents reads only those
-  // columns, so quoting a refund against a total that includes a t-shirt would
-  // promise money the refund path will never return.
+  // What the entry alone costs. The refund policy applies to the entry, never
+  // to anything else, and entryPaidCents reads only these figures.
   const ticketTotal = subtotal + feeTotal;
-  const total = ticketTotal + addOnTotal;
+  const total = ticketTotal;
+
   // A free order: tickets chosen, nothing to pay. It skips Stripe entirely and
   // is written by /api/registrations/free when the athlete confirms.
   const freeOrder = totalTickets > 0 && total === 0;
@@ -462,7 +332,7 @@ function RegisterContent() {
   const refundHeadline = freeEvent
     ? ""
     : refundIfCancelledNow > 0
-      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(ticketTotal)} back on your entry.${addOnLines.length > 0 ? " Extras are not covered by this policy and are refunded separately." : ""} The amount drops as the event gets closer.`
+      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(ticketTotal)} back on your entry. The amount drops as the event gets closer.`
       : `This event's policy does not cover a refund at this date, so treat this entry as final.`;
 
   const isMulti = participants.length > 1;
@@ -558,15 +428,9 @@ function RegisterContent() {
       waveLabel: ticketWaves[0],
       turnstileToken: turnstileToken ?? undefined,
       participants: participants.map((p, i) => ({ ...p, waveLabel: ticketWaves[i] })),
-      // Ids and quantities only. The server prices the basket.
-      addOns: addOnLines.map((l) => ({
-        participantIndex: l.participantIndex,
-        variantId: l.variantId,
-        quantity: l.quantity,
-      })),
       ...(sharedContactActive && { groupRegistration: true, emergencyContact: sharedEmergencyContact }),
     }),
-    [eventId, ticketWaves, participants, sharedContactActive, sharedEmergencyContact, turnstileToken, addOnLines]
+    [eventId, ticketWaves, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
   );
 
   // ── Checkout (create PaymentIntent) ──
@@ -634,9 +498,6 @@ function RegisterContent() {
       for (let i = 0; i < (quantities[wave.label] ?? 0); i++) nextWaves.push(wave.label);
     }
     setParticipants((prev) => reconcileParticipants(prev, ticketWaves, nextWaves));
-    setAddOnSelections((prev) =>
-      reconcileAddOnSelections(prev, participants.length, ticketWaves, nextWaves, addOnCatalogue),
-    );
     setTicketWaves(nextWaves);
     setFieldErrors({});
     setEmergencyContactErrors({});
@@ -718,9 +579,6 @@ function RegisterContent() {
       label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
       value: priceLabel(t.price * t.qty),
     }));
-    for (const line of addOnLines) {
-      rows.push({ label: line.label, value: money(line.amountCents / 100) });
-    }
     if (participants.length === 1) {
       const p = participants[0];
       rows.push({ label: "Name", value: `${p.firstName} ${p.lastName}`.trim() });
@@ -742,7 +600,7 @@ function RegisterContent() {
       }
     }
     return rows;
-  }, [participants, tierLines, ticketWaves, sharedContactActive, sharedEmergencyContact, addOnLines]);
+  }, [participants, tierLines, ticketWaves, sharedContactActive, sharedEmergencyContact]);
 
   // ── Loading / not-found ──
   if (loading || status === "loading") {
@@ -955,24 +813,6 @@ function RegisterContent() {
                   <p className="font-headline text-[10px] uppercase tracking-[0.13em] text-muted-dark mt-4">
                     Mix tiers as needed · up to {MAX_REGISTRATION_PARTICIPANTS} tickets per order
                   </p>
-
-                  {/* Extras are chosen per participant on the next step, where
-                      the participants actually exist. This just signals they are
-                      coming, so the buyer does not leave to look for them. */}
-                  {addOnCatalogue.length > 0 && (
-                    <div className="mt-4 flex items-start gap-3 px-4 py-3.5 rounded-[14px] border border-dashed border-dark-lighter">
-                      <ShoppingBag className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <div className="font-headline text-[12px] font-bold uppercase tracking-[0.13em] text-light">
-                          Extras available
-                        </div>
-                        <div className="text-[12.5px] text-muted mt-0.5">
-                          {addOnCatalogue.map((a) => a.name).join(", ")}. Add them to each ticket on
-                          the next step.
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex justify-between items-center mt-5">
@@ -1015,14 +855,6 @@ function RegisterContent() {
                         errors={fieldErrors[0]}
                         onChange={(field, value) => updateParticipant(0, field, value)}
                       />
-                      {addOnCatalogue.length > 0 && (
-                        <AddOnPicker
-                          addOns={addOnCatalogue}
-                          selection={addOnSelections[0] ?? {}}
-                          onChange={(variantId, quantity) => setAddOnQty(0, variantId, quantity)}
-                          athletePaysFee={athletePaysFee}
-                        />
-                      )}
                     </>
                   ) : (
                     participants.map((participant, index) => {
@@ -1082,15 +914,6 @@ function RegisterContent() {
                                 hideEmergencyContact={sharedContactActive}
                                 onChange={(field, value) => updateParticipant(index, field, value)}
                               />
-                              {addOnCatalogue.length > 0 && (
-                                <AddOnPicker
-                                  addOns={addOnCatalogue}
-                                  selection={addOnSelections[index] ?? {}}
-                                  onChange={(variantId, quantity) => setAddOnQty(index, variantId, quantity)}
-                                  athletePaysFee={athletePaysFee}
-                                  participantLabel={`Ticket ${index + 1}`}
-                                />
-                              )}
                               {index < participants.length - 1 && (
                                 <div className="flex justify-end mt-5">
                                   <button
@@ -1259,13 +1082,10 @@ function RegisterContent() {
                 label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
                 value: priceLabel(t.price * t.qty),
               })),
-              // Labels carry the ticket number, so two participants buying the
-              // same shirt stay distinct as React keys.
-              ...addOnLines.map((l) => ({ label: l.label, value: money(l.amountCents / 100) })),
             ]}
             feeLine={
-              totalTickets > 0 && athletePaysFee && feeTotal + addOnFeeCents / 100 > 0
-                ? { label: "Service fee", value: money(feeTotal + addOnFeeCents / 100) }
+              totalTickets > 0 && athletePaysFee && feeTotal > 0
+                ? { label: "Service fee", value: money(feeTotal) }
                 : null
             }
             totalLabel={totalTickets > 0 ? totalLabel : null}
