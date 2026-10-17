@@ -245,7 +245,7 @@ export default function UserProfileView({
 
               <div className="flex flex-1 min-w-0 flex-col sm:flex-row sm:items-end gap-4 sm:gap-5 pb-1">
                 <div className="min-w-0 flex flex-wrap items-end gap-x-5 gap-y-2">
-                  <h1 className="font-headline text-4xl sm:text-5xl font-black tracking-tighter text-light leading-none">
+                  <h1 className="min-w-0 break-words font-headline text-4xl sm:text-5xl font-black tracking-tighter text-light leading-none">
                     {displayName}
                   </h1>
                   {bio && (

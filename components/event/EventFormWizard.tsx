@@ -1110,7 +1110,10 @@ function ReviewStep({ form, setStep, confirmed, onConfirm, onLeave, showAbnNotic
   // or for a requirement that does not apply to this event, only appears once
   // there is something in it to review. A flagged row always shows.
   const hasContent: Record<string, boolean> = {
-    "Categories":    hasCategories,
+    // Saved categories count too: an event from before the picker only offered
+    // running/cycling/swimming divisions still has them on the record, and the
+    // summary must show what the event will publish.
+    "Categories":    hasCategories || form.categories.length > 0,
     "Refund policy": !isFreeEvent(form.waves),
     "Prize money":   form.prizeMoney,
     "Info PDFs":     form.informationPdfs.length > 0,
@@ -1177,7 +1180,7 @@ function ReviewStep({ form, setStep, confirmed, onConfirm, onLeave, showAbnNotic
           waits for review instead of going live, and the organiser is told
           again on the confirmation screen once the work is safely saved. */}
       {showAbnNotice && (
-        <div className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-md p-4 mb-6">
+        <div data-testid="abn-notice" className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-md p-4 mb-6">
           <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="font-headline text-[13px] text-amber-200 leading-relaxed">
             <span className="font-bold">Your organiser profile isn&apos;t finished.</span>{" "}

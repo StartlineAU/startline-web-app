@@ -73,6 +73,10 @@ export async function getServerSession(): Promise<ServerSession | null> {
         // Belongs to no organisation, for the "become an organiser" paths.
         // Every other identity here owns or manages one.
         "athlete":  { sub: "dev-bypass-harper-jones", email: "harper.jones@startline.test", groups: [] },
+        // Rows these identities point at are created and removed by the specs
+        // that use them, so tests never mutate the shared seed users.
+        "profile":  { sub: "dev-bypass-profile-test", email: "profile.test@startline.test", groups: [] },
+        "noabn":    { sub: "dev-bypass-noabn-test",   email: "noabn.organiser@startline.test", groups: [] },
       };
       const identity = identities[bypass];
       if (identity) return identity;
