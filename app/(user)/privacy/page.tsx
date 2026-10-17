@@ -121,7 +121,7 @@ const SECTIONS: LegalSection[] = [
             and to record suspicious activity such as failed bot checks. Cloudflare Turnstile checks
             that forms are being filled in by a person. We use cookies to keep you signed in and
             remember your preferences; see the <TextLink href="/cookies">Cookie Policy</TextLink>.
-            We do not use advertising trackers.
+            We do not use analytics or advertising trackers.
           </p>
         </Clause>
         <Clause n="2.9" title="Information from other people">

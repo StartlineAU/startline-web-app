@@ -1110,8 +1110,8 @@ function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice }: {
         <input type="checkbox" checked={confirmed} onChange={e => onConfirm(e.target.checked)}
           className="accent-primary w-4 h-4 mt-1 cursor-pointer" />
         <span className="font-headline text-[13px] text-light leading-relaxed">
-          I confirm I have the right to run this event, that it is covered by our public liability
-          insurance, and that these details are accurate. I agree to the organiser terms in the{" "}
+          I confirm I have the right to run this event, that it has the insurance and permits it
+          needs, and that these details are accurate. I agree to the organiser terms in the{" "}
           <a href={termsHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>.
         </span>
       </label>

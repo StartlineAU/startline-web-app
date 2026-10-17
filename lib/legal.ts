@@ -18,6 +18,7 @@ export const LEGAL_JURISDICTION = "Victoria";
 
 export const TERMS_LAST_UPDATED = "17 October 2026";
 export const PRIVACY_LAST_UPDATED = "17 October 2026";
+export const COOKIES_LAST_UPDATED = "17 October 2026";
 
 /** The booking fee as the documents state it, read from the fee the checkout charges. */
 export const PLATFORM_FEE_DESCRIPTION = `${(PLATFORM_FEE_PERCENT * 100).toFixed(2).replace(/\.?0+$/, "")}% of the ticket price plus A$${(PLATFORM_FEE_FIXED_CENTS / 100).toFixed(2)}`;

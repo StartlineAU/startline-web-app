@@ -362,10 +362,11 @@ export default function OrganisationSection() {
         <div>
           <GroupHeading>Insurance</GroupHeading>
           <p className="text-[12px] text-muted leading-relaxed mb-4">
-            To list events on Startline you must hold current public liability insurance of at least{" "}
-            <span className="text-muted-light">$10 million per occurrence</span>, from an APRA-registered insurer, covering the
-            full duration of each event. Startline does not collect or check certificates: this is your own declaration
-            (Terms of Service §5.3). It is needed before you can connect Stripe for payouts.
+            To list events on Startline you must hold public liability insurance for each event, at the level your council,
+            venue and permits require, covering the full duration of the event. Many councils ask for{" "}
+            <span className="text-muted-light">$20 million or more</span>, so check yours. Startline does not collect or check
+            certificates: this is your own declaration (Terms of Service §5.3). It is needed before you can connect Stripe
+            for payouts.
           </p>
           <label className={`flex items-start gap-3 ${isOwner ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
             <span className="relative shrink-0 mt-0.5">
@@ -376,8 +377,8 @@ export default function OrganisationSection() {
               </span>
             </span>
             <span className="text-[13px] text-muted leading-relaxed">
-              I declare that I currently hold public liability insurance meeting Startline&apos;s minimum requirements, and I
-              will maintain this coverage for the full duration of every event I list.
+              I declare that I hold public liability insurance at the level each event&apos;s council, venue and permits
+              require, and I will keep it in place for the full duration of every event I list.
             </span>
           </label>
           {!isOwner && <p className="text-[11px] text-muted-dark mt-3">Only the owner can make this declaration.</p>}

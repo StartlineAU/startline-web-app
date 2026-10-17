@@ -254,10 +254,12 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="5.3" title="Insurance">
           <p>
-            You must hold current public liability insurance of at least $10 million per occurrence,
-            from an APRA-registered insurer, covering the full duration of each event you list.
-            Startline does not collect or check certificates of insurance. You declare that you hold
-            this cover, and you are responsible for that declaration being true.
+            You must hold public liability insurance for each event you list, at the level required
+            by the council, venue, landowner and any permit for that event, covering the full
+            duration of the event. Many councils ask for cover of $20 million or more, so check what
+            yours requires. Startline does not set its own minimum and does not collect or check
+            certificates of insurance. You declare that you hold this cover, and you are responsible
+            for that declaration being true.
           </p>
         </Clause>
         <Clause n="5.4" title="Payments and payouts">
