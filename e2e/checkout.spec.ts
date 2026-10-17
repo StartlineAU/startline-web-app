@@ -232,10 +232,11 @@ test.describe("registration flow", () => {
     expect(crumb!.y).toBeGreaterThanOrEqual(nav!.y + nav!.height);
   });
 
-  test("guest email-verify step is never a dead end", async ({ page }) => {
-    // Regression: when the auto-send failed, the verify step showed an error
-    // with no code input and no Resend — stranding the buyer. The code entry
-    // and Resend must be present once a send has been attempted, pass or fail.
+  test("a guest goes from details straight to payment, with no email code", async ({ page }) => {
+    // Issue #387: checkout used to stop every guest, and every participant
+    // email other than the signed-in one, for a 6-digit code before payment.
+    // Like any guest checkout, the confirmation email after the order is now
+    // the only email step.
     await page.goto(REG);
     await page.waitForLoadState("networkidle");
     await addTickets(page, 1);
@@ -244,17 +245,21 @@ test.describe("registration flow", () => {
     await expect(page.locator("#p0-firstName")).toBeVisible();
     await page.locator("#p0-firstName").fill("Jordan");
     await page.locator("#p0-lastName").fill("Clarke");
-    // Unique guest email (never the signed-in account) → forces the verify gate.
     await page.locator("#p0-email").fill(`guest-${Date.now()}@example.com`);
     await pickDateOfBirth(page, "1994-03-20");
     await page.locator("#p0-ecName").fill("Sam Clarke");
     await page.locator("#p0-ecPhone").fill("0498 111 222");
     await page.getByRole("button", { name: /^Continue/ }).click();
 
-    // The verify gate should appear with a usable code entry and a Resend path.
-    await expect(page.getByText(/verify email addresses/i)).toBeVisible();
-    await expect(page.locator('input[inputmode="numeric"]').first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole("button", { name: /^Resend$/i }).first()).toBeVisible();
+    // Review & pay is reached directly: the payment form, its loading state,
+    // or (without Stripe keys locally) the recoverable "couldn't start" panel.
+    const payStep = page
+      .getByText("3 / 3")
+      .or(page.getByRole("status", { name: "Loading payment" }))
+      .or(page.getByText(/we couldn't start your payment/i));
+    await expect(payStep.first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/verify email addresses/i)).toHaveCount(0);
+    await expect(page.locator('input[inputmode="numeric"]')).toHaveCount(0);
   });
 });
 

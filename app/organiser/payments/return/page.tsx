@@ -2,18 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle, AlertCircle, Clock, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
 
 interface StripeStatus {
-  connected:      boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-  error?:         string;
+  connected:       boolean;
+  chargesEnabled:  boolean;
+  payoutsEnabled:  boolean;
+  actionRequired?: boolean;
+  error?:          string;
 }
 
+const eyebrowCls = "font-headline text-[11px] font-bold uppercase tracking-[0.25em] mb-3";
+const titleCls   = "font-headline text-3xl font-black italic tracking-tighter text-light mb-3";
+const bodyCls    = "text-muted text-[14px] mb-6";
+const ctaCls =
+  "inline-flex items-center gap-2 font-headline text-[13px] font-bold uppercase tracking-widest bg-machined text-dark px-6 py-3 rounded-xl shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform";
+
+/**
+ * Where Stripe's hosted onboarding sends the organiser back to. It says which
+ * of three places they are in: finished, submitted and waiting on Stripe's
+ * checks, or with something still to fill in.
+ */
 export default function PaymentsReturnPage() {
   const router = useRouter();
   const [status,  setStatus]  = useState<StripeStatus | null>(null);
@@ -27,7 +40,9 @@ export default function PaymentsReturnPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const verified = status?.chargesEnabled && status?.payoutsEnabled;
+  const verified  = !!(status?.chargesEnabled && status?.payoutsEnabled);
+  // Only a reply that says so counts as "nothing left to do".
+  const reviewing = !verified && status?.connected === true && status.actionRequired === false;
 
   useEffect(() => {
     if (!verified) return;
@@ -36,68 +51,67 @@ export default function PaymentsReturnPage() {
   }, [verified, router]);
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-      <div className="w-full max-w-[440px] text-center">
+    <main className="min-h-screen bg-dark-darker flex items-center justify-center px-6 pt-14">
+      <div className="w-full max-w-[440px] text-center page-in">
 
         {loading && (
           <>
             <div className="flex justify-center mb-6" role="status" aria-label="Loading">
-              <Skeleton className="h-16 w-16 rounded-full bg-gray-200" />
+              <Skeleton className="h-16 w-16 rounded-full" />
             </div>
-            <h1 className="font-headline text-2xl font-black italic tracking-tighter text-gray-900 mb-2">
-              Checking your account…
-            </h1>
-            <p className="text-gray-500 text-[14px] mb-6">
-              We&apos;re confirming your Stripe setup with Stripe. This only takes a moment.
+            <h1 className={titleCls}>Checking your account…</h1>
+            <p className={bodyCls}>
+              We&apos;re confirming your setup with Stripe. This only takes a moment.
             </p>
-            <div className="space-y-3">
-              <Skeleton className="h-3 w-3/4 mx-auto bg-gray-200" />
-              <Skeleton className="h-3 w-1/2 mx-auto bg-gray-200" />
-            </div>
           </>
         )}
 
         {!loading && verified && (
           <>
-            <div className="w-16 h-16 rounded-full bg-lime-100 flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-8 h-8 text-lime-500" />
+            <div className="w-16 h-16 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-8 h-8 text-primary" />
             </div>
-            <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-lime-600 mb-3">
-              All done
-            </div>
-            <h1 className="font-headline text-3xl font-black italic tracking-tighter text-gray-900 mb-3">
-              Stripe account connected.
-            </h1>
-            <p className="text-gray-500 text-[14px] mb-6">
-              Your account is verified and ready to receive payouts. Redirecting you back to payments…
+            <div className={`${eyebrowCls} text-primary`}>All done</div>
+            <h1 className={titleCls}>Stripe account connected.</h1>
+            <p className={bodyCls}>
+              Your account is verified and ready to receive payouts. Taking you back to payments…
             </p>
             <div className="flex items-center justify-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-lime-400 animate-ping" />
-              <span className="font-headline text-[11px] uppercase tracking-widest text-gray-400">Redirecting…</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+              <span className="font-headline text-[11px] uppercase tracking-widest text-muted">Redirecting…</span>
             </div>
           </>
         )}
 
-        {!loading && !verified && (
+        {!loading && reviewing && (
           <>
-            <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-6">
-              <AlertCircle className="w-8 h-8 text-amber-500" />
+            <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mx-auto mb-6">
+              <Clock className="w-8 h-8 text-primary" />
             </div>
-            <div className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-amber-600 mb-3">
-              Setup incomplete
-            </div>
-            <h1 className="font-headline text-3xl font-black italic tracking-tighter text-gray-900 mb-3">
-              Not quite finished.
-            </h1>
-            <p className="text-gray-500 text-[14px] mb-6">
-              Stripe hasn&apos;t fully verified your account yet. This can happen if you didn&apos;t complete all the steps. Go back to payments to continue where you left off.
+            <div className={`${eyebrowCls} text-primary`}>Details submitted</div>
+            <h1 className={titleCls}>Stripe is reviewing.</h1>
+            <p className={bodyCls}>
+              You&apos;ve sent Stripe everything it asked for. It&apos;s verifying your identity now, which usually takes a few minutes and can take up to two business days. Payments switch on as soon as it finishes.
             </p>
-            <button
-              onClick={() => router.push("/organiser/payments")}
-              className="inline-flex items-center gap-2 font-headline text-[13px] font-bold uppercase tracking-widest bg-gray-900 text-white px-6 py-3 rounded-md hover:bg-gray-700 transition-colors"
-            >
-              Back to payments
-            </button>
+            <Link href="/organiser/payments" className={ctaCls}>
+              Back to payments <ArrowRight className="w-4 h-4" />
+            </Link>
+          </>
+        )}
+
+        {!loading && !verified && !reviewing && (
+          <>
+            <div className="w-16 h-16 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-8 h-8 text-amber-300" />
+            </div>
+            <div className={`${eyebrowCls} text-amber-300`}>Setup incomplete</div>
+            <h1 className={titleCls}>Not quite finished.</h1>
+            <p className={bodyCls}>
+              Stripe still needs a few details before you can take payments. Head back to payments to continue where you left off.
+            </p>
+            <Link href="/organiser/payments" className={ctaCls}>
+              Back to payments <ArrowRight className="w-4 h-4" />
+            </Link>
           </>
         )}
 

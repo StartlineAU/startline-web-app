@@ -16,11 +16,11 @@ export async function GET() {
     });
 
     if (!organiser?.stripeAccountId) {
-      return NextResponse.json({ connected: false, chargesEnabled: false, payoutsEnabled: false });
+      return NextResponse.json({ connected: false, chargesEnabled: false, payoutsEnabled: false, actionRequired: true });
     }
 
     if (organiser.stripeOnboardingComplete) {
-      return NextResponse.json({ connected: true, chargesEnabled: true, payoutsEnabled: true });
+      return NextResponse.json({ connected: true, chargesEnabled: true, payoutsEnabled: true, actionRequired: false });
     }
 
     const status = await retrieveConnectStatus(getStripe(), organiser.stripeAccountId);

@@ -58,7 +58,6 @@ Junction table linking a User to an Organiser they follow, with a `@@unique([use
 - **Notification**: Organiser notifications for event approvals, rejections, and new registrations
 - **Announcement**: Per-event organiser announcements to registrants
 - **AdminAuditLog**: Admin action audit trail (action, target type/ID, JSON metadata)
-- **GuestEmailVerification**: Email verification codes for guest (non-logged-in) registrations
 - **WaitlistSubscriber**: Pre-launch email signups
 - **RateLimit**: Fixed-window rate-limit counters (key, count, resetAt), used to throttle email senders and auth probes — see `lib/rate-limit.ts`
 - **SecurityEvent**: Admin-visible security incidents (failed bot checks, reported reviews, suspicious activity), separate from rate counters — see `/app/admin/security/`

@@ -34,10 +34,9 @@ The checkout API at `/app/api/checkout/route.ts`:
 2. Normalises participant data (single or group)
 3. Validates age (18+), required fields, and emergency contact
 4. Checks capacity against event cap and per-tier (wave) limits
-5. Verifies guest emails if the athlete is not logged in
-6. Calculates pricing: ticket sum + platform fee per participant
-7. Creates Stripe PaymentIntent and Prisma Registration records
-8. Returns client secret for Stripe Elements to confirm payment
+5. Calculates pricing: ticket sum + platform fee per participant
+6. Creates Stripe PaymentIntent and Prisma Registration records
+7. Returns client secret for Stripe Elements to confirm payment
 
 Supports:
 - **Single registration**: One participant, direct form fields

@@ -46,58 +46,6 @@ export async function sendRegistrationConfirmationEmail(to: string, data: Regist
   });
 }
 
-// ── Guest Registration Verification ───────────────────────────────────────────
-export type GuestRegistrationVerificationDetails = {
-  email: string;
-  code: string;
-  eventTitle: string;
-  idempotencyKey: string;
-};
-
-export function buildGuestRegistrationVerificationEmail(details: GuestRegistrationVerificationDetails) {
-  return {
-    subject: `Your Startline verification code: ${details.code}`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-        <body style="margin:0;padding:32px;background:#141414;font-family:Inter,system-ui,sans-serif;color:#F5F7FA;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#1D1D1D;border:1px solid #2A2A2A;border-radius:12px;">
-            <tr>
-              <td style="padding:28px;">
-                <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#B3E153;">Verify your email</p>
-                <h1 style="margin:0 0 16px;font-size:28px;line-height:1.2;color:#F5F7FA;">Enter this code to continue registration</h1>
-                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#8A8F98;">
-                  Use this code to confirm your email address for <strong style="color:#F5F7FA;">${escapeHtml(details.eventTitle)}</strong>.
-                  It expires in 15 minutes.
-                </p>
-                <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#8A8F98;">Verification code</p>
-                <p style="margin:0 0 24px;font-size:36px;line-height:1;font-weight:800;letter-spacing:0.35em;color:#B3E153;font-family:monospace;">${escapeHtml(details.code)}</p>
-                <p style="margin:0;font-size:13px;line-height:1.6;color:#8A8F98;">
-                  If you did not start an event registration, you can ignore this email.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </body>
-      </html>
-    `,
-  };
-}
-
-export async function sendGuestRegistrationVerificationEmail(details: GuestRegistrationVerificationDetails) {
-  const resend = getResend();
-  if (!resend) {
-    console.warn("RESEND_API_KEY not configured — skipping guest verification email");
-    return;
-  }
-  const { subject, html } = buildGuestRegistrationVerificationEmail(details);
-  const result = await resend.emails.send(
-    { from: getEmailFrom(), to: details.email, subject, html },
-    { idempotencyKey: `guest-registration-verify-${details.idempotencyKey}` },
-  );
-  if (result.error) throw new Error(`Resend error: ${result.error.message}`);
-}
-
 // ── Event approved ────────────────────────────────────────────────────────────
 // `to` is every recipient on one message. They all belong to the same
 // organisation, so seeing each other's address is expected.

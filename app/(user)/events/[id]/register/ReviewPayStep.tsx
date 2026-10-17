@@ -7,6 +7,10 @@ import { ArrowLeft, Check, ChevronDown, CreditCard } from "lucide-react";
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
+/** The step footer's way back: an outlined pill, the same as the rest of the platform's back links. */
+export const backBtnCls =
+  "inline-flex items-center gap-2 h-11 px-5 rounded-full border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:text-primary transition-colors";
+
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
 function getStripe() {
   if (!stripePromise && stripePublishableKey) stripePromise = loadStripe(stripePublishableKey);
@@ -273,7 +277,7 @@ function ReviewForm({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted hover:bg-dark-light hover:text-light transition-colors"
+          className={backBtnCls}
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>

@@ -6,11 +6,9 @@ import {
   validateParticipants,
   athleteNameFromParticipant,
   applySharedEmergencyContact,
-  getEmailsRequiringVerification,
   type RegistrationFormData,
   type EmergencyContact,
 } from "@/lib/registration-form";
-import { assertGuestEmailsVerifiedForCheckout } from "@/lib/guest-email-verification";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import { todayIso } from "@/lib/event-types";
 
@@ -151,8 +149,7 @@ function normalizeSharedEmergencyContact(body: CheckoutBody): EmergencyContact |
  *
  * Shared by the paid checkout (which turns this into a Stripe PaymentIntent)
  * and the free path (which writes the registrations straight out), so a free
- * entry passes exactly the same tier, capacity, email-verification and guest
- * checks a paid one does. Whether an order is free is read off the resolved
+ * entry passes exactly the same tier, capacity and guest checks a paid one does. Whether an order is free is read off the resolved
  * totalCents, never off the request.
  */
 export async function resolveCheckoutOrder(
@@ -284,12 +281,6 @@ export async function resolveCheckoutOrder(
   }
 
   const userSession = await getUserSession();
-  const emailsToVerify = getEmailsRequiringVerification(
-    participants.map((participant) => participant.email),
-    userSession?.email,
-  );
-  const verificationError = await assertGuestEmailsVerifiedForCheckout(emailsToVerify, eventId);
-  if (verificationError) return { error: verificationError, status: 400 };
 
   const resolvedParticipants =
     groupRegistration && sharedEmergencyContact
