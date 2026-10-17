@@ -94,7 +94,7 @@ accounts. Per Stripe mode, once:
 
 1. `STRIPE_SECRET_KEY=sk_... pnpm stripe:account-events https://<host>`
    creates the destination and prints its signing secret (the Dashboard can reveal it again later).
-2. Store it in `startline/ci-bootstrap` as `stripe_account_events_secret_<env>`,
+2. Store it in `startline/automation` as `stripe_account_events_secret_<env>`,
    run the apply in `startline-infra` (manual there), then rebuild.
 
 Locally, `pnpm stripe:listen:accounts` forwards the same events. Without the

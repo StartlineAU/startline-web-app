@@ -81,10 +81,11 @@ Prerequisites to run it locally:
 
 ## CI
 
-The e2e workflow (`ci.yml`) exports `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`
-from the bootstrap secret. When they are absent the spec skips; when present the
-seed organiser is not onboarded in CI, so it also skips there — real-Stripe runs
-are a local/dev activity. The skip path keeps CI green either way.
+The e2e workflow (`ci.yml`) runs without AWS credentials, so it has no Stripe
+keys. `e2e/stripe-lifecycle.spec.ts` and the Stripe webhook signature tests in
+`e2e/stripe.spec.ts` skip there; real-Stripe runs are a local/dev activity. The
+skip path keeps CI green either way. Local runs get their keys from
+`.env.local`.
 
 ## Related
 
