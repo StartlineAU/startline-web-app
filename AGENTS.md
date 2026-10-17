@@ -23,11 +23,18 @@ Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
 
 | Secret | Contents |
 |---|---|
-| `startline/ci-bootstrap` | CI/CD bootstrap tokens + Neon API key/org + prod runtime secrets (`stripe_secret_key_prod`, `stripe_webhook_secret_prod`, `abr_guid`) |
+| `startline/automation` | Trusted CI/Terraform credentials: provider tokens (Cloudflare, Neon, Amplify, DigitalOcean) and the per-environment runtime source values Terraform feeds into the app secrets |
 | `startline/prod/app` | Prod env vars (Cognito, Stripe live, S3) |
 | `startline/staging/app` | Staging env vars (non-prod Cognito, Neon, S3) |
+| `startline/docs` | Outline documentation server only |
 
-**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`startline-infra/web-app/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/ci-bootstrap`. Org plan is Free — 6 h PITR only.
+**Which workflow may read what.** PR checks read no secret at all: anything a PR
+workflow can read, unmerged PR code can read, and Secrets Manager grants a whole
+JSON secret rather than single fields. `startline/automation` and the app secrets
+belong to workflows on protected branches (`deploy.yml`, `terraform-apply.yml`).
+The one PR-time credential, the Gitleaks license, is a repository secret.
+
+**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`startline-infra/startline-web-app/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/automation`. Org plan is Free — 6 h PITR only.
 
 ### Runtime vs build-time variables
 
@@ -45,11 +52,11 @@ So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
 `TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
-`startline-infra/web-app/modules/environment/main.tf`; add a new one there.
+`startline-infra/startline-web-app/modules/environment/main.tf`; add a new one there.
 
 Terraform owns the whole app secret and the whole branch variable map, so a
 value added by hand in Secrets Manager or the Amplify console is deleted on a
-later apply. Put the source value in the `startline/ci-bootstrap` secret
+later apply. Put the source value in the `startline/automation` secret
 instead: `stripe_secret_key_<env>`, `stripe_webhook_secret_<env>`,
 `stripe_publishable_key_<env>` (`<env>` is `prod` or `staging`),
 `resend_api_key`, `resend_from`, `abr_guid`. A prod apply fails its

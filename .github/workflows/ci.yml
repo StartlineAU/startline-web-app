@@ -4,8 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+# PR checks run with no AWS credentials on purpose: anything a PR workflow can
+# read, unmerged PR code can read. Environment secrets belong to the trusted
+# deploy workflows (deploy.yml) only. See AGENTS.md -> Environment variables.
 permissions:
-  id-token: write
   contents: read
   pull-requests: write
   security-events: write
@@ -18,14 +20,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/load-env
-        with:
-          aws-role-arn: ${{ vars.AWS_ROLE_ARN_READONLY }}
-          environment: prod
-          bootstrap-export-keys: GITLEAKS_LICENSE
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Org-owned repo, so the action wants a license. Kept as a repository
+          # secret rather than an AWS one: a PR-safe CI credential, and this job
+          # must not be able to reach Secrets Manager.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
   lint:
     continue-on-error: false
@@ -97,6 +98,15 @@ jobs:
   e2e:
     continue-on-error: false
     runs-on: ubuntu-latest
+    # Hermetic: local Postgres, no AWS secrets. Stripe's live-lifecycle and the
+    # real-Cognito auth specs guard on their own env vars and skip when those
+    # are absent, which is what we want here. Turnstile is absent, so the
+    # server fails open as the specs expect.
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/startline?schema=public
+      NEXT_PUBLIC_AWS_REGION: ap-southeast-2
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_BASE_URL: http://localhost:3000
     services:
       postgres:
         image: postgres:15-alpine
@@ -122,19 +132,6 @@ jobs:
             echo "::warning::These files changed in this PR — review before merging:"
             echo "$CHANGED"
           fi
-      - uses: ./.github/actions/load-env
-        with:
-          aws-role-arn: ${{ vars.AWS_ROLE_ARN_READONLY }}
-          environment: staging
-          bootstrap-export-keys: "STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET"
-      - name: Disable Turnstile for E2E
-        shell: bash
-        run: |
-          # load-env exports all staging app secrets, which now include Turnstile
-          # keys. The E2E specs are written against a fail-open server (no
-          # TURNSTILE_SECRET_KEY), so blank the keys to keep the suite hermetic.
-          echo "TURNSTILE_SECRET_KEY=" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_TURNSTILE_SITE_KEY=" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
@@ -151,6 +148,6 @@ jobs:
       - name: Start Next.js dev server
         shell: bash
         run: |
-          NEXT_PUBLIC_BASE_URL=http://localhost:3000 pnpm dev -p 3000 &
+          pnpm dev -p 3000 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
       - run: pnpm test:e2e
