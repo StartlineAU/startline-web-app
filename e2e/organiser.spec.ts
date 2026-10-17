@@ -364,6 +364,9 @@ test.describe("organiser pages", () => {
   // Managers are told what the owner is told only while the owner allows it,
   // and only the owner can change that (#348).
   test("only the owner can change whether managers are notified", async ({ page, browser }) => {
+    // Two settings dialogs to open (owner, then manager), each behind a dev
+    // compile and a hydration wait, plus three API round-trips.
+    test.slow();
     await organiserLogin(page);
 
     // The switch reads shared seed state, and a cleanup that lost its
