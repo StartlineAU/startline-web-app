@@ -6,9 +6,9 @@ import { PLATFORM_FEE_FIXED_CENTS, PLATFORM_FEE_PERCENT } from "@/lib/platform-f
  * name the same company and the same inbox.
  */
 
-/** The company athletes and organisers contract with. Fill in before launch. */
-export const LEGAL_ENTITY_NAME = "[COMPANY NAME] Pty Ltd";
-export const LEGAL_ENTITY_ABN = "[ABN]";
+/** The company athletes and organisers contract with. */
+export const LEGAL_ENTITY_NAME = "Startline Pty Ltd";
+export const LEGAL_ENTITY_ABN = "85 775 067 904";
 
 /** The one inbox for legal and privacy enquiries until dedicated ones exist. */
 export const LEGAL_CONTACT_EMAIL = "admin@startlineau.com";
