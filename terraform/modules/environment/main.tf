@@ -240,6 +240,7 @@ locals {
     RESEND_FROM                     = var.resend_from
     STRIPE_SECRET_KEY               = var.stripe_secret_key
     STRIPE_WEBHOOK_SECRET           = var.stripe_webhook_secret
+    STRIPE_ACCOUNT_EVENTS_SECRET    = var.stripe_account_events_secret
     ABR_GUID                        = var.abr_guid
   }
 

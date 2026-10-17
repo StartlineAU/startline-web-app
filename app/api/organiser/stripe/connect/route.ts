@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { organiserUrl } from "@/lib/portal-domains";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
+import { createConnectedAccount, createOnboardingLink, ensureManualPayouts } from "@/lib/stripe-connect";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -36,32 +36,10 @@ function logStripeError(step: string, err: unknown) {
   });
 }
 
-async function createExpressAccount(stripe: Stripe, email: string) {
-  return stripe.accounts.create({
-    type:    "express",
-    country: "AU",
-    email,
-    capabilities: {
-      card_payments: { requested: true },
-      transfers:     { requested: true },
-    },
-    business_type: "individual",
-    settings: {
-      payouts: {
-        schedule: { interval: "manual" },
-      },
-    },
-  });
-}
-
-function createOnboardingLink(stripe: Stripe, accountId: string) {
-  return stripe.accountLinks.create({
-    account:     accountId,
-    refresh_url: organiserUrl("/organiser/payments?refresh=1", SITE),
-    return_url:  organiserUrl("/organiser/payments/return", SITE),
-    type:        "account_onboarding",
-  });
-}
+const ONBOARDING_URLS = {
+  refreshUrl: organiserUrl("/organiser/payments?refresh=1", SITE),
+  returnUrl:  organiserUrl("/organiser/payments/return", SITE),
+};
 
 export async function POST() {
   const auth = await requireOrganiser();
@@ -94,7 +72,7 @@ export async function POST() {
   if (!organiser) return NextResponse.json({ error: "Organiser not found." }, { status: 404 });
 
   const newAccount = async () => {
-    const account = await createExpressAccount(stripe, organiser.email);
+    const account = await createConnectedAccount(stripe, organiser.email);
     await prisma.organiser.update({
       where: { id: session.sub },
       data:  { stripeAccountId: account.id, stripeOnboardingComplete: false },
@@ -110,8 +88,17 @@ export async function POST() {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 503 });
   }
 
+  // Funds wait for lib/payout.ts after the event, so the schedule has to be
+  // manual before the first charge lands. Set on every connect, which also
+  // covers an account whose earlier attempt stopped after it was created, and
+  // before the link so a stale id fails here the same way it would there.
+  const onboardingLink = async (id: string) => {
+    await ensureManualPayouts(stripe, id);
+    return createOnboardingLink(stripe, id, ONBOARDING_URLS);
+  };
+
   try {
-    const link = await createOnboardingLink(stripe, accountId);
+    const link = await onboardingLink(accountId);
     return NextResponse.json({ url: link.url });
   } catch (err) {
     const stale = organiser.stripeAccountId !== null && STALE_ACCOUNT_CODES.has(stripeErrorCode(err) ?? "");
@@ -121,7 +108,7 @@ export async function POST() {
 
   // The stored account is unusable. Replace it once and try again.
   try {
-    const link = await createOnboardingLink(stripe, await newAccount());
+    const link = await onboardingLink(await newAccount());
     return NextResponse.json({ url: link.url });
   } catch (err) {
     logStripeError("replace account", err);

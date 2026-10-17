@@ -93,6 +93,13 @@ variable "stripe_webhook_secret" {
   default     = ""
 }
 
+variable "stripe_account_events_secret" {
+  description = "Signing secret of the Stripe event destination for Accounts v2 events (/api/stripe/account-events). Without it the route answers 503 and onboarding completes only when the organiser returns from Stripe."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "abr_guid" {
   description = "Australian Business Register lookup GUID. Without it /api/abn returns 503 and organisers cannot verify the ABN that hosting paid events requires."
   type        = string

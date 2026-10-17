@@ -152,25 +152,25 @@ resource "aws_amplify_app" "this" {
 locals {
   environments = {
     prod = {
-      branch_name                     = "prod"
-      amplify_stage                   = "PRODUCTION"
-      auto_build_enabled              = false
-      enable_pull_request_preview     = true
-      cognito_deletion_protection     = true
-      bucket_cors_allowed_origins     = ["https://startlineau.com", "https://organiser.startlineau.com", "https://admin.startlineau.com"]
-      site_url                        = "https://startlineau.com"
+      branch_name                 = "prod"
+      amplify_stage               = "PRODUCTION"
+      auto_build_enabled          = false
+      enable_pull_request_preview = true
+      cognito_deletion_protection = true
+      bucket_cors_allowed_origins = ["https://startlineau.com", "https://organiser.startlineau.com", "https://admin.startlineau.com"]
+      site_url                    = "https://startlineau.com"
     }
     staging = {
-      branch_name                     = "main"
-      amplify_stage                   = "BETA"
-      auto_build_enabled              = false
-      enable_pull_request_preview     = true
-      cognito_deletion_protection     = false
-      bucket_cors_allowed_origins     = ["*"]
+      branch_name                 = "main"
+      amplify_stage               = "BETA"
+      auto_build_enabled          = false
+      enable_pull_request_preview = true
+      cognito_deletion_protection = false
+      bucket_cors_allowed_origins = ["*"]
       # Ignored — staging.startlineau.com has never been delegated, so the real
       # value is computed from the Amplify branch domain below. Kept here as the
       # intended hostname for whenever that DNS record is created.
-      site_url                        = "https://staging.startlineau.com"
+      site_url = "https://staging.startlineau.com"
     }
   }
 
@@ -197,12 +197,13 @@ module "env" {
   # them on the Amplify branch and in the app secret. Stripe is per-environment
   # (live keys on prod, test keys on staging); the rest are shared. A missing
   # prod key fails the plan in the module rather than silently clearing it.
-  resend_api_key         = try(local.bootstrap.resend_api_key, "")
-  resend_from            = try(local.bootstrap.resend_from, "")
-  stripe_secret_key      = try(local.bootstrap["stripe_secret_key_${each.key}"], "")
-  stripe_webhook_secret  = try(local.bootstrap["stripe_webhook_secret_${each.key}"], "")
-  stripe_publishable_key = try(local.bootstrap["stripe_publishable_key_${each.key}"], "")
-  abr_guid               = try(local.bootstrap.abr_guid, "")
+  resend_api_key               = try(local.bootstrap.resend_api_key, "")
+  resend_from                  = try(local.bootstrap.resend_from, "")
+  stripe_secret_key            = try(local.bootstrap["stripe_secret_key_${each.key}"], "")
+  stripe_webhook_secret        = try(local.bootstrap["stripe_webhook_secret_${each.key}"], "")
+  stripe_account_events_secret = try(local.bootstrap["stripe_account_events_secret_${each.key}"], "")
+  stripe_publishable_key       = try(local.bootstrap["stripe_publishable_key_${each.key}"], "")
+  abr_guid                     = try(local.bootstrap.abr_guid, "")
 
   # NEXT_PUBLIC_SITE_URL has to resolve: event share links, check-in QR codes,
   # email buttons and the organiser sign-up gate are all absolute URLs built
