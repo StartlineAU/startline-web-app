@@ -14,6 +14,7 @@ import DashboardTrendChart, {
 } from "@/components/organiser/DashboardTrendChart";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { formatAudFromCents } from "@/lib/organiser-dashboard";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
@@ -164,6 +165,12 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, trendEventId, trendRangeDays]);
 
+  useOnOrganiserEventsChanged(() => {
+    load(trendEventId, trendRangeDays).then((payload) => {
+      if (payload) setData(payload);
+    });
+  });
+
   const events = data?.events ?? [];
 
   const recent = [...events]
@@ -231,9 +238,9 @@ export default function DashboardPage() {
               </h2>
               <Link
                 href="/organiser/listings"
-                className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary flex items-center gap-1 transition-colors"
+                className="group inline-flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary font-headline text-[11px] font-bold uppercase tracking-widest hover:bg-primary/20 transition-colors"
               >
-                See all <ArrowRight className="w-3 h-3" />
+                See all <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 

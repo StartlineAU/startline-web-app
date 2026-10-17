@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
@@ -178,6 +179,7 @@ export default function ListingsPage() {
   }, []);
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  useOnOrganiserEventsChanged(fetchEvents);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");

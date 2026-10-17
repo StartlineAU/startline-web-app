@@ -32,6 +32,8 @@ interface ParticipantFormSectionProps {
   hideEmergencyContact?: boolean;
   /** Render without the outer card chrome (for embedding in an accordion card). */
   frameless?: boolean;
+  /** Rendered between the title and the first field, e.g. who the ticket is for. */
+  intro?: React.ReactNode;
   onRemove?: () => void;
   onChange: (field: keyof RegistrationFormData, value: string | boolean) => void;
 }
@@ -44,6 +46,7 @@ export default function ParticipantFormSection({
   showRemove,
   hideEmergencyContact,
   frameless,
+  intro,
   onRemove,
   onChange,
 }: ParticipantFormSectionProps) {
@@ -68,6 +71,8 @@ export default function ParticipantFormSection({
           )}
         </div>
       )}
+
+      {intro}
 
       {/* Contact */}
       <div className="mb-6">
