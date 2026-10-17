@@ -13,11 +13,17 @@ const prisma = new PrismaClient({
 // Reported tab, an edited review replaces its card instead of duplicating it,
 // and reviews can be filtered by event.
 //
-// Harper Jones (the "athlete" bypass identity) does the reporting. The seeded
-// reviews have no author, so Harper can report them. Every run removes what it
-// created, so it repeats cleanly.
+// Harper Jones (the "athlete" bypass identity) does the reporting, on a review
+// this suite owns. Nothing here touches a seeded review or another run's data,
+// so the spec repeats cleanly and running it against a shared dev database
+// cannot delete work it did not create.
 const ATHLETE_EMAIL = "harper.jones@startline.test";
-const REPORTED_REVIEW = "seed-review-007"; // Apex, "Challenging but rewarding"
+const APEX_REVIEW = "seed-review-007"; // Apex, "Challenging but rewarding"
+/** Owned by nobody (userId null), so Harper is allowed to report it. */
+const REPORT_TARGET = "e2e-review-reported";
+
+// Reviews this run created through the API, so cleanup removes only our own.
+const createdReviewIds: string[] = [];
 
 async function athleteId(): Promise<string> {
   const user = await prisma.user.findUnique({ where: { email: ATHLETE_EMAIL }, select: { id: true } });
@@ -26,16 +32,29 @@ async function athleteId(): Promise<string> {
 }
 
 async function apexOrganiserId(): Promise<string> {
-  const review = await prisma.review.findUnique({ where: { id: REPORTED_REVIEW }, select: { organiserId: true } });
+  const review = await prisma.review.findUnique({ where: { id: APEX_REVIEW }, select: { organiserId: true } });
   expect(review, "seed reviews missing").toBeTruthy();
   return review!.organiserId;
 }
 
+async function seedReportTarget(): Promise<void> {
+  await prisma.review.create({
+    data: {
+      id: REPORT_TARGET,
+      organiserId: await apexOrganiserId(),
+      reviewerName: "E2E Reviewer",
+      title: "E2E reportable review",
+      body: "Created by the review moderation spec.",
+      overallRating: 3,
+    },
+  });
+}
+
 async function cleanUp(): Promise<void> {
   const userId = await athleteId();
-  await prisma.reviewReport.deleteMany({ where: { userId } });
-  await prisma.reviewReport.deleteMany({ where: { reviewId: REPORTED_REVIEW } });
-  await prisma.review.deleteMany({ where: { userId } });
+  // Deleting a review cascades to its reports, so only our own rows go.
+  await prisma.review.deleteMany({ where: { id: { in: [REPORT_TARGET, ...createdReviewIds] } } });
+  createdReviewIds.length = 0;
   // Both routes allow 10 an hour per user; repeat local runs would hit that.
   await prisma.$executeRaw`DELETE FROM "rate_limits" WHERE "key" IN (${`review:${userId}`}, ${`review-report:${userId}`})`;
 }
@@ -58,23 +77,24 @@ test.describe("review moderation (#374)", () => {
   test("report API needs a listed reason and refuses your own review", async ({ page }) => {
     await signInAsAthlete(page);
     const organiserId = await apexOrganiserId();
+    await seedReportTarget();
 
-    const noReason = await page.request.post(`/api/public/review/${REPORTED_REVIEW}/report`, { data: {} });
+    const noReason = await page.request.post(`/api/public/review/${REPORT_TARGET}/report`, { data: {} });
     expect(noReason.status()).toBe(400);
 
-    const otherNoDetails = await page.request.post(`/api/public/review/${REPORTED_REVIEW}/report`, {
+    const otherNoDetails = await page.request.post(`/api/public/review/${REPORT_TARGET}/report`, {
       data: { reason: "Other" },
     });
     expect(otherNoDetails.status()).toBe(400);
 
-    const ok = await page.request.post(`/api/public/review/${REPORTED_REVIEW}/report`, {
+    const ok = await page.request.post(`/api/public/review/${REPORT_TARGET}/report`, {
       data: { reason: "Spam or advertising", details: "Links to a shop." },
     });
     expect(ok.status()).toBe(201);
-    const stored = await prisma.reviewReport.findFirst({ where: { reviewId: REPORTED_REVIEW } });
+    const stored = await prisma.reviewReport.findFirst({ where: { reviewId: REPORT_TARGET } });
     expect(stored?.reason).toBe("Spam or advertising: Links to a shop.");
 
-    const again = await page.request.post(`/api/public/review/${REPORTED_REVIEW}/report`, {
+    const again = await page.request.post(`/api/public/review/${REPORT_TARGET}/report`, {
       data: { reason: "Spam or advertising" },
     });
     expect(again.status()).toBe(409);
@@ -83,7 +103,9 @@ test.describe("review moderation (#374)", () => {
       data: { overallRating: 4, title: "Own review", body: "Written by the reporter.", eventId: null },
     });
     expect(own.status()).toBe(201);
-    const ownReport = await page.request.post(`/api/public/review/${(await own.json()).id}/report`, {
+    const ownId = (await own.json()).id as string;
+    createdReviewIds.push(ownId);
+    const ownReport = await page.request.post(`/api/public/review/${ownId}/report`, {
       data: { reason: "Spam or advertising" },
     });
     expect(ownReport.status()).toBe(400);
@@ -91,9 +113,10 @@ test.describe("review moderation (#374)", () => {
 
   test("Report opens a reason overlay and the admin sees it under Reported", async ({ page, browser }) => {
     await signInAsAthlete(page);
+    await seedReportTarget();
     await page.goto(`/organisers/${await apexOrganiserId()}`);
 
-    const card = page.locator(`[data-review-id="${REPORTED_REVIEW}"]`);
+    const card = page.locator(`[data-review-id="${REPORT_TARGET}"]`);
     const dialog = page.getByRole("dialog", { name: "Report review" });
     // The cards are server-rendered: a click before hydration does nothing,
     // so keep clicking until the overlay is actually up.
@@ -115,12 +138,12 @@ test.describe("review moderation (#374)", () => {
     const admin = await adminContext.newPage();
     await adminLogin(admin);
     await admin.goto("/admin/reviews?filter=reported");
-    await expect(admin.getByText("Challenging but rewarding")).toBeVisible();
+    await expect(admin.getByText("E2E reportable review")).toBeVisible();
     await expect(admin.getByText("Offensive or abusive: Insults another athlete.")).toBeVisible();
 
     await admin.getByRole("button", { name: "Dismiss" }).first().click();
-    await expect(admin.getByText("Challenging but rewarding")).toHaveCount(0);
-    expect(await prisma.reviewReport.count({ where: { reviewId: REPORTED_REVIEW } })).toBe(0);
+    await expect(admin.getByText("E2E reportable review")).toHaveCount(0);
+    expect(await prisma.reviewReport.count({ where: { reviewId: REPORT_TARGET } })).toBe(0);
     await adminContext.close();
   });
 
@@ -131,7 +154,8 @@ test.describe("review moderation (#374)", () => {
       data: { overallRating: 5, title: "First take", body: "Before the edit.", eventId: null },
     });
     expect(created.status()).toBe(201);
-    const { reviewerName } = await created.json();
+    const { id: createdId, reviewerName } = await created.json();
+    createdReviewIds.push(createdId);
 
     await page.goto(`/organisers/${organiserId}`);
     const reviews = page.locator("#reviews");
@@ -148,7 +172,7 @@ test.describe("review moderation (#374)", () => {
 
   test("reviews can be filtered by event", async ({ page }) => {
     const organiserId = await apexOrganiserId();
-    const event = await prisma.review.findUnique({ where: { id: REPORTED_REVIEW }, select: { eventTitle: true } });
+    const event = await prisma.review.findUnique({ where: { id: APEX_REVIEW }, select: { eventTitle: true } });
     const eventTitle = event!.eventTitle!;
 
     await page.goto(`/organisers/${organiserId}`);

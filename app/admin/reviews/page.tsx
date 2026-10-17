@@ -24,7 +24,10 @@ interface ReviewRow {
   isPublished: boolean;
   createdAt: string;
   organiser: { id: string; orgName: string | null; email: string };
+  /** Reports on this review, capped to a preview on the Reported tab and empty elsewhere. */
   reports: { id: string; reason: string | null; createdAt: string }[];
+  /** The true total, so the badge is right on every tab. */
+  reportCount: number;
 }
 
 const TABS: { filter: Filter; label: string }[] = [
@@ -81,6 +84,7 @@ function ReviewCard({
           ...review,
           isPublished: updated.isPublished,
           isVerified: updated.isVerified,
+          reportCount: updated.reportCount,
           reports: updated.reportCount === 0 ? [] : review.reports,
         });
       }
@@ -119,9 +123,9 @@ function ReviewCard({
                 <EyeOff className="w-3.5 h-3.5" /> Hidden
               </span>
             )}
-            {review.reports.length > 0 && (
+            {review.reportCount > 0 && (
               <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-red-400">
-                <Flag className="w-3.5 h-3.5" /> Reported{review.reports.length > 1 ? ` ×${review.reports.length}` : ""}
+                <Flag className="w-3.5 h-3.5" /> Reported{review.reportCount > 1 ? ` ×${review.reportCount}` : ""}
               </span>
             )}
           </div>
@@ -149,7 +153,7 @@ function ReviewCard({
 
         {/* Actions */}
         <div className="flex flex-wrap justify-end items-center gap-1.5 shrink-0">
-          {review.reports.length > 0 && (
+          {review.reportCount > 0 && (
             <button
               onClick={() => patch({ dismissReports: true })}
               disabled={busy}
@@ -221,7 +225,7 @@ function AdminReviewsContent() {
   const handleChanged = (updated: ReviewRow) => {
     // Swap the row in, then drop it if it no longer belongs on this tab.
     const belongs = (r: ReviewRow) =>
-      activeFilter === "reported"  ? r.reports.length > 0
+      activeFilter === "reported"  ? r.reportCount > 0
       : activeFilter === "published" ? r.isPublished
       : activeFilter === "hidden"    ? !r.isPublished
       : true;

@@ -11,6 +11,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import {
   REVIEW_REPORT_DETAILS_MAX,
   REVIEW_REPORT_REASONS,
+  reviewEventKey,
   topRatedEventsFromReviews,
   type ReviewReportReason,
 } from "@/lib/review-helpers";
@@ -106,12 +107,14 @@ function timeAgo(dateStr: string): string {
 
 // ─── Review card ──────────────────────────────────────────────────────────────
 
-function ReviewCard({ r, onEdit, onReport, reported }: {
+function ReviewCard({ r, onEdit, onReport, reported, own }: {
   r: Review;
-  /** Set only on the viewer's own review, which can be edited but not reported. */
+  /** Set only when the viewer may edit this card (their own review, edits allowed). */
   onEdit?: () => void;
   onReport: () => void;
   reported: boolean;
+  /** The viewer wrote this review: Edit is offered, Report never is. */
+  own: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = r.body.length > 200;
@@ -212,7 +215,7 @@ function ReviewCard({ r, onEdit, onReport, reported }: {
             <Pencil className="w-3 h-3" /> Edit
           </button>
         )}
-        {onEdit ? null : reported ? (
+        {own ? null : reported ? (
           <span className="text-[11px] font-headline font-bold uppercase tracking-widest text-primary">Reported</span>
         ) : (
           <button
@@ -638,9 +641,11 @@ export default function ReviewsSection({
   const [afterSignIn, setAfterSignIn] = useState<{ kind: "write" } | { kind: "report"; review: Review }>({ kind: "write" });
 
   // Fetch the current user's own review so the "Write a review" CTA becomes
-  // "Edit" and their existing review shows an Edit button.
+  // "Edit", and so their own card never offers Report. Done in the organiser
+  // portal twin too, where editing is hidden: the owner still must not report
+  // their own review.
   useEffect(() => {
-    if (readOnly || status !== "authenticated") return;
+    if (status !== "authenticated") return;
     let cancelled = false;
     fetch(`/api/public/reviews/${organiserId}/mine`)
       .then((res) => (res.ok ? res.json() : { review: null }))
@@ -649,7 +654,7 @@ export default function ReviewsSection({
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [organiserId, status, readOnly]);
+  }, [organiserId, status]);
 
   function openWriteReview() {
     if (readOnly) return;
@@ -707,21 +712,25 @@ export default function ReviewsSection({
 
   const topEvents = topRatedEventsFromReviews(reviews, 3);
 
-  // Filter by event: keyed on title so reviews of a since-deleted event (eventId
-  // nulled, title kept) still group together.
+  // Filter by event, grouped with the same key the rating summary uses: the id
+  // when known, else the title. Two events can share a title, so grouping on
+  // the title alone would mix their reviews together.
   const eventFilterOptions = useMemo(() => {
-    const counts = new Map<string, number>();
+    const counts = new Map<string, { title: string; count: number }>();
     for (const r of reviews) {
-      const t = r.eventTitle?.trim();
-      if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+      const key = reviewEventKey(r);
+      if (!key) continue;
+      const existing = counts.get(key);
+      if (existing) existing.count += 1;
+      else counts.set(key, { title: r.eventTitle?.trim() || "Event", count: 1 });
     }
     return [...counts.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([title, count]) => ({ value: title, label: `${title} (${count})` }));
+      .sort((a, b) => a[1].title.localeCompare(b[1].title))
+      .map(([value, { title, count }]) => ({ value, label: `${title} (${count})` }));
   }, [reviews]);
   const activeEventFilter = eventFilterOptions.some((o) => o.value === eventFilter) ? eventFilter : "";
   const visibleReviews = activeEventFilter
-    ? reviews.filter((r) => r.eventTitle?.trim() === activeEventFilter)
+    ? reviews.filter((r) => reviewEventKey(r) === activeEventFilter)
     : reviews;
 
   return (
@@ -886,15 +895,19 @@ export default function ReviewsSection({
           )}
 
           <div className="space-y-4">
-            {visibleReviews.map((r) => (
-              <ReviewCard
-                key={r.id}
-                r={r}
-                onEdit={!readOnly && ownReview?.id === r.id ? () => { setEditReview(r); setModalOpen(true); } : undefined}
-                onReport={() => openReport(r)}
-                reported={reportedIds.has(r.id)}
-              />
-            ))}
+            {visibleReviews.map((r) => {
+              const own = ownReview?.id === r.id;
+              return (
+                <ReviewCard
+                  key={r.id}
+                  r={r}
+                  own={own}
+                  onEdit={!readOnly && own ? () => { setEditReview(r); setModalOpen(true); } : undefined}
+                  onReport={() => openReport(r)}
+                  reported={reportedIds.has(r.id)}
+                />
+              );
+            })}
           </div>
         </div>
       )}

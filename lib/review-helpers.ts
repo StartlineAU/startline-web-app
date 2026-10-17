@@ -30,6 +30,24 @@ export function toOrganiserRating(
   return { average: Math.round(average * 10) / 10, count };
 }
 
+/**
+ * Groups reviews of the same event: by id when it is known, else by the
+ * lower-cased title, so reviews of a since-deleted event (id nulled, title
+ * kept) still group together. Null when the review names no event.
+ *
+ * Titles are not unique, so anything that tells two events apart must key on
+ * the id — the title is only a fallback, never the identity.
+ */
+export function reviewEventKey(event: {
+  eventId?: string | null;
+  eventTitle?: string | null;
+}): string | null {
+  const id = event.eventId?.trim();
+  if (id) return `id:${id}`;
+  const title = event.eventTitle?.trim();
+  return title ? `title:${title.toLowerCase()}` : null;
+}
+
 /** Top events by average overall rating, then review count. Max `limit`. */
 export function topRatedEventsFromReviews(
   reviews: Array<{
@@ -42,18 +60,16 @@ export function topRatedEventsFromReviews(
   const buckets = new Map<string, { eventId: string | null; eventTitle: string; sum: number; count: number }>();
 
   for (const r of reviews) {
-    const title = r.eventTitle?.trim() || null;
-    const id = r.eventId?.trim() || null;
-    if (!id && !title) continue;
-    const key = id ? `id:${id}` : `title:${title!.toLowerCase()}`;
+    const key = reviewEventKey(r);
+    if (!key) continue;
     const existing = buckets.get(key);
     if (existing) {
       existing.sum += r.overallRating;
       existing.count += 1;
     } else {
       buckets.set(key, {
-        eventId: id,
-        eventTitle: title ?? "Event",
+        eventId: r.eventId?.trim() || null,
+        eventTitle: r.eventTitle?.trim() || "Event",
         sum: r.overallRating,
         count: 1,
       });
