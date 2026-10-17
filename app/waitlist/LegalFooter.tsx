@@ -15,7 +15,7 @@ export function LegalFooter() {
   return (
     <footer className="absolute inset-x-0 bottom-0 z-[1] px-4 pb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 font-headline text-[10px] uppercase tracking-widest text-muted-dark">
       <span>
-        © {new Date().getFullYear()} {LEGAL_ENTITY_NAME} · ABN {LEGAL_ENTITY_ABN}
+        {LEGAL_ENTITY_NAME} · ABN {LEGAL_ENTITY_ABN}
       </span>
       <nav aria-label="Legal" className="flex gap-4">
         {LINKS.map((l) => (
