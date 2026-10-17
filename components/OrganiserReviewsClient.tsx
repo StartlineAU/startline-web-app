@@ -20,7 +20,13 @@ export default function OrganiserReviewsClient({
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
 
   const onNewReview = useCallback((r: Review) => {
-    setReviews((prev) => [r, ...prev]);
+    // An edit comes back with the id it already had: replace that card rather
+    // than prepend a copy (#374 showed one review three times).
+    setReviews((prev) =>
+      prev.some((p) => p.id === r.id)
+        ? prev.map((p) => (p.id === r.id ? r : p))
+        : [r, ...prev],
+    );
   }, []);
 
   return (

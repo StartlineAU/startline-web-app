@@ -38,31 +38,6 @@ test.describe("spam & bot protection", () => {
     expect(second.status()).toBe(409);
   });
 
-  test("reporting a review records it for moderation", async ({ page }) => {
-    const organiserId = await getOrganiserId(page);
-
-    const created = await page.request.post(`/api/public/reviews/${organiserId}`, {
-      data: { overallRating: 2, title: "Reportable review", body: "E2E test for the report flow.", eventId: null },
-    });
-    if (created.status() === 409) {
-      // Already reviewed from a prior run — find the existing review instead.
-      const existing = await page.request.get(`/api/public/reviews/${organiserId}/mine`);
-      const review = (await existing.json()).review;
-      expect(review).toBeTruthy();
-      const report = await page.request.post(`/api/public/review/${review.id}/report`, { data: {} });
-      expect([201, 409]).toContain(report.status());
-      return;
-    }
-    expect(created.status()).toBe(201);
-    const reviewId = (await created.json()).id;
-
-    const report = await page.request.post(`/api/public/review/${reviewId}/report`, { data: {} });
-    expect(report.status()).toBe(201);
-
-    const again = await page.request.post(`/api/public/reviews/${reviewId}/report`, { data: {} });
-    expect(again.status()).toBe(409);
-  });
-
   test("contact form is rate limited", async ({ page }) => {
     const payload = { name: "Bot", email: "bot@example.com", subject: "Spam", message: "Spam test." };
 

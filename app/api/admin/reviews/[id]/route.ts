@@ -7,9 +7,12 @@ import { z } from "zod";
 const reviewModerationSchema = z.object({
   isPublished: z.boolean().optional(),
   isVerified: z.boolean().optional(),
+  /** Clear every report: the review was checked and is fine to stay up. */
+  dismissReports: z.literal(true).optional(),
 });
 
-// PATCH /api/admin/reviews/[id]  — moderate a review (publish / verify toggles)
+// PATCH /api/admin/reviews/[id]  — moderate a review (publish / verify toggles,
+// dismiss reports)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -32,17 +35,20 @@ export async function PATCH(
   if (parsedBody.data.isPublished !== undefined) data.isPublished = parsedBody.data.isPublished;
   if (parsedBody.data.isVerified !== undefined)  data.isVerified  = parsedBody.data.isVerified;
 
-  if (Object.keys(data).length === 0) {
+  const dismissReports = parsedBody.data.dismissReports === true;
+
+  if (Object.keys(data).length === 0 && !dismissReports) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
   try {
     const review = await prisma.review.update({
       where: { id },
-      data,
-      select: { id: true, isPublished: true, isVerified: true },
+      data: dismissReports ? { ...data, reports: { deleteMany: {} } } : data,
+      select: { id: true, isPublished: true, isVerified: true, _count: { select: { reports: true } } },
     });
-    return NextResponse.json(review);
+    const { _count, ...rest } = review;
+    return NextResponse.json({ ...rest, reportCount: _count.reports });
   } catch (err) {
     console.error("Admin review update error:", err);
     return NextResponse.json({ error: "Review not found." }, { status: 404 });

@@ -180,19 +180,69 @@ export async function sendEventSubmittedForReviewEmails(
   recipients: string[],
   data: EventSubmittedForReviewEmailData,
 ) {
+  await sendToEachAdmin(recipients, buildEventSubmittedForReviewEmail(data), "admin review notification");
+}
+
+async function sendToEachAdmin(
+  recipients: string[],
+  { subject, html }: { subject: string; html: string },
+  what: string,
+) {
   if (recipients.length === 0) return;
   const resend = getResend();
   if (!resend) {
-    console.warn("RESEND_API_KEY not configured — skipping admin review notification");
+    console.warn(`RESEND_API_KEY not configured — skipping ${what}`);
     return;
   }
-  const { subject, html } = buildEventSubmittedForReviewEmail(data);
   const from = getEmailFrom();
   for (let i = 0; i < recipients.length; i += 100) {
     const chunk = recipients.slice(i, i + 100);
     const result = await resend.batch.send(chunk.map((to) => ({ from, to, subject, html })));
     if (result.error) throw new Error(`Resend error: ${result.error.message}`);
   }
+}
+
+// ── Review reported (admins) ──────────────────────────────────────────────────
+export interface ReviewReportedEmailData {
+  reviewTitle: string;
+  reviewBody: string;
+  reviewerName: string;
+  organiserName: string;
+  eventTitle?: string | null;
+  reason: string;
+  /** Reports on this review so far, including this one. */
+  reportCount: number;
+}
+
+export function buildReviewReportedEmail(
+  data: ReviewReportedEmailData,
+  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
+) {
+  const tag = environment === "staging" ? "[Staging] " : "";
+  const queueUrl = adminUrl("/admin/reviews?filter=reported", siteUrl);
+  const about = [data.organiserName, data.eventTitle].filter(Boolean).join(" · ");
+  const excerpt = data.reviewBody.length > 300 ? `${data.reviewBody.slice(0, 300)}…` : data.reviewBody;
+  const count = data.reportCount > 1 ? ` (${data.reportCount} reports)` : "";
+
+  return {
+    subject: `${tag}Review reported: ${data.reviewTitle}${count}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#B42318">${tag}Review reported${escapeHtml(count)}</p>
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.reviewTitle)}</h2>
+        <p style="font-size:14px;line-height:1.6;color:#555">By ${escapeHtml(data.reviewerName)} · ${escapeHtml(about)}</p>
+        <p style="font-size:14px;line-height:1.6;background:#F4F4F4;border-radius:6px;padding:10px 12px">${escapeHtml(excerpt)}</p>
+        <p style="font-size:15px;line-height:1.6"><strong>Reason:</strong> ${escapeHtml(data.reason)}</p>
+        <a href="${queueUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Open reported reviews
+        </a>
+      </div>
+    `,
+  };
+}
+
+export async function sendReviewReportedEmails(recipients: string[], data: ReviewReportedEmailData) {
+  await sendToEachAdmin(recipients, buildReviewReportedEmail(data), "review report notification");
 }
 
 // ── Wave update (athlete) ─────────────────────────────────────────────────────

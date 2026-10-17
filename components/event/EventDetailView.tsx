@@ -236,8 +236,8 @@ export default function EventDetailView({
                   <Link href={`https://maps.google.com/?q=${encodeURIComponent(
                     (event.address || event.location) + ", " + event.city + ", Australia"
                   )}`} target="_blank" rel="noopener noreferrer">
-                    <MapPin className="w-4 h-4" />
                     View on Maps
+                    <MapPin className="w-4 h-4" />
                   </Link>
                 </Button>
               </div>

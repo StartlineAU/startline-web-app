@@ -305,7 +305,7 @@ test.describe("organiser pages", () => {
     await organiserLogin(page);
     await page.goto("/organiser/profile");
 
-    await page.getByRole("button", { name: "Edit Profile" }).click();
+    await openOrganiserSettings(page);
     await expect(page.getByText("Cover photo")).toBeVisible();
 
     // The cover has an image in seed data, so Reposition is available.
@@ -323,9 +323,8 @@ test.describe("organiser pages", () => {
     await organiserLogin(page);
     await page.goto("/organiser/profile");
 
-    await page.getByRole("button", { name: "Edit Profile" }).click();
     // The navbar has its own Notifications button and Payments link.
-    const settings = page.getByRole("dialog", { name: "Settings" });
+    const settings = await openOrganiserSettings(page);
     await settings.getByRole("button", { name: "Notifications", exact: true }).click();
     const registrations = settings.getByRole("switch", { name: "New registration" });
     await expect(settings.getByRole("switch", { name: "Event approved" })).toHaveAttribute("aria-checked", "true");
@@ -364,6 +363,9 @@ test.describe("organiser pages", () => {
   // Managers are told what the owner is told only while the owner allows it,
   // and only the owner can change that (#348).
   test("only the owner can change whether managers are notified", async ({ page, browser }) => {
+    // Two settings dialogs to open (owner, then manager), each behind a dev
+    // compile and a hydration wait, plus three API round-trips.
+    test.slow();
     await organiserLogin(page);
 
     // The switch reads shared seed state, and a cleanup that lost its
@@ -442,6 +444,31 @@ test.describe("organiser pages", () => {
     ]);
   });
 
+  // A phone used to show an account dropdown and a hamburger side by side,
+  // listing much the same things. Now the hamburger is the only menu, and it
+  // carries the same AccountMenu the desktop dropdown uses (Home, Athlete
+  // profile, the visitor's organisations, Settings, Sign Out).
+  test("phone nav has one menu holding everything", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await organiserLogin(page);
+    await page.goto("/organiser/dashboard");
+
+    const nav = page.locator("nav");
+    const toggle = nav.getByRole("button", { name: "Toggle menu" });
+    await expect(toggle).toBeVisible();
+    // Bell and hamburger only: the account dropdown's trigger is gone.
+    await expect(nav.locator("button:visible")).toHaveCount(2);
+
+    await toggle.click();
+    for (const name of ["Dashboard", "Listings", "Organisation", "Members", "Payments", "Home", "Athlete profile"]) {
+      await expect(nav.getByRole("link", { name, exact: true }).last()).toBeVisible();
+    }
+    // The organisation switcher and the rest of the account menu came with it.
+    await expect(nav.getByRole("button", { name: "Apex Endurance Events", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
+  });
+
   test("payments page shows ABN field for Stripe connection", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/payments");
@@ -478,12 +505,15 @@ test.describe("organiser pages", () => {
     await expect(page.getByText(/rules\.pdf/i)).toBeVisible();
   });
 
-  test("organiser how it works page visual snapshot", async ({ page }) => {
+  test("organiser guide page is gone from the nav and the route", async ({ page }) => {
 
     await organiserLogin(page);
-    await page.goto("/organiser/how-it-works");
-    await page.waitForLoadState("networkidle");
-    await argosScreenshot(page, "organiser-how-it-works");
+    await page.goto("/organiser/dashboard");
+    await expect(page.getByRole("link", { name: "Listings", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Guide", exact: true })).toHaveCount(0);
+
+    const res = await page.goto("/organiser/how-it-works");
+    expect(res?.status()).toBe(404);
   });
 
   test("organiser profile page visual snapshot", async ({ page }) => {
