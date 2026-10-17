@@ -8,6 +8,7 @@ import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserNotificationRecipients } from "@/lib/organiser-notification-recipients";
 import { idParams } from "@/lib/schemas";
 import { hasAbn } from "@/lib/abn";
+import { takesPayments } from "@/lib/event-approval";
 import { z } from "zod";
 
 const reviewActionSchema = z.object({
@@ -42,7 +43,7 @@ export async function POST(
     const event = await prisma.event.findUnique({
       where:  { id },
       select: {
-        id: true, title: true, status: true, registrationType: true,
+        id: true, title: true, status: true, registrationType: true, waves: true,
         eventDate: true, city: true,
         organiser: {
           select: {
@@ -65,9 +66,11 @@ export async function POST(
     }
 
     // The organiser is no longer blocked from submitting without an ABN, so the
-    // requirement has to hold here instead: a marketplace listing cannot go live
-    // until the organiser's profile carries one.
-    if (action === "approve" && event.registrationType === "startline") {
+    // requirement has to hold here instead: a paid listing cannot go live until
+    // the organiser's profile carries one. A free one takes no money, so it needs
+    // neither this nor Stripe (lib/event-approval.ts).
+    const paid = takesPayments(event.registrationType, event.waves);
+    if (action === "approve" && paid) {
       if (!hasAbn(event.organiser.abn)) {
         return NextResponse.json(
           { error: "This organiser has no ABN on file. Marketplace events cannot be approved until their profile is complete.", code: "ABN_MISSING" },
@@ -76,8 +79,8 @@ export async function POST(
       }
     }
 
-    // Per ToS §3.4 — marketplace listings cannot go live until Stripe onboarding is complete
-    if (action === "approve" && event.registrationType === "startline") {
+    // Per ToS §3.4 — paid listings cannot go live until Stripe onboarding is complete
+    if (action === "approve" && paid) {
       if (!event.organiser.stripeOnboardingComplete) {
         return NextResponse.json(
           { error: "This organiser has not completed Stripe Express onboarding. Marketplace events cannot be approved until their payout account is verified (ToS §3.4).", code: "STRIPE_NOT_ONBOARDED" },

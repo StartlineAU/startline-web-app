@@ -25,11 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: ./.github/actions/load-env
+      # Only the admin role's OIDC credentials are assumed here — no secrets are
+      # fetched. The Amplify build reads the environment's own app secret
+      # (startline/<env>/app) itself, so nothing needs to land on this runner.
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
-          environment: ${{ env.ENV }}
-          bootstrap-export-keys: ""
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+          role-session-name: gha-deploy
 
       - name: Resolve Amplify app ID
         id: amplify-app

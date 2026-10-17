@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, AlertCircle, CreditCard, ArrowRight, ExternalLink, ShieldCheck, RefreshCw, UserCog, Clock } from "lucide-react";
+import { CheckCircle, AlertCircle, CreditCard, ArrowRight, ExternalLink, RefreshCw, UserCog, Clock } from "lucide-react";
 import Link from "next/link";
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
@@ -12,7 +12,6 @@ import {
 import DatePicker from "@/components/ui/DatePicker";
 import { isNative, openExternal } from "@/lib/capacitor";
 import { maxDateOfBirthForMinAge } from "@/lib/registration-form";
-import { useSettings } from "@/context/SettingsContext";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +35,6 @@ interface Profile {
   legalName: string | null;
   abn: string | null;
   dob: string | null;
-  insuranceDeclared: boolean;
   stripeAccountId: string | null;
   stripeOnboardingComplete: boolean;
 }
@@ -67,10 +65,8 @@ function PaymentsContent() {
   const [legalName,         setLegalName]         = useState("");
   const [abn,               setAbn]               = useState("");
   const [dob,               setDob]               = useState("");
-  const [insuranceDeclared, setInsuranceDeclared] = useState(false);
   const [stripeStatus,      setStripeStatus]      = useState<StripeStatus | null>(null);
   const [checking,          setChecking]          = useState(false);
-  const { open: openSettings, profileSavedAt } = useSettings();
 
   // The stored flag only flips when Stripe tells us, so an account that is
   // mid-onboarding is asked about directly. That is what separates "you still
@@ -97,7 +93,6 @@ function PaymentsContent() {
         setLegalName(data.legalName ?? "");
         setAbn(data.abn ?? "");
         setDob(data.dob ?? "");
-        setInsuranceDeclared(data.insuranceDeclared ?? false);
         if (data.stripeAccountId && !data.stripeOnboardingComplete) {
           const res = await fetch("/api/organiser/stripe/status").catch(() => null);
           const status = res?.ok ? await res.json() as StripeStatus : null;
@@ -107,18 +102,6 @@ function PaymentsContent() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
-
-  // The declaration is made in Settings, over this page. Pick up the new value
-  // when that saves, without disturbing what has been typed into the form here.
-  useEffect(() => {
-    if (profileSavedAt === 0) return;
-    let cancelled = false;
-    fetch("/api/organiser/profile")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data: Profile | null) => { if (data && !cancelled) setInsuranceDeclared(data.insuranceDeclared ?? false); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [profileSavedAt]);
 
   const profileIncomplete =
     !profile?.orgName || !profile?.contactName || !profile?.contactEmail || !profile?.phone;
@@ -136,10 +119,6 @@ function PaymentsContent() {
     }
     if (!abn.trim()) {
       setError("ABN or ACN is required before connecting your Stripe account (required for ATO reporting under ToS §3.2).");
-      return;
-    }
-    if (!insuranceDeclared) {
-      setError("Declare your public liability insurance under Settings, Organisation profile, before connecting.");
       return;
     }
 
@@ -424,27 +403,6 @@ function PaymentsContent() {
                   <p className="text-[11px] text-muted-dark mt-1.5">Used for identity verification with Stripe and ATO SERR reporting. Not required if you only list external-link events.</p>
                 </div>
               </div>
-
-              {/* The insurance declaration is not a payments matter, so it is
-                  made under Settings > Organisation profile. Connecting Stripe
-                  still waits on it, and says where to go. */}
-              {!insuranceDeclared && (
-                <div className="mt-6 bg-white/[0.03] border border-dark-lighter rounded-xl p-5 flex items-start gap-4">
-                  <ShieldCheck className="w-5 h-5 text-muted mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted-light mb-2">
-                      Insurance declaration needed
-                    </div>
-                    <p className="text-[13px] text-muted leading-relaxed mb-3">
-                      Before connecting Stripe, declare that you hold public liability insurance for your events. It takes one tick, in your organisation profile.
-                    </p>
-                    <button type="button" onClick={() => openSettings("organisation")}
-                      className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:underline">
-                      Open organisation profile
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Connect / update button */}
               {!isConnected && !reviewing && (

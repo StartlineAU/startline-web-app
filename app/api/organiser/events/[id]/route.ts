@@ -7,6 +7,7 @@ import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
+import { takesPayments } from "@/lib/event-approval";
 
 export async function GET(
   _req: NextRequest,
@@ -55,7 +56,7 @@ export async function PATCH(
   try {
     const existing = await prisma.event.findUnique({
       where:  { id },
-      select: { organiserId: true, status: true, title: true },
+      select: { organiserId: true, status: true, title: true, registrationType: true, waves: true },
     });
 
     if (!existing)
@@ -76,9 +77,11 @@ export async function PATCH(
     }
 
     // See the create route: a missing ABN costs the event its auto-approval
-    // rather than rejecting the edit and stranding the organiser's changes.
+    // rather than rejecting the edit and stranding the organiser's changes. An
+    // edit that leaves a field out keeps the saved value, so judge what the
+    // event will be once it is written.
     let abnOk = true;
-    if ((data.registrationType ?? "startline") === "startline") {
+    if (takesPayments(data.registrationType ?? existing.registrationType, data.waves ?? existing.waves)) {
       const org = await prisma.organiser.findUnique({
         where: { id: session.sub },
         select: { abn: true },
