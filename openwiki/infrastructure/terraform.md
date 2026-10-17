@@ -3,50 +3,54 @@ type: Reference
 title: Infrastructure & CI/CD
 description: Terraform-managed AWS infrastructure for Startline — including Neon-managed Postgres, Cognito, Amplify hosting, GitHub Actions CI/CD, and secrets management.
 tags: [startline, infrastructure, terraform, aws, amplify, neon, ci-cd, deployments]
-resource: /terraform/main.tf
+resource: StartlineAU/startline-infra
 ---
 
 # Infrastructure & CI/CD
 
-Startline's infrastructure is fully defined in **Terraform** with a unified state, deployed via GitHub Actions. The application is hosted on **AWS Amplify** with per-environment Postgres databases on **Neon** and Cognito pools.
+Startline's infrastructure is fully defined in **Terraform** with a unified state, deployed via GitHub Actions. The infrastructure lives in the separate **`StartlineAU/startline-infra`** repo; the web-app stack is at `web-app/`. The application is hosted on **AWS Amplify** with per-environment Postgres databases on **Neon** and Cognito pools.
 
 ## Infrastructure Overview
 
-- **Terraform state**: Unified, single state file. `main` branch is the sole source of truth — only pushes to `main` trigger Terraform apply.
-- **Root module** (`/terraform/main.tf`): Amplify app, IAM roles, Route 53 DNS, Cloudflare DNS, ACM certificates
-- **Environment module** (`/terraform/modules/environment/`): Per-environment Amplify branch, Cognito user pool, uploads bucket
-- **Neon** (`/terraform/neon.tf`): Two `neon_project` resources (`startline-prod`, `startline-staging`, Sydney, Postgres 16) managed via the `kislerdm/neon` provider; connection strings flow to the Amplify branch `DATABASE_URL`
+- **Terraform state**: Unified, single state file (S3 key `startline/terraform.tfstate`). The stack moved out of this repo without changing the key, so resources were not recreated.
+- **Root module** (`web-app/main.tf`): Amplify app, IAM roles, Route 53 DNS, Cloudflare DNS, ACM certificates
+- **Environment module** (`web-app/modules/environment/`): Per-environment Amplify branch, Cognito user pool, uploads bucket
+- **Neon** (`web-app/neon.tf`): Two `neon_project` resources (`startline-prod`, `startline-staging`, Sydney, Postgres 16) managed via the `kislerdm/neon` provider; connection strings flow to the Amplify branch `DATABASE_URL`
 - **Two environments**: `prod` and `staging` (defined in `main.tf` → `local.environments`)
 
 ## Terraform Structure
 
 | File | Purpose |
 |---|---|
-| `main.tf` | Root module — Amplify app, IAM roles, build spec, environment module instances |
-| `neon.tf` | Neon `neon_project` resources (prod + staging Postgres) + provider |
-| `modules/environment/main.tf` | Amplify branch, Cognito, uploads bucket |
-| `dns.tf` | Cloudflare DNS records for apex and subdomains |
-| `cloudflare-dns.tf` | Additional Cloudflare DNS resources |
-| `acm.tf` | ACM certificates |
-| `github_oidc.tf` | GitHub OIDC provider and IAM roles for CI/CD |
-| `iam-policies.tf` | Custom IAM policies for Amplify, CI/CD |
-| `iam-users.tf` | IAM users (if needed) |
-| `state.tf` | S3 backend for Terraform state |
-| `variables.tf` | Input variables |
-| `outputs.tf` | Output values |
-| `providers.tf` | Provider configuration |
-| `versions.tf` | Terraform and provider version constraints |
+| `web-app/main.tf` | Root module — Amplify app, IAM roles, build spec, environment module instances |
+| `web-app/neon.tf` | Neon `neon_project` resources (prod + staging Postgres) + provider |
+| `web-app/modules/environment/main.tf` | Amplify branch, Cognito, uploads bucket |
+| `web-app/dns.tf` | Cloudflare DNS records for apex and subdomains |
+| `web-app/cloudflare-dns.tf` | Additional Cloudflare DNS resources |
+| `web-app/acm.tf` | ACM certificates |
+| `web-app/github_oidc.tf` | GitHub OIDC provider and IAM roles for CI/CD |
+| `web-app/iam-policies.tf` | Custom IAM policies for Amplify, CI/CD |
+| `web-app/iam-users.tf` | IAM users (if needed) |
+| `web-app/state.tf` | S3 backend for Terraform state |
+| `web-app/variables.tf` | Input variables |
+| `web-app/outputs.tf` | Output values |
+| `web-app/providers.tf` | Provider configuration |
+| `web-app/versions.tf` | Terraform and provider version constraints |
+
+The repo root still holds the unrelated docs stack (Outline droplet, docs Cognito).
 
 ## CI/CD Pipelines
 
-### Terraform Workflows
+### Terraform Workflows (`startline-infra`)
 
 | Workflow | Trigger | Scope |
 |---|---|---|
-| `terraform-plan.yml` | PR to `main` touching `terraform/**` | Plans both environments + Infracost |
-| `terraform-apply.yml` | Push to `main` | Applies both environments |
+| `terraform-plan.yml` | PR touching `web-app/**` | Plans the stack + Infracost |
+| `terraform-apply.yml` | `workflow_dispatch`, or `main` when `TF_AUTO_APPLY=true` | Applies the saved plan |
 
-### Application Workflows
+Apply is manual until the first apply has been reviewed. Set `TF_AUTO_APPLY=true` in `startline-infra` to restore apply-on-merge.
+
+### Application Workflows (this repo)
 
 | Workflow | Trigger | Scope |
 |---|---|---|
@@ -89,7 +93,7 @@ built with `output: "standalone"` and Amplify ships only `.next`, so that file
 never reaches the running server. Secrets Manager is therefore build-time only:
 `NEXT_PUBLIC_*` works (Next inlines it at build), and anything read at runtime
 must be an Amplify **branch** environment variable set in
-`modules/environment/main.tf`.
+`startline-infra/web-app/modules/environment/main.tf`.
 
 Terraform owns the whole branch variable map, so console-added values are
 deleted on the next apply. New runtime secrets belong in the
