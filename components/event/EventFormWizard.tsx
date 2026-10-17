@@ -24,17 +24,6 @@ import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
 import DatePicker           from "@/components/ui/DatePicker";
 import SelectMenu           from "@/components/ui/SelectMenu";
 import TimePicker           from "@/components/ui/TimePicker";
-import AddOnEditor, {
-  uploadAddOnImages,
-  publishAddOnsToProfile,
-  PublishToProfileError,
-} from "@/components/organiser/AddOnEditor";
-import {
-  type AddOnDraft,
-  draftsFromCatalogue,
-  draftsToPayload,
-  draftValidationError,
-} from "@/lib/add-on-drafts";
 
 /* ── Step definitions ───────────────────────────────────────── */
 const STEPS = [
@@ -601,20 +590,7 @@ const STARTLINE_FLAT = 1.45;
 const STRIPE_PCT     = 0.0175;
 const STRIPE_FLAT    = 0.30;
 
-function TicketsStep({
-  form,
-  update,
-  addOns,
-  setAddOns,
-  showAddOns,
-}: {
-  form: FormState;
-  update: (p: Partial<FormState>) => void;
-  addOns: AddOnDraft[];
-  setAddOns: (next: AddOnDraft[]) => void;
-  /** Organiser portal only: the admin portal has no add-ons route. */
-  showAddOns: boolean;
-}) {
+function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
   const updateWave = (i: number, patch: Partial<Wave>) => {
     const waves = [...form.waves]; waves[i] = { ...waves[i], ...patch }; update({ waves });
   };
@@ -761,23 +737,6 @@ function TicketsStep({
           </button>
         </div>
       </Field>
-
-      {/* Merchandise sold alongside the entry. Editable at any time, including
-          after the event is published, which is why it saves through its own
-          route rather than the DRAFT-locked event PATCH. */}
-      {showAddOns && (
-        <Field label="Merchandise" hint="Optional">
-          <p className="font-headline text-[10px] uppercase tracking-widest text-light mb-3">
-            Extras athletes can buy with their entry, like a tee or a parking pass. Add, restock or
-            retire these at any time, including after the event goes live.
-          </p>
-          <AddOnEditor
-            addOns={addOns}
-            onChange={setAddOns}
-            feeStructure={form.feeStructure === "organiser" ? "organiser" : "athlete"}
-          />
-        </Field>
-      )}
 
       {/* Prize money toggle */}
       <div className="border border-dark-lighter rounded-xl overflow-hidden mb-6">
@@ -1717,10 +1676,6 @@ export default function EventFormWizard({
   const [direction,       setDirection]       = useState<"forward" | "back">("forward");
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const [eventId,         setEventId]         = useState<string | null>(null);
-  // The add-on catalogue is loaded and saved through its own route, not the
-  // event payload, because it must stay editable after the event is approved.
-  const [addOns,          setAddOns]          = useState<AddOnDraft[]>([]);
-  const showAddOns = apiBase === "/api/organiser";
   const originalFields = useRef<Record<string, unknown>>({});
 
   const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
@@ -1788,15 +1743,6 @@ export default function EventFormWizard({
       })
       .catch(() => {})
       .finally(() => setLoadingEvent(false));
-
-    if (apiBase === "/api/organiser") {
-      fetch(`${apiBase}/events/${id}/add-ons`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data.addOns)) setAddOns(draftsFromCatalogue(data.addOns));
-        })
-        .catch(() => {});
-    }
   }, [apiBase, eventIdProp]);
 
   const missing = missingRequirements(form);
@@ -1828,13 +1774,6 @@ export default function EventFormWizard({
       if (requireOrganiser && !organiserId) {
         setApiError("Select an organiser to create this event for.");
         return false;
-      }
-
-      // Checked before anything is uploaded or written, so a bad catalogue
-      // cannot leave the event saved and the merchandise silently dropped.
-      if (showAddOns) {
-        const addOnError = draftValidationError(addOns);
-        if (addOnError) { setApiError(addOnError); return false; }
       }
 
       // Cognito access tokens last 60 minutes and nothing refreshes them after
@@ -1925,51 +1864,6 @@ export default function EventFormWizard({
         return false;
       }
       if (asDraft && !eventId && data.id) setEventId(data.id);
-
-      // Add-ons go to their own route, and only once the event has an id: a
-      // brand new event does not exist until the call above returns one. Saved
-      // before the ABN notice below so the catalogue lands either way.
-      const savedEventId = eventId ?? data.id;
-      if (showAddOns && savedEventId) {
-        try {
-          const withImages = await uploadAddOnImages(addOns);
-          setAddOns(withImages);
-          // Before the catalogue save, so the profile links are saved with it.
-          const published = await publishAddOnsToProfile(withImages);
-          setAddOns(published);
-          const addOnRes = await fetch(`${apiBase}/events/${savedEventId}/add-ons`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ addOns: draftsToPayload(published) }),
-          });
-          if (!addOnRes.ok) {
-            const addOnData = await addOnRes.json().catch(() => ({}));
-            // The event itself saved. Say so, so the organiser does not redo it.
-            // The route's own message already covers an expired session, and
-            // SESSION_EXPIRED_MESSAGE would be wrong here: it says nothing was
-            // saved, and by this point the event has been.
-            setApiError(
-              (addOnData.error ?? "Could not save your merchandise.") +
-                " Your event details were saved.",
-            );
-            return false;
-          }
-        } catch (err) {
-          // Keep the profile items already published, so a retry does not
-          // publish them a second time.
-          if (err instanceof PublishToProfileError) setAddOns(err.drafts);
-          // UploadError and PublishToProfileError already name the product and
-          // the reason. Anything else is a dropped connection, where the
-          // browser's own text says nothing useful to an organiser.
-          setApiError(
-            (err instanceof UploadError || err instanceof PublishToProfileError
-              ? err.message
-              : "Could not save your merchandise.") + " Your event details were saved.",
-          );
-          return false;
-        }
-      }
-
       // The event is saved. Hold the redirect so the organiser is told what the
       // missing ABN cost them, rather than being refused before anything saved.
       if (!asDraft && data.abnRequired) {
@@ -2083,15 +1977,7 @@ export default function EventFormWizard({
 
                 {step === 0 && <BasicsStep  form={form} update={update} />}
                 {step === 1 && <WhenStep    form={form} update={update} />}
-                {step === 2 && (
-                  <TicketsStep
-                    form={form}
-                    update={update}
-                    addOns={addOns}
-                    setAddOns={setAddOns}
-                    showAddOns={showAddOns}
-                  />
-                )}
+                {step === 2 && <TicketsStep form={form} update={update} />}
                 {step === 3 && <MediaStep   key={loadingEvent ? "loading" : (eventId ?? "new")} form={form} update={update} />}
                 {step === 4 && <ReviewStep  form={form} setStep={goTo} confirmed={confirmed} onConfirm={setConfirmed} onLeave={askToLeave} missing={missing} showAbnNotice={!organiserHasAbn && form.registrationType === "startline"} />}
 

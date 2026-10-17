@@ -15,7 +15,7 @@ Next.js 15 (App Router) fitness event discovery platform. Three portals:
 - **Docker:** PostgreSQL 15 on :5432 + Mailpit (SMTP :1025, UI :8026). Start: `docker compose up -d` on main checkout only.
 - **Worktree?** `git worktree list`. If worktree, Docker infra runs on main checkout — just `pnpm dev`, never `docker compose up`.
 - **Per-worktree DB:** run `./scripts/dev-db.sh` on first use of a new worktree (creates an isolated `startline_<branch>` DB, applies migrations, points `.env.local` at it). Then **always run `pnpm prisma:seed`** — skip only if you specifically need an empty DB.
-- **Env vars:** Loaded from `.env.local` (gitignored). See `.env.example` + `terraform/` for setup steps.
+- **Env vars:** Loaded from `.env.local` (gitignored). See `.env.example` and `StartlineAU/startline-infra` for setup steps.
 
 ## Environment variables
 
@@ -27,28 +27,38 @@ Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
 | `startline/prod/app` | Prod env vars (Cognito, Stripe live, S3) |
 | `startline/staging/app` | Staging env vars (non-prod Cognito, Neon, S3) |
 
-**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`terraform/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/ci-bootstrap`. Org plan is Free — 6 h PITR only.
+**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`startline-infra/web-app/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/ci-bootstrap`. Org plan is Free — 6 h PITR only.
 
 ### Runtime vs build-time variables
 
-`next.config.ts` sets `output: "standalone"` and the Amplify build ships only
-`.next`, so the `.env.production` that preBuild writes from Secrets Manager
-never reaches the server. Secrets Manager therefore covers build time only.
+The running server reads its environment from `.env.production`. preBuild
+writes that file from the `startline/<env>/app` secret, and because
+`next.config.ts` sets `output: "standalone"`, `pnpm build` copies it into
+`.next/standalone`, which is inside the artefact Amplify ships.
 
-* `NEXT_PUBLIC_*` is fine there, because Next inlines it during `pnpm build`.
-* Anything the server reads at runtime (`STRIPE_SECRET_KEY`,
-  `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
-  `TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
-  `DATABASE_URL`, `UPLOADS_BUCKET`, `CDN_URL`) has to be an Amplify **branch**
-  environment variable. Terraform sets those in
-  `terraform/modules/environment/main.tf`.
+An Amplify **branch** environment variable is visible to the build and not to
+the route handlers. `STRIPE_SECRET_KEY` sat on the staging branch, listed in
+the console, and was still undefined at runtime (#363).
 
-Terraform owns the whole branch variable map, so a value added by hand in the
-Amplify console is deleted on the next apply. Add new runtime secrets to the
-`startline/ci-bootstrap` secret instead — `stripe_secret_key_prod`,
-`stripe_secret_key_staging`, `stripe_webhook_secret_prod`,
-`stripe_webhook_secret_staging`, `resend_api_key`, `resend_from`, `abr_guid`.
-A prod apply fails its precondition rather than silently clearing a missing one.
+So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
+`TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
+`DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
+secrets in both places from one list, `runtime_secrets` in
+`startline-infra/web-app/modules/environment/main.tf`; add a new one there.
+
+Terraform owns the whole app secret and the whole branch variable map, so a
+value added by hand in Secrets Manager or the Amplify console is deleted on a
+later apply. Put the source value in the `startline/ci-bootstrap` secret
+instead: `stripe_secret_key_<env>`, `stripe_webhook_secret_<env>`,
+`stripe_publishable_key_<env>` (`<env>` is `prod` or `staging`),
+`resend_api_key`, `resend_from`, `abr_guid`. A prod apply fails its
+precondition rather than silently clearing a missing secret key. A new value
+only takes effect after a Terraform apply and then a fresh Amplify build.
+
+To check an environment without credentials, POST an empty body to
+`/api/stripe/webhook`: `400` means the server has `STRIPE_SECRET_KEY`, `500`
+means it does not.
 
 ## Uploads
 
@@ -88,7 +98,6 @@ Each upload type carries its own MIME allowlist and size cap in
 enough to enforce it everywhere. Every image type takes JPEG, PNG or WebP —
 **no GIF anywhere** — and a file picker's `accept` must come from `TYPE_MIMES`
 rather than `image/*`, or the dialog offers files the routes then refuse.
-Merchandise photos (`merch`) cap at 5 MB against 10 MB for every other image.
 
 `lib/upload-client.ts` (`uploadFile`) drives all three and is the only thing
 UI should call. `/api/upload` still exists and still reads bytes itself, but
@@ -99,8 +108,9 @@ Two things break this silently if forgotten:
 
 - **CSP.** `connect-src` in `next.config.ts` must list the S3 origin. Without
   it the browser blocks the upload and nothing reaches the server logs.
-- **Bucket CORS.** `bucket_cors_allowed_origins` in `terraform/main.tf` must
-  cover the portal origins. Prod lists the three domains; staging is `*`.
+- **Bucket CORS.** `bucket_cors_allowed_origins` in
+  `startline-infra/web-app/main.tf` must cover the portal origins. Prod lists the
+  three domains; staging is `*`.
 
 Step 3 is not optional. Direct-to-S3 means the server never sees the bytes in
 flight, so it is the only remaining check that a file matching an image
@@ -134,6 +144,11 @@ contact email and every OWNER, plus MANAGERs while `Organiser.notifyManagers`
 is on. The same flag decides whether a MANAGER sees the in-app feed. Only an
 OWNER can change it (`PATCH /api/organiser/profile`).
 
+Each kind of notification also has its own switch on the organisation
+(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`), owner
+only as well. Off means no feed entry and no email: anything that sends one must
+check `wantsNotification` from `lib/organiser-notification-preferences.ts`.
+
 All seed users share password `Password123!`.
 
 | Email | Notes |
@@ -163,16 +178,45 @@ resolve it server-side from what they already have (#338):
 someone else's organisation counts and is never offered a second one. Keep both
 gates server-side: `AuthContext` only learns about memberships after a fetch, so
 a client-side check flashes the wrong page first. The athlete header dropdown
-carries the same fork, listing each organisation or offering to set one up.
+lists each organisation the visitor belongs to. It does not offer to set one
+up: that door is the footer and the organiser landing page.
 
-### MFA + Passkeys
+### MFA
 
-- **TOTP authenticator app** via Cognito (OPTIONAL, software token MFA). Admin seed user has MFA preference enabled.
-- **Passkey** (`WEB_AUTHN`) via `authFlowType: "USER_AUTH"` — passkey sign-in in `SignInModal.tsx` passes `options: { authFlowType: "USER_AUTH", preferredChallenge: "WEB_AUTHN" }`.
-- Passkey = first factor that **skips second factor**. Password login still uses `USER_SRP_AUTH`.
-- Recovery codes: AES-256-GCM encrypted, stored in `User.recoveryCodes`. Managed via `lib/recovery-codes.ts` and `app/api/user/mfa/route.ts`.
-- Recovery codes removed — passkey sign-in or password reset are the recovery paths.
-- Security settings at `/settings/security` for users.
+- **TOTP authenticator app** via Cognito (OPTIONAL, software token MFA). Admin seed user has MFA preference enabled. Set up, turned off and password changes go through `app/api/user/mfa/route.ts`; turning it off must tell Cognito, not only flip `User.mfaEnabled`.
+- **No passkeys.** They are out of scope for the MVP: sign-in is password (`USER_SRP_AUTH`) plus the optional authenticator app, and the Cognito client allows no other flow.
+- **Sign out everywhere** in Login & security revokes every session for the account (`signOut({ global: true })`), not just this browser's.
+- The setup QR code is drawn in the browser with `qrcode`. Never put the TOTP secret in a URL sent to another service.
+
+### Account menu
+
+`components/AccountMenu.tsx` is the one account menu, rendered by both
+`NavBar` and `OrganiserNavBar` as the desktop avatar dropdown and inside the
+phone menu. Rows and order are fixed: Home, Athlete profile, the visitor's
+organisations, Settings, Sign Out. Change it there, never in a navbar.
+
+### Settings menu
+
+One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted in both the athlete and organiser layouts and opened with `useSettings().open(section?)`. It sits directly above Sign Out in every account dropdown.
+
+| Group | Sections | Shown to |
+|---|---|---|
+| My account | `profile`, `details`, `alerts`, `security` | Everyone signed in |
+| Organisation | `organisation`, `members`, `notifications`, `payments` | Owners and managers, for the active organisation |
+| Privacy | `cookies` | Everyone signed in. Site-wide, so it belongs to neither group above |
+
+- `?settings=<section>` on any page opens the menu on that section. `/settings/security` redirects to it.
+- "Edit Profile" on the athlete and organiser profile pages opens the matching section. There is no separate edit-profile modal.
+- Organisation images save on their own through `PATCH /api/organiser/profile`. The text fields save only on Save (`PUT`).
+- Login & security also holds changing the sign-in email (`/api/user/email`,
+  a code to the new address first) and deleting the account (`/api/user/account`).
+- Deleting an account keeps the person's entries, detached, because they are
+  the organiser's records. It is refused while they are the only owner of an
+  organisation; they transfer ownership or delete it. An organisation can only
+  be deleted while it has never taken an entry (`lib/account-deletion.ts`).
+- Athletes can turn off "new event from an organiser you follow"
+  (`User.notifyFollowedOrganiserEvents`). Entry emails are always sent.
+- Section fetches must ignore a reply that arrives after cleanup: in development the effect runs twice, and the late reply overwrites what was typed or toggled.
 
 ## Design system
 
@@ -294,12 +338,19 @@ Configured in `opencode.json`: stripe, resend, aws, cloudflare.
 
 ## Terraform + CI/CD
 
-Infra in `terraform/`. Unified state. Only `main` triggers Terraform apply.
+Infra lives in `StartlineAU/startline-infra`, stack at `web-app/`. Same unified
+state as before (S3 key `startline/terraform.tfstate`), so applying from the new
+repo does not recreate anything.
 
-| Workflow | Trigger | Scope |
-|---|---|---|
-| `terraform-plan.yml` | PR to `main` | Plan both environments |
-| `terraform-apply.yml` | Push to `main` | Apply both environments |
+| Workflow | Repo | Trigger | Scope |
+|---|---|---|---|
+| `terraform-plan.yml` | `startline-infra` | PR touching `web-app/**` | Plan + Infracost |
+| `terraform-apply.yml` | `startline-infra` | Manual, or `main` once `TF_AUTO_APPLY=true` | Apply the saved plan |
+| `deploy.yml` | this repo | Push to `main`/`prod` | Amplify build + deploy |
+
+Terraform apply is manual until the first apply has been reviewed. Auto-apply
+on `main` resumes by setting the `TF_AUTO_APPLY` repo variable to `true` in
+`startline-infra`.
 
 Environments:
 

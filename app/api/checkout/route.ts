@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
-import { encodeAddOnsMetadata, assertMetadataBudget } from "@/lib/stripe-webhook";
+import { assertMetadataBudget } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
   isOrderFailure,
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const {
       event, participants, waveLabels, wavePricing,
-      totalCents, platformFeeCents, addOnLines, addOnChargedCents,
+      totalCents, platformFeeCents,
       groupRegistration, userSession, athleteName, athleteEmail,
     } = order;
 
@@ -63,10 +63,6 @@ export async function POST(req: NextRequest) {
     // application fee.
     const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
     const useConnect = Boolean(event.organiser.stripeAccountId) && !isDirectCharge;
-    // Add-on lines travel as variant codes so the webhook can resolve them even
-    // if the organiser reorders or retires the catalogue while this payment is in
-    // flight. Built and checked before the Stripe call so a metadata overflow
-    // fails here, cleanly, rather than as an opaque 400 under a card form.
     const metadata: Record<string, string> = {
       eventId: event.id,
       // Legacy single-tier fields (first ticket's tier); per-ticket truth
@@ -83,13 +79,6 @@ export async function POST(req: NextRequest) {
       feeStructure: event.feeStructure,
       groupRegistration: groupRegistration ? "true" : "false",
       ...participantMetadata,
-      ...encodeAddOnsMetadata(
-        addOnLines.map((line) => ({
-          participantIndex: line.participantIndex,
-          code: line.code,
-          quantity: line.quantity,
-        })),
-      ),
     };
     assertMetadataBudget(metadata);
 
@@ -115,7 +104,6 @@ export async function POST(req: NextRequest) {
       // arithmetic, so it can never show a figure the server disagrees with.
       amount: totalCents / 100,
       platformFee: platformFeeCents / 100,
-      addOnAmount: addOnChargedCents / 100,
       participantCount: participants.length,
     });
   } catch (err) {

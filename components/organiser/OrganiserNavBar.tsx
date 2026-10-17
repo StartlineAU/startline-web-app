@@ -5,14 +5,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LogOut, Building2, Shield, Plus, Settings, Bell,
-  Check, TriangleAlert, Menu, X, ChevronDown, ChevronRight, Users, UserCircle,
-  UserRound, RefreshCw, House,
+  Building2, Bell,
+  Check, TriangleAlert, Menu, X, ChevronDown, ChevronRight,
+  UserRound, RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
 import SignInModal from "@/components/SignInModal";
+import AccountMenu from "@/components/AccountMenu";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 
@@ -62,7 +63,7 @@ export default function OrganiserNavBar() {
   const router   = useRouter();
   const pathname = usePathname();
   const { user, status, logout } = useAuthContext();
-  const { open: openSettingsModal } = useSettings();
+  const { open: openSettingsModal, profileSavedAt } = useSettings();
 
   const [isMenuOpen,   setIsMenuOpen]   = useState(false);
   const [isUserOpen,   setIsUserOpen]   = useState(false);
@@ -104,7 +105,8 @@ export default function OrganiserNavBar() {
 
   useEffect(() => {
     if (status === "authenticated") startTransition(() => fetchOrgInfo());
-  }, [status, fetchOrgInfo]);
+    // profileSavedAt: the settings menu changed the name or logo shown here.
+  }, [status, fetchOrgInfo, profileSavedAt]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -158,11 +160,17 @@ export default function OrganiserNavBar() {
     window.location.reload();
   };
 
+  // The organisation you are already in goes to its dashboard. Any other one
+  // becomes the active organisation first.
+  const selectOrganisation = (organiserId: string) => {
+    if (organiserId === activeOrgId) router.push("/organiser/dashboard");
+    else switchOrganiser(organiserId);
+  };
+
   const openNotifPanel = () => {
     const opening = !notifOpen;
     setNotifOpen(o => !o);
     setIsUserOpen(false);
-    setIsMenuOpen(false);
     if (opening) setFreshIds(new Set(notifications.filter(n => !n.read).map(n => n.id)));
     if (unreadCount > 0) {
       fetch("/api/organiser/notifications", {
@@ -264,10 +272,7 @@ export default function OrganiserNavBar() {
                 )}
               </button>
               {notifOpen && (
-                // On a phone the bell is not at the screen edge, so a panel hung
-                // off its right side ran off the left of the screen. There it is
-                // pinned to the viewport instead; from sm up it drops from the bell.
-                <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
+                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1.5rem))] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden animate-fade-in">
                   <div className="flex items-center justify-between pl-3.5 pr-2 py-2 border-b border-white/[0.06]">
                     <span className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
                       Notifications
@@ -326,11 +331,9 @@ export default function OrganiserNavBar() {
               )}
             </div>
 
-            {/* User menu. Desktop only: on a phone it sat beside the hamburger
-                and the two menus listed much the same things, so everything
-                here is in the one mobile menu below instead. */}
-            <div ref={userRef} className="relative hidden md:block">
-              <button onClick={() => { setIsUserOpen(o => !o); setNotifOpen(false); }}
+            {/* User menu */}
+            <div ref={userRef} className="hidden md:block relative">
+              <button onClick={() => { setIsUserOpen(o => !o); setNotifOpen(false); }} data-testid="user-menu" aria-label="Account menu"
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
                 {orgLogo ? (
                   <Image src={orgLogo} alt="" width={28} height={28} className="w-7 h-7 rounded-lg object-cover shrink-0" />
@@ -343,78 +346,15 @@ export default function OrganiserNavBar() {
               </button>
 
               {isUserOpen && (
-                <div className="absolute right-0 top-full mt-1 min-w-[220px] bg-dark-darker border border-primary/40 rounded-xl shadow-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-white/10">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">{orgName || "Organisation"}</span>
-                      {roleLabel && (
-                        <span className={`font-headline text-[9px] uppercase tracking-widest rounded px-1 py-0.5 border
-                          ${role === "OWNER" ? "text-primary border-primary/40" : "text-white/40 border-white/15"}`}>
-                          {roleLabel}
-                        </span>
-                      )}
-                    </div>
-                    {user?.email && <div className="font-headline text-[12px] text-white/70 truncate">{user.email}</div>}
-                  </div>
-
-                  {/* Organiser */}
-                  <div className="px-4 pt-3 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">
-                    {memberships.length > 1 ? "Organiser · switch organisation" : "Organiser"}
-                  </div>
-                  <Link href="/organiser/new-listing" onClick={() => setIsUserOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                    <Plus className="w-4 h-4" /> Post an Event
-                  </Link>
-                  {memberships.length > 0 && (
-                    <div className="pb-1.5">
-                      {memberships.map((m) => {
-                        const isActive = m.organiserId === activeOrgId;
-                        return (
-                          <button key={m.organiserId} onClick={() => { setIsUserOpen(false); switchOrganiser(m.organiserId); }}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 font-headline text-[12px] font-bold uppercase tracking-widest text-left transition-colors
-                              ${isActive ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
-                            {m.logoUrl
-                              ? <Image src={m.logoUrl} alt="" width={20} height={20} className="w-5 h-5 rounded object-cover shrink-0" />
-                              : <Building2 className="w-3.5 h-3.5 shrink-0 text-white/40" />}
-                            <span className="truncate flex-1">{m.organiserName ?? "Organisation"}</span>
-                            {m.role === "OWNER"
-                              ? <span className="shrink-0 text-[9px] text-primary border border-primary/40 rounded px-1.5 py-0.5">OWNER</span>
-                              : <span className="shrink-0 text-[9px] text-white/40 border border-white/15 rounded px-1.5 py-0.5">MANAGER</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Athlete side of the account. Named for what it is: the old
-                      header said "User" and its last row said "User" again,
-                      which gave no hint that the row left the organiser
-                      portal for the public site (issue #309). */}
-                  <div className="border-t border-white/10 my-1" />
-                  <div className="px-4 pt-2 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/40">My athlete account</div>
-                  <Link href="/profile" onClick={() => setIsUserOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                    <UserCircle className="w-4 h-4" /> My profile
-                  </Link>
-                  <Link href="/settings/security" onClick={() => setIsUserOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                    <Shield className="w-4 h-4" /> Security
-                  </Link>
-                  <button onClick={() => { setIsUserOpen(false); openSettingsModal("personal"); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                    <Settings className="w-4 h-4" /> Settings
-                  </button>
-                  <div className="border-t border-white/10 my-1" />
-                  <Link href={homeHref} onClick={() => setIsUserOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
-                    <House className="w-4 h-4" /> Startline home
-                    <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />
-                  </Link>
-                  <div className="border-t border-white/10" />
-                  <button onClick={handleSignOut}
-                    className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[13px] font-bold uppercase tracking-widest text-red-400/80 hover:text-red-400 hover:bg-white/5 transition-colors">
-                    <LogOut className="w-4 h-4" /> Sign Out
-                  </button>
+                <div data-testid="user-menu-panel" className="absolute right-0 top-full mt-1 pt-1 min-w-[220px] max-w-[calc(100vw-1.5rem)] bg-dark-darker border border-white/[0.05] rounded-xl shadow-2xl overflow-hidden">
+                  <AccountMenu
+                    variant="dropdown"
+                    organisations={memberships}
+                    onNavigate={() => setIsUserOpen(false)}
+                    onSelectOrganisation={selectOrganisation}
+                    onOpenSettings={openSettingsModal}
+                    onSignOut={handleSignOut}
+                  />
                 </div>
               )}
             </div>
@@ -434,18 +374,15 @@ export default function OrganiserNavBar() {
         {isMenuOpen && (
           <div className="md:hidden bg-dark-darker/95 backdrop-blur-xl border-t border-white/[0.05] max-h-[calc(100dvh-3.5rem)] overflow-y-auto">
             <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-1.5">
-              <div className="px-4 py-2 mb-1">
-                <div className="flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-primary" />
-                  <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">{orgName || "Organiser"}</span>
-                  {roleLabel && (
-                    <span className={`font-headline text-[9px] uppercase tracking-widest rounded px-1 py-0.5 border
-                      ${role === "OWNER" ? "text-primary border-primary/40" : "text-white/40 border-white/15"}`}>
-                      {roleLabel}
-                    </span>
-                  )}
-                </div>
-                {user?.email && <div className="font-headline text-[12px] text-white/70 truncate mt-1">{user.email}</div>}
+              <div className="flex items-center gap-1.5 px-4 py-2 mb-1">
+                <Building2 className="w-3.5 h-3.5 text-primary" />
+                <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">{orgName || "Organiser"}</span>
+                {roleLabel && (
+                  <span className={`font-headline text-[9px] uppercase tracking-widest rounded px-1 py-0.5 border
+                    ${role === "OWNER" ? "text-primary border-primary/40" : "text-white/40 border-white/15"}`}>
+                    {roleLabel}
+                  </span>
+                )}
               </div>
 
               {ORGANISER_NAV.map(({ href, label }) => {
@@ -461,64 +398,21 @@ export default function OrganiserNavBar() {
                 );
               })}
 
-              <Link href="/organiser/new-listing" onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                <Plus className="w-4 h-4" /> Post an Event
-              </Link>
-
-              {memberships.length > 1 && (
+              {/* The same account menu as the desktop dropdown. Its Home row
+                  is the way out of the organiser portal on a phone (#309). */}
+              {status === "authenticated" && (
                 <>
                   <div className="border-t border-white/10 my-1.5" />
-                  <div className="px-4 pt-1 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">Switch organisation</div>
-                  {memberships.map((m) => {
-                    const isActive = m.organiserId === activeOrgId;
-                    return (
-                      <button key={m.organiserId} onClick={() => { setIsMenuOpen(false); switchOrganiser(m.organiserId); }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest transition-colors text-left
-                          ${isActive ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
-                        {m.logoUrl
-                          ? <Image src={m.logoUrl} alt="" width={20} height={20} className="w-5 h-5 rounded object-cover shrink-0" />
-                          : <Users className="w-4 h-4 shrink-0" />}
-                        <span className="truncate flex-1">{m.organiserName ?? "Organisation"}</span>
-                        {m.role === "OWNER"
-                          ? <span className="shrink-0 text-[9px] text-primary border border-primary/40 rounded px-1.5 py-0.5">OWNER</span>
-                          : <span className="shrink-0 text-[9px] text-white/40 border border-white/15 rounded px-1.5 py-0.5">MANAGER</span>}
-                      </button>
-                    );
-                  })}
+                  <AccountMenu
+                    variant="list"
+                    organisations={memberships}
+                    onNavigate={() => setIsMenuOpen(false)}
+                    onSelectOrganisation={selectOrganisation}
+                    onOpenSettings={openSettingsModal}
+                    onSignOut={handleSignOut}
+                  />
                 </>
               )}
-
-              {/* The way out of the organiser portal. Phones only had the
-                  organiser nav and Sign Out before, so the public site was
-                  unreachable from here (issue #309). */}
-              <div className="border-t border-white/10 my-1.5" />
-              <div className="px-4 pt-1 pb-1 font-headline text-[10px] font-bold uppercase tracking-widest text-white/30">My athlete account</div>
-              <Link href="/profile" onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                <UserCircle className="w-4 h-4" /> My profile
-              </Link>
-              <Link href="/settings/security" onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                <Shield className="w-4 h-4" /> Security
-              </Link>
-              <button onClick={() => { setIsMenuOpen(false); openSettingsModal("personal"); }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-white/60 hover:text-white hover:bg-white/10 transition-colors">
-                <Settings className="w-4 h-4" /> Settings
-              </button>
-              <div className="border-t border-white/10 my-1.5" />
-              <Link href={homeHref} onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg font-headline text-[13px] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 transition-colors">
-                <House className="w-4 h-4" /> Startline home
-                <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-60" />
-              </Link>
-
-              <div className="border-t border-white/10 mt-1.5 pt-3 pb-2">
-                <button onClick={() => { setIsMenuOpen(false); handleSignOut(); }}
-                  className="w-full flex items-center justify-center gap-2 h-10 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest text-red-400/80 border border-white/10 hover:text-red-400 hover:border-red-400/30 transition-colors">
-                  <LogOut className="w-3.5 h-3.5" /> Sign Out
-                </button>
-              </div>
             </div>
           </div>
         )}

@@ -24,6 +24,7 @@ const profileUpdateSchema = z.object({
   gender: z.string().max(50).nullable().optional(),
   emergencyContactName: z.string().max(200).nullable().optional(),
   emergencyContactPhone: z.string().max(50).nullable().optional(),
+  notifyFollowedOrganiserEvents: z.boolean().optional(),
 });
 
 const privateSelect = {
@@ -45,6 +46,7 @@ const profileSelect = {
   city: true,
   state: true,
   createdAt: true,
+  notifyFollowedOrganiserEvents: true,
   ...privateSelect,
 } as const;
 
@@ -185,6 +187,7 @@ export async function PUT(req: Request) {
   if ("bio" in body) data.bio = normalizeOptionalString(body.bio);
   if ("profilePicUrl" in body) data.profilePicUrl = body.profilePicUrl || null;
   if ("isPublic" in body) data.isPublic = body.isPublic;
+  if ("notifyFollowedOrganiserEvents" in body) data.notifyFollowedOrganiserEvents = body.notifyFollowedOrganiserEvents;
   if ("city" in body) data.city = normalizeOptionalString(body.city);
   if ("state" in body) data.state = normalizeOptionalString(body.state);
 
