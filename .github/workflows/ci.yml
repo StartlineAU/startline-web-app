@@ -108,9 +108,13 @@ jobs:
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       NEXT_PUBLIC_BASE_URL: http://localhost:3000
       # A fake Cognito domain: social-sign-in.spec.ts intercepts the redirect to
-      # it and only checks the request.
+      # it and only checks the request. Amplify still needs a non-empty pool and
+      # client id to build the authorize URL at all, so the fake ones match what
+      # playwright.config.ts uses locally.
       NEXT_PUBLIC_COGNITO_DOMAIN: sl-e2e.auth.ap-southeast-2.amazoncognito.com
       NEXT_PUBLIC_SOCIAL_SIGN_IN: google,apple
+      NEXT_PUBLIC_COGNITO_USER_POOL_ID: ap-southeast-2_test
+      NEXT_PUBLIC_COGNITO_CLIENT_ID: testclientid
     services:
       postgres:
         image: postgres:15-alpine

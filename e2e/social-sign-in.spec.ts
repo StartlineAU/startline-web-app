@@ -1,5 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import { goToHomepage } from "./helpers";
 
 // Google and Apple sign-in leave the site for Cognito's hosted endpoint, which
 // the suite cannot complete. These cover everything on our side of it: the
@@ -12,8 +11,10 @@ const AUTHORIZE = "**/oauth2/authorize**";
 // Next renders an empty role="alert" route announcer, so match the message.
 const callbackError = (page: Page) => page.locator('p[role="alert"]');
 
+// Deliberately not helpers.goToHomepage: that waits for networkidle, which the
+// navbar's polling never reaches (see AGENTS.md), so it burns the whole timeout.
 async function openSignInModal(page: Page) {
-  await goToHomepage(page);
+  await page.goto("/");
   await page.getByRole("button", { name: "SIGN IN" }).click();
   await page.waitForSelector('[role="dialog"]');
 }
@@ -86,7 +87,8 @@ test.describe("/auth/callback", () => {
       "/auth/callback?error=invalid_request&error_description=" +
       encodeURIComponent("Already found an entry for username google_1234567890 ");
 
-    await goToHomepage(page);
+    // Just needs to be on the origin so sessionStorage is that origin's.
+    await page.goto("/");
     await page.evaluate(() => {
       sessionStorage.setItem("startline_social_provider", "google");
       sessionStorage.setItem("startline_social_return_to", "/events");
