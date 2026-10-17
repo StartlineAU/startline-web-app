@@ -164,7 +164,7 @@ test.describe("insurance declaration", () => {
     await organiserLogin(page);
     const settings = await openSettings(page, "organisation");
 
-    const declaration = settings.getByRole("checkbox", { name: /I declare that I currently hold public liability insurance/i });
+    const declaration = settings.getByRole("checkbox", { name: /I declare that I (currently )?hold public liability insurance/i });
     await expect(declaration).toBeEnabled();
     const before = (await (await page.request.get("/api/organiser/profile")).json()).insuranceDeclared as boolean;
     await expect(declaration).toBeChecked({ checked: before });

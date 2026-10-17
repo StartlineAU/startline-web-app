@@ -96,6 +96,9 @@ test.describe("/auth/callback", () => {
     await page.goto(linked);
     const url = await authorize;
     expect(url.searchParams.get("identity_provider")).toBe("Google");
+    // Let the retry's navigation land before going back, or the second goto
+    // below is interrupted by it.
+    await page.waitForURL(/amazoncognito\.com/);
 
     // The retry is spent, so the same reply again is shown, not looped.
     await page.goto(linked);
