@@ -7,10 +7,9 @@ import { ArrowLeft, ArrowRight, Plus, Minus, LogIn, Check, ChevronDown } from "l
 import SignInModal from "@/components/SignInModal";
 import ParticipantFormSection from "@/components/registration/ParticipantFormSection";
 import SharedEmergencyContactSection from "@/components/registration/SharedEmergencyContactSection";
-import GuestEmailVerificationStep from "@/components/registration/GuestEmailVerificationStep";
 import StepRail from "@/components/registration/StepRail";
 import OrderSummary from "@/components/registration/OrderSummary";
-import ReviewPayStep, { type ReviewRow } from "./ReviewPayStep";
+import ReviewPayStep, { backBtnCls, type ReviewRow } from "./ReviewPayStep";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -34,7 +33,6 @@ import {
   type RegistrationFormData,
   type EmergencyContact,
   type EmergencyContactErrors,
-  getEmailsRequiringVerification,
 } from "@/lib/registration-form";
 
 interface Wave {
@@ -143,14 +141,13 @@ function RegisterContent() {
   const searchParams = useSearchParams();
   const eventId = params.id as string;
   const preselectedWave = searchParams.get("wave") ?? "";
-  const { status, user } = useAuthContext();
+  const { status } = useAuthContext();
 
   const [event, setEvent] = useState<EventData | null>(null);
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [step, setStep] = useState<0 | 1 | 2>(0);
-  const [payPhase, setPayPhase] = useState<"verify" | "pay">("pay");
   const [error, setError] = useState("");
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -362,16 +359,6 @@ function RegisterContent() {
     return (quantities[label] ?? 0) < tierLeft;
   };
 
-  const emailsToVerify = useMemo(
-    () =>
-      getEmailsRequiringVerification(
-        participants.map((p) => p.email),
-        status === "authenticated" ? user?.email : null
-      ),
-    [participants, status, user?.email]
-  );
-  const requiresEmailVerification = emailsToVerify.length > 0;
-
   const ticketComplete = useCallback(
     (index: number) =>
       Object.keys(
@@ -518,14 +505,9 @@ function RegisterContent() {
     setError("");
     setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
-    if (requiresEmailVerification) {
-      setPayPhase("verify");
-    } else {
-      setPayPhase("pay");
-      // A free order has no PaymentIntent to prepare — the review step renders
-      // straight away and the registration is written when they confirm.
-      if (!freeOrder) startCheckout();
-    }
+    // A free order has no PaymentIntent to prepare — the review step renders
+    // straight away and the registration is written when they confirm.
+    if (!freeOrder) startCheckout();
   };
   const goToNextTicket = (index: number) => {
     const errors = getRegistrationFormErrors(participants[index], {
@@ -541,11 +523,6 @@ function RegisterContent() {
     }
     setOpenTicket(index + 1);
   };
-  const onVerified = () => {
-    setPayPhase("pay");
-    if (!freeOrder) startCheckout();
-  };
-
   // `reference` is the PaymentIntent id on a paid order, the first registration
   // id on a free one. Either way it is only ever shown back to the athlete.
   const onConfirmed = (reference: string) => {
@@ -664,7 +641,7 @@ function RegisterContent() {
           </div>
           <Link
             href={`/events/${eventId}`}
-            className="inline-flex items-center gap-2 h-11 px-5 rounded-xl border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:bg-dark-light transition-colors"
+            className={backBtnCls}
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to event
           </Link>
@@ -678,7 +655,7 @@ function RegisterContent() {
       <div className="max-w-[1240px] mx-auto px-5 sm:px-8 pt-24 pb-24">
         <Link
           href={`/events/${eventId}`}
-          className="inline-flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-[0.15em] text-muted hover:text-primary transition-colors mb-8"
+          className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors mb-8"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to event
         </Link>
@@ -808,7 +785,7 @@ function RegisterContent() {
                 <div className="flex justify-between items-center mt-5">
                   <Link
                     href={`/events/${eventId}`}
-                    className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted hover:bg-dark-light hover:text-light transition-colors"
+                    className={backBtnCls}
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to event
                   </Link>
@@ -960,7 +937,7 @@ function RegisterContent() {
                   <button
                     type="button"
                     onClick={goToTicket}
-                    className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted hover:bg-dark-light hover:text-light transition-colors"
+                    className={backBtnCls}
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
@@ -978,22 +955,9 @@ function RegisterContent() {
             )}
 
             {/* ── STEP 2: Review & pay ── */}
-            {step === 2 && payPhase === "verify" && (
-              <GuestEmailVerificationStep
-                eventId={eventId}
-                eventTitle={event.title}
-                emails={emailsToVerify}
-                onBack={() => {
-                  setError("");
-                  setStep(1);
-                }}
-                onComplete={onVerified}
-              />
-            )}
-
             {/* A free order goes straight to review: there is no PaymentIntent
                 to wait on, and confirming writes the registration. */}
-            {step === 2 && payPhase === "pay" && freeOrder && (
+            {step === 2 && freeOrder && (
               <ReviewPayStep
                 free
                 clientSecret=""
@@ -1012,7 +976,7 @@ function RegisterContent() {
               />
             )}
 
-            {step === 2 && payPhase === "pay" && !freeOrder && (
+            {step === 2 && !freeOrder && (
               !clientSecret ? (
                 error && !processing ? (
                   // Checkout could not start (e.g. the event sold out mid-session).
@@ -1024,7 +988,7 @@ function RegisterContent() {
                       <button
                         type="button"
                         onClick={() => { setError(""); setStep(1); }}
-                        className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted border border-dark-lighter hover:text-light hover:border-primary transition-colors"
+                        className={backBtnCls}
                       >
                         <ArrowLeft className="w-3.5 h-3.5" /> Back to details
                       </button>

@@ -169,9 +169,27 @@ export function isOnboardingComplete(status: ConnectStatus): boolean {
   return status.chargesEnabled && status.payoutsEnabled;
 }
 
-export async function retrieveConnectStatus(stripe: Stripe, accountId: string): Promise<ConnectStatus> {
+/**
+ * Whether Stripe is waiting on the organiser rather than on itself. Once the
+ * onboarding form is submitted, capabilities can sit at "pending" while Stripe
+ * verifies identity, and sending the organiser back into onboarding then only
+ * shows them the form they already finished (issue #387). Only a requirement
+ * the user owes now (currently or past due) counts; eventually_due ones do not
+ * hold up charging.
+ */
+export function actionRequiredFromAccount(account: Account): boolean {
+  return (account.requirements?.entries ?? []).some(
+    (entry) =>
+      entry.awaiting_action_from === "user" &&
+      entry.minimum_deadline?.status !== "eventually_due",
+  );
+}
+
+export type ConnectProgress = ConnectStatus & { actionRequired: boolean };
+
+export async function retrieveConnectStatus(stripe: Stripe, accountId: string): Promise<ConnectProgress> {
   const account = await stripe.v2.core.accounts.retrieve(accountId, { include: [...INCLUDE] });
-  return connectStatusFromAccount(account);
+  return { ...connectStatusFromAccount(account), actionRequired: actionRequiredFromAccount(account) };
 }
 
 /**

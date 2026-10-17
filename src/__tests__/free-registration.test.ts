@@ -35,9 +35,6 @@ vi.mock("@/lib/prisma", () => ({ default: prismaMock }));
 vi.mock("@/lib/turnstile", () => ({ assertTurnstile: async () => null }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: async () => null }));
 vi.mock("@/lib/amplify-server", () => ({ getUserSession: async () => mocks.session() }));
-vi.mock("@/lib/guest-email-verification", () => ({
-  assertGuestEmailsVerifiedForCheckout: async () => null,
-}));
 vi.mock("@/lib/athlete-accounts", () => ({
   ensureAthleteCognitoUser: async () => "cognito-sub-1",
 }));

@@ -477,6 +477,81 @@ test.describe("organiser pages", () => {
     await expect(page.getByPlaceholder("12 345 678 901")).toBeVisible();
   });
 
+  // Issue #378: the native date input drew the OS calendar, not the platform's.
+  test("payments date of birth uses the themed calendar", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+    const dob = page.locator("#organiser-dob");
+    await expect(dob).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('input[type="date"]')).toHaveCount(0);
+
+    await dob.click();
+    // The year grid sits behind the month label, as on every other birthday field.
+    const header = page.getByRole("button", { name: /^[A-Z][a-z]+ \d{4}$/ });
+    await expect(header).toBeVisible();
+    await header.click();
+    await expect(page.getByRole("button", { name: "1990", exact: true })).toBeVisible();
+  });
+
+  // Issue #387: after the form is submitted, Stripe can hold the account while
+  // it verifies. The page must say so rather than send the organiser back into
+  // the onboarding they already finished.
+  test("payments page waits on Stripe instead of offering setup again", async ({ page }) => {
+    await page.route("**/api/organiser/profile", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const body = await res.json();
+      await route.fulfill({ response: res, json: { ...body, stripeAccountId: "acct_e2e_review", stripeOnboardingComplete: false } });
+    });
+    await page.route("**/api/organiser/stripe/status", (route) =>
+      route.fulfill({ json: { connected: true, chargesEnabled: false, payoutsEnabled: false, actionRequired: false } }));
+
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+
+    await expect(page.getByText(/stripe is reviewing your details/i)).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole("button", { name: /continue stripe setup/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /connect with stripe/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /check again/i })).toBeVisible();
+  });
+
+  test("payments page still offers setup when Stripe needs more from the organiser", async ({ page }) => {
+    await page.route("**/api/organiser/profile", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const body = await res.json();
+      await route.fulfill({ response: res, json: { ...body, stripeAccountId: "acct_e2e_due", stripeOnboardingComplete: false } });
+    });
+    await page.route("**/api/organiser/stripe/status", (route) =>
+      route.fulfill({ json: { connected: true, chargesEnabled: false, payoutsEnabled: false, actionRequired: true } }));
+
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+
+    await expect(page.getByRole("button", { name: /continue stripe setup/i }).first()).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/stripe is reviewing your details/i)).toHaveCount(0);
+  });
+
+  test("Stripe return page is dark and tells review apart from unfinished setup", async ({ page }) => {
+    let actionRequired = false;
+    await page.route("**/api/organiser/stripe/status", (route) =>
+      route.fulfill({ json: { connected: true, chargesEnabled: false, payoutsEnabled: false, actionRequired } }));
+
+    await organiserLogin(page);
+    await page.goto("/organiser/payments/return");
+    await expect(page.getByRole("heading", { name: /stripe is reviewing/i })).toBeVisible({ timeout: 20000 });
+
+    // Dark only: the page used to render on a light grey background.
+    const bg = await page.locator("main").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const [r, g, b] = (bg.match(/\d+/g) ?? []).map(Number);
+    expect(r + g + b).toBeLessThan(150);
+
+    actionRequired = true;
+    await page.reload();
+    await expect(page.getByRole("heading", { name: /not quite finished/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole("link", { name: /back to payments/i })).toBeVisible();
+  });
+
   test("new listing media step supports multiple info PDFs with labels, reorder and remove", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
