@@ -12,6 +12,8 @@ import StepRail from "@/components/registration/StepRail";
 import OrderSummary from "@/components/registration/OrderSummary";
 import ReviewPayStep, { type ReviewRow } from "./ReviewPayStep";
 import TurnstileWidget from "@/components/TurnstileWidget";
+import TicketHolderToggle, { type TicketHolder } from "@/components/registration/TicketHolderToggle";
+import SaveDetailsPrompt, { type ProfileUpdate } from "@/components/registration/SaveDetailsPrompt";
 import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
@@ -72,6 +74,12 @@ interface ProfilePrefill {
   emergencyContactName: string;
   emergencyContactPhone: string;
 }
+
+// The saved details "Save to my profile" can fill in (email always exists).
+const PROFILE_FIELDS = [
+  "firstName", "lastName", "mobile", "dateOfBirth", "gender", "emergencyContactName", "emergencyContactPhone",
+] as const;
+type ProfileField = (typeof PROFILE_FIELDS)[number];
 
 interface WaveAvailability {
   label: string;
@@ -186,6 +194,13 @@ function RegisterContent() {
   const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean } | null>(null);
 
   const prefilledRef = useRef(false);
+  // Signed-in only: the buyer's saved details, and which ticket (if any) is
+  // theirs. Every other ticket is for a guest and starts blank.
+  const [profile, setProfile] = useState<ProfilePrefill | null>(null);
+  const [selfIndex, setSelfIndex] = useState<number | null>(null);
+  // Set on confirmation when the buyer's own ticket holds details their
+  // profile lacks; the confirmation screen offers to save them.
+  const [profileOffer, setProfileOffer] = useState<ProfileUpdate | null>(null);
 
   // ── Load event ──
   useEffect(() => {
@@ -258,9 +273,11 @@ function RegisterContent() {
             ? formatPhoneForDisplay(profile.emergencyContactPhone)
             : "",
         };
+        setProfile(prefill);
         setParticipants((prev) => {
           const first = prev[0];
           if (first.firstName || first.lastName || first.email) return prev;
+          setSelfIndex(0);
           const next = [...prev];
           next[0] = { ...first, ...prefill };
           return next;
@@ -337,6 +354,54 @@ function RegisterContent() {
 
   const isMulti = participants.length > 1;
   const sharedContactActive = isMulti && useSharedContact;
+
+  // Profile fields the buyer hasn't saved yet, which their own ticket can fill.
+  const missingProfileFields = useMemo(
+    () => (profile ? PROFILE_FIELDS.filter((f) => !profile[f]) : []),
+    [profile]
+  );
+
+  const setTicketHolder = (index: number, holder: TicketHolder) => {
+    if (holder === "self" && profile) {
+      setParticipants((prev) => prev.map((p, i) => (i === index ? { ...createEmptyParticipant(), ...profile } : p)));
+      setSelfIndex(index);
+    } else if (holder === "guest" && selfIndex === index) {
+      setParticipants((prev) => prev.map((p, i) => (i === index ? createEmptyParticipant() : p)));
+      setSelfIndex(null);
+    }
+    setFieldErrors((prev) => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
+  // What the buyer's own ticket could add to their profile so the next
+  // checkout prefills. Only fills gaps; never overwrites a saved value.
+  const buildProfileUpdate = (): ProfileUpdate | null => {
+    if (selfIndex == null || missingProfileFields.length === 0) return null;
+    const p = participants[selfIndex];
+    if (!p) return null;
+    const contact = sharedContactActive
+      ? { emergencyContactName: sharedEmergencyContact.name, emergencyContactPhone: sharedEmergencyContact.phone }
+      : { emergencyContactName: p.emergencyContactName, emergencyContactPhone: p.emergencyContactPhone };
+    const entered: Record<ProfileField, string> = {
+      firstName: p.firstName, lastName: p.lastName, mobile: p.mobile,
+      dateOfBirth: p.dateOfBirth, gender: p.gender, ...contact,
+    };
+    const body: ProfileUpdate = {};
+    for (const f of missingProfileFields) {
+      if (f === "firstName" || f === "lastName") continue;
+      if (entered[f].trim()) body[f] = entered[f].trim();
+    }
+    // Name is one field on the profile; only write it when none is saved.
+    if (profile && !profile.firstName && !profile.lastName) {
+      const name = `${p.firstName} ${p.lastName}`.trim();
+      if (name) body.name = name;
+    }
+    return Object.keys(body).length > 0 ? body : null;
+  };
 
   const setQty = (label: string, delta: number) => {
     setQuantities((prev) => {
@@ -487,7 +552,13 @@ function RegisterContent() {
       if (!waveIsOpen(wave)) continue;
       for (let i = 0; i < (quantities[wave.label] ?? 0); i++) nextWaves.push(wave.label);
     }
+    const kept = matchPreviousTickets(participants.length, ticketWaves, nextWaves);
     setParticipants((prev) => reconcileParticipants(prev, ticketWaves, nextWaves));
+    // The buyer's own ticket follows its details; if it was dropped, none is theirs.
+    if (selfIndex != null) {
+      const moved = kept.indexOf(selfIndex);
+      setSelfIndex(moved >= 0 ? moved : null);
+    }
     setTicketWaves(nextWaves);
     setFieldErrors({});
     setEmergencyContactErrors({});
@@ -550,6 +621,7 @@ function RegisterContent() {
   // id on a free one. Either way it is only ever shown back to the athlete.
   const onConfirmed = (reference: string) => {
     const ref = "SL-" + reference.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
+    setProfileOffer(buildProfileUpdate());
     setConfirmed({
       ref,
       email: participants[0].email,
@@ -561,6 +633,19 @@ function RegisterContent() {
       free: freeOrder,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ── Signed-in: whose ticket this is ──
+  const renderTicketHolder = (index: number) => {
+    if (status !== "authenticated" || !profile) return null;
+    const isSelf = selfIndex === index;
+    return (
+      <TicketHolderToggle
+        value={isSelf ? "self" : "guest"}
+        onChange={(holder) => setTicketHolder(index, holder)}
+        selfTakenBy={selfIndex != null && !isSelf ? selfIndex : null}
+      />
+    );
   };
 
   // ── Review rows ──
@@ -662,6 +747,7 @@ function RegisterContent() {
           <div className="text-[12.5px] text-muted-dark mb-6 leading-relaxed">
             Confirmation sent to <strong className="text-muted">{confirmed.email}</strong>
           </div>
+          {profileOffer && <SaveDetailsPrompt update={profileOffer} />}
           <Link
             href={`/events/${eventId}`}
             className="inline-flex items-center gap-2 h-11 px-5 rounded-xl border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:bg-dark-light transition-colors"
@@ -841,6 +927,7 @@ function RegisterContent() {
                       <ParticipantFormSection
                         index={0}
                         title={ticketWaves[0]}
+                        intro={renderTicketHolder(0)}
                         participant={participants[0]}
                         errors={fieldErrors[0]}
                         onChange={(field, value) => updateParticipant(0, field, value)}
@@ -899,6 +986,7 @@ function RegisterContent() {
                               <ParticipantFormSection
                                 frameless
                                 index={index}
+                                intro={renderTicketHolder(index)}
                                 participant={participant}
                                 errors={fieldErrors[index]}
                                 hideEmergencyContact={sharedContactActive}

@@ -16,6 +16,7 @@ import SignInModal from "@/components/SignInModal";
 import AccountMenu from "@/components/AccountMenu";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
+import { announceOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
 type NavItem = { href: string; label: string };
 
@@ -85,6 +86,7 @@ export default function OrganiserNavBar() {
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef  = useRef<HTMLDivElement>(null);
   const navRef   = useRef<HTMLDivElement>(null);
+  const seenNotifIds = useRef<Set<string> | null>(null);
 
   const fetchOrgInfo = useCallback(async () => {
     try {
@@ -113,6 +115,12 @@ export default function OrganiserNavBar() {
       const r = await fetch("/api/organiser/notifications");
       if (!r.ok) return;
       const data: { notifications: Notification[]; unreadCount: number } = await r.json();
+      // Skip the first load: the page fetched its own data when it mounted.
+      const seen = seenNotifIds.current;
+      if (seen && data.notifications.some((n) => !seen.has(n.id))) {
+        announceOrganiserEventsChanged();
+      }
+      seenNotifIds.current = new Set(data.notifications.map((n) => n.id));
       startTransition(() => {
         setNotifications(data.notifications);
         setUnreadCount(data.unreadCount);

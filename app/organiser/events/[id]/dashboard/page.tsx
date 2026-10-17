@@ -488,7 +488,18 @@ function EventDashboardInner({
                         <Megaphone className="w-5 h-5 text-muted-dark" />
                       </div>
                       <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-1">No announcements yet</div>
-                      <div className="text-[13px] text-muted-dark">Use New announcement to notify registered athletes.</div>
+                      <div className="text-[13px] text-muted-dark">Post one to notify registered athletes.</div>
+                      {!announcePanel && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="mt-4"
+                          onClick={() => setPanel("announce")}
+                        >
+                          <Plus className="w-4 h-4" /> New announcement
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-4">
