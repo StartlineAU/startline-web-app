@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type Stripe from "stripe";
 import { NextRequest } from "next/server";
-import { connectStatusFromAccount, isOnboardingComplete } from "@/lib/stripe-connect";
+import { actionRequiredFromAccount, connectStatusFromAccount, isOnboardingComplete } from "@/lib/stripe-connect";
 
 // Issue #379: organiser accounts on Accounts v2. charges_enabled and
 // payouts_enabled are gone; onboarding is read from capability statuses, by the
@@ -81,6 +81,41 @@ describe("connectStatusFromAccount", () => {
   });
 });
 
+// Issue #387: once the form is submitted, Stripe can hold capabilities at
+// "pending" while it verifies. The organiser then has nothing to do, and the
+// payments page must not send them back into onboarding.
+describe("actionRequiredFromAccount", () => {
+  function withEntries(entries: unknown[]): Stripe.V2.Core.Account {
+    return { ...account({ payouts: "pending" }), requirements: { entries } } as unknown as Stripe.V2.Core.Account;
+  }
+
+  it("is false when nothing is outstanding", () => {
+    expect(actionRequiredFromAccount(account())).toBe(false);
+    expect(actionRequiredFromAccount(withEntries([]))).toBe(false);
+  });
+
+  it("is false while only Stripe has work to do", () => {
+    expect(actionRequiredFromAccount(withEntries([
+      { awaiting_action_from: "stripe", minimum_deadline: { status: "currently_due" } },
+    ]))).toBe(false);
+  });
+
+  it("is true when the organiser owes something now", () => {
+    expect(actionRequiredFromAccount(withEntries([
+      { awaiting_action_from: "user", minimum_deadline: { status: "currently_due" } },
+    ]))).toBe(true);
+    expect(actionRequiredFromAccount(withEntries([
+      { awaiting_action_from: "user", minimum_deadline: { status: "past_due" } },
+    ]))).toBe(true);
+  });
+
+  it("ignores requirements that are only eventually due", () => {
+    expect(actionRequiredFromAccount(withEntries([
+      { awaiting_action_from: "user", minimum_deadline: { status: "eventually_due" } },
+    ]))).toBe(false);
+  });
+});
+
 describe("GET /api/organiser/stripe/status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,7 +134,7 @@ describe("GET /api/organiser/stripe/status", () => {
 
     const res = await get();
 
-    expect(await res.json()).toEqual({ connected: true, chargesEnabled: true, payoutsEnabled: true });
+    expect(await res.json()).toEqual({ connected: true, chargesEnabled: true, payoutsEnabled: true, actionRequired: false });
     expect(mocks.retrieveAccount).toHaveBeenCalledWith("acct_v2", {
       include: expect.arrayContaining(["configuration.merchant", "configuration.recipient"]),
     });
@@ -115,8 +150,20 @@ describe("GET /api/organiser/stripe/status", () => {
 
     const res = await get();
 
-    expect(await res.json()).toEqual({ connected: true, chargesEnabled: true, payoutsEnabled: false });
+    expect(await res.json()).toEqual({ connected: true, chargesEnabled: true, payoutsEnabled: false, actionRequired: false });
     expect(mocks.organiser.update).not.toHaveBeenCalled();
+  });
+
+  it("says when the organiser still owes Stripe something", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({ stripeAccountId: "acct_v2", stripeOnboardingComplete: false });
+    mocks.retrieveAccount.mockResolvedValue({
+      ...account({ transfers: "pending" }),
+      requirements: { entries: [{ awaiting_action_from: "user", minimum_deadline: { status: "currently_due" } }] },
+    });
+
+    const res = await get();
+
+    expect((await res.json()).actionRequired).toBe(true);
   });
 });
 

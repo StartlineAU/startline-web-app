@@ -524,21 +524,6 @@ model WaitlistSubscriber {
   @@map("waitlist_subscribers")
 }
 
-model GuestEmailVerification {
-  id         String    @id @default(uuid())
-  email      String
-  eventId    String
-  codeHash   String
-  expiresAt  DateTime
-  verifiedAt DateTime?
-  attempts   Int       @default(0)
-  lastSentAt DateTime  @default(now())
-  createdAt  DateTime  @default(now())
-
-  @@index([email, eventId])
-  @@map("guest_email_verifications")
-}
-
 model RateLimit {
   key     String   @id
   count   Int      @default(1)

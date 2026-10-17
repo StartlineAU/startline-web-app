@@ -352,26 +352,6 @@ export function validateRegistrationForm(data: RegistrationFormData): string | n
   return validateParticipants([data]).firstMessage;
 }
 
-export function normalizeGuestEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-export function getEmailsRequiringVerification(
-  participantEmails: string[],
-  authenticatedEmail?: string | null
-): string[] {
-  const unique = [...new Set(
-    participantEmails
-      .map(normalizeGuestEmail)
-      .filter((email) => email.length > 0)
-  )];
-
-  if (!authenticatedEmail) return unique;
-
-  const accountEmail = normalizeGuestEmail(authenticatedEmail);
-  return unique.filter((email) => email !== accountEmail);
-}
-
 /**
  * For each slot in `nextWaves`, the index of the previous ticket it inherits
  * from, or null for a brand-new slot. Tier first, then positionally through

@@ -104,6 +104,7 @@ test.describe("stripe connect (Accounts v2)", () => {
         connected:      expect.any(Boolean),
         chargesEnabled: expect.any(Boolean),
         payoutsEnabled: expect.any(Boolean),
+        actionRequired: expect.any(Boolean),
       });
     } else {
       // A seeded account id the local key cannot see.
