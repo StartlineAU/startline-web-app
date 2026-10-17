@@ -23,9 +23,9 @@ Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
 
 | Secret | Contents |
 |---|---|
-| `startline/automation` | Trusted CI/Terraform credentials: provider tokens (Cloudflare, Neon, Amplify, DigitalOcean) and the per-environment runtime source values Terraform feeds into the app secrets |
-| `startline/prod/app` | Prod env vars (Cognito, Stripe live, S3) |
-| `startline/staging/app` | Staging env vars (non-prod Cognito, Neon, S3) |
+| `startline/automation` | Trusted CI/Terraform credentials: provider tokens (Cloudflare, Neon, Amplify, DigitalOcean) and the Cognito social sign-in secrets Terraform configures. Not app runtime config |
+| `startline/prod/app` | Prod runtime config: Cognito, Stripe live keys, Postgres, S3/CDN, Resend, ABR |
+| `startline/staging/app` | Staging runtime config: non-prod Cognito, Stripe test keys, Postgres, S3/CDN, Resend, ABR |
 | `startline/docs` | Outline documentation server only |
 
 **Which workflow may read what.** PR checks read no secret at all: anything a PR
@@ -54,15 +54,24 @@ So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
 secrets in both places from one list, `runtime_secrets` in
 `startline-infra/startline-web-app/modules/environment/main.tf`; add a new one there.
 
-Terraform owns the whole app secret and the whole branch variable map, so a
-value added by hand in Secrets Manager or the Amplify console is deleted on a
-later apply. Put the source value in the `startline/automation` secret
-instead: `stripe_secret_key_<env>`, `stripe_webhook_secret_<env>`,
-`stripe_publishable_key_<env>`, `stripe_account_events_secret_<env>`
-(`<env>` is `prod` or `staging`),
-`resend_api_key`, `resend_from`, `abr_guid`. A prod apply fails its
-precondition rather than silently clearing a missing secret key. A new value
-only takes effect after a Terraform apply and then a fresh Amplify build.
+Terraform owns only the *generated* half of the app secret (Cognito ids, Neon
+URL, bucket, CDN, site URL, `GUEST_EMAIL_VERIFICATION_SECRET`,
+`TURNSTILE_SECRET_KEY`) plus the whole branch variable map. The third-party
+credentials are owned by the app secret itself: Terraform reads the secret and
+merges the generated keys over the top, so `startline/automation` is no longer
+their source. A prod apply fails its precondition rather than silently clearing
+a missing key.
+
+**Rotating a runtime credential:** set it on the app secret that owns it —
+`startline/prod/app` or `startline/staging/app` — and rebuild that branch. No
+Terraform change and no apply needed. The keys an environment owns are
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`,
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM` and
+`ABR_GUID`. Anything the app needs that Terraform generates still goes through
+`startline-infra/startline-web-app/modules/environment/main.tf`.
+
+A branch variable or app secret set by hand in the Amplify console is still
+deleted on the next apply: Terraform owns the branch variable map.
 
 To check an environment without credentials, POST an empty body to
 `/api/stripe/webhook`: `400` means the server has `STRIPE_SECRET_KEY`, `500`
@@ -94,8 +103,9 @@ accounts. Per Stripe mode, once:
 
 1. `STRIPE_SECRET_KEY=sk_... pnpm stripe:account-events https://<host>`
    creates the destination and prints its signing secret (the Dashboard can reveal it again later).
-2. Store it in `startline/automation` as `stripe_account_events_secret_<env>`,
-   run the apply in `startline-infra` (manual there), then rebuild.
+2. Store it on the environment's own app secret as
+   `STRIPE_ACCOUNT_EVENTS_SECRET` (`startline/prod/app` for live,
+   `startline/staging/app` for test), then rebuild that branch.
 
 Locally, `pnpm stripe:listen:accounts` forwards the same events. Without the
 secret the route answers 503 and onboarding only completes when the organiser

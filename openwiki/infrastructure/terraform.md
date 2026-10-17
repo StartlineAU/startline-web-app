@@ -96,11 +96,18 @@ must be an Amplify **branch** environment variable set in
 `startline-infra/startline-web-app/modules/environment/main.tf`.
 
 Terraform owns the whole branch variable map, so console-added values are
-deleted on the next apply. New runtime secrets belong in the
-`startline/automation` secret: `stripe_secret_key_<env>`,
-`stripe_webhook_secret_<env>`, `resend_api_key`, `resend_from`, `abr_guid`. A
-prod apply fails a precondition rather than silently clearing one that is
-missing.
+deleted on the next apply — and it owns only the *generated* half of the app
+secret (Cognito ids, Neon URL, bucket, CDN, site URL, the two generated
+secrets). The credential keys are owned by the app secret itself: Terraform
+reads the secret and merges the generated keys over the top, so
+`startline/automation` is no longer their source. A prod apply fails a
+precondition rather than silently clearing one that is missing.
+
+To rotate a runtime credential, set it on `startline/prod/app` or
+`startline/staging/app` and rebuild that branch. The keys an environment owns
+are `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`,
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM` and
+`ABR_GUID`.
 
 ## Secrets Management
 
@@ -108,8 +115,8 @@ All secrets are stored in **AWS Secrets Manager** and never committed to the rep
 
 | Secret | Contents |
 |---|---|
-| `startline/automation` | Trusted CI/Terraform credentials: Amplify PAT, Cloudflare token, Neon API key/org, DigitalOcean token, plus the per-environment runtime source values Terraform feeds into the app secrets |
-| `startline/prod/app` | Production env vars (Cognito IDs, Stripe live keys, S3 credentials, etc.) |
+| `startline/automation` | Trusted CI/Terraform credentials: Amplify PAT, Cloudflare token, Neon API key/org, DigitalOcean token, Cognito social sign-in secrets. Not app runtime config |
+| `startline/prod/app` | Production runtime config (Cognito, Stripe live keys, Postgres, S3/CDN, Resend, ABR). Terraform owns the generated keys and preserves the credential keys |
 | `startline/staging/app` | Staging env vars (non-production Cognito, Neon, S3) |
 | `startline/docs` | Outline documentation server only |
 
