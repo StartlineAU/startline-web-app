@@ -216,10 +216,49 @@ a client-side check flashes the wrong page first. The athlete header dropdown
 lists each organisation the visitor belongs to. It does not offer to set one
 up: that door is the footer and the organiser landing page.
 
+### Google and Apple sign-in
+
+Both go through Cognito's hosted endpoint, never straight to the provider:
+the browser goes to `NEXT_PUBLIC_COGNITO_DOMAIN`, the provider returns to
+Cognito's `/oauth2/idpresponse`, and Cognito returns to `/auth/callback` on the
+host that started it. Amplify's OAuth listener (imported in
+`components/AmplifyProvider.tsx`) swaps the code for tokens there.
+
+| Piece | Where |
+|---|---|
+| Domain, providers, callback URLs, pre sign-up trigger | `startline-infra`, `startline-web-app/modules/environment` |
+| Keys | `startline/ci-bootstrap`: `google_client_id_<env>`, `google_client_secret_<env>`, `apple_client_id_<env>`, `apple_team_id`, `apple_key_id`, `apple_private_key` |
+| Buttons, return path, error copy | `components/SocialSignInButtons.tsx`, `lib/social-sign-in.ts` |
+| Callback | `app/(user)/auth/callback/` |
+
+- **The Cognito hosts are `auth.startlineau.com` (prod) and
+  `sl-staging.auth.ap-southeast-2.amazoncognito.com` (staging).** Each one's
+  `/oauth2/idpresponse` is registered by hand in Google Cloud and in the
+  matching Apple Services ID (`com.startlineau.auth`,
+  `com.startlineau.auth.staging`). Change a host and both consoles must change
+  too. Prod is on its own domain so Google can brand-verify the consent screen
+  as Startline; `auth` is a DNS-only CNAME in Cloudflare and must stay unproxied.
+- **Callback origins are a fixed list** (`oauth_origins` in the infra root
+  module): the three prod hosts minus admin, the staging branch domain and
+  `http://localhost:3000`. PR previews get no social sign-in, since Cognito
+  takes no wildcards.
+- **One person, one Cognito user.** The pre sign-up trigger links a Google or
+  Apple sign-in to the existing user with the same verified email. Cognito
+  fails that first linked attempt with "Already found an entry for username";
+  the callback retries once and it goes through. Accounts with an authenticator
+  app or in `admins` are refused, because provider sign-in skips Cognito's TOTP
+  check. A password sign-up for an email that only has a Google or Apple user
+  is refused too.
+- `NEXT_PUBLIC_SOCIAL_SIGN_IN` lists the providers whose keys exist, and the
+  buttons render only for those. Without `NEXT_PUBLIC_COGNITO_DOMAIN` there are
+  none, which is local dev unless `.env.local` sets it.
+- `connect-src` must keep `https://*.auth.ap-southeast-2.amazoncognito.com`,
+  or the browser blocks the token exchange and the callback hangs.
+
 ### MFA
 
 - **TOTP authenticator app** via Cognito (OPTIONAL, software token MFA). Admin seed user has MFA preference enabled. Set up, turned off and password changes go through `app/api/user/mfa/route.ts`; turning it off must tell Cognito, not only flip `User.mfaEnabled`.
-- **No passkeys.** They are out of scope for the MVP: sign-in is password (`USER_SRP_AUTH`) plus the optional authenticator app, and the Cognito client allows no other flow.
+- **No passkeys.** They are out of scope for the MVP: sign-in is password (`USER_SRP_AUTH`) plus the optional authenticator app, or Google / Apple (below).
 - **Sign out everywhere** in Login & security revokes every session for the account (`signOut({ global: true })`), not just this browser's.
 - The setup QR code is drawn in the browser with `qrcode`. Never put the TOTP secret in a URL sent to another service.
 

@@ -10,6 +10,10 @@ export type ServerSession = {
   groups:       string[];
   phoneNumber?: string;
   birthdate?:   string;
+  // From the id token. name is set by Google and Apple; emailTrusted is false
+  // only for a Google or Apple sign-in whose provider did not verify the email.
+  name?:         string;
+  emailTrusted?: boolean;
 };
 
 export type UserSession = {
@@ -109,6 +113,8 @@ export async function getServerSession(): Promise<ServerSession | null> {
     // sub (a UUID), not an address. Fall back to LastAuthUser only if it is
     // itself an email (pools where the username is the email).
     let email = lastAuthUser.includes("@") ? lastAuthUser : "";
+    let name: string | undefined;
+    let emailTrusted = true;
     const idToken = (
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.idToken`)?.value ??
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.idToken`)?.value
@@ -119,12 +125,20 @@ export async function getServerSession(): Promise<ServerSession | null> {
         if (typeof idPayload.email === "string" && idPayload.email) {
           email = idPayload.email;
         }
+        if (typeof idPayload.name === "string" && idPayload.name.trim()) {
+          name = idPayload.name.trim();
+        }
+        // Only Google and Apple users carry `identities`. Password users are
+        // left alone: seeded accounts are not marked email_verified.
+        if (idPayload.identities && String(idPayload.email_verified) !== "true") {
+          emailTrusted = false;
+        }
       } catch {
         // Keep the fallback if the id token can't be verified.
       }
     }
 
-    return { sub, email, groups, phoneNumber, birthdate };
+    return { sub, email, groups, phoneNumber, birthdate, name, emailTrusted };
   } catch {
     return null;
   }
@@ -140,18 +154,22 @@ export async function getUserSession(): Promise<UserSession | null> {
       return { sub: existing.id, email: existing.email, name: existing.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
     }
 
+    // Re-pointing an existing row at this sub hands that person's account to
+    // whoever holds the session, so it needs an email the provider vouched for.
+    if (cognitoSession.email && cognitoSession.emailTrusted === false) return null;
+
     if (cognitoSession.email) {
       const user = await prisma.user.upsert({
         where: { email: cognitoSession.email },
         update: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
-        create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
+        create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email, name: cognitoSession.name },
         select: { id: true, email: true, name: true },
       });
       return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
     }
 
     const user = await prisma.user.create({
-      data: { cognitoSub: cognitoSession.sub, email: cognitoSession.sub },
+      data: { cognitoSub: cognitoSession.sub, email: cognitoSession.sub, name: cognitoSession.name },
       select: { id: true, email: true, name: true },
     });
     return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };

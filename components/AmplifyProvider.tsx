@@ -2,6 +2,10 @@
 
 import { useEffect } from "react";
 import { Amplify } from "aws-amplify";
+// Finishes a Google or Apple sign-in when the browser lands on /auth/callback.
+// Next loads each route as its own page, so without this the code in the URL
+// is never exchanged for tokens.
+import "aws-amplify/auth/enable-oauth-listener";
 import { CookieStorage } from "aws-amplify/utils";
 import { cognitoUserPoolsTokenProvider } from "aws-amplify/auth/cognito";
 import { amplifyConfig } from "@/lib/amplify-config";
