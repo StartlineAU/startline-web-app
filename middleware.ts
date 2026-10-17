@@ -42,6 +42,11 @@ const ADMIN_PROTECTED = [
 // them through or the only route into the product dead-ends (issue #302).
 const ORGANISER_SIGNUP_PATHS = ["/organiser-setup", "/api/organiser/setup"];
 
+// Readable on the apex domain even while it shows the waitlist: the legal
+// pages have to be public before launch, and the waitlist footer links to
+// them. They are served from app/waitlist/(legal), which drops the site header.
+const LEGAL_PATHS = ["/terms", "/privacy", "/cookies"];
+
 async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> {
   const lastAuthUser = req.cookies.get(
     `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
@@ -142,6 +147,9 @@ export async function middleware(req: NextRequest) {
         || pathname.startsWith("/images")
         || pathname.startsWith("/favicon")) {
       return NextResponse.next();
+    }
+    if (LEGAL_PATHS.includes(pathname)) {
+      return NextResponse.rewrite(new URL(`/waitlist${pathname}`, req.url));
     }
     return NextResponse.rewrite(new URL("/waitlist", req.url));
   }

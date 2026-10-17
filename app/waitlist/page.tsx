@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { WaitlistForm } from "./WaitlistForm";
+import { LegalFooter } from "./LegalFooter";
 
 export default function WaitlistPage() {
   return (
@@ -35,6 +36,7 @@ export default function WaitlistPage() {
           <WaitlistForm />
         </div>
       </div>
+      <LegalFooter />
     </div>
   );
 }
