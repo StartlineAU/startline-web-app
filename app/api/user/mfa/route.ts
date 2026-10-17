@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { CognitoIdentityProviderClient, AssociateSoftwareTokenCommand, VerifySoftwareTokenCommand, SetUserMFAPreferenceCommand, ChangePasswordCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AssociateSoftwareTokenCommand, VerifySoftwareTokenCommand, SetUserMFAPreferenceCommand, ChangePasswordCommand } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
+import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
-
-const region = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
-const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? "";
-const cognito = new CognitoIdentityProviderClient({ region });
 
 const mfaActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("enable") }),
@@ -16,17 +12,6 @@ const mfaActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("verify-setup"), code: z.string().max(10) }),
   z.object({ action: z.literal("change-password"), currentPassword: z.string().min(1), newPassword: z.string().min(1) }),
 ]);
-
-async function getAccessToken(): Promise<string | null> {
-  const store = await cookies();
-  const lastAuthUser = store.get(`CognitoIdentityServiceProvider.${clientId}.LastAuthUser`)?.value;
-  if (!lastAuthUser) return null;
-  return (
-    store.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`)?.value ??
-    store.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`)?.value ??
-    null
-  );
-}
 
 export async function GET() {
   const session = await getServerSession();
@@ -51,18 +36,35 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({ where: { cognitoSub: session.sub } });
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
+  try {
+    return await handleAction(body, user.id);
+  } catch (err) {
+    const { status, error } = describeCognitoError(err);
+    return NextResponse.json({ error }, { status });
+  }
+}
+
+async function handleAction(body: z.infer<typeof mfaActionSchema>, userId: string) {
   switch (body.action) {
     case "enable": {
       await prisma.user.update({
-        where: { id: user.id },
+        where: { id: userId },
         data: { mfaEnabled: true },
       });
       return NextResponse.json({ ok: true });
     }
 
     case "disable": {
+      // The flag alone is only a label: Cognito decides whether sign-in asks
+      // for a code, so it has to be told first.
+      const accessToken = await getAccessToken();
+      if (!accessToken) return NextResponse.json({ error: "No session." }, { status: 401 });
+      await cognito.send(new SetUserMFAPreferenceCommand({
+        AccessToken: accessToken,
+        SoftwareTokenMfaSettings: { Enabled: false, PreferredMfa: false },
+      }));
       await prisma.user.update({
-        where: { id: user.id },
+        where: { id: userId },
         data: { mfaEnabled: false },
       });
       return NextResponse.json({ ok: true });
@@ -90,7 +92,7 @@ export async function POST(req: Request) {
         SoftwareTokenMfaSettings: { Enabled: true, PreferredMfa: true },
       }));
       await prisma.user.update({
-        where: { id: user.id },
+        where: { id: userId },
         data: { mfaEnabled: true },
       });
       return NextResponse.json({ ok: true });

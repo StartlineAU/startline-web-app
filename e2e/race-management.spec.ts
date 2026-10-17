@@ -266,8 +266,10 @@ test.describe("race management", () => {
   test("every wave-builder input has an accessible name", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
-    await page.waitForLoadState("networkidle");
 
+    // No networkidle here: the organiser navbar polls for notifications, so the
+    // network never goes idle and the wait burns the whole test timeout
+    // (AGENTS.md). The click below auto-waits for the button instead.
     await page.getByRole("button", { name: /manage waves/i }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
 

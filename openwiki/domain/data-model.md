@@ -17,7 +17,7 @@ Every platform user has a User record, created on first Cognito login. Users can
 
 ### Organiser (`organisers`)
 A standalone brand entity managed by one or more Users through `OrganiserMember` (see [User Roles & Permissions](user-roles.md)). `createdBy` records the creator (informational). Holds business-specific fields:
-- **Profile**: org name, contact info, ABN, website, social links, bio, logo, cover image, photos
+- **Profile**: org name, contact info, ABN, bio, logo, cover image, photos
 - **Legal**: legal name, Date of Birth (for ATO SERR reporting), insurance declaration
 - **Stripe**: Stripe Connect Express account reference and onboarding completion status
 - **Status**: `APPROVED` or `SUSPENDED`

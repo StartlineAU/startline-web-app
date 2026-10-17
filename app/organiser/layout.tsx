@@ -4,7 +4,7 @@ import PortalFooter from "@/components/PortalFooter";
 import AmplifyProvider from "./AmplifyProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import { SettingsProvider } from "@/context/SettingsContext";
-import SettingsModal from "@/components/organiser/SettingsModal";
+import SettingsModal from "@/components/settings/SettingsModal";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
@@ -15,13 +15,13 @@ export default function OrganiserLayout({ children }: { children: React.ReactNod
   return (
     <AmplifyProvider>
       <AuthProvider>
-        <SettingsProvider>
+        <SettingsProvider defaultSection="organisation">
           <div className="min-h-screen flex flex-col bg-dark-darker">
             <OrganiserNavBar />
             <div className="flex-1">{children}</div>
             <PortalFooter />
           </div>
-          <SettingsModal />
+          <SettingsModal portal="organiser" />
         </SettingsProvider>
       </AuthProvider>
     </AmplifyProvider>
