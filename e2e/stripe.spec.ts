@@ -66,6 +66,63 @@ test.describe("stripe webhook", () => {
   });
 });
 
+// Issue #379: organiser accounts on Accounts v2. These never reach Stripe's
+// account APIs with a real account, so they only pin the route contract.
+test.describe("stripe connect (Accounts v2)", () => {
+  test("POST /api/organiser/stripe/connect requires an organiser", async ({ request }) => {
+    const res = await request.post("/api/organiser/stripe/connect");
+    expect(res.status()).toBe(401);
+  });
+
+  test("POST /api/organiser/stripe/connect answers with a link or a reason", async ({ playwright }) => {
+    const ctx = await playwright.request.newContext({
+      baseURL: "http://localhost:3000",
+      extraHTTPHeaders: { Cookie: "__e2e_bypass=organiser" },
+    });
+    const res = await ctx.post("/api/organiser/stripe/connect");
+    const body = await res.json();
+    // Without Stripe keys (local dev, CI) the route says payments are
+    // unavailable; with test keys it returns a v2 onboarding link.
+    if (res.status() === 200) {
+      expect(body.url).toMatch(/^https:\/\/[a-z.]*stripe\.com\//);
+    } else {
+      expect(res.status()).toBe(503);
+      expect(typeof body.error).toBe("string");
+    }
+    await ctx.dispose();
+  });
+
+  test("GET /api/organiser/stripe/status keeps its response shape", async ({ playwright }) => {
+    const ctx = await playwright.request.newContext({
+      baseURL: "http://localhost:3000",
+      extraHTTPHeaders: { Cookie: "__e2e_bypass=organiser" },
+    });
+    const res = await ctx.get("/api/organiser/stripe/status");
+    if (res.status() === 200) {
+      const body = await res.json();
+      expect(body).toEqual({
+        connected:      expect.any(Boolean),
+        chargesEnabled: expect.any(Boolean),
+        payoutsEnabled: expect.any(Boolean),
+      });
+    } else {
+      // A seeded account id the local key cannot see.
+      expect(res.status()).toBe(503);
+    }
+    await ctx.dispose();
+  });
+
+  // A 404 here means the v2 event destination has nowhere to deliver, and
+  // onboarding then completes only when the organiser comes back from Stripe.
+  test("POST /api/stripe/account-events exists and refuses unsigned events", async ({ request }) => {
+    const res = await request.post("/api/stripe/account-events", {
+      data: { type: "v2.core.account[configuration.recipient].capability_status_updated" },
+    });
+    // 400 = signature checked and refused; 503 = no destination secret here.
+    expect([400, 503]).toContain(res.status());
+  });
+});
+
 test.describe("checkout API — Stripe Connect gate", () => {
   test("POST /api/checkout rejects an event whose organiser is not Stripe-onboarded", async ({ request }) => {
     // seed-event-001's organiser has no stripeAccountId by default, so the

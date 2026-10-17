@@ -41,7 +41,7 @@ the route handlers. `STRIPE_SECRET_KEY` sat on the staging branch, listed in
 the console, and was still undefined at runtime (#363).
 
 So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
 `TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
@@ -51,7 +51,8 @@ Terraform owns the whole app secret and the whole branch variable map, so a
 value added by hand in Secrets Manager or the Amplify console is deleted on a
 later apply. Put the source value in the `startline/ci-bootstrap` secret
 instead: `stripe_secret_key_<env>`, `stripe_webhook_secret_<env>`,
-`stripe_publishable_key_<env>` (`<env>` is `prod` or `staging`),
+`stripe_publishable_key_<env>`, `stripe_account_events_secret_<env>`
+(`<env>` is `prod` or `staging`),
 `resend_api_key`, `resend_from`, `abr_guid`. A prod apply fails its
 precondition rather than silently clearing a missing secret key. A new value
 only takes effect after a Terraform apply and then a fresh Amplify build.
@@ -59,6 +60,40 @@ only takes effect after a Terraform apply and then a fresh Amplify build.
 To check an environment without credentials, POST an empty body to
 `/api/stripe/webhook`: `400` means the server has `STRIPE_SECRET_KEY`, `500`
 means it does not.
+
+## Stripe Connect (Accounts v2)
+
+Organiser accounts are created with Accounts v2 (`POST /v2/core/accounts`),
+not v1 `stripe.accounts.create` (#379). Stripe turns v1 off by default on new
+platforms, so the "Accounts v1 support" API policy is no longer needed. All of
+it lives in `lib/stripe-connect.ts`:
+
+| Concern | v2 shape |
+|---|---|
+| Account | `dashboard: "express"`, AU individual, `fees_collector`/`losses_collector` `application`, `merchant.card_payments` + `recipient.stripe_balance.stripe_transfers` |
+| Onboarding link | `v2.core.accountLinks`, `configurations: ["merchant", "recipient"]` |
+| Manual payouts | v2 accounts have no payout schedule; `/v1/balance_settings` with `Stripe-Account` sets `manual`. The connect route does it on every call |
+| Onboarded | `charges_enabled`/`payouts_enabled` are gone. `connectStatusFromAccount`: card payments, transfers and payouts capabilities all `active` |
+
+Accounts created on v1 stay on v1 with no migration. The v2 API reads and
+links them, and the v1 endpoints the rest of the app uses (destination charges,
+`reverse_transfer` refunds, `payouts.create`) take either kind of id.
+
+**v2 account events do not reach `/api/stripe/webhook`.** They are thin events
+delivered by a separate Stripe *event destination* to
+`/api/stripe/account-events`, signed with its own secret
+(`STRIPE_ACCOUNT_EVENTS_SECRET`). The v1 `account.updated` handler stays for v1
+accounts. Per Stripe mode, once:
+
+1. `STRIPE_SECRET_KEY=sk_... pnpm stripe:account-events https://<host>`
+   creates the destination and prints its signing secret (the Dashboard can reveal it again later).
+2. Store it in `startline/ci-bootstrap` as `stripe_account_events_secret_<env>`,
+   run the apply in `startline-infra` (manual there), then rebuild.
+
+Locally, `pnpm stripe:listen:accounts` forwards the same events. Without the
+secret the route answers 503 and onboarding only completes when the organiser
+returns from Stripe to `/organiser/payments/return`. The secret is not in the
+prod precondition list yet, so a missing one does not fail an apply.
 
 ## Uploads
 

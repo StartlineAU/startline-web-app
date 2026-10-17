@@ -43,9 +43,11 @@ Supports:
 - **Single registration**: One participant, direct form fields
 - **Group registration**: Up to 10 participants (`MAX_REGISTRATION_PARTICIPANTS`), optional shared emergency contact, mixed ticket tiers
 
-## Stripe Connect Express
+## Stripe Connect (Accounts v2, Express dashboard)
 
-- Organisers create a Stripe Connect Express account during onboarding
+- Organisers get a Stripe connected account during onboarding, created with Accounts v2 (`lib/stripe-connect.ts`). Older accounts created with v1 keep working unchanged
+- Onboarding status comes from v2 capability statuses (card payments, transfers, payouts), checked by `/api/organiser/stripe/status` and by the v2 event destination at `/api/stripe/account-events`
+- Payouts are manual (set through balance settings) and sent per event by `lib/payout.ts`
 - Startline stores only the `stripeAccountId` reference — bank details are held by Stripe (ToS §3.3)
 - `stripeOnboardingComplete` flag tracks whether the organiser finished onboarding
 - Payouts flow through Connect to the organiser's bank account

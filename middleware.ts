@@ -130,8 +130,10 @@ export async function middleware(req: NextRequest) {
         // Stripe posts to the apex domain, and the rewrite below would answer
         // with the waitlist page: a 200 Stripe reads as delivered while no
         // payment is ever confirmed and no onboarding ever completes. Safe to
-        // expose — the handler verifies the Stripe signature before anything.
+        // expose — both handlers verify the Stripe signature before anything.
+        // account-events is the Accounts v2 event destination (#379).
         || pathname === "/api/stripe/webhook"
+        || pathname === "/api/stripe/account-events"
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")

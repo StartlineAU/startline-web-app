@@ -234,7 +234,7 @@ function BlockingOrganisation({ org, onDeleted }: { org: Blocker; onDeleted: () 
       {confirming ? (
         <div className="space-y-2">
           <p className="text-[12px] text-red-300 leading-relaxed">
-            Delete {org.name}? Its profile, events, merchandise and members are removed for good.
+            Delete {org.name}? Its profile, events and members are removed for good.
           </p>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={remove} disabled={busy} className={dangerBtn}>

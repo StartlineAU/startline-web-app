@@ -16,6 +16,8 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:seed": "npx tsx prisma/seed.ts",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/stripe/webhook",
+    "stripe:listen:accounts": "stripe listen --thin-events \"v2.core.account[configuration.merchant].capability_status_updated,v2.core.account[configuration.recipient].capability_status_updated,v2.core.account[requirements].updated\" --forward-thin-to localhost:3000/api/stripe/account-events",
+    "stripe:account-events": "node scripts/create-stripe-account-events-destination.mjs",
     "stripe:setup": "node scripts/setup-stripe-local.mjs",
     "stripe:validate": "node scripts/validate-stripe-connect.mjs",
     "stripe:lifecycle": "node scripts/validate-stripe-lifecycle.mjs",
