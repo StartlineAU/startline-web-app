@@ -18,10 +18,10 @@ Every platform user has a User record, created on first Cognito login. Users can
 ### Organiser (`organisers`)
 A standalone brand entity managed by one or more Users through `OrganiserMember` (see [User Roles & Permissions](user-roles.md)). `createdBy` records the creator (informational). Holds business-specific fields:
 - **Profile**: org name, contact info, ABN, bio, logo, cover image, photos
-- **Legal**: legal name, Date of Birth (for ATO SERR reporting), insurance declaration
+- **Legal**: legal name, Date of Birth (for ATO SERR reporting). Both are prefilled into Stripe onboarding. Insurance is confirmed per event at publish, not stored on the organiser (`insuranceDeclared` is a legacy column, no longer read or written)
 - **Stripe**: Stripe Connect Express account reference and onboarding completion status
 - **Status**: `APPROVED` or `SUSPENDED`
-- **Verification**: Verified organisers can auto-publish events; unverified ones need admin approval
+- **Verification**: Verified organisers can auto-publish events; unverified ones need admin approval. A paid Startline-registration event also needs an ABN to auto-publish, and an ABN plus finished Stripe onboarding to be approved. Free and external events need neither (`takesPayments` in `lib/event-approval.ts`)
 
 ### OrganiserMember (`organiser_members`)
 Junction granting a User a role on an Organiser. `role ∈ { OWNER, MANAGER }`, `@@unique([organiserId, userId])`. A user may hold memberships on up to 5 organisers; each organiser has exactly one Owner (enforced in app logic).

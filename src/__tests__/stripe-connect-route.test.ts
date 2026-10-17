@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   requireOrganiser: vi.fn(),
   organiser: { findUnique: vi.fn(), update: vi.fn() },
   createAccount: vi.fn(),
+  retrieveAccount: vi.fn(),
+  updateAccount: vi.fn(),
   createAccountLink: vi.fn(),
   updateBalanceSettings: vi.fn(),
   configured: { value: true },
@@ -18,7 +20,12 @@ vi.mock("@/lib/prisma", () => ({ default: { organiser: mocks.organiser } }));
 vi.mock("@/lib/stripe", () => ({
   isStripeConfigured: () => mocks.configured.value,
   getStripe: () => ({
-    v2: { core: { accounts: { create: mocks.createAccount }, accountLinks: { create: mocks.createAccountLink } } },
+    v2: {
+      core: {
+        accounts:     { create: mocks.createAccount, retrieve: mocks.retrieveAccount, update: mocks.updateAccount },
+        accountLinks: { create: mocks.createAccountLink },
+      },
+    },
     balanceSettings: { update: mocks.updateBalanceSettings },
   }),
 }));
@@ -49,6 +56,8 @@ describe("POST /api/organiser/stripe/connect", () => {
     mocks.createAccount.mockResolvedValue({ id: "acct_new" });
     mocks.createAccountLink.mockResolvedValue({ url: "https://connect.stripe.com/setup/e/acct_new" });
     mocks.updateBalanceSettings.mockResolvedValue({});
+    mocks.retrieveAccount.mockResolvedValue({ id: "acct_old", identity: { individual: null } });
+    mocks.updateAccount.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -100,6 +109,98 @@ describe("POST /api/organiser/stripe/connect", () => {
       where: { id: ORGANISER },
       data:  { stripeAccountId: "acct_new", stripeOnboardingComplete: false },
     });
+  });
+
+  // The Payments page asks for these first; Stripe's form opens with them
+  // instead of asking again.
+  it("creates the account with the legal name and date of birth filled in", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: null, email: "hugo@example.com",
+      legalName: "Hugo Van Der Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
+    });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(mocks.createAccount).toHaveBeenCalledWith(expect.objectContaining({
+      identity: {
+        country:     "AU",
+        entity_type: "individual",
+        individual:  {
+          given_name:    "Hugo Van Der",
+          surname:       "Berg",
+          date_of_birth: { day: 7, month: 4, year: 1990 },
+        },
+      },
+    }));
+  });
+
+  it("makes the account without the prefill when Stripe refuses it", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: null, email: "hugo@example.com",
+      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
+    });
+    mocks.createAccount
+      .mockRejectedValueOnce(stripeError("parameter_invalid_empty"))
+      .mockResolvedValueOnce({ id: "acct_new" });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(mocks.createAccount).toHaveBeenCalledTimes(2);
+    expect(mocks.createAccount).toHaveBeenLastCalledWith(expect.objectContaining({
+      identity: { country: "AU", entity_type: "individual" },
+    }));
+  });
+
+  it("fills in what an unfinished existing account is missing, and nothing it holds", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: "acct_old", email: "hugo@example.com",
+      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
+    });
+    // Typed into Stripe's own form on an earlier visit: Stripe's copy wins.
+    mocks.retrieveAccount.mockResolvedValue({
+      id: "acct_old", identity: { individual: { given_name: "Hugh", surname: "Berg" } },
+    });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(mocks.retrieveAccount).toHaveBeenCalledWith("acct_old", { include: ["identity"] });
+    expect(mocks.updateAccount).toHaveBeenCalledWith("acct_old", {
+      identity: { individual: { date_of_birth: { day: 7, month: 4, year: 1990 } } },
+    });
+  });
+
+  it("leaves a finished account alone", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: "acct_old", email: "hugo@example.com",
+      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: true,
+    });
+    const POST = await loadRoute();
+
+    await POST();
+
+    expect(mocks.retrieveAccount).not.toHaveBeenCalled();
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
+  });
+
+  it("still hands out the link when the prefill fails", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: "acct_old", email: "hugo@example.com",
+      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
+    });
+    mocks.updateAccount.mockRejectedValue(stripeError("parameter_invalid_empty"));
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ url: "https://connect.stripe.com/setup/e/acct_new" });
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("prefill"), expect.anything());
   });
 
   it("reuses an existing account", async () => {

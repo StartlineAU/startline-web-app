@@ -185,9 +185,11 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="4.2" title="Stripe">
           <p>
-            Stripe processes payments, refunds and payouts. Organisers give their bank account and
-            identity details directly to Stripe, which handles them under its own privacy policy.
-            Startline keeps only a reference to the organiser’s Stripe account.
+            Stripe processes payments, refunds and payouts. When an organiser connects Stripe, we
+            pass Stripe the legal name and date of birth they gave us (2.4), so they do not have to
+            enter them twice. Organisers give their bank account and other identity details
+            directly to Stripe, which handles them under its own privacy policy. Startline does not
+            receive those, and keeps only a reference to the organiser’s Stripe account.
           </p>
         </Clause>
         <Clause n="4.3" title="Service providers">
