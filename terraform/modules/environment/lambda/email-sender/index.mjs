@@ -184,14 +184,13 @@ function footer() {
           <a href="https://www.strava.com/clubs/startlineau" style="color:#6E737B;text-decoration:none;">Strava</a>
         </p>
         <p style="margin:0 0 6px;font-family:'Inter',Arial,sans-serif;font-size:12px;color:#8A8F98;">
-          Need help? <a href="mailto:support@startline.com.au" style="color:#8A8F98;">support@startline.com.au</a>
+          Need help? <a href="mailto:admin@startlineau.com" style="color:#8A8F98;">admin@startlineau.com</a>
         </p>
         <p style="margin:0 0 16px;font-family:'Inter',Arial,sans-serif;font-size:11px;color:#6E737B;">
           <a href="#" style="color:#6E737B;text-decoration:none;">Unsubscribe</a> &middot; <a href="#" style="color:#6E737B;text-decoration:none;">Manage Preferences</a>
         </p>
         <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:11px;color:#6E737B;line-height:1.7;">
-          &copy; 2026 Startline Pty Ltd &middot; ABN 12 345 678 901<br>
-          PO Box 1234, Sydney NSW 2000, Australia
+          Startline Pty Ltd &middot; ABN 85 775 067 904
         </p>
         <p style="margin:4px 0 0;font-family:'Inter',Arial,sans-serif;font-size:10px;color:#6E737B;">
           This is a transactional email. You cannot unsubscribe from account and event notifications.
