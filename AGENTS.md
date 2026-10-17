@@ -31,24 +31,34 @@ Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
 
 ### Runtime vs build-time variables
 
-`next.config.ts` sets `output: "standalone"` and the Amplify build ships only
-`.next`, so the `.env.production` that preBuild writes from Secrets Manager
-never reaches the server. Secrets Manager therefore covers build time only.
+The running server reads its environment from `.env.production`. preBuild
+writes that file from the `startline/<env>/app` secret, and because
+`next.config.ts` sets `output: "standalone"`, `pnpm build` copies it into
+`.next/standalone`, which is inside the artefact Amplify ships.
 
-* `NEXT_PUBLIC_*` is fine there, because Next inlines it during `pnpm build`.
-* Anything the server reads at runtime (`STRIPE_SECRET_KEY`,
-  `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
-  `TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
-  `DATABASE_URL`, `UPLOADS_BUCKET`, `CDN_URL`) has to be an Amplify **branch**
-  environment variable. Terraform sets those in
-  `terraform/modules/environment/main.tf`.
+An Amplify **branch** environment variable is visible to the build and not to
+the route handlers. `STRIPE_SECRET_KEY` sat on the staging branch, listed in
+the console, and was still undefined at runtime (#363).
 
-Terraform owns the whole branch variable map, so a value added by hand in the
-Amplify console is deleted on the next apply. Add new runtime secrets to the
-`startline/ci-bootstrap` secret instead — `stripe_secret_key_prod`,
-`stripe_secret_key_staging`, `stripe_webhook_secret_prod`,
-`stripe_webhook_secret_staging`, `resend_api_key`, `resend_from`, `abr_guid`.
-A prod apply fails its precondition rather than silently clearing a missing one.
+So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
+`TURNSTILE_SECRET_KEY`, `GUEST_EMAIL_VERIFICATION_SECRET`, `ABR_GUID`,
+`DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
+secrets in both places from one list, `runtime_secrets` in
+`terraform/modules/environment/main.tf`; add a new one there.
+
+Terraform owns the whole app secret and the whole branch variable map, so a
+value added by hand in Secrets Manager or the Amplify console is deleted on a
+later apply. Put the source value in the `startline/ci-bootstrap` secret
+instead: `stripe_secret_key_<env>`, `stripe_webhook_secret_<env>`,
+`stripe_publishable_key_<env>` (`<env>` is `prod` or `staging`),
+`resend_api_key`, `resend_from`, `abr_guid`. A prod apply fails its
+precondition rather than silently clearing a missing secret key. A new value
+only takes effect after a Terraform apply and then a fresh Amplify build.
+
+To check an environment without credentials, POST an empty body to
+`/api/stripe/webhook`: `400` means the server has `STRIPE_SECRET_KEY`, `500`
+means it does not.
 
 ## Uploads
 

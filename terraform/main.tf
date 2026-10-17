@@ -193,17 +193,16 @@ module "env" {
 
   cognito_deletion_protection = each.value.cognito_deletion_protection
 
-  # Runtime server-side secrets. These land on the Amplify branch environment,
-  # not in Secrets Manager, because the build writes Secrets Manager into
-  # .env.production and the standalone artefact never carries that file. Stripe
-  # is per-environment (live keys on prod, test keys on staging); the rest are
-  # shared. A missing prod key fails the plan in the module rather than silently
-  # clearing the value the console currently holds.
-  resend_api_key        = try(local.bootstrap.resend_api_key, "")
-  resend_from           = try(local.bootstrap.resend_from, "")
-  stripe_secret_key     = try(local.bootstrap["stripe_secret_key_${each.key}"], "")
-  stripe_webhook_secret = try(local.bootstrap["stripe_webhook_secret_${each.key}"], "")
-  abr_guid              = try(local.bootstrap.abr_guid, "")
+  # Runtime server-side secrets, from startline/ci-bootstrap. The module puts
+  # them on the Amplify branch and in the app secret. Stripe is per-environment
+  # (live keys on prod, test keys on staging); the rest are shared. A missing
+  # prod key fails the plan in the module rather than silently clearing it.
+  resend_api_key         = try(local.bootstrap.resend_api_key, "")
+  resend_from            = try(local.bootstrap.resend_from, "")
+  stripe_secret_key      = try(local.bootstrap["stripe_secret_key_${each.key}"], "")
+  stripe_webhook_secret  = try(local.bootstrap["stripe_webhook_secret_${each.key}"], "")
+  stripe_publishable_key = try(local.bootstrap["stripe_publishable_key_${each.key}"], "")
+  abr_guid               = try(local.bootstrap.abr_guid, "")
 
   # NEXT_PUBLIC_SITE_URL has to resolve: event share links, check-in QR codes,
   # email buttons and the organiser sign-up gate are all absolute URLs built
