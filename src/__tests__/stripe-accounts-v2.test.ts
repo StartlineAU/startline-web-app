@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type Stripe from "stripe";
 import { NextRequest } from "next/server";
-import { connectStatusFromAccount, isOnboardingComplete } from "@/lib/stripe-connect";
+import { connectStatusFromAccount, individualPrefill, isOnboardingComplete } from "@/lib/stripe-connect";
 
 // Issue #379: organiser accounts on Accounts v2. charges_enabled and
 // payouts_enabled are gone; onboarding is read from capability statuses, by the
@@ -45,6 +45,30 @@ function account(
     },
   } as unknown as Stripe.V2.Core.Account;
 }
+
+describe("individualPrefill", () => {
+  it("splits the surname off the end of the legal name", () => {
+    expect(individualPrefill("Nathan Sweet", null)).toEqual({ given_name: "Nathan", surname: "Sweet" });
+    expect(individualPrefill("  Mary  Jane   Watson ", null)).toEqual({ given_name: "Mary Jane", surname: "Watson" });
+  });
+
+  it("leaves a one-word name for Stripe to ask about", () => {
+    expect(individualPrefill("Cher", null)).toEqual({});
+    expect(individualPrefill(null, null)).toEqual({});
+  });
+
+  it("passes on a real date of birth for an adult", () => {
+    expect(individualPrefill(null, "1990-04-07")).toEqual({ date_of_birth: { day: 7, month: 4, year: 1990 } });
+  });
+
+  it("drops a date that does not exist, is malformed or belongs to a minor", () => {
+    expect(individualPrefill(null, "1990-02-30")).toEqual({});
+    expect(individualPrefill(null, "07/04/1990")).toEqual({});
+    expect(individualPrefill(null, "2999-01-01")).toEqual({});
+    const tenYearsAgo = `${new Date().getUTCFullYear() - 10}-01-01`;
+    expect(individualPrefill(null, tenYearsAgo)).toEqual({});
+  });
+});
 
 describe("connectStatusFromAccount", () => {
   it("is complete when card payments, transfers and payouts are all active", () => {

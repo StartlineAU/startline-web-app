@@ -31,6 +31,8 @@ const EVENT_SELECT = {
   rejectionReason: true,
   reviewedAt:      true,
   registrationType: true,
+  // With registrationType, decides whether the event takes payments at all.
+  waves:           true,
   organiser: {
     select: {
       id:          true,

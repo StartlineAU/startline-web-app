@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { writeAuditLog } from "@/lib/audit";
-import { hasAbn } from "@/lib/abn";
+import { approvalBlocker } from "@/lib/event-approval";
 import { z } from "zod";
 
 const bulkActionSchema = z.object({
@@ -47,18 +47,12 @@ export async function POST(req: NextRequest) {
         const candidates = await prisma.event.findMany({
           where:  { id: { in: ids }, status: "PENDING" },
           select: {
-            id: true, title: true, registrationType: true,
+            id: true, title: true, registrationType: true, waves: true,
             organiser: { select: { abn: true, stripeOnboardingComplete: true } },
           },
         });
-        const blockedFor = (e: (typeof candidates)[number]): string | null => {
-          if (e.registrationType !== "startline") return null;
-          if (!hasAbn(e.organiser.abn)) return "No ABN on file";
-          if (!e.organiser.stripeOnboardingComplete) return "Stripe onboarding incomplete";
-          return null;
-        };
         blocked = candidates
-          .map((e) => ({ id: e.id, title: e.title, reason: blockedFor(e) }))
+          .map((e) => ({ id: e.id, title: e.title, reason: approvalBlocker(e) }))
           .filter((e): e is { id: string; title: string; reason: string } => e.reason !== null);
         const blockedIds = new Set(blocked.map((e) => e.id));
         approvable = ids.filter((id) => !blockedIds.has(id));

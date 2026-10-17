@@ -106,7 +106,8 @@ export default function OrganiserNavBar() {
   useEffect(() => {
     if (status === "authenticated") startTransition(() => fetchOrgInfo());
     // profileSavedAt: the settings menu changed the name or logo shown here.
-  }, [status, fetchOrgInfo, profileSavedAt]);
+    // user?.sub: a sign-in to another account, in this tab or another one.
+  }, [status, user?.sub, fetchOrgInfo, profileSavedAt]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -125,7 +126,7 @@ export default function OrganiserNavBar() {
     startTransition(() => fetchNotifications());
     const interval = setInterval(() => startTransition(() => fetchNotifications()), 30_000);
     return () => clearInterval(interval);
-  }, [status, fetchNotifications]);
+  }, [status, user?.sub, fetchNotifications]);
 
   useEffect(() => {
     if (!isUserOpen && !notifOpen && !isNavOpen) return;

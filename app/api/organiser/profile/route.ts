@@ -16,7 +16,6 @@ const organiserProfileSchema = z.object({
   coverPosition: z.string().max(100).nullable().optional(),
   photos: z.array(z.string().max(3000)).optional(),
   legalName: z.string().max(300).nullable().optional(),
-  insuranceDeclared: z.boolean().optional(),
   dob: z.string().max(20).nullable().optional(),
 });
 
@@ -47,7 +46,7 @@ export async function GET() {
         orgName: true, contactName: true, contactEmail: true, phone: true,
         abn: true,
         bio: true, logoUrl: true, logoPosition: true, coverImageUrl: true, coverPosition: true, photos: true,
-        legalName: true, insuranceDeclared: true, dob: true,
+        legalName: true, dob: true,
         stripeAccountId: true, stripeOnboardingComplete: true,
         notifyManagers: true,
         notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
@@ -84,7 +83,7 @@ export async function PUT(req: NextRequest) {
     orgName, contactName, contactEmail, phone,
     abn, bio,
     logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
-    legalName, insuranceDeclared, dob,
+    legalName, dob,
   } = parsed.data;
 
   if (!orgName || !contactName || !phone || !contactEmail) {
@@ -94,10 +93,10 @@ export async function PUT(req: NextRequest) {
     );
   }
 
-  // Legal identity fields (ABN, legal name, DOB, insurance) are owner-level:
-  // they underpin Stripe payouts and liability. MANAGERs may edit the rest.
+  // Legal identity fields (ABN, legal name, DOB) are owner-level: they
+  // underpin Stripe payouts and tax reporting. MANAGERs may edit the rest.
   const hasIdentityFields = abn !== undefined || legalName !== undefined ||
-    dob !== undefined || insuranceDeclared !== undefined;
+    dob !== undefined;
   if (hasIdentityFields && session.role !== "OWNER") {
     return NextResponse.json(
       { error: "Only an Owner can update legal identity details." },
@@ -113,7 +112,6 @@ export async function PUT(req: NextRequest) {
         abn, bio,
         logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
         ...(legalName !== undefined        ? { legalName }         : {}),
-        ...(insuranceDeclared !== undefined ? { insuranceDeclared } : {}),
         ...(dob !== undefined         ? { dob }              : {}),
       },
     });

@@ -428,4 +428,58 @@ test.describe("new listing wizard: leaving for Payments without an ABN", () => {
     });
     expect(draft).toMatchObject({ title: "Payments Prompt Classic", status: "DRAFT" });
   });
+
+  // The ABN is for tax reporting on paid entries and Stripe is where takings are
+  // paid out. A free event takes no money, so neither holds it up: it used to
+  // go to review, where no admin could approve it without both.
+  const listing = (title: string, price: string) => ({
+    title,
+    discipline: "Running",
+    eventDate: "2027-03-14",
+    startTime: "07:00",
+    endTime: "10:00",
+    venue: "Albert Park",
+    city: "Melbourne",
+    state: "VIC",
+    format: "Individual",
+    level: "All levels",
+    registrationType: "startline",
+    waves: [{ label: "General", price, closes: "", startTime: "" }],
+  });
+
+  test("a free event publishes straight away without an ABN", async ({ page }) => {
+    const res = await page.request.post("/api/organiser/events", {
+      data: { ...listing("Free Fun Run E2E", "0"), submit: true },
+    });
+    expect(res.ok()).toBe(true);
+    const body = await res.json();
+    expect(body.status).toBe("APPROVED");
+    expect(body.abnRequired).toBeUndefined();
+  });
+
+  test("a paid event without an ABN still waits for review", async ({ page }) => {
+    const res = await page.request.post("/api/organiser/events", {
+      data: { ...listing("Paid Half E2E", "45"), submit: true },
+    });
+    expect(res.ok()).toBe(true);
+    const body = await res.json();
+    expect(body.status).toBe("PENDING");
+    expect(body.abnRequired).toBe(true);
+  });
+
+  test("the review step does not warn about the ABN on a free event", async ({ page }) => {
+    const res = await page.request.post("/api/organiser/events", {
+      data: { ...listing("Free Draft E2E", "0"), submit: false },
+    });
+    const { id } = await res.json();
+
+    // Same hydration race as the categories test above: retry until the review
+    // step shows the saved event.
+    await expect(async () => {
+      await page.goto(`/organiser/new-listing?id=${id}`);
+      await page.locator("button", { hasText: /^05/ }).first().click();
+      await expect(page.getByText("Free Draft E2E").first()).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 30000 });
+    await expect(page.getByTestId("abn-notice")).toHaveCount(0);
+  });
 });

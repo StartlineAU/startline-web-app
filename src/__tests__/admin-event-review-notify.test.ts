@@ -39,17 +39,29 @@ const pendingEvent = {
   organiser,
 };
 
+const paidWaves = [{ label: "General", price: "45" }];
+const freeWaves = [{ label: "General", price: "0" }];
+
 describe("approvalBlocker", () => {
   it("never blocks an external listing", () => {
-    expect(approvalBlocker({ registrationType: "external", organiser: { abn: null, stripeOnboardingComplete: false } })).toBeNull();
+    expect(approvalBlocker({ registrationType: "external", waves: paidWaves, organiser: { abn: null, stripeOnboardingComplete: false } })).toBeNull();
   });
 
   it("names the ABN first, then Stripe", () => {
-    expect(approvalBlocker({ registrationType: "startline", organiser: { abn: null, stripeOnboardingComplete: false } }))
+    expect(approvalBlocker({ registrationType: "startline", waves: paidWaves, organiser: { abn: null, stripeOnboardingComplete: false } }))
       .toBe("No ABN on file");
-    expect(approvalBlocker({ registrationType: "startline", organiser: { abn: organiser.abn, stripeOnboardingComplete: false } }))
+    expect(approvalBlocker({ registrationType: "startline", waves: paidWaves, organiser: { abn: organiser.abn, stripeOnboardingComplete: false } }))
       .toBe("Stripe onboarding incomplete");
-    expect(approvalBlocker({ registrationType: "startline", organiser })).toBeNull();
+    expect(approvalBlocker({ registrationType: "startline", waves: paidWaves, organiser })).toBeNull();
+  });
+
+  it("never blocks a free event, which takes no money", () => {
+    expect(approvalBlocker({ registrationType: "startline", waves: freeWaves, organiser: { abn: null, stripeOnboardingComplete: false } })).toBeNull();
+  });
+
+  it("blocks once any ticket costs something", () => {
+    expect(approvalBlocker({ registrationType: "startline", waves: [...freeWaves, ...paidWaves], organiser: { abn: null, stripeOnboardingComplete: false } }))
+      .toBe("No ABN on file");
   });
 });
 

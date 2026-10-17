@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Check, Mail, Move, Phone, Upload } from "lucide-react";
+import { Mail, Move, Phone, Upload } from "lucide-react";
 import { useSettings } from "@/context/SettingsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { uploadFile } from "@/lib/upload-client";
@@ -147,10 +147,6 @@ export default function OrganisationSection() {
   const [saved,     setSaved]     = useState(false);
   const [error,     setError]     = useState("");
   const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
-  // The insurance declaration is the owner's to make; the API refuses it from
-  // a manager, who sees where it stands.
-  const [insuranceDeclared, setInsuranceDeclared] = useState(false);
-  const [isOwner,           setIsOwner]           = useState(false);
   const logoRef  = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
 
@@ -174,8 +170,6 @@ export default function OrganisationSection() {
           coverImageUrl: data.coverImageUrl ?? "",
           coverPosition: data.coverPosition ?? "50% 50%",
         });
-        setInsuranceDeclared(Boolean(data.insuranceDeclared));
-        setIsOwner(data.role === "OWNER");
         setLoadState("ready");
       })
       .catch(() => { if (!cancelled) setLoadState("failed"); });
@@ -229,7 +223,7 @@ export default function OrganisationSection() {
     try {
       const res = await fetch("/api/organiser/profile", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isOwner ? { ...form, insuranceDeclared } : form),
+        body: JSON.stringify(form),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data.error ?? "Save failed."); return; }
@@ -356,32 +350,6 @@ export default function OrganisationSection() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Insurance */}
-        <div>
-          <GroupHeading>Insurance</GroupHeading>
-          <p className="text-[12px] text-muted leading-relaxed mb-4">
-            To list events on Startline you must hold public liability insurance for each event, at the level your council,
-            venue and permits require, covering the full duration of the event. Many councils ask for{" "}
-            <span className="text-muted-light">$20 million or more</span>, so check yours. Startline does not collect or check
-            certificates: this is your own declaration (Terms of Service §5.3). It is needed before you can connect Stripe
-            for payouts.
-          </p>
-          <label className={`flex items-start gap-3 ${isOwner ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
-            <span className="relative shrink-0 mt-0.5">
-              <input type="checkbox" className="peer sr-only" checked={insuranceDeclared} disabled={!isOwner}
-                onChange={(e) => setInsuranceDeclared(e.target.checked)} />
-              <span className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary ${insuranceDeclared ? "bg-primary border-primary" : "bg-dark-light border-dark-lighter"}`}>
-                {insuranceDeclared && <Check className="w-3.5 h-3.5 text-dark" strokeWidth={3} />}
-              </span>
-            </span>
-            <span className="text-[13px] text-muted leading-relaxed">
-              I declare that I hold public liability insurance at the level each event&apos;s council, venue and permits
-              require, and I will keep it in place for the full duration of every event I list.
-            </span>
-          </label>
-          {!isOwner && <p className="text-[11px] text-muted-dark mt-3">Only the owner can make this declaration.</p>}
         </div>
 
         {error && <ErrorNote>{error}</ErrorNote>}

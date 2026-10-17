@@ -24,11 +24,60 @@ const CONFIGURATIONS = ["merchant", "recipient"] as const;
 // v2 returns null for configurations it is not asked to include.
 const INCLUDE = ["configuration.merchant", "configuration.recipient", "requirements"] as const;
 
-export async function createConnectedAccount(stripe: Stripe, email: string): Promise<Account> {
+/**
+ * The details the Payments page already asked for, shaped for Stripe so its
+ * onboarding opens with them filled in rather than asking a second time. The
+ * organiser still reviews and confirms them there; Stripe does the verifying.
+ * Fields that cannot be read cleanly are left out for Stripe to collect.
+ */
+export type IndividualPrefill = {
+  given_name?:    string;
+  surname?:       string;
+  date_of_birth?: { day: number; month: number; year: number };
+};
+
+export function individualPrefill(legalName: string | null, dob: string | null): IndividualPrefill {
+  const prefill: IndividualPrefill = {};
+
+  // Last word is the surname, the rest the given names. One word is too little
+  // to split, so Stripe asks for both.
+  const words = (legalName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    prefill.given_name = words.slice(0, -1).join(" ");
+    prefill.surname    = words[words.length - 1];
+  }
+
+  // Stored as yyyy-mm-dd. Only a real date for someone at least 18 is passed
+  // on: anything else Stripe would refuse, so it is left for Stripe to ask.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob ?? "");
+  if (m) {
+    const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const date = new Date(Date.UTC(year, month - 1, day));
+    const real = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+    const adult = new Date(Date.UTC(year + 18, month - 1, day)).getTime() <= Date.now();
+    if (real && adult) prefill.date_of_birth = { day, month, year };
+  }
+
+  return prefill;
+}
+
+function isEmpty(prefill: IndividualPrefill): boolean {
+  return Object.keys(prefill).length === 0;
+}
+
+export async function createConnectedAccount(
+  stripe: Stripe,
+  email: string,
+  prefill: IndividualPrefill = {},
+): Promise<Account> {
   return stripe.v2.core.accounts.create({
     contact_email: email,
     dashboard:     "express",
-    identity:      { country: "AU", entity_type: "individual" },
+    identity: {
+      country:     "AU",
+      entity_type: "individual",
+      ...(isEmpty(prefill) ? {} : { individual: prefill }),
+    },
     defaults: {
       currency: "aud",
       // What v1 `type: "express"` implied: the platform pays Stripe's fees and
@@ -41,6 +90,29 @@ export async function createConnectedAccount(stripe: Stripe, email: string): Pro
     },
     include: [...INCLUDE],
   });
+}
+
+/**
+ * Fills in what an existing, unfinished account is still missing. Anything
+ * Stripe already holds is left alone: the organiser may have typed it into
+ * Stripe's own form, and that is the copy Stripe verifies.
+ */
+export async function prefillExistingAccount(
+  stripe: Stripe,
+  accountId: string,
+  prefill: IndividualPrefill,
+): Promise<void> {
+  if (isEmpty(prefill)) return;
+  const account = await stripe.v2.core.accounts.retrieve(accountId, { include: ["identity"] });
+  const held = account.identity?.individual;
+
+  const missing: IndividualPrefill = {};
+  if (prefill.given_name && !held?.given_name) missing.given_name = prefill.given_name;
+  if (prefill.surname && !held?.surname) missing.surname = prefill.surname;
+  if (prefill.date_of_birth && !held?.date_of_birth) missing.date_of_birth = prefill.date_of_birth;
+  if (isEmpty(missing)) return;
+
+  await stripe.v2.core.accounts.update(accountId, { identity: { individual: missing } });
 }
 
 export async function createOnboardingLink(
