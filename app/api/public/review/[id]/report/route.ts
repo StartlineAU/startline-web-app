@@ -4,14 +4,26 @@ import { getUserSession } from "@/lib/amplify-server";
 import { idParams } from "@/lib/schemas";
 import { recordSecurityEvent } from "@/lib/security-event";
 import { rateLimit } from "@/lib/rate-limit";
+import {
+  REVIEW_REPORT_DETAILS_MAX,
+  REVIEW_REPORT_REASONS,
+  formatReviewReportReason,
+} from "@/lib/review-helpers";
+import { notifyAdminsReviewReported } from "@/lib/notify-admins-review-reported";
 import { z } from "zod";
 
-const reportSchema = z.object({
-  reason: z.string().min(1).max(500).optional(),
-});
+const reportSchema = z
+  .object({
+    reason: z.enum(REVIEW_REPORT_REASONS, { message: "Choose a reason for the report." }),
+    details: z.string().trim().max(REVIEW_REPORT_DETAILS_MAX).optional(),
+  })
+  .refine((d) => d.reason !== "Other" || !!d.details, {
+    message: "Tell us what is wrong with this review.",
+  });
 
-// POST /api/public/reviews/[id]/report — flag a review for moderation. Reported
-// reviews are not auto-deleted; they surface in the admin moderation view.
+// POST /api/public/review/[id]/report — flag a review for moderation. Reported
+// reviews are not auto-hidden; they surface in the admin Reported tab and every
+// admin is emailed.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -37,21 +49,28 @@ export async function POST(
 
   const parsed = reportSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid report." }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid report." },
+      { status: 400 },
+    );
   }
+  const reason = formatReviewReportReason(parsed.data.reason, parsed.data.details);
 
   const review = await prisma.review.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
   if (!review) return NextResponse.json({ error: "Review not found." }, { status: 404 });
+  if (review.userId === session.sub) {
+    return NextResponse.json({ error: "You can't report your own review." }, { status: 400 });
+  }
 
   try {
     await prisma.reviewReport.create({
       data: {
         reviewId: id,
         userId: session.sub,
-        reason: parsed.data.reason,
+        reason,
       },
     });
   } catch (err) {
@@ -66,8 +85,11 @@ export async function POST(
     type: "review_reported",
     action: "review_report",
     userId: session.sub,
-    meta: { reviewId: id, reason: parsed.data.reason },
+    meta: { reviewId: id, reason },
   });
+
+  await notifyAdminsReviewReported(id, reason)
+    .catch((err) => console.error("Review report notify failed:", err));
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

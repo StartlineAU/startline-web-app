@@ -81,3 +81,22 @@ export function displayNameFromUser(user: {
   const local = user.email.split("@")[0]?.trim();
   return (local || "Startline user").slice(0, 80);
 }
+
+/** Reasons offered when reporting a review. The API accepts only these. */
+export const REVIEW_REPORT_REASONS = [
+  "Spam or advertising",
+  "Offensive or abusive",
+  "False or misleading",
+  "Not about this organiser",
+  "Other",
+] as const;
+
+export type ReviewReportReason = (typeof REVIEW_REPORT_REASONS)[number];
+
+export const REVIEW_REPORT_DETAILS_MAX = 400;
+
+/** "Reason" or "Reason: details", the shape stored in ReviewReport.reason. */
+export function formatReviewReportReason(reason: ReviewReportReason, details?: string | null): string {
+  const extra = details?.trim();
+  return extra ? `${reason}: ${extra}` : reason;
+}

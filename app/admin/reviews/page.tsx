@@ -2,13 +2,13 @@
 
 import { useState, useEffect, Suspense, startTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Star, Eye, EyeOff, BadgeCheck, Trash2, RefreshCw } from "lucide-react";
+import { Star, Eye, EyeOff, BadgeCheck, Trash2, RefreshCw, Flag, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
 
-type Filter = "all" | "published" | "hidden";
+type Filter = "all" | "reported" | "published" | "hidden";
 
 interface ReviewRow {
   id: string;
@@ -24,10 +24,12 @@ interface ReviewRow {
   isPublished: boolean;
   createdAt: string;
   organiser: { id: string; orgName: string | null; email: string };
+  reports: { id: string; reason: string | null; createdAt: string }[];
 }
 
 const TABS: { filter: Filter; label: string }[] = [
   { filter: "all",       label: "All"       },
+  { filter: "reported",  label: "Reported"  },
   { filter: "published", label: "Published" },
   { filter: "hidden",    label: "Hidden"    },
 ];
@@ -65,7 +67,7 @@ function ReviewCard({
   const [busy, setBusy] = useState(false);
   const organiserName = review.organiser.orgName || review.organiser.email;
 
-  const patch = async (data: { isPublished?: boolean; isVerified?: boolean }) => {
+  const patch = async (data: { isPublished?: boolean; isVerified?: boolean; dismissReports?: true }) => {
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/reviews/${review.id}`, {
@@ -74,8 +76,13 @@ function ReviewCard({
         body:    JSON.stringify(data),
       });
       if (res.ok) {
-        const updated = await res.json() as { isPublished: boolean; isVerified: boolean };
-        onChanged({ ...review, ...updated });
+        const updated = await res.json() as { isPublished: boolean; isVerified: boolean; reportCount: number };
+        onChanged({
+          ...review,
+          isPublished: updated.isPublished,
+          isVerified: updated.isVerified,
+          reports: updated.reportCount === 0 ? [] : review.reports,
+        });
       }
     } finally {
       setBusy(false);
@@ -112,6 +119,11 @@ function ReviewCard({
                 <EyeOff className="w-3.5 h-3.5" /> Hidden
               </span>
             )}
+            {review.reports.length > 0 && (
+              <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-red-400">
+                <Flag className="w-3.5 h-3.5" /> Reported{review.reports.length > 1 ? ` ×${review.reports.length}` : ""}
+              </span>
+            )}
           </div>
 
           <p className="text-[14px] text-muted leading-relaxed mb-2">{review.body}</p>
@@ -122,10 +134,31 @@ function ReviewCard({
             <span className="text-dark-lighter"> · for {organiserName}</span>
             <span className="text-dark-lighter"> · {formatDate(review.createdAt)}</span>
           </div>
+
+          {review.reports.length > 0 && (
+            <ul className="mt-3 space-y-1.5 border-l-2 border-red-500/40 pl-3">
+              {review.reports.map((rep) => (
+                <li key={rep.id} className="text-[13px] text-light">
+                  {rep.reason || "No reason given"}
+                  <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark"> · {formatDate(rep.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap justify-end items-center gap-1.5 shrink-0">
+          {review.reports.length > 0 && (
+            <button
+              onClick={() => patch({ dismissReports: true })}
+              disabled={busy}
+              title="The review is fine: clear its reports"
+              className="flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest border border-dark-lighter text-muted px-2.5 py-2 rounded-md hover:bg-dark-light hover:text-light transition-colors disabled:opacity-40"
+            >
+              <Check className="w-3.5 h-3.5" /> Dismiss
+            </button>
+          )}
           <button
             onClick={() => patch({ isPublished: !review.isPublished })}
             disabled={busy}
@@ -186,12 +219,14 @@ function AdminReviewsContent() {
   };
 
   const handleChanged = (updated: ReviewRow) => {
+    // Swap the row in, then drop it if it no longer belongs on this tab.
+    const belongs = (r: ReviewRow) =>
+      activeFilter === "reported"  ? r.reports.length > 0
+      : activeFilter === "published" ? r.isPublished
+      : activeFilter === "hidden"    ? !r.isPublished
+      : true;
     setReviews((prev) =>
-      activeFilter === "all"
-        ? (prev ?? []).map((r) => (r.id === updated.id ? updated : r))
-        : (prev ?? []).filter((r) =>
-            activeFilter === "published" ? updated.isPublished : !updated.isPublished,
-          ),
+      (prev ?? []).map((r) => (r.id === updated.id ? updated : r)).filter(belongs),
     );
   };
 

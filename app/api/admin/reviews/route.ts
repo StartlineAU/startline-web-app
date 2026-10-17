@@ -4,12 +4,12 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { z } from "zod";
 
 const reviewsQuery = z.object({
-  filter: z.enum(["all", "published", "hidden"]).catch("all"),
+  filter: z.enum(["all", "reported", "published", "hidden"]).catch("all"),
 });
 
 export const dynamic = "force-dynamic";
 
-// GET /api/admin/reviews?filter=all|published|hidden
+// GET /api/admin/reviews?filter=all|reported|published|hidden
 export async function GET(req: NextRequest) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const { filter } = reviewsQuery.parse(Object.fromEntries(searchParams));
   const where =
-    filter === "published" ? { isPublished: true }
+    filter === "reported"  ? { reports: { some: {} } }
+    : filter === "published" ? { isPublished: true }
     : filter === "hidden"  ? { isPublished: false }
     : {};
 
@@ -39,8 +40,17 @@ export async function GET(req: NextRequest) {
         isPublished:  true,
         createdAt:    true,
         organiser: { select: { id: true, orgName: true, email: true } },
+        reports: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, reason: true, createdAt: true },
+        },
       },
     });
+    // The Reported tab leads with the most recently reported review.
+    if (filter === "reported") {
+      const latest = (r: (typeof reviews)[number]) => r.reports[0]?.createdAt.getTime() ?? 0;
+      reviews.sort((a, b) => latest(b) - latest(a));
+    }
     return NextResponse.json(reviews);
   } catch (err) {
     console.error("Admin reviews fetch error:", err);

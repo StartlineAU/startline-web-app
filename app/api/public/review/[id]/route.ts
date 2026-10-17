@@ -72,9 +72,15 @@ export async function PATCH(
         eventId,
         eventTitle,
       },
-      select: { id: true },
+      select: { id: true, reviewerName: true, eventId: true, eventTitle: true },
     });
-    return NextResponse.json({ id: updated.id, ok: true });
+    return NextResponse.json({
+      id: updated.id,
+      reviewerName: updated.reviewerName,
+      eventId: updated.eventId,
+      eventTitle: updated.eventTitle,
+      ok: true,
+    });
   } catch (err) {
     console.error("Review update error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });

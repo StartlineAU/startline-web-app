@@ -502,16 +502,6 @@ function RegisterContent() {
   );
   const requiresEmailVerification = emailsToVerify.length > 0;
 
-  const detailsValid = useMemo(
-    () =>
-      validateParticipants(participants, {
-        groupRegistration: sharedContactActive,
-        sharedEmergencyContact: sharedContactActive ? sharedEmergencyContact : undefined,
-        includeWaiver: false,
-      }).firstMessage === null,
-    [participants, sharedContactActive, sharedEmergencyContact]
-  );
-
   const ticketComplete = useCallback(
     (index: number) =>
       Object.keys(
@@ -1153,7 +1143,10 @@ function RegisterContent() {
                   </button>
                   <div className="flex items-center gap-3">
                     <span className="font-headline text-[10px] uppercase tracking-[0.15em] text-muted-dark">2 / 3</span>
-                    <button type="button" onClick={goToReview} disabled={!detailsValid} className={continueBtnCls}>
+                    {/* Never disabled: goToReview marks every invalid field and
+                        scrolls to the first one. A greyed-out button gave no
+                        reason, e.g. an emergency phone matching the athlete's (#374). */}
+                    <button type="button" onClick={goToReview} className={continueBtnCls}>
                       Continue <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
