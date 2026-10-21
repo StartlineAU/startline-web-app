@@ -47,6 +47,7 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "sk_test_unset", {
+  // @ts-expect-error v23's types only describe the current API; this suite pins the app's version.
   apiVersion: "2026-05-27.dahlia",
 });
 

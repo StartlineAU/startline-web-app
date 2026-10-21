@@ -34,8 +34,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Every account event names the account; a few other event types in the
-  // SDK's union have no related object at all.
-  const accountId = "related_object" in notification ? notification.related_object?.id : undefined;
+  // SDK's union have no related object, and singleton objects have no id.
+  const related = "related_object" in notification ? notification.related_object : undefined;
+  const accountId = related && "id" in related && typeof related.id === "string" ? related.id : undefined;
   if (!HANDLED.has(notification.type) || !accountId) {
     return NextResponse.json({ received: true });
   }
