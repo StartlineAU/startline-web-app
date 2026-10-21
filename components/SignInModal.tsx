@@ -13,6 +13,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
 import PasswordRequirements from "@/components/PasswordRequirements";
+import SocialSignInButtons from "@/components/SocialSignInButtons";
 
 type View = "signin" | "signup" | "onboarding" | "username" | "mfa";
 
@@ -41,9 +42,9 @@ function totpUri(details: unknown): string | null {
 
 export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalProps) {
   // The modal also opens on the organiser portal, where /contact does not exist.
-  const portalHost = usePortalHost();
+  const portalHost  = usePortalHost();
   const contactHref = customerHref("/contact", portalHost);
-  const termsHref = customerHref("/terms", portalHost);
+  const termsHref   = customerHref("/terms", portalHost);
   const privacyHref = customerHref("/privacy", portalHost);
   const router      = useRouter();
   const { refresh } = useAuthContext();
@@ -465,6 +466,9 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("UsernameExistsException")) {
         setError("An account with that email already exists.");
+      } else if (msg.includes("STARTLINE_FEDERATED_ACCOUNT")) {
+        // Refused by the pre sign-up trigger in startline-infra.
+        setError("This email already signs in with Google or Apple. Use that button on the Sign In tab.");
       } else if (msg.includes("InvalidPasswordException")) {
         setError("Password must be " + PASSWORD_POLICY_SUMMARY);
       } else {
@@ -561,6 +565,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
             </div>
 
             {error && <div className={errCls}>{error}</div>}
+
+            <div className="mb-4">
+              <SocialSignInButtons termsHref={termsHref} privacyHref={privacyHref} />
+            </div>
 
             <form onSubmit={handleCheckEmail} className="space-y-4">
               <div>
@@ -830,6 +838,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
             </div>
 
             {error && <div className={errCls}>{error}</div>}
+
+            <div className="mb-4">
+              <SocialSignInButtons termsHref={termsHref} privacyHref={privacyHref} />
+            </div>
 
             <form onSubmit={handleSignUp} className="space-y-3">
               <div>

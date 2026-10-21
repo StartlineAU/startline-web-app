@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
+import { resolveUserRow } from "@/lib/user-session";
 
 export async function POST() {
   const session = await getServerSession();
@@ -9,23 +9,13 @@ export async function POST() {
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { cognitoSub: session.sub } });
-    if (existing) return NextResponse.json({ ok: true });
-
-    if (session.email) {
-      await prisma.user.upsert({
-        where: { email: session.email },
-        update: { cognitoSub: session.sub, email: session.email },
-        create: { cognitoSub: session.sub, email: session.email },
-        select: { id: true },
-      });
-    } else {
-      await prisma.user.create({
-        data: { cognitoSub: session.sub, email: session.sub },
-        select: { id: true },
-      });
+    const user = await resolveUserRow(session.sub, session.email, session.name);
+    // No row means this identity was never linked to the account that holds the
+    // email. The caller is signed in to Cognito but has no app account, which is
+    // a refusal, not an error they can fix by retrying.
+    if (!user) {
+      return NextResponse.json({ error: "No account for this identity." }, { status: 403 });
     }
-
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("User session upsert error:", err);
