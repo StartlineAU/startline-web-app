@@ -267,6 +267,18 @@ describe("POST /api/stripe/account-events", () => {
     expect(mocks.organiser.updateMany).not.toHaveBeenCalled();
   });
 
+  it("acknowledges a singleton related object without an account id", async () => {
+    mocks.parseEventNotification.mockReturnValue({
+      type: "v2.core.account[requirements].updated",
+      related_object: { type: "v2.core.account", url: "" },
+    });
+
+    const res = await post();
+
+    expect(res.status).toBe(200);
+    expect(mocks.retrieveAccount).not.toHaveBeenCalled();
+  });
+
   it("acknowledges event types it does not handle without calling Stripe", async () => {
     notify("v2.core.event_destination.ping");
 

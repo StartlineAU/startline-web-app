@@ -125,6 +125,7 @@ export async function createOnboardingLink(
     use_case: {
       type: "account_onboarding",
       account_onboarding: {
+        // @ts-expect-error v23 types describe the newer API; the pinned version still accepts this.
         configurations: [...CONFIGURATIONS],
         return_url:     urls.returnUrl,
         refresh_url:    urls.refreshUrl,
