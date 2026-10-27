@@ -141,8 +141,10 @@ export async function middleware(req: NextRequest) {
         || pathname === "/api/stripe/account-events"
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         // Google and Apple hand back here from /organiser-setup, the one page
-        // that can sign people in while the apex is in waitlist mode.
+        // that can sign people in while the apex is in waitlist mode, and the
+        // onboarding step a first provider sign-up still owes has to be reachable.
         || pathname === "/auth/callback"
+        || pathname === "/auth/onboarding"
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")
         || pathname.startsWith("/favicon")) {

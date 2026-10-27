@@ -12,6 +12,7 @@ import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSi
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
+import { calcAge, MIN_AGE } from "@/lib/age";
 import PasswordRequirements from "@/components/PasswordRequirements";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
 
@@ -21,15 +22,6 @@ interface SignInModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-}
-
-function calcAge(dobStr: string): number {
-  const dob   = new Date(dobStr);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-  return age;
 }
 
 function totpUri(details: unknown): string | null {
@@ -437,8 +429,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     }
 
     const age = calcAge(isoDate);
-    if (age < 18)  { setError("You must be 18 or older to create an account. A parent or guardian can enter you into events."); return; }
-    if (age > 120) { setError("Please enter a valid date of birth."); return; }
+    if (age === null || age > 120) { setError("Please enter a valid date of birth."); return; }
+    if (age < MIN_AGE) { setError(`You must be ${MIN_AGE} or older to create an account. A parent or guardian can enter you into events.`); return; }
 
     if (!acceptedTerms) { setError("Please agree to the Terms of Service to continue."); return; }
 
@@ -469,6 +461,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       } else if (msg.includes("STARTLINE_FEDERATED_ACCOUNT")) {
         // Refused by the pre sign-up trigger in startline-infra.
         setError("This email already signs in with Google or Apple. Use that button on the Sign In tab.");
+      } else if (msg.includes("STARTLINE_LOOKUP_FAILED")) {
+        // The trigger could not check for an existing account, so it refused
+        // rather than risk creating a second one.
+        setError("We couldn't check your account just now. Please try again in a moment.");
       } else if (msg.includes("InvalidPasswordException")) {
         setError("Password must be " + PASSWORD_POLICY_SUMMARY);
       } else {
