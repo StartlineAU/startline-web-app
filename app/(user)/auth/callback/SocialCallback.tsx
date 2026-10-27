@@ -42,10 +42,31 @@ export default function SocialCallback({ failure }: { failure: string | null }) 
         // Waits for the code exchange the OAuth listener started.
         const session = await fetchAuthSession();
         if (!session.tokens?.accessToken) throw new Error("No session");
-        // Registers the Prisma row the way the password flow does, so the
-        // account exists whichever page they land on next.
-        await fetch("/api/user/auth/session", { method: "POST" });
+
+        // Registers the Prisma row the way the password flow does. A refusal
+        // here means this identity was never linked to the account holding the
+        // email, so stop — signing them into the app would leave them signed in
+        // to an account that does not exist.
+        const res = await fetch("/api/user/auth/session", { method: "POST" });
+        if (!res.ok) {
+          setError(
+            res.status === 403
+              ? "This sign-in isn't linked to a Startline account. Sign in with your email and password, or contact support."
+              : "We couldn't finish signing you in. Please try again.",
+          );
+          return;
+        }
+
+        const { needsOnboarding } = (await res.json().catch(() => ({}))) as { needsOnboarding?: boolean };
         await refresh();
+
+        // First sign-up through a provider never saw the modal's onboarding
+        // step, so it owes the age gate and terms before the app opens.
+        if (needsOnboarding) {
+          window.location.replace(`/auth/onboarding?returnTo=${encodeURIComponent(plan.returnTo)}`);
+          return;
+        }
+
         // A full load, so the server sees the new cookies on the next page.
         window.location.replace(plan.returnTo);
       } catch {

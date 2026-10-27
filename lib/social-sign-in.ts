@@ -103,6 +103,9 @@ export function socialSignInErrorMessage(description: string): string {
   if (description.includes("STARTLINE_FEDERATED_ACCOUNT")) {
     return "This email already signs in with Google or Apple. Use that button instead.";
   }
+  if (description.includes("STARTLINE_LOOKUP_FAILED")) {
+    return "We couldn't check your account just now. Please try again in a moment.";
+  }
   if (/access_denied|cancel/i.test(description)) {
     return "Sign-in was cancelled.";
   }

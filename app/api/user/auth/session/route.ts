@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
 import { resolveUserRow } from "@/lib/user-session";
+import { needsProfileOnboarding } from "@/lib/onboarding";
 
 export async function POST() {
   const session = await getServerSession();
@@ -16,7 +18,18 @@ export async function POST() {
     if (!user) {
       return NextResponse.json({ error: "No account for this identity." }, { status: 403 });
     }
-    return NextResponse.json({ ok: true });
+
+    // Social sign-up skips the modal's onboarding step, so the caller sends
+    // first-time provider users to /auth/onboarding before the app.
+    const profile = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { dateOfBirth: true },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      needsOnboarding: needsProfileOnboarding(profile ?? {}),
+    });
   } catch (err) {
     console.error("User session upsert error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });

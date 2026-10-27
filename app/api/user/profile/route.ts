@@ -5,6 +5,7 @@ import { validateUsername } from "@/lib/username-validation";
 import { containsProfanity } from "@/lib/profanity";
 import { getOrganiserRatings } from "@/lib/reviews";
 import { GENDER_OPTIONS } from "@/lib/registration-form";
+import { isAtLeastYearsOld, MIN_AGE } from "@/lib/age";
 import { z } from "zod";
 
 function badRequest(msg: string) {
@@ -196,6 +197,11 @@ export async function PUT(req: Request) {
     const dob = normalizeOptionalString(body.dateOfBirth);
     if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
       return badRequest("Date of birth must be YYYY-MM-DD.");
+    }
+    // The age gate lives here as well as in the forms: a client-side check is
+    // only a courtesy, and this is the one write that stores the answer.
+    if (dob && !isAtLeastYearsOld(dob)) {
+      return badRequest(`You must be at least ${MIN_AGE} years old to use Startline.`);
     }
     data.dateOfBirth = dob;
   }

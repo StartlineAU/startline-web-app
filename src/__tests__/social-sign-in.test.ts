@@ -94,6 +94,7 @@ describe("socialSignInErrorMessage", () => {
   it("maps the pre sign-up trigger's codes", () => {
     expect(socialSignInErrorMessage("invalid_request PreSignUp failed with error STARTLINE_MFA_ACCOUNT.")).toMatch(/authenticator app/);
     expect(socialSignInErrorMessage("PreSignUp failed with error STARTLINE_FEDERATED_ACCOUNT.")).toMatch(/already signs in with Google or Apple/);
+    expect(socialSignInErrorMessage("PreSignUp failed with error STARTLINE_LOOKUP_FAILED.")).toMatch(/couldn't check your account/);
     expect(socialSignInErrorMessage("access_denied")).toBe("Sign-in was cancelled.");
     expect(socialSignInErrorMessage("server_error boom")).toBe("We couldn't sign you in. Please try again.");
   });
