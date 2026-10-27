@@ -189,6 +189,13 @@ JWT verification in `middleware.ts` via `jose`. Tokens in Cognito-managed cookie
 
 Every user has a **User** record (created on first login). Users can create an **Organiser** profile (1:1). Organiser records can be verified (auto-publish events) or unverified (admin approval needed). See `lib/amplify-server.ts` for session helpers (`ServerSession`, `UserSession`, `OrganiserSession`, `AdminSession`).
 
+Admin alerts (new event to review, review reported) go to every deliverable
+address in the Cognito `admins` group at send time, through
+`lib/admin-notification-recipients.ts`. Group membership is the source of truth,
+so a new admin is reached before their first admin-portal sign-in. The `Admin`
+row is still created on that first visit and kept for audit and review
+attribution; do not use it to choose notification recipients.
+
 Organiser notifications belong to the organisation, not to a person. Event
 approved/rejected emails go to the list built by
 `lib/organiser-notification-recipients.ts`: the account email, the onboarding
