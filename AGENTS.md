@@ -395,6 +395,11 @@ Use `gh` CLI — **not** GitHub MCP (fails for this private org repo).
 
 PR conventions: scan open issues, link with `Closes #N`. Follow `.github/PULL_REQUEST_TEMPLATE.md`. CI runs are informational, non-blocking.
 
+Security reports follow `SECURITY.md`: GitHub private vulnerability reporting
+(already enabled on the repo) or `admin@startlineau.com`. Never open a public
+issue or PR for one. The policy's supported-versions table tracks the deploy
+model, so update it if staging or prod stops being the only supported targets.
+
 ### Commit authorship
 
 **Every commit must be authored by a person, not by an agent or automation.**
