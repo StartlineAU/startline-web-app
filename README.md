@@ -87,6 +87,13 @@ No `.env` file in the repo. See `AGENTS.md` for local setup details.
 
 **Rotating a key:** Update the secret in AWS Secrets Manager, trigger an Amplify rebuild, done. No code changes.
 
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for supported versions and how to report a
+vulnerability. Report privately through
+[GitHub security advisories](https://github.com/StartlineAU/startline-web-app/security/advisories/new)
+or `admin@startlineau.com` — never in a public issue.
+
 ## License
 
 All Rights Reserved
