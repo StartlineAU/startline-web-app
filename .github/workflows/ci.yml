@@ -107,6 +107,12 @@ jobs:
       NEXT_PUBLIC_AWS_REGION: ap-southeast-2
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      # A fake Cognito domain: social-sign-in.spec.ts intercepts the redirect to
+      # it and only checks the request. No spec gates on these, so they are safe
+      # at job level. The pool and client id are NOT here — see the dev-server
+      # step below.
+      NEXT_PUBLIC_COGNITO_DOMAIN: sl-e2e.auth.ap-southeast-2.amazoncognito.com
+      NEXT_PUBLIC_SOCIAL_SIGN_IN: google,apple
     services:
       postgres:
         image: postgres:15-alpine
@@ -148,6 +154,8 @@ jobs:
       - name: Start Next.js dev server
         shell: bash
         run: |
-          pnpm dev -p 3000 &
+          # The app needs a non-empty pool and client id to build an authorize
+          # URL at all; social-sign-in.spec.ts then intercepts the redirect.
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid pnpm dev -p 3000 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
       - run: pnpm test:e2e
