@@ -456,8 +456,6 @@ gh api graphql -f query='mutation { setIssueFieldValue(input: { issueId: "ISSUE_
 
 Get `issueId` (node ID) and re-verify all issues via the read query above.
 
-Configured in `opencode.json`: stripe, resend, aws, cloudflare.
-
 ## Terraform + CI/CD
 
 Infra lives in `StartlineAU/startline-infra`, stack at `web-app/`. Same unified
