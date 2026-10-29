@@ -12,6 +12,7 @@ import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSi
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
+import { resolveSignInUsername } from "@/lib/sign-in-username";
 import { calcAge, MIN_AGE } from "@/lib/age";
 import PasswordRequirements from "@/components/PasswordRequirements";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
@@ -63,6 +64,9 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [checkingEmail,   setCheckingEmail]   = useState(false);
   const [userExists,      setUserExists]      = useState<boolean | null>(null);
   const [userStatus,      setUserStatus]      = useState<string | null>(null);
+  // Cognito's username for a password sign-in. Usually the email; a Google or
+  // Apple profile keeps its provider-generated username after a password is set.
+  const [signInUsername,  setSignInUsername]  = useState("");
   const [resetCode,       setResetCode]       = useState("");
   const [newPassword,     setNewPassword]     = useState("");
   const [newPwConfirm,    setNewPwConfirm]    = useState("");
@@ -94,7 +98,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setPassword(""); setConfirm("");
       setError(""); setShowPw(false); setPwFocused(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
-      setCheckingEmail(false); setUserExists(null); setUserStatus(null);
+      setCheckingEmail(false); setUserExists(null); setUserStatus(null); setSignInUsername("");
       setResetCode(""); setNewPassword(""); setNewPwConfirm("");
       setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
       setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
@@ -139,13 +143,16 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       if (!data.exists) {
         setUserExists(false);
         setUserStatus(null);
+        setSignInUsername("");
       } else {
         setUserExists(true);
         setUserStatus(data.status === "UNCONFIRMED" ? "CONFIRMED" : data.status);
+        setSignInUsername(await resolveSignInUsername(email));
       }
     } catch {
       setUserExists(true);
       setUserStatus("CONFIRMED");
+      setSignInUsername(email);
     } finally {
       setCheckingEmail(false);
     }
@@ -158,7 +165,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setLoading(true);
     try {
       await signOut({ global: false }).catch(() => {});
-      const result = await signIn({ username: email, password });
+      const result = await signIn({ username: signInUsername || email, password });
 
       if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
         onClose(); router.push("/auth/verify-email?email=" + encodeURIComponent(email)); return;
@@ -331,7 +338,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setError("");
     setLoading(true);
     try {
-      await resetPassword({ username: email });
+      await resetPassword({ username: signInUsername || email });
       setResetSent(true);
       setNewPwStep("sent");
     } catch (err: unknown) {
@@ -354,7 +361,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setLoading(true);
     try {
       await confirmResetPassword({
-        username: email,
+        username: signInUsername || email,
         confirmationCode: resetCode,
         newPassword,
       });
@@ -363,7 +370,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setError("");
       try {
         await signOut({ global: false }).catch(() => {});
-        const result = await signIn({ username: email, password: newPassword });
+        const result = await signIn({ username: signInUsername || email, password: newPassword });
         if (result.nextStep.signInStep === "DONE") {
           await fetch("/api/user/auth/session", { method: "POST" });
           await refresh();
@@ -497,6 +504,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const goBackToEmail = () => {
     setUserExists(null);
     setUserStatus(null);
+    setSignInUsername("");
     setPassword("");
     setError("");
     setPwFocused(false);

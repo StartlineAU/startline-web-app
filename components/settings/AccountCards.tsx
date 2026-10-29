@@ -8,6 +8,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
 import { customerHref, organiserHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
+import { socialProviderLabel, type SocialProvider } from "@/lib/social-providers";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ErrorNote, SuccessNote, cardCls, inputCls, labelCls, outlineBtnCls,
@@ -136,11 +137,20 @@ export function EmailCard() {
 // right now keeps working until its current token runs out, which is why the
 // wording says "within the hour" and not "immediately".
 
-export function SessionsCard() {
+export function SessionsCard({
+  hasPassword, providers,
+}: {
+  hasPassword: boolean;
+  providers: SocialProvider[];
+}) {
   const host = usePortalHost();
   const [confirming, setConfirming] = useState(false);
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState("");
+  const providerNames = providers.map(socialProviderLabel).join(" and ");
+  const signInMethods = hasPassword
+    ? providerNames ? `your password or ${providerNames}` : "your password"
+    : providerNames || "your sign-in method";
 
   const signOutEverywhere = async () => {
     setBusy(true); setError("");
@@ -172,8 +182,8 @@ export function SessionsCard() {
       {confirming && (
         <div className="border-t border-dark-lighter pt-4">
           <p className="text-[13px] text-muted leading-relaxed">
-            You will be signed out here straight away, and on your other devices within the hour. You can sign back in with
-            your password.
+            You will be signed out here straight away, and on your other devices within the hour. You can sign back in with{" "}
+            {signInMethods}.
           </p>
           <div className="flex flex-wrap gap-2 mt-3">
             <button type="button" onClick={signOutEverywhere} disabled={busy} className={primaryBtn}>

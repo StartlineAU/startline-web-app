@@ -241,26 +241,36 @@ test.describe("race management", () => {
     await expect(dialog.getByText(/must look like/i)).toBeVisible();
   });
 
-  test("CSV upload reports unmatched emails and unreadable times", async ({ page }) => {
+  test("results import preview reports unmatched athletes and unreadable times", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /after race/i }).click();
 
-    await page.getByRole("button", { name: /upload results csv/i }).click();
+    await page.getByRole("button", { name: /import results/i }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.locator("textarea").fill(
+    await dialog.getByLabel(/or paste rows/i).fill(
       "email,time,placement\n" +
       "eli.patel@example.com,44:12,5\n" +
       "hannah.jones@example.com,not-a-time,6\n" +
       "nobody@nowhere.com,30:00,9"
     );
-    await dialog.getByRole("button", { name: /^upload$/i }).click();
+    await dialog.getByRole("button", { name: /preview pasted data/i }).click();
 
-    // One good row applied, and neither bad row is allowed to pass silently.
-    await expect(dialog.getByText(/updated 1 result/i)).toBeVisible();
-    await expect(dialog.getByText(/no athlete matched: nobody@nowhere\.com/i)).toBeVisible();
-    await expect(dialog.getByText(/unreadable time/i)).toBeVisible();
+    // The preview names both problems and refuses to apply the invalid time.
+    await expect(dialog.getByText(/2 matched/i)).toBeVisible();
+    await expect(dialog.getByText(/1 unmatched/i)).toBeVisible();
+    await expect(dialog.getByText(/1 invalid/i)).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /apply \d+ changes?/i })).toBeDisabled();
+
+    // Fixing the bad time makes the two matched rows applyable; the unmatched
+    // row is still shown but is not sent to the server.
+    await dialog.getByLabel(/time for hannah jones/i).fill("45:00");
+    await expect(dialog.getByRole("button", { name: /apply 2 changes/i })).toBeEnabled();
+    await dialog.getByRole("button", { name: /apply 2 changes/i }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByText(/updated 2 results/i)).toBeVisible();
   });
 
   test("every wave-builder input has an accessible name", async ({ page }) => {
@@ -372,23 +382,26 @@ test.describe("race management", () => {
     await expect(updated.getByText(/1st \/ 12/)).toBeVisible();
   });
 
-  test("bulk-uploads results via CSV", async ({ page }) => {
+  test("imports results pasted from a spreadsheet", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /after race/i }).click();
 
-    await page.getByRole("button", { name: /upload results csv/i }).click();
+    await page.getByRole("button", { name: /import results/i }).click();
     const dialog = page.getByRole("dialog");
-    await dialog.locator("textarea").fill(
-      "email,time,placement\n" +
-      "bree.collins@example.com,42:10,3rd / 12"
+    // Spreadsheet copy is tab-separated, not comma-separated (#411).
+    await dialog.getByLabel(/or paste rows/i).fill(
+      "email\ttime\tplacement\n" +
+      "bree.collins@example.com\t42:10\t3rd / 12"
     );
-    await dialog.getByRole("button", { name: /^upload$/i }).click();
-    await expect(dialog.getByText(/updated/i)).toBeVisible();
+    await dialog.getByRole("button", { name: /preview pasted data/i }).click();
+    await expect(dialog.getByText(/1 matched/i)).toBeVisible();
+    await expect(dialog.getByText(/1 changed/i)).toBeVisible();
+    await dialog.getByRole("button", { name: /apply 1 change/i }).click();
 
-    await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+    await expect(page.getByText(/updated 1 result/i)).toBeVisible();
     await expect(
       page
         .locator("div.flex.items-center.gap-2", { hasText: "Bree Collins" })
@@ -500,7 +513,7 @@ test.describe("athlete public profile race history", () => {
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /after race/i }).click();
     // The results tab's own CTA proves the tab actually switched.
-    await expect(page.getByRole("button", { name: /upload results csv/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /import results/i })).toBeVisible();
 
     // Jade is seeded onto this event's results board (profile-linked athlete).
     await page.getByPlaceholder(/search any wave by name, email, or bib/i).fill("jade.nguyen");

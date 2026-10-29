@@ -4,9 +4,10 @@
  *
  * v2 account events never reach the v1 webhook endpoint, so each Stripe mode
  * needs its own destination pointing at /api/stripe/account-events. Run once per
- * environment with that environment's key, then store the printed secret in the
- * startline/automation secret as stripe_account_events_secret_<env> and apply
- * Terraform. The Dashboard can reveal the secret again later.
+ * environment with that environment's key, then store the printed secret on that
+ * environment's own app secret as STRIPE_ACCOUNT_EVENTS_SECRET
+ * (startline/prod/app for live, startline/staging/app for test) and rebuild the
+ * branch. The Dashboard can reveal the secret again later.
  *
  * Usage:
  *   STRIPE_SECRET_KEY=sk_... node scripts/create-stripe-account-events-destination.mjs https://startlineau.com

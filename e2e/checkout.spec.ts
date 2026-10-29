@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { argosScreenshot } from "@argos-ci/playwright";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureDatabaseUrl } from "./helpers";
+
+ensureDatabaseUrl();
 
 // The registration flow is a 3-step design: Select ticket → Your details →
 // Review & pay, with a sticky order-summary sidebar. Step 1 uses per-tier
@@ -278,5 +283,136 @@ test.describe("confirmation page", () => {
     await expect(page.getByText(/confirmed/i).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /back to event/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /browse more events/i })).toBeVisible();
+  });
+});
+
+// A free event has no ticket sale, so the athlete RSVPs as their signed-in
+// account. These fixtures are local to this spec and are removed again.
+const FREE_MULTI_ID = "e2e-free-rsvp-multi";
+const FREE_SINGLE_ID = "e2e-free-rsvp-single";
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
+
+async function createFreeEvent(id: string, title: string, waves: { label: string; price: string }[]) {
+  const organiser = await prisma.organiser.findFirst({
+    where: { orgName: "Apex Endurance Events" },
+    select: { id: true },
+  });
+  if (!organiser) throw new Error("Apex Endurance Events is missing from the seed");
+
+  await prisma.event.create({
+    data: {
+      id,
+      organiserId: organiser.id,
+      status: "APPROVED",
+      slug: id,
+      title,
+      discipline: "running",
+      description: "Free RSVP E2E fixture.",
+      eventDate: "2027-03-14",
+      startTime: "07:00",
+      endTime: "10:00",
+      venue: "Albert Park",
+      address: "Albert Park, Melbourne VIC",
+      city: "Melbourne",
+      state: "VIC",
+      format: "individual",
+      level: "open",
+      categories: ["5K"],
+      cap: 100,
+      minAge: 16,
+      waves,
+      photos: [],
+    },
+  });
+}
+
+test.describe("free event RSVP", () => {
+  test.beforeAll(async () => {
+    await prisma.registration.deleteMany({ where: { eventId: { in: [FREE_MULTI_ID, FREE_SINGLE_ID] } } });
+    await prisma.event.deleteMany({ where: { id: { in: [FREE_MULTI_ID, FREE_SINGLE_ID] } } });
+    await createFreeEvent(FREE_MULTI_ID, "Free RSVP Multi Tier", [
+      { label: "General", price: "0" },
+      { label: "Junior", price: "0" },
+    ]);
+    await createFreeEvent(FREE_SINGLE_ID, "Free RSVP Single Tier", [
+      { label: "General", price: "0" },
+    ]);
+  });
+
+  test.beforeEach(async () => {
+    await prisma.registration.deleteMany({ where: { eventId: { in: [FREE_MULTI_ID, FREE_SINGLE_ID] } } });
+  });
+
+  test.afterAll(async () => {
+    await prisma.registration.deleteMany({ where: { eventId: { in: [FREE_MULTI_ID, FREE_SINGLE_ID] } } });
+    await prisma.event.deleteMany({ where: { id: { in: [FREE_MULTI_ID, FREE_SINGLE_ID] } } });
+    await prisma.$disconnect();
+  });
+
+  test("asks a signed-out visitor to sign in before an RSVP", async ({ page }) => {
+    await page.goto(`/events/${FREE_MULTI_ID}/register`);
+
+    await expect(page.getByRole("heading", { name: /sign in to/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /sign in to rsvp/i })).toBeVisible();
+    await expect(page.locator("#p0-firstName")).toHaveCount(0);
+  });
+
+  test("the event page offers I'm going rather than a ticket checkout", async ({ page }) => {
+    await page.goto(`/events/${FREE_MULTI_ID}`);
+
+    await expect(page.getByRole("link", { name: /i'm going/i }).first()).toBeVisible();
+  });
+
+  test("asks for a tier, then RSVPs with the account and accepted terms", async ({ page }) => {
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "user", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await page.goto(`/events/${FREE_MULTI_ID}/register`);
+
+    await expect(page.getByRole("radio", { name: /General/i })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Junior/i })).toBeVisible();
+    await page.getByRole("radio", { name: /Junior/i }).click();
+    await page.getByRole("button", { name: /^Continue/ }).click();
+
+    const review = page.getByTestId("rsvp-review");
+    await expect(review.getByText("Review your RSVP")).toBeVisible();
+    await expect(review.getByText("Jade Nguyen", { exact: true })).toBeVisible();
+    await expect(review.getByText("jade.nguyen@startline.test", { exact: true })).toBeVisible();
+    await expect(review.locator("#registration-terms-copy")).toHaveText(
+      /I agree to the Startline\s+Terms of Service\s+and this event's\s+entry terms & waiver,\s+and confirm/,
+    );
+    await expect(page.locator("#p0-firstName")).toHaveCount(0);
+    await expect(page.getByText("Payment not required")).toHaveCount(0);
+
+    await page.locator('[role="checkbox"][aria-describedby="registration-terms-copy"]').click();
+    await page.getByRole("button", { name: /i'm going/i }).click();
+
+    await expect(page.getByText(/you're in/i)).toBeVisible();
+    await expect(page.getByText(/registration/i).first()).toBeVisible();
+
+    await expect.poll(async () => {
+      const registration = await prisma.registration.findFirst({
+        where: { eventId: FREE_MULTI_ID, status: "CONFIRMED" },
+        select: { athleteName: true, athleteEmail: true, waveLabel: true },
+      });
+      return registration;
+    }).toMatchObject({
+      athleteName: "Jade Nguyen",
+      athleteEmail: "jade.nguyen@startline.test",
+      waveLabel: "Junior",
+    });
+  });
+
+  test("a single free tier goes straight to the RSVP confirmation", async ({ page }) => {
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "user", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await page.goto(`/events/${FREE_SINGLE_ID}/register`);
+
+    await expect(page.getByText("Review your RSVP")).toBeVisible();
+    await expect(page.getByRole("button", { name: /i'm going/i })).toBeVisible();
+    await expect(page.locator("#p0-firstName")).toHaveCount(0);
   });
 });

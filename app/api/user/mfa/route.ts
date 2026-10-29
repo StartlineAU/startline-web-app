@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { AssociateSoftwareTokenCommand, VerifySoftwareTokenCommand, SetUserMFAPreferenceCommand, ChangePasswordCommand } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
+import { canUseMfa } from "@/lib/sign-in-methods";
+import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
 
@@ -32,6 +34,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
   const body = parsed.data;
+
+  // Turning MFA off is always allowed, so a legacy profile that enabled it can
+  // clear it. Everything else needs a password: Cognito only challenges the
+  // password flow, and setup without one would be a false sense of protection.
+  if (body.action !== "disable") {
+    const methods = await getSessionSignInMethods(session);
+    if (!methods) {
+      return NextResponse.json({ error: "Could not read your sign-in methods." }, { status: 503 });
+    }
+    if (!canUseMfa(methods)) {
+      return NextResponse.json(
+        { error: "Set a password before adding an authenticator app." },
+        { status: 409 },
+      );
+    }
+  }
 
   const user = await prisma.user.findUnique({ where: { cognitoSub: session.sub } });
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });

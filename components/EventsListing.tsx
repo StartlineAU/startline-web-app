@@ -16,6 +16,7 @@ import { selectionLabel } from "@/lib/divisions";
 import { toUserEvents } from "@/lib/user-events";
 import { eventDistance, formatDistance, DEFAULT_RADIUS_KM } from "@/lib/distance";
 import { getEventCoords } from "@/lib/australia-coords";
+import { locationErrorMessage } from "@/lib/geolocation";
 import { nextMapSelection } from "@/lib/map-events";
 import { useAuthContext } from "@/context/AuthContext";
 import EventMap from "@/components/EventMap";
@@ -178,6 +179,7 @@ function EventsListingInner() {
   const [whereQuery,    setWhereQuery]    = useState(searchParams.get("where") ?? "");
   const [searchOrigin,  setSearchOrigin]  = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding,   setIsGeocoding]   = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [typeFilters,   setTypeFilters]   = useState<EventType[]>(searchParams.get("type") ? [searchParams.get("type") as EventType] : []);
   const [stateFilters,  setStateFilters]  = useState<AustralianState[]>([]);
   const [formatFilters, setFormatFilters] = useState<CompetitionFormat[]>([]);
@@ -209,17 +211,24 @@ function EventsListingInner() {
   }, []);
 
   const locateMe = useCallback(() => {
-    if (!("geolocation" in navigator)) return;
+    setLocationError(null);
+    if (!("geolocation" in navigator)) {
+      setLocationError(locationErrorMessage());
+      return;
+    }
     setIsGeocoding(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setSearchOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setWhereQuery("Current location");
+        setLocationError(null);
         setIsGeocoding(false);
       },
-      () => {
-        setSearchOrigin(null);
-        setWhereQuery("");
+      (error) => {
+        // Keep what the visitor already had: a denied or timed-out request
+        // should not erase a typed suburb or the results already on screen
+        // (#352). The message says what happened and what to do next.
+        setLocationError(locationErrorMessage(error.code));
         setIsGeocoding(false);
       },
       { timeout: 10000 }
@@ -228,6 +237,7 @@ function EventsListingInner() {
 
   const handleWhereSearch = useCallback(async (raw?: string) => {
     const q = (raw ?? whereQuery).trim();
+    setLocationError(null);
     if (!q) { setSearchOrigin(null); return; }
     if (q.toLowerCase() === "current location") { locateMe(); return; }
     setIsGeocoding(true);
@@ -248,16 +258,24 @@ function EventsListingInner() {
     }
   }, [whereQuery, locateMe]);
 
+  const handleWhereChange = useCallback((text: string) => {
+    setWhereQuery(text);
+    setLocationError(null);
+  }, []);
+
   const clearWhere = useCallback(() => {
     setWhereQuery("");
     setSearchOrigin(null);
+    setLocationError(null);
   }, []);
 
   // Auto-search an initial ?where= param (e.g. from HeroSearch) once.
-  const didInitialWhere = useRef(false);
+  //
+  // No "already ran" ref: in development React runs effects twice, and the
+  // first run's cleanup clears the timer. A ref set on that first run made the
+  // second run return early, so a handoff from the home page never searched at
+  // all. The cleanup alone keeps this to one call.
   useEffect(() => {
-    if (didInitialWhere.current) return;
-    didInitialWhere.current = true;
     const initial = searchParams.get("where");
     if (!initial) return;
     // Defer so the geocode fetch (and its setState) runs after this effect settles.
@@ -532,7 +550,7 @@ function EventsListingInner() {
             <span className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-0.5">Where</span>
             <EventLocationAutocomplete
               value={whereQuery}
-              onChange={setWhereQuery}
+              onChange={handleWhereChange}
               filter={selection}
               onSelect={(label) => handleWhereSearch(label)}
               onEnter={() => handleWhereSearch()}
@@ -571,7 +589,7 @@ function EventsListingInner() {
             <div className="flex-1 min-w-0">
               <EventLocationAutocomplete
                 value={whereQuery}
-                onChange={setWhereQuery}
+                onChange={handleWhereChange}
                 filter={selection}
                 onSelect={(label) => handleWhereSearch(label)}
                 onEnter={() => handleWhereSearch()}
@@ -1084,6 +1102,13 @@ function EventsListingInner() {
       {desktopHeader}
       {mobileHeader}
       {filterSubNav}
+      {locationError && (
+        <div role="alert" data-testid="location-error" className="px-3 lg:px-6 pt-3">
+          <p className="rounded-md border border-red-500/30 bg-red-900/20 px-4 py-2.5 font-headline text-[12px] leading-relaxed text-red-400">
+            {locationError}
+          </p>
+        </div>
+      )}
       {resultsHeader}
       {activeChipsRow}
 

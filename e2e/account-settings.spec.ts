@@ -1,5 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
-import { organiserLogin, organiserMemberLogin } from "./helpers";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import {
+  ensureDatabaseUrl,
+  organiserLogin,
+  organiserMemberLogin,
+} from "./helpers";
+
+ensureDatabaseUrl();
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // The parts of the settings menu that change an account: athlete notification
 // preferences, changing email, deleting the account, and the organisation's
@@ -78,6 +90,44 @@ test.describe("changing email", () => {
   });
 });
 
+test.describe("provider-only login security", () => {
+  test("a Google-only account sees its provider and can set a password", async ({ page }) => {
+    await loginAs(page, "social");
+    const settings = await openSettings(page, "security");
+
+    await expect(settings.getByRole("heading", { name: "Google and Apple" })).toBeVisible();
+    await expect(settings.getByText(/you sign in with google/i)).toBeVisible();
+    await expect(settings.getByRole("heading", { name: "Set a password" })).toBeVisible();
+    // The controls that need a Cognito password, or would be overwritten by
+    // the provider, are not offered.
+    await expect(settings.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: /change password/i })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: /set up/i })).toHaveCount(0);
+    await expect(settings.getByText(/authenticator codes protect password sign-ins/i)).toBeVisible();
+  });
+
+  test("an Apple-only account names Apple", async ({ page }) => {
+    await loginAs(page, "apple");
+    const settings = await openSettings(page, "security");
+
+    await expect(settings.getByText(/you sign in with apple/i)).toBeVisible();
+    await expect(settings.getByRole("heading", { name: "Set a password" })).toBeVisible();
+  });
+});
+
+test.describe("linked account login security", () => {
+  test("a linked account can unlink but cannot change its email", async ({ page }) => {
+    await loginAs(page, "linked");
+    const settings = await openSettings(page, "security");
+
+    await expect(settings.getByRole("heading", { name: "Google and Apple" })).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Disconnect", exact: true })).toBeVisible();
+    await expect(settings.getByRole("button", { name: /change password/i })).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
+    await expect(settings.getByText(/password sign-in/i)).toBeVisible();
+  });
+});
+
 test.describe("signing out everywhere", () => {
   test("asks first and says what will happen", async ({ page }) => {
     await loginAs(page, "athlete");
@@ -130,6 +180,71 @@ test.describe("deleting an account", () => {
     const body = await refused.json();
     expect(body.code).toBe("OWNS_ORGANISATION");
     expect(body.blockers[0].name).toBe("Apex Endurance Events");
+  });
+
+  // Issue #406: the delete button appeared for an organisation with no entries,
+  // but the request failed as soon as the organisation had any event, even a
+  // draft. Deleting an organisation now takes its events with it; entries still
+  // protect it, which the test below covers.
+  test("an organisation with events but no entries can be deleted, with its events", async ({ page }) => {
+    test.slow();
+    const owner = await prisma.user.findUniqueOrThrow({
+      where: { email: "sarah.mitchell@startline.test" },
+    });
+    const org = await prisma.organiser.create({
+      data: {
+        createdBy: owner.id,
+        email: `delete-account-${Date.now()}@startline.test`,
+        orgName: "E2E Delete Account Events",
+        contactName: "Sarah Mitchell",
+        contactEmail: "sarah.mitchell@startline.test",
+        verified: true,
+        status: "APPROVED",
+        members: { create: { userId: owner.id, role: "OWNER" } },
+      },
+    });
+    const event = await prisma.event.create({
+      data: {
+        organiserId: org.id,
+        title: "E2E Delete Account Draft",
+        discipline: "running",
+        eventDate: "2027-01-01",
+        startTime: "07:00",
+        endTime: "10:00",
+        venue: "E2E Test Venue",
+        city: "Sydney",
+        state: "nsw",
+        format: "individual",
+        level: "beginner",
+        categories: ["Open"],
+        waves: [],
+        photos: [],
+      },
+    });
+
+    try {
+      await organiserLogin(page);
+      const settings = await openSettings(page, "security");
+
+      await settings.getByRole("button", { name: "Delete", exact: true }).click();
+      const card = settings.getByText(org.orgName!, { exact: true })
+        .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+      await expect(card).toBeVisible();
+      await expect(card.getByRole("button", { name: "Delete organisation" })).toBeVisible();
+
+      await card.getByRole("button", { name: "Delete organisation" }).click();
+      const deleted = page.waitForResponse(
+        r => r.url().includes(`/api/user/account/organisations/${org.id}`) && r.request().method() === "DELETE",
+      );
+      await card.getByRole("button", { name: "Yes, delete organisation" }).click();
+      expect((await deleted).status()).toBe(200);
+      await expect(card).toHaveCount(0);
+
+      expect(await prisma.organiser.count({ where: { id: org.id } })).toBe(0);
+      expect(await prisma.event.count({ where: { id: event.id } })).toBe(0);
+    } finally {
+      await prisma.organiser.deleteMany({ where: { id: org.id } });
+    }
   });
 
   test("an organisation that has taken entries cannot be deleted, by anyone", async ({ page, browser }) => {
