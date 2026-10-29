@@ -239,10 +239,10 @@ function RegisterContent() {
 
   // ── Load event ──
   useEffect(() => {
-    fetch(`/api/events`)
-      .then((r) => r.json())
-      .then((events: EventData[]) => {
-        const found = events.find((e) => e.id === eventId);
+    fetch(`/api/events?ids=${encodeURIComponent(eventId)}`)
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((data: { events?: EventData[] }) => {
+        const found = data.events?.find((e) => e.id === eventId);
         if (found) setEvent(found);
         setLoading(false);
       })

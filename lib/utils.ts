@@ -150,20 +150,29 @@ export function filterEvents(
   });
 }
 
+/**
+ * Stable tie-break for paginated sorts. Without it, two events with the same
+ * price or date could swap places between page requests and "Load more" would
+ * skip or repeat one.
+ */
+function byId(a: UserEvent, b: UserEvent): number {
+  return (a.id ?? "").localeCompare(b.id ?? "");
+}
+
 export function sortEventsByDate(events: UserEvent[]): UserEvent[] {
   return [...events].sort(
-    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime() || byId(a, b)
   );
 }
 
 export function sortEvents(events: UserEvent[], sortBy: SortOption): UserEvent[] {
   switch (sortBy) {
     case "price-asc":
-      return [...events].sort((a, b) => (a.fromPrice ?? Infinity) - (b.fromPrice ?? Infinity));
+      return [...events].sort((a, b) => (a.fromPrice ?? Infinity) - (b.fromPrice ?? Infinity) || byId(a, b));
     case "price-desc":
-      return [...events].sort((a, b) => (b.fromPrice ?? -Infinity) - (a.fromPrice ?? -Infinity));
+      return [...events].sort((a, b) => (b.fromPrice ?? -Infinity) - (a.fromPrice ?? -Infinity) || byId(a, b));
     case "popular":
-      return [...events].sort((a, b) => b.registrationCount - a.registrationCount);
+      return [...events].sort((a, b) => b.registrationCount - a.registrationCount || byId(a, b));
     case "date":
     default:
       return sortEventsByDate(events);

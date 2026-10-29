@@ -11,10 +11,10 @@ import {
   FORMAT_OPTIONS, DATE_RANGE_OPTIONS, LEVEL_OPTIONS, SORT_OPTIONS,
   PRICE_RANGE_MIN, PRICE_RANGE_MAX,
 } from "@/types";
-import { filterEvents, sortEvents } from "@/lib/utils";
-import { selectionLabel } from "@/lib/divisions";
 import { toUserEvents } from "@/lib/user-events";
-import { eventDistance, formatDistance, DEFAULT_RADIUS_KM } from "@/lib/distance";
+import type { PublicEvent } from "@/lib/event-types";
+import { eventDistance, formatDistance } from "@/lib/distance";
+import { selectionLabel } from "@/lib/divisions";
 import { getEventCoords } from "@/lib/australia-coords";
 import { nextMapSelection } from "@/lib/map-events";
 import { useAuthContext } from "@/context/AuthContext";
@@ -26,8 +26,16 @@ import type { EventDetailData } from "@/lib/event-detail";
 import EventLocationAutocomplete from "@/components/ui/EventLocationAutocomplete";
 import EventAutocomplete from "@/components/ui/EventAutocomplete";
 
-/** Cards in the "Other events you may like" row under a set of results. */
-const OTHER_EVENTS_LIMIT = 6;
+/** Cards in the "Other events you may like" row are ranked by the API. */
+type EventListResponse = {
+  events: PublicEvent[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  suggestions: PublicEvent[];
+  otherEvents: PublicEvent[];
+};
 
 /**
  * Every list of event cards on this page: one column, one card width. Results,
@@ -114,19 +122,20 @@ function FilterTrigger({
 
 function EventsListingInner() {
   const { status } = useAuthContext();
-  const [allEvents, setAllEvents] = useState<UserEvent[]>([]);
+  const [events, setEvents] = useState<UserEvent[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextPage, setNextPage] = useState(2);
+  const [suggestions, setSuggestions] = useState<UserEvent[]>([]);
+  const [otherEvents, setOtherEvents] = useState<UserEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [initialCenter, setInitialCenter] = useState<{ lng: number; lat: number; zoom: number } | undefined>(undefined);
   const mapRef = useRef<EventMapHandle>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const subNavRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    fetch("/api/events")
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setAllEvents(toUserEvents(data)); })
-      .catch(() => {});
-  }, []);
+  const requestVersion = useRef(0);
 
   // Default map to the user's area: device GPS first, then profile city/state,
   // then fall back to the Australia-wide view. Runs once on mount.
@@ -298,36 +307,111 @@ function EventsListingInner() {
     searchQuery: selection ? (selection.division ?? "") : whatQuery,
     originLat:   searchOrigin?.lat,
     originLng:   searchOrigin?.lng,
-    maxDistance: searchOrigin ? DEFAULT_RADIUS_KM : undefined,
   }), [typeFilters, stateFilters, formatFilters, levelFilters, priceRange, dateFilter, whatQuery, selection, searchOrigin]);
 
-  const displayEvents = useMemo(() => {
-    // Geocoded search drops the hard radius cap — results are still sorted
-    // closest-first below, so a suburb with no nearby event surfaces the
-    // closest matches instead of an empty list.
-    const effectiveFilter = searchOrigin ? { ...filterState, maxDistance: undefined } : filterState;
-    let results = filterEvents(allEvents, effectiveFilter);
-    if (searchOrigin) {
-      // Geocoded search — sort closest-first and stamp distance onto each event.
-      results = results
-        .map((e) => {
-          const dist = eventDistance(searchOrigin, e);
-          return { ...e, distance: dist === null ? undefined : formatDistance(dist) };
-        })
-        .sort((a, b) => {
-          const da = eventDistance(searchOrigin, a) ?? Infinity;
-          const db = eventDistance(searchOrigin, b) ?? Infinity;
-          return da - db;
-        });
-    } else {
-      results = sortEvents(results, sortBy);
-      if (whereQuery.trim()) {
-        const q = whereQuery.toLowerCase();
-        results = results.filter((e) => e.city.toLowerCase().includes(q) || e.state.toLowerCase().includes(q) || e.location.toLowerCase().includes(q));
-      }
+  /**
+   * Everything the listing's filters mean, as one request. The server applies
+   * these before pagination, so a match on a later page is never missed.
+   */
+  const buildRequestParams = useCallback((page: number) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", "20");
+    params.set("sort", sortBy);
+
+    if (filterState.searchQuery) params.set("q", filterState.searchQuery);
+    if (whereQuery.trim()) params.set("where", whereQuery.trim());
+    if (filterState.dateRange !== "all") params.set("dateRange", filterState.dateRange);
+    if (filterState.priceRange) {
+      params.set("minPrice", String(filterState.priceRange[0]));
+      params.set("maxPrice", String(filterState.priceRange[1]));
     }
-    return results;
-  }, [allEvents, filterState, whereQuery, sortBy, searchOrigin]);
+    filterState.types.forEach((value) => params.append("type", value));
+    filterState.states.forEach((value) => params.append("state", value));
+    filterState.formats.forEach((value) => params.append("format", value));
+    filterState.levels.forEach((value) => params.append("level", value));
+    if (searchOrigin) {
+      params.set("originLat", String(searchOrigin.lat));
+      params.set("originLng", String(searchOrigin.lng));
+    }
+    return params;
+  }, [filterState, whereQuery, sortBy, searchOrigin]);
+
+  useEffect(() => {
+    const version = ++requestVersion.current;
+    const controller = new AbortController();
+
+    // Debounce text fields so a keystroke does not send a request per character.
+    const timer = setTimeout(() => {
+      setEventsLoading(true);
+      setLoadingMore(false);
+      fetch(`/api/events?${buildRequestParams(1)}`, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() as Promise<EventListResponse> : Promise.reject(new Error(String(res.status)))))
+        .then((data) => {
+          if (version !== requestVersion.current) return;
+          setEvents(toUserEvents(data.events ?? []));
+          setTotal(data.total);
+          setHasMore(data.hasMore);
+          setNextPage(2);
+          setSuggestions(toUserEvents(data.suggestions ?? []));
+          setOtherEvents(toUserEvents(data.otherEvents ?? []));
+        })
+        .catch((error) => {
+          if (error?.name === "AbortError" || version !== requestVersion.current) return;
+          setEvents([]);
+          setTotal(0);
+          setHasMore(false);
+          setSuggestions([]);
+          setOtherEvents([]);
+        })
+        .finally(() => {
+          if (version === requestVersion.current) setEventsLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [buildRequestParams]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    const version = requestVersion.current;
+    setLoadingMore(true);
+
+    try {
+      const res = await fetch(`/api/events?${buildRequestParams(nextPage)}`);
+      if (!res.ok) return;
+      const data = await res.json() as EventListResponse;
+      if (version !== requestVersion.current) return;
+
+      const next = toUserEvents(data.events ?? []);
+      setEvents((previous) => {
+        const seen = new Set(previous.map((event) => event.id));
+        return [...previous, ...next.filter((event) => !seen.has(event.id))];
+      });
+      setTotal(data.total);
+      setHasMore(data.hasMore);
+      setNextPage((data.page ?? nextPage) + 1);
+      setSuggestions(toUserEvents(data.suggestions ?? []));
+      setOtherEvents(toUserEvents(data.otherEvents ?? []));
+    } catch {
+      // Keep the loaded page and let the visitor retry.
+    } finally {
+      if (version === requestVersion.current) setLoadingMore(false);
+    }
+  }, [buildRequestParams, hasMore, loadingMore, nextPage]);
+
+  // The server ranks a geocoded search closest-first across the whole result
+  // set. Distance is stamped here only so the cards can show it.
+  const displayEvents = useMemo(() => {
+    if (!searchOrigin) return events;
+    return events.map((event) => {
+      const distance = eventDistance(searchOrigin, event);
+      return { ...event, distance: distance === null ? undefined : formatDistance(distance) };
+    });
+  }, [events, searchOrigin]);
 
   // Typing again abandons the picked category: the text is no longer its label.
   const handleWhatChange = useCallback((text: string) => {
@@ -833,7 +917,7 @@ function EventsListingInner() {
         </button>
         <button onClick={() => setFilterSheet(false)}
           className="flex-1 bg-machined text-dark font-headline text-xs font-bold uppercase tracking-widest h-11 rounded-xl">
-          Show {displayEvents.length} event{displayEvents.length !== 1 ? "s" : ""}
+          Show {total} event{total !== 1 ? "s" : ""}
         </button>
       </div>
     </div>,
@@ -845,12 +929,12 @@ function EventsListingInner() {
       <h2 className="font-headline text-base lg:text-xl font-black italic tracking-tighter text-light">
         {searchOrigin ? (
           <>
-            <span className="text-primary">{displayEvents.length}</span> closest event{displayEvents.length !== 1 ? "s" : ""} to{" "}
+            <span className="text-primary">{total}</span> closest event{total !== 1 ? "s" : ""} to{" "}
             <span className="text-light">{whereQuery || "your location"}</span>
           </>
         ) : (
           <>
-            <span className="text-primary">{displayEvents.length}</span> event{displayEvents.length !== 1 ? "s" : ""} found
+            <span className="text-primary">{total}</span> event{total !== 1 ? "s" : ""} found
           </>
         )}
       </h2>
@@ -869,46 +953,6 @@ function EventsListingInner() {
     </div>
   ) : null;
 
-  // With nothing matching, fall back to the whole upcoming listing rather than
-  // a dead end. Computed from the events already loaded, so it costs no extra
-  // request.
-  const suggestions = useMemo(() => {
-    if (displayEvents.length > 0 || allEvents.length === 0) return null;
-
-    const NO_FILTERS: FilterState = {
-      types: [], states: [], formats: [], levels: [],
-      priceRange: null, dateRange: "all", searchQuery: "",
-    };
-    const upcoming = sortEvents(filterEvents(allEvents, NO_FILTERS), "date");
-    return upcoming.length > 0 ? upcoming : null;
-  }, [displayEvents.length, allEvents]);
-
-  /**
-   * Events to offer alongside a set of results. Ranked by what they share with
-   * the current search — same discipline, then same place — so the row reads as
-   * a genuine suggestion rather than an arbitrary tail of the listing.
-   */
-  const otherEvents = useMemo(() => {
-    if (displayEvents.length === 0 || allEvents.length === 0) return [];
-
-    const NO_FILTERS: FilterState = {
-      types: [], states: [], formats: [], levels: [],
-      priceRange: null, dateRange: "all", searchQuery: "",
-    };
-    const shown = new Set(displayEvents.map((e) => e.id));
-    const rest = sortEvents(filterEvents(allEvents, NO_FILTERS), "date")
-      .filter((e) => !shown.has(e.id));
-
-    const types = new Set(displayEvents.map((e) => e.type));
-    const cities = new Set(displayEvents.map((e) => e.city.toLowerCase()));
-    const affinity = (e: UserEvent) =>
-      (types.has(e.type) ? 2 : 0) + (cities.has(e.city.toLowerCase()) ? 1 : 0);
-
-    return [...rest]
-      .sort((a, b) => affinity(b) - affinity(a))
-      .slice(0, OTHER_EVENTS_LIMIT);
-  }, [displayEvents, allEvents]);
-
   /** "Other events you may like", shown under a set of results. */
   const otherEventsBlock = () => (
     otherEvents.length > 0 ? (
@@ -924,6 +968,22 @@ function EventsListingInner() {
       </div>
     ) : null
   );
+
+  /** Adds the next server page to the same list the map reads from. */
+  const loadMoreControl = hasMore ? (
+    <div className="flex justify-center py-5">
+      <button
+        type="button"
+        onClick={loadMore}
+        disabled={loadingMore}
+        data-testid="load-more-events"
+        className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-5 py-2.5 rounded-full transition-colors disabled:opacity-60"
+      >
+        {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+        {loadingMore ? "Loading" : "Load more events"}
+      </button>
+    </div>
+  ) : null;
 
   /**
    * Shared "nothing matched" block, sized for the full list or a side column.
@@ -945,7 +1005,7 @@ function EventsListingInner() {
         >Clear Filters</button>
       </div>
 
-      {suggestions && (
+      {suggestions.length > 0 && (
         <div>
           <p className="font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark mb-3">
             All events
@@ -961,6 +1021,13 @@ function EventsListingInner() {
   );
 
   const emptyState = noResults("lg");
+
+  const loadingState = (
+    <div className="flex items-center justify-center gap-2 py-10 font-headline text-xs uppercase tracking-widest text-muted">
+      <Loader2 className="w-4 h-4 animate-spin" />
+      Loading events
+    </div>
+  );
 
   // Full-width results grid — shown for the "List" tab, all breakpoints
   /** Placeholder while the selected event's information screen loads. */
@@ -983,13 +1050,16 @@ function EventsListingInner() {
   const gridContent = (
     <div className={view === "list" ? "flex-1 overflow-y-auto px-3 py-4" : "hidden"}>
       <div className={`${CARD_COLUMN_WIDTH} mx-auto`}>
-        {displayEvents.length === 0 ? emptyState : (
+        {displayEvents.length === 0 ? (
+          eventsLoading ? loadingState : emptyState
+        ) : (
           <>
             <div className={CARD_LIST}>
               {displayEvents.map((event) => (
                 <EventCard key={event.id} event={event} className="w-full" />
               ))}
             </div>
+            {loadMoreControl}
             {otherEventsBlock()}
           </>
         )}
@@ -1004,7 +1074,7 @@ function EventsListingInner() {
     <div className={view === "list" ? "flex flex-1 min-h-0" : "hidden"}>
       <div className="w-[372px] flex-shrink-0 border-r border-dark-lighter overflow-y-auto px-4 py-4">
         {displayEvents.length === 0 ? (
-          noResults("sm")
+          eventsLoading ? loadingState : noResults("sm")
         ) : (
           <>
             <div className={CARD_LIST}>
@@ -1018,6 +1088,7 @@ function EventsListingInner() {
                 />
               ))}
             </div>
+            {loadMoreControl}
             {otherEventsBlock()}
           </>
         )}
@@ -1053,7 +1124,7 @@ function EventsListingInner() {
           map left neither usable. The List tab is the list. */}
       <div ref={listRef} className="hidden lg:flex flex-col lg:w-[372px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-dark-lighter bg-dark-darker overflow-y-auto lg:max-h-none px-4 py-3 lg:py-4">
         {displayEvents.length === 0 ? (
-          noResults("sm")
+          eventsLoading ? loadingState : noResults("sm")
         ) : (
           <>
             <div className={CARD_LIST}>
@@ -1061,6 +1132,7 @@ function EventsListingInner() {
                 <EventCard key={event.id} event={event} className="w-full" selected={selectedId === event.id} onSelect={() => handleSelect(event.id)} />
               ))}
             </div>
+            {loadMoreControl}
             {otherEventsBlock()}
           </>
         )}
