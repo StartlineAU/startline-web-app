@@ -63,7 +63,7 @@ type PayoutEventRecord = {
   payoutTriggered: boolean;
   payoutAmountCents: number | null;
   organiser: { id: string; stripeAccountId: string | null };
-  registrations: Array<{ amountCents: number }>;
+  registrations: PayoutRegistration[];
   payoutOperation: PayoutOperationRecord | null;
 };
 
@@ -75,6 +75,38 @@ export type PayoutEligibleEvent = {
   organiser: { id: string; orgName: string | null; stripeAccountId: string | null };
   netCents: number;
 };
+
+export interface PayoutRegistration {
+  amountCents: number;
+  platformFeeCents: number;
+  feeStructure: string;
+}
+
+/**
+ * What the organiser's connected account actually holds for one entry.
+ *
+ * Checkout always takes the platform fee as an application fee, so the
+ * organiser's balance is the ticket price when the athlete paid the fee on top,
+ * and the ticket price minus the fee when the organiser absorbed it. Reading
+ * platformFeeCents as part of the organiser's share would pay out money the
+ * connected account never received (issue #251).
+ *
+ * An unrecognised structure is treated as organiser-absorbed, matching
+ * calculateTotalWithFee: that is the safer direction when the snapshot is odd.
+ */
+export function registrationPayoutCents(registration: PayoutRegistration): number {
+  return registration.feeStructure === "athlete"
+    ? registration.amountCents
+    : Math.max(0, registration.amountCents - registration.platformFeeCents);
+}
+
+/** Net payout for a set of confirmed entries, using each entry's own snapshot. */
+export function registrationsPayoutCents(registrations: PayoutRegistration[]): number {
+  return registrations.reduce(
+    (sum, registration) => sum + registrationPayoutCents(registration),
+    0,
+  );
+}
 
 export type PayoutAttention = {
   eventId: string;
@@ -140,7 +172,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       payoutOperation: { select: { status: true } },
       registrations: {
         where: { status: "CONFIRMED" },
-        select: { amountCents: true },
+        select: { amountCents: true, platformFeeCents: true, feeStructure: true },
       },
     },
   });
@@ -152,10 +184,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       continue;
     }
 
-    const netCents = event.registrations.reduce(
-      (sum, registration) => sum + registration.amountCents,
-      0,
-    );
+    const netCents = registrationsPayoutCents(event.registrations);
     if (netCents <= 0) continue;
 
     eligible.push({
@@ -214,6 +243,10 @@ export async function getPayoutAttention(): Promise<PayoutAttention[]> {
  * The process is split into a durable claim, the Stripe request, and the
  * recorded result. A retry after the result write fails resumes the same
  * attempt with the same idempotency key rather than starting a second payout.
+ *
+ * The net is read from each entry's fee snapshot. An athlete-paid entry leaves
+ * the ticket price in the connected account; an organiser-paid entry leaves the
+ * ticket price minus the platform fee.
  */
 export async function runPayoutForEvent(eventId: string): Promise<PayoutResult> {
   const event = await loadEvent(eventId);
@@ -238,10 +271,7 @@ export async function runPayoutForEvent(eventId: string): Promise<PayoutResult> 
     throw new PayoutError("Organiser has no Stripe account.", 422, "NO_STRIPE_ACCOUNT");
   }
 
-  const netCents = existing?.amountCents ?? event.registrations.reduce(
-    (sum, registration) => sum + registration.amountCents,
-    0,
-  );
+  const netCents = registrationsPayoutCents(event.registrations);
   if (netCents <= 0) {
     throw new PayoutError("No confirmed registrations to pay out.", 422, "NOTHING_TO_PAY");
   }
@@ -264,7 +294,7 @@ async function loadEvent(eventId: string): Promise<PayoutEventRecord> {
       organiser: { select: { id: true, stripeAccountId: true } },
       registrations: {
         where: { status: "CONFIRMED" },
-        select: { amountCents: true },
+        select: { amountCents: true, platformFeeCents: true, feeStructure: true },
       },
       payoutOperation: { select: operationSelect },
     },
@@ -368,7 +398,34 @@ async function ensureOperation(
   netCents: number,
   stripeAccountId: string,
 ): Promise<PayoutOperationRecord> {
-  if (event.payoutOperation) return event.payoutOperation;
+  const existing = event.payoutOperation;
+  if (existing) {
+    if (existing.amountCents === netCents) return existing;
+
+    // A PENDING or FAILED operation has not moved money yet, so a retry can
+    // correct an amount recorded before the fee snapshot was applied. A
+    // concurrent claim is left alone; the claim transaction resumes it with
+    // the amount Stripe was already asked for.
+    const updated = await prisma.payoutOperation.updateMany({
+      where: {
+        id: existing.id,
+        status: { in: [PayoutStatus.PENDING, PayoutStatus.FAILED] },
+      },
+      data: { amountCents: netCents },
+    });
+    if (updated.count === 1) {
+      return { ...existing, amountCents: netCents };
+    }
+
+    const current = await prisma.payoutOperation.findUnique({
+      where: { id: existing.id },
+      select: operationSelect,
+    });
+    if (!current) {
+      throw new PayoutError("Payout operation not found.", 503, "OPERATION_MISSING");
+    }
+    return current;
+  }
 
   try {
     return await prisma.payoutOperation.create({

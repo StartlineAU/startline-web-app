@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { PayoutAttemptStatus, PayoutStatus } from "@prisma/client";
 
-// The failure this covers is between two systems: Stripe has accepted a payout
-// while the database still says it has not been sent. These tests pin the
-// durable claim and the idempotent resume path, rather than mocking Stripe's
-// own idempotency implementation.
+// Stripe and the database cannot commit together, so these tests pin the
+// durable claim and idempotent resume path rather than mocking Stripe's own
+// idempotency implementation. They also pin the per-entry fee snapshot: an
+// organiser-paid entry leaves less in the connected account than its ticket
+// price (issue #251).
 
 const mocks = vi.hoisted(() => {
   const payoutOperation = {
@@ -44,10 +45,19 @@ vi.mock("@/lib/stripe", () => ({
 }));
 
 import {
+  getPayoutEligibleEvents,
   PAYOUT_IDEMPOTENCY_WINDOW_MS,
   PayoutError,
+  registrationPayoutCents,
+  registrationsPayoutCents,
   runPayoutForEvent,
 } from "@/lib/payout";
+
+const entry = (
+  amountCents: number,
+  platformFeeCents: number,
+  feeStructure: string,
+) => ({ amountCents, platformFeeCents, feeStructure });
 
 function operation(overrides: Record<string, unknown> = {}) {
   return {
@@ -81,7 +91,7 @@ function event(overrides: Record<string, unknown> = {}) {
     payoutTriggered: false,
     payoutAmountCents: null,
     organiser: { id: "org-1", stripeAccountId: "acct_1" },
-    registrations: [{ amountCents: 10000 }],
+    registrations: [entry(10000, 540, "athlete")],
     payoutOperation: null,
     ...overrides,
   };
@@ -125,6 +135,65 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("registrationPayoutCents", () => {
+  it("leaves the athlete-paid ticket price untouched", () => {
+    expect(registrationPayoutCents(entry(10000, 540, "athlete"))).toBe(10000);
+  });
+
+  it("deducts the fee the organiser absorbed", () => {
+    expect(registrationPayoutCents(entry(10000, 540, "organiser"))).toBe(9460);
+  });
+
+  // Checkout treats anything that is not "athlete" as organiser-absorbed, so
+  // the payout follows the same rule rather than overpaying on a bad snapshot.
+  it("treats an unrecognised structure as organiser-absorbed", () => {
+    expect(registrationPayoutCents(entry(10000, 540, ""))).toBe(9460);
+  });
+
+  it("never returns a negative share", () => {
+    expect(registrationPayoutCents(entry(100, 540, "organiser"))).toBe(0);
+  });
+
+  it("uses each entry's own snapshot in a mixed event", () => {
+    expect(registrationsPayoutCents([
+      entry(10000, 540, "athlete"),
+      entry(10000, 540, "organiser"),
+    ])).toBe(19460);
+  });
+});
+
+describe("getPayoutEligibleEvents", () => {
+  it("previews the net the organiser will actually receive", async () => {
+    mocks.event.findMany.mockResolvedValue([
+      {
+        id: "event-1",
+        title: "Apex Throwdown",
+        eventDate: "2026-08-15",
+        endDate: null,
+        organiser: { id: "org-1", orgName: "Apex", stripeAccountId: "acct_1" },
+        payoutOperation: null,
+        registrations: [
+          entry(10000, 540, "athlete"),
+          entry(10000, 540, "organiser"),
+        ],
+      },
+    ]);
+
+    const events = await getPayoutEligibleEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].netCents).toBe(19460);
+    expect(mocks.event.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        registrations: {
+          where: { status: "CONFIRMED" },
+          select: { amountCents: true, platformFeeCents: true, feeStructure: true },
+        },
+      }),
+    }));
+  });
+});
+
 describe("runPayoutForEvent", () => {
   it("claims a durable operation and sends an event-scoped idempotency key", async () => {
     const result = await runPayoutForEvent("event-1");
@@ -161,6 +230,62 @@ describe("runPayoutForEvent", () => {
         payoutAt: expect.any(Date),
       },
     });
+  });
+
+  it("creates the operation for the net, not the sum of ticket prices", async () => {
+    const mixed = [
+      entry(10000, 540, "athlete"),
+      entry(10000, 540, "organiser"),
+    ];
+    mocks.event.findUnique.mockResolvedValue(event({ registrations: mixed }));
+    mocks.payoutOperation.create.mockResolvedValue(operation({ amountCents: 19460 }));
+    mocks.payoutOperation.findUnique.mockResolvedValue(operation({ amountCents: 19460 }));
+
+    await expect(runPayoutForEvent("event-1")).resolves.toEqual({
+      netCents: 19460,
+      alreadyProcessed: false,
+      stripePayoutId: "po_1",
+    });
+
+    expect(mocks.payoutOperation.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ amountCents: 19460 }),
+      }),
+    );
+    expect(mocks.createPayout).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 19460 }),
+      expect.objectContaining({ stripeAccount: "acct_1" }),
+    );
+    expect(mocks.event.update).toHaveBeenCalledWith({
+      where: { id: "event-1" },
+      data: expect.objectContaining({ payoutAmountCents: 19460 }),
+    });
+  });
+
+  it("corrects an unstarted operation recorded with the old gross amount", async () => {
+    mocks.event.findUnique.mockResolvedValue(event({
+      payoutOperation: operation(),
+      registrations: [entry(10000, 540, "organiser")],
+    }));
+    mocks.payoutOperation.findUnique.mockResolvedValue(operation({ amountCents: 9460 }));
+
+    await expect(runPayoutForEvent("event-1")).resolves.toEqual({
+      netCents: 9460,
+      alreadyProcessed: false,
+      stripePayoutId: "po_1",
+    });
+
+    expect(mocks.payoutOperation.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: "operation-1",
+        status: { in: [PayoutStatus.PENDING, PayoutStatus.FAILED] },
+      },
+      data: { amountCents: 9460 },
+    });
+    expect(mocks.createPayout).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 9460 }),
+      expect.objectContaining({ stripeAccount: "acct_1" }),
+    );
   });
 
   it("does not send a second payout when another request already owns the claim", async () => {
