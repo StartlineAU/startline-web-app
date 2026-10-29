@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   eventFindUnique: vi.fn(),
   registrationCount: vi.fn(),
   registrationGroupBy: vi.fn(),
+  registrationFindFirst: vi.fn(),
   registrationFindMany: vi.fn(),
   registrationCreateMany: vi.fn(),
   userUpsert: vi.fn(),
@@ -19,6 +20,7 @@ const prismaMock = vi.hoisted(() => {
     registration: {
       count: mocks.registrationCount,
       groupBy: mocks.registrationGroupBy,
+      findFirst: mocks.registrationFindFirst,
       findMany: mocks.registrationFindMany,
       createMany: mocks.registrationCreateMany,
     },
@@ -46,6 +48,7 @@ vi.mock("@/lib/stripe", () => ({
 }));
 
 import { POST as registerFree } from "@/app/api/registrations/free/route";
+import { POST as registerFreeRsvp } from "@/app/api/registrations/free/rsvp/route";
 import { POST as checkout } from "@/app/api/checkout/route";
 
 const participant = (over: Record<string, unknown> = {}) => ({
@@ -89,6 +92,7 @@ const post = (handler: (req: NextRequest) => Promise<Response>, path: string, bo
   }));
 
 const postFree = (body: unknown) => post(registerFree, "/api/registrations/free", body);
+const postRsvp = (body: unknown) => post(registerFreeRsvp, "/api/registrations/free/rsvp", body);
 const postCheckout = (body: unknown) => post(checkout, "/api/checkout", body);
 
 beforeEach(() => {
@@ -96,6 +100,7 @@ beforeEach(() => {
   mocks.session.mockReturnValue(null);
   mocks.registrationCount.mockResolvedValue(0);
   mocks.registrationGroupBy.mockResolvedValue([]);
+  mocks.registrationFindFirst.mockResolvedValue(null);
   mocks.registrationFindMany.mockResolvedValue([]);
   mocks.registrationCreateMany.mockResolvedValue({ count: 1 });
   mocks.userUpsert.mockResolvedValue({ id: "user-1" });
@@ -218,6 +223,148 @@ describe("POST /api/registrations/free", () => {
     });
 
     expect(res.status).toBe(200);
+  });
+});
+
+// A free RSVP is a signed-in athlete's entry, so the account is the identity and
+// the request carries no participant details at all.
+describe("POST /api/registrations/free/rsvp", () => {
+  const account = (over: Record<string, unknown> = {}) => ({
+    sub: "user-1",
+    email: "jordan@example.com",
+    name: "Jordan Clarke",
+    ...over,
+  });
+
+  it("requires a signed-in account", async () => {
+    mocks.session.mockReturnValue(null);
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+
+    expect(res.status).toBe(401);
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("requires the terms and waiver to be accepted", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: false,
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("terms and waiver");
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("uses the account name and email for the registration", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      participantCount: 1,
+      email: "jordan@example.com",
+      name: "Jordan Clarke",
+    });
+
+    const [row] = mocks.registrationCreateMany.mock.calls[0][0].data;
+    expect(row).toMatchObject({
+      eventId: "evt-free",
+      userId: "user-1",
+      athleteName: "Jordan Clarke",
+      athleteEmail: "jordan@example.com",
+      firstName: "Jordan",
+      lastName: "Clarke",
+      waveLabel: "General",
+      amountCents: 0,
+      platformFeeCents: 0,
+      waiverAccepted: true,
+    });
+    expect(mocks.userUpsert).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the account email when there is no display name", async () => {
+    mocks.session.mockReturnValue(account({ name: null, email: "fallback@example.com" }));
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+
+    expect(res.status).toBe(200);
+    const [row] = mocks.registrationCreateMany.mock.calls[0][0].data;
+    expect(row.athleteName).toBe("fallback@example.com");
+    expect(row.athleteEmail).toBe("fallback@example.com");
+  });
+
+  it("refuses a second RSVP for the same account", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+    mocks.registrationFindFirst.mockResolvedValue({ id: "existing-registration" });
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain("already registered");
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("leaves paid and mixed-price events on the standard registration flow", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(
+      freeEvent({
+        waves: [{ label: "General", price: "20" }],
+        organiser: { id: "org-1", stripeAccountId: "acct_1", stripeOnboardingComplete: true },
+      })
+    );
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain("not a free event");
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a closed free tier", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(
+      freeEvent({ waves: [{ label: "General", price: "0", closes: "2020-01-01" }] })
+    );
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain("closed");
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
   });
 });
 

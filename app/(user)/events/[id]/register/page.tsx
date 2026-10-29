@@ -199,6 +199,13 @@ function RegisterContent() {
   // profile lacks; the confirmation screen offers to save them.
   const [profileOffer, setProfileOffer] = useState<ProfileUpdate | null>(null);
 
+  // A free RSVP is one ticket for the signed-in account, so the tier is chosen
+  // directly rather than through the quantity steppers.
+  const [freeRsvpWave, setFreeRsvpWave] = useState(preselectedWave);
+  // The server tells us which account email the RSVP used; use that on the
+  // confirmation screen even if the profile request is still in flight.
+  const rsvpEmailRef = useRef("");
+
   // ── Load event ──
   useEffect(() => {
     fetch(`/api/events`)
@@ -339,6 +346,33 @@ function RegisterContent() {
   // A free event has no policy to state — nothing is paid, so nothing comes back
   // — and both surfaces below take an empty list as "say nothing" (issue #304).
   const freeEvent = isFreeEvent(event?.waves);
+  // A fully free event on Startline is an RSVP: one seat for the signed-in
+  // account, no participant form and no card. A free tier on a mixed-price
+  // event keeps the standard flow because there are still paid tiers.
+  const freeRsvp = freeEvent && event?.registrationType === "startline";
+  const openFreeWaves = useMemo(() => (freeRsvp ? openWaves : []), [freeRsvp, openWaves]);
+  const freeRsvpWaveLabel = useMemo(() => {
+    if (freeRsvpWave && openFreeWaves.some((w) => w.label === freeRsvpWave)) return freeRsvpWave;
+    return openFreeWaves.length === 1 ? openFreeWaves[0].label : "";
+  }, [freeRsvpWave, openFreeWaves]);
+  // One free tier needs no picker, so the confirmation is the first step.
+  const freeRsvpDisplayStep = freeRsvp && openFreeWaves.length === 1 ? 1 : step;
+  const accountName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : "";
+  const accountEmail = profile?.email ?? "";
+  const freeRsvpReviewRows: ReviewRow[] = [
+    { label: "Ticket", value: freeRsvpWaveLabel || "Choose a tier" },
+    { label: "Name", value: accountName || "Your account" },
+    { label: "Email", value: accountEmail || "Loading your account…" },
+  ];
+  const summaryLines = freeRsvp
+    ? freeRsvpWaveLabel
+      ? [{ label: freeRsvpWaveLabel, value: "Free" }]
+      : []
+    : tierLines.map((t) => ({
+        label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
+        value: priceLabel(t.price * t.qty),
+      }));
+
   const refundTiers = parseTiers(event?.refundTiers);
   const refundLines = freeEvent ? [] : describeTiers(refundTiers);
   const daysToEvent = event ? daysUntil(event.eventDate, new Date().toISOString().slice(0, 10)) : 0;
@@ -416,6 +450,9 @@ function RegisterContent() {
     const w = availByWave[label];
     return w?.qty != null && w.qty - w.confirmed <= 0;
   };
+  const freeRsvpSoldOut =
+    !!freeRsvpWaveLabel && (eventSoldOut || waveSoldOut(freeRsvpWaveLabel));
+  const freeRsvpReady = !!freeRsvpWaveLabel && !freeRsvpSoldOut;
   const canIncrement = (label: string): boolean => {
     if (totalTickets >= MAX_REGISTRATION_PARTICIPANTS) return false;
     if (totalTickets >= eventRemaining) return false;
@@ -525,6 +562,49 @@ function RegisterContent() {
     }
   }, [orderPayload]);
 
+  // ── Free RSVP (signed-in, account is the attendee) ──
+  // The request carries only the tier and the terms acceptance. The server
+  // reads the name and email from the session, so nothing here can change who
+  // the registration belongs to.
+  const submitFreeRsvp = useCallback(async (): Promise<string | null> => {
+    setError("");
+    if (!freeRsvpWaveLabel) {
+      setError("Choose a ticket first.");
+      return null;
+    }
+    try {
+      const res = await fetch("/api/registrations/free/rsvp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          waveLabel: freeRsvpWaveLabel,
+          acceptedTerms: true,
+          turnstileToken: turnstileToken ?? undefined,
+        }),
+      });
+      const data = (await res.json()) as {
+        registrationIds?: string[];
+        error?: string;
+        email?: string;
+      };
+      if (res.status === 401) {
+        setError("Please sign in again to RSVP.");
+        setIsSignInOpen(true);
+        return null;
+      }
+      if (!res.ok || !data.registrationIds?.length) {
+        setError(data.error ?? "Failed to complete RSVP.");
+        return null;
+      }
+      rsvpEmailRef.current = data.email ?? "";
+      return data.registrationIds[0];
+    } catch {
+      setError("Something went wrong. Please try again.");
+      return null;
+    }
+  }, [eventId, freeRsvpWaveLabel, turnstileToken]);
+
   // ── Step navigation ──
   const goToTicket = () => {
     setStep(0);
@@ -598,16 +678,16 @@ function RegisterContent() {
   // id on a free one. Either way it is only ever shown back to the athlete.
   const onConfirmed = (reference: string) => {
     const ref = "SL-" + reference.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
-    setProfileOffer(buildProfileUpdate());
+    setProfileOffer(freeRsvp ? null : buildProfileUpdate());
     setConfirmed({
       ref,
-      email: participants[0].email,
-      tierSummary,
-      count: participants.length,
+      email: rsvpEmailRef.current || profile?.email || participants[0].email,
+      tierSummary: freeRsvp ? freeRsvpWaveLabel : tierSummary,
+      count: freeRsvp ? 1 : participants.length,
       // The server's own total where it gave one, so the receipt can never
       // disagree with what the card was charged.
-      amount: serverTotal != null ? priceLabel(serverTotal) : totalLabel,
-      free: freeOrder,
+      amount: freeRsvp ? "Free" : serverTotal != null ? priceLabel(serverTotal) : totalLabel,
+      free: freeRsvp || freeOrder,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -684,6 +764,45 @@ function RegisterContent() {
     );
   }
 
+  // A free RSVP belongs to an account, so there is no guest path. Ask the
+  // visitor to sign in instead of showing a form whose details we would ignore.
+  if (freeRsvp && status !== "authenticated") {
+    return (
+      <div className="min-h-screen bg-dark-darker">
+        <div className="max-w-[520px] mx-auto px-5 pt-24 pb-24">
+          <Link
+            href={`/events/${eventId}`}
+            className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors mb-8"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+          </Link>
+          <div className="bg-dark border border-dark-lighter rounded-[14px] p-6 text-center">
+            <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2.5">
+              Free event
+            </div>
+            <h1 className="font-headline text-[clamp(28px,4vw,40px)] font-bold italic tracking-[-0.04em] text-light leading-[.95] mb-3">
+              Sign in to<br /><span className="text-primary">RSVP.</span>
+            </h1>
+            <p className="text-[13px] text-muted leading-relaxed mb-6">
+              This event is free. Sign in so your account is the entry — there are no extra details to fill in.
+            </p>
+            <button type="button" onClick={() => setIsSignInOpen(true)} className={continueBtnCls}>
+              <LogIn className="w-4 h-4" /> Sign in to RSVP
+            </button>
+          </div>
+        </div>
+        <SignInModal
+          isOpen={isSignInOpen}
+          onClose={() => setIsSignInOpen(false)}
+          onSuccess={() => {
+            setIsSignInOpen(false);
+            prefilledRef.current = false;
+          }}
+        />
+      </div>
+    );
+  }
+
   const dateLabel = formatEventDate(event.eventDate, event.startTime);
   const locationLabel = [event.venue, event.city].filter(Boolean).join(", ") + ` ${event.state.toUpperCase()}`;
 
@@ -751,14 +870,14 @@ function RegisterContent() {
           <div>
             <div className="mb-7">
               <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2.5">
-                Registration · {event.title}
+                {freeRsvp ? "RSVP" : "Registration"} · {event.title}
               </div>
               <h1 className="font-headline text-[clamp(28px,3.5vw,42px)] font-bold italic tracking-[-0.04em] text-light leading-[.92]">
-                Secure your<br /><span className="text-primary">spot.</span>
+                {freeRsvp ? <>Save your<br /><span className="text-primary">spot.</span></> : <>Secure your<br /><span className="text-primary">spot.</span></>}
               </h1>
             </div>
 
-            <StepRail current={step} />
+            <StepRail current={freeRsvp ? (freeRsvpDisplayStep as 0 | 1 | 2) : step} variant={freeRsvp ? "rsvp" : "registration"} />
 
             {showTurnstile && (
               <div className="mb-4">
@@ -772,8 +891,90 @@ function RegisterContent() {
               </div>
             )}
 
-            {/* ── STEP 0: Select tickets ── */}
-            {step === 0 && (
+            {/* ── STEP 0a: Choose a free tier ── */}
+            {freeRsvpDisplayStep === 0 && freeRsvp && (
+              <>
+                <div className="bg-dark border border-dark-lighter rounded-[14px] p-6">
+                  <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted mb-4">
+                    Choose your ticket
+                  </div>
+                  {eventSoldOut && (
+                    <div className="mb-4 bg-red-900/20 border border-red-500/25 rounded-lg px-4 py-3 font-headline text-[11px] font-bold uppercase tracking-[0.13em] text-red-300">
+                      This event is sold out.
+                    </div>
+                  )}
+                  <div className="space-y-2.5" role="radiogroup" aria-label="Ticket tier">
+                    {event.waves?.map((wave) => {
+                      const closed = !waveIsOpen(wave);
+                      const soldOut = !closed && waveSoldOut(wave.label);
+                      const disabled = closed || soldOut;
+                      const selected = freeRsvpWaveLabel === wave.label;
+                      return (
+                        <button
+                          key={wave.label}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          disabled={disabled}
+                          onClick={() => {
+                            setFreeRsvpWave(wave.label);
+                            setError("");
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-3.5 px-[18px] py-4 rounded-xl border-2 text-left transition-colors",
+                            disabled
+                              ? "border-dark-lighter bg-dark-light opacity-40"
+                              : selected
+                                ? "border-primary bg-primary/[0.07]"
+                                : "border-dark-lighter bg-dark-light hover:border-primary/50"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0",
+                              selected ? "border-primary bg-primary" : "border-dark-lighter"
+                            )}
+                          >
+                            {selected && <Check className="w-2.5 h-2.5 text-dark" strokeWidth={3} />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-headline text-[14.5px] font-bold text-light">{wave.label}</span>
+                            <span className="block font-headline text-[10px] uppercase tracking-[0.13em] mt-1 text-muted">
+                              {closed ? "Closed" : soldOut ? "Sold out" : "One place · your account"}
+                            </span>
+                          </span>
+                          <span className="font-headline text-[20px] font-bold italic text-primary">Free</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center mt-5">
+                  <Link href={`/events/${eventId}`} className={backBtnCls}>
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+                  </Link>
+                  <div className="flex items-center gap-3">
+                    <span className="font-headline text-[10px] uppercase tracking-[0.15em] text-muted-dark">1 / 2</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep(1);
+                        setError("");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      disabled={!freeRsvpWaveLabel || freeRsvpSoldOut}
+                      className={continueBtnCls}
+                    >
+                      Continue <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── STEP 0b: Select tickets (standard registration) ── */}
+            {step === 0 && !freeRsvp && (
               <>
                 <div className="bg-dark border border-dark-lighter rounded-[14px] p-6">
                   <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted mb-4">
@@ -885,8 +1086,32 @@ function RegisterContent() {
               </>
             )}
 
-            {/* ── STEP 1: Your details ── */}
-            {step === 1 && (
+            {/* ── STEP 1a: Confirm a free RSVP ── */}
+            {freeRsvpDisplayStep === 1 && freeRsvp && (
+              <ReviewPayStep
+                free
+                rsvp
+                ready={freeRsvpReady}
+                clientSecret=""
+                eventId={eventId}
+                reviewRows={freeRsvpReviewRows}
+                confirmLabel="I'm going"
+                refundLines={[]}
+                refundHeadline=""
+                onBack={openFreeWaves.length > 1 ? () => {
+                  setStep(0);
+                  setError("");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                } : undefined}
+                onConfirmed={onConfirmed}
+                onFreeSubmit={submitFreeRsvp}
+                onError={setError}
+                stepLabel="2 / 2"
+              />
+            )}
+
+            {/* ── STEP 1b: Your details (standard registration) ── */}
+            {step === 1 && !freeRsvp && (
               <>
                 {status !== "authenticated" && (
                   <button
@@ -1045,7 +1270,7 @@ function RegisterContent() {
             {/* ── STEP 2: Review & pay ── */}
             {/* A free order goes straight to review: there is no PaymentIntent
                 to wait on, and confirming writes the registration. */}
-            {step === 2 && freeOrder && (
+            {step === 2 && !freeRsvp && freeOrder && (
               <ReviewPayStep
                 free
                 clientSecret=""
@@ -1064,7 +1289,7 @@ function RegisterContent() {
               />
             )}
 
-            {step === 2 && !freeOrder && (
+            {step === 2 && !freeRsvp && !freeOrder && (
               !clientSecret ? (
                 error && !processing ? (
                   // Checkout could not start (e.g. the event sold out mid-session).
@@ -1122,18 +1347,18 @@ function RegisterContent() {
             dateLabel={dateLabel}
             locationLabel={locationLabel}
             coverImageUrl={event.coverImageUrl}
-            lines={[
-              ...tierLines.map((t) => ({
-                label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
-                value: priceLabel(t.price * t.qty),
-              })),
-            ]}
+            lines={summaryLines}
             feeLine={
-              totalTickets > 0 && athletePaysFee && feeTotal > 0
+              !freeRsvp && totalTickets > 0 && athletePaysFee && feeTotal > 0
                 ? { label: "Service fee", value: money(feeTotal) }
                 : null
             }
-            totalLabel={totalTickets > 0 ? totalLabel : null}
+            totalLabel={
+              freeRsvp
+                ? freeRsvpWaveLabel ? "Free" : null
+                : totalTickets > 0 ? totalLabel : null
+            }
+            free={freeRsvp}
           />
         </div>
       </div>
