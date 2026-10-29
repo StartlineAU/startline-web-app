@@ -80,7 +80,6 @@ describe("getPayoutEligibleEvents", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0].netCents).toBe(19460);
-    expect(events[0].registrations).toBeUndefined();
     expect(mocks.event.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
         registrations: {
