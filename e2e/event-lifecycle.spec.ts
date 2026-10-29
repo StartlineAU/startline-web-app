@@ -121,5 +121,10 @@ test.describe("event lifecycle reads", () => {
     await page.goto(`/events/${RUNNING_ID}`);
     await expect(page.getByText("Event in progress")).toBeVisible({ timeout: 20000 });
     await expect(page.getByRole("link", { name: /register now/i })).toHaveCount(0);
+
+    await page.goto(`/events/${RUNNING_ID}/register`);
+    await expect(page.getByText("Event in progress")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/this event has started/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /continue/i })).toHaveCount(0);
   });
 });

@@ -9,14 +9,24 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 export type EventPhase = "upcoming" | "in_progress" | "ended";
 
+export interface LifecycleFields {
+  status?: string;
+  startsAtUtc?: string | null;
+  endsAtUtc?: string | null;
+}
+
 /** Public display phase, derived without mutating the persisted status. */
-export function getEventPhase(event: UserEvent, now = Date.now()): EventPhase {
+export function getLifecyclePhase(event: LifecycleFields, now = Date.now()): EventPhase {
   const startsAt = event.startsAtUtc ? new Date(event.startsAtUtc).getTime() : null;
   const endsAt = event.endsAtUtc ? new Date(event.endsAtUtc).getTime() : null;
 
   if (event.status === "ARCHIVED" || (endsAt != null && now >= endsAt)) return "ended";
   if (event.status === "IN_PROGRESS" || (startsAt != null && now >= startsAt)) return "in_progress";
   return "upcoming";
+}
+
+export function getEventPhase(event: UserEvent, now = Date.now()): EventPhase {
+  return getLifecyclePhase(event, now);
 }
 
 export function getEventStatus(event: UserEvent): EventStatus {

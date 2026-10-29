@@ -18,6 +18,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { getLifecyclePhase } from "@/lib/event-status";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 const BOT_CHECK_HOSTS = ["startlineau.com", "www.startlineau.com", "staging.startlineau.com"];
@@ -53,6 +54,9 @@ interface EventData {
   title: string;
   eventDate: string;
   startTime: string;
+  status?: string;
+  startsAtUtc?: string | null;
+  endsAtUtc?: string | null;
   venue: string;
   city: string;
   state: string;
@@ -768,6 +772,33 @@ function RegisterContent() {
           <h1 className="font-headline text-2xl font-black italic text-light mb-2">Event not found</h1>
           <Link href="/events" className="font-headline text-xs uppercase tracking-widest text-primary hover:text-primary/80">
             Back to events
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const phase = getLifecyclePhase(event);
+  if (phase !== "upcoming") {
+    return (
+      <div className="min-h-screen bg-dark-darker flex items-center justify-center px-6">
+        <div className="text-center max-w-md">
+          <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-3">
+            {phase === "in_progress" ? "Event in progress" : "Registration closed"}
+          </div>
+          <h1 className="font-headline text-3xl font-black italic tracking-tighter text-light mb-3">
+            {event.title}
+          </h1>
+          <p className="text-muted text-[14px] mb-6">
+            {phase === "in_progress"
+              ? "This event has started, so new entries are closed. Follow the organiser for future events."
+              : "This event has finished, so it is no longer taking entries."}
+          </p>
+          <Link
+            href={`/events/${event.id}`}
+            className="inline-flex items-center gap-2 h-11 px-5 rounded-xl border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:bg-dark-light transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to event
           </Link>
         </div>
       </div>
