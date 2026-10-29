@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Link2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -39,6 +39,8 @@ function flashFromQuery(query: URLSearchParams): Message {
 }
 
 export default function SignInMethodsCard() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [methods, setMethods] = useState<SignInMethods | null>(null);
   const [loadingError, setLoadingError] = useState("");
@@ -57,12 +59,8 @@ export default function SignInMethodsCard() {
     params.delete("linked");
     params.delete("linkError");
     const query = params.toString();
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-    );
-  }, []);
+    router.replace(`${pathname ?? "/"}${query ? `?${query}` : ""}`, { scroll: false });
+  }, [router, pathname]);
 
   useEffect(() => {
     let cancelled = false;
