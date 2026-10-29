@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/amplify-server";
-import { getPayoutEligibleEvents, runPayoutForEvent } from "@/lib/payout";
+import {
+  getPayoutAttention,
+  getPayoutEligibleEvents,
+  PayoutError,
+  runPayoutForEvent,
+} from "@/lib/payout";
 import { z } from "zod";
 
 const payoutSchema = z.object({ eventId: z.string().min(1).max(255) });
@@ -10,8 +15,11 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   try {
-    const eligible = await getPayoutEligibleEvents();
-    return NextResponse.json({ events: eligible });
+    const [events, attention] = await Promise.all([
+      getPayoutEligibleEvents(),
+      getPayoutAttention(),
+    ]);
+    return NextResponse.json({ events, attention });
   } catch (err) {
     console.error("Admin payout list error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
@@ -29,13 +37,22 @@ export async function POST(req: NextRequest) {
   const eventId = parsed.data.eventId;
 
   try {
-    const { netCents } = await runPayoutForEvent(eventId);
-    return NextResponse.json({ ok: true, eventId, netCents });
+    const result = await runPayoutForEvent(eventId);
+    return NextResponse.json({
+      ok: true,
+      eventId,
+      netCents: result.netCents,
+      stripePayoutId: result.stripePayoutId,
+      alreadyProcessed: result.alreadyProcessed,
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Payout failed.";
-    const status = message.includes("not found") ? 404
-      : message.includes("already triggered") ? 409
-      : 422;
-    return NextResponse.json({ error: message }, { status });
+    if (err instanceof PayoutError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: err.status },
+      );
+    }
+    console.error("Admin payout error:", err);
+    return NextResponse.json({ error: "Payout failed." }, { status: 503 });
   }
 }

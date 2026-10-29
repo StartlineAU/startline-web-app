@@ -186,9 +186,12 @@ model Event {
   feeStructure      String  @default("athlete")
 
   // Payouts — set once an admin triggers a Stripe Connect payout after the event ends.
+  // These stay as the read projection for existing screens; PayoutOperation is
+  // the durable source of truth for the money movement itself.
   payoutTriggered   Boolean   @default(false)
   payoutAmountCents Int?
   payoutAt          DateTime?
+  payoutOperation   PayoutOperation?
 
   // Step 5 — media & logistics
   coverImageUrl       String?
@@ -219,6 +222,62 @@ model Event {
   updatedAt DateTime @updatedAt
 
   @@map("events")
+}
+
+// ─── Payout operations ────────────────────────────────────────────────────────
+// One durable operation per event. Stripe and the database cannot commit
+// atomically, so the operation is claimed before the Stripe call and every
+// request carries an idempotency key recorded here. An ambiguous outcome stays
+// visible to an admin instead of being retried blindly.
+enum PayoutStatus {
+  PENDING
+  SUBMITTING
+  SUBMITTED
+  FAILED
+  NEEDS_RECONCILIATION
+}
+
+enum PayoutAttemptStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+  UNKNOWN
+}
+
+model PayoutOperation {
+  id              String       @id @default(uuid())
+  eventId         String       @unique
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  stripeAccountId String
+  amountCents     Int
+  currency        String       @default("aud")
+  status          PayoutStatus @default(PENDING)
+  stripePayoutId  String?
+  lastError       String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  attempts PayoutAttempt[]
+
+  @@index([status])
+  @@map("payout_operations")
+}
+
+model PayoutAttempt {
+  id             String              @id @default(uuid())
+  operationId    String
+  operation      PayoutOperation     @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  attemptNumber  Int
+  idempotencyKey String              @unique
+  status         PayoutAttemptStatus @default(STARTED)
+  stripePayoutId String?
+  errorCategory  String?
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([operationId, attemptNumber])
+  @@map("payout_attempts")
 }
 
 // ─── Start waves (heats) ──────────────────────────────────────────────────────
