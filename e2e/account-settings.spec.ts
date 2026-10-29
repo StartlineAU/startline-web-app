@@ -78,6 +78,44 @@ test.describe("changing email", () => {
   });
 });
 
+test.describe("provider-only login security", () => {
+  test("a Google-only account sees its provider and can set a password", async ({ page }) => {
+    await loginAs(page, "social");
+    const settings = await openSettings(page, "security");
+
+    await expect(settings.getByRole("heading", { name: "Sign-in method" })).toBeVisible();
+    await expect(settings.getByText(/you sign in with google/i)).toBeVisible();
+    await expect(settings.getByRole("heading", { name: "Set a password" })).toBeVisible();
+    // The controls that need a Cognito password, or would be overwritten by
+    // the provider, are not offered.
+    await expect(settings.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: /change password/i })).toHaveCount(0);
+    await expect(settings.getByRole("button", { name: /set up/i })).toHaveCount(0);
+    await expect(settings.getByText(/authenticator codes protect password sign-ins/i)).toBeVisible();
+  });
+
+  test("an Apple-only account names Apple", async ({ page }) => {
+    await loginAs(page, "apple");
+    const settings = await openSettings(page, "security");
+
+    await expect(settings.getByText(/you sign in with apple/i)).toBeVisible();
+    await expect(settings.getByRole("heading", { name: "Set a password" })).toBeVisible();
+  });
+});
+
+test.describe("linked account login security", () => {
+  test("a linked account can unlink but cannot change its email", async ({ page }) => {
+    await loginAs(page, "linked");
+    const settings = await openSettings(page, "security");
+
+    await expect(settings.getByRole("heading", { name: "Sign-in method" })).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Unlink Google" })).toBeVisible();
+    await expect(settings.getByRole("button", { name: /change password/i })).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Change", exact: true })).toHaveCount(0);
+    await expect(settings.getByText(/password sign-in/i)).toBeVisible();
+  });
+});
+
 test.describe("signing out everywhere", () => {
   test("asks first and says what will happen", async ({ page }) => {
     await loginAs(page, "athlete");

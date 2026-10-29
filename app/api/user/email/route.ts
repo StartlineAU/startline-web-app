@@ -5,7 +5,12 @@ import {
   VerifyUserAttributeCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "@/lib/prisma";
-import { getUserSession } from "@/lib/amplify-server";
+import { getServerSession, getUserSession } from "@/lib/amplify-server";
+import {
+  canChangeEmail,
+  getAccountSignInState,
+  providerListLabel,
+} from "@/lib/account-sign-in";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
 
@@ -26,6 +31,24 @@ const emailActionSchema = z.discriminatedUnion("action", [
 export async function POST(req: Request) {
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  const cognitoSession = await getServerSession();
+  if (!cognitoSession) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const signIn = await getAccountSignInState(cognitoSession);
+  if (!signIn) {
+    return NextResponse.json({ error: "Could not read your sign-in methods." }, { status: 503 });
+  }
+  if (!canChangeEmail(signIn)) {
+    const providers = [...new Set(signIn.identities.map((identity) => identity.provider))];
+    return NextResponse.json(
+      {
+        error: providers.length
+          ? `Unlink ${providerListLabel(providers)} before changing your email. The provider controls that address.`
+          : "Set a password before changing your email.",
+      },
+      { status: 409 },
+    );
+  }
 
   const parsed = emailActionSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 400 });
