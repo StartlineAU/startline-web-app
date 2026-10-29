@@ -21,14 +21,21 @@ async function organiserId(): Promise<string> {
   return organiser!.id;
 }
 
+function localIsoDate(daysFromToday: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromToday);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 async function upsertEvent(args: {
   id: string;
   title: string;
+  eventDate: string;
   startsAtUtc: Date;
   endsAtUtc: Date;
 }) {
   const organiser = await organiserId();
-  const eventDate = args.startsAtUtc.toISOString().slice(0, 10);
+  const eventDate = args.eventDate;
   await prisma.event.upsert({
     where: { id: args.id },
     update: {
@@ -67,12 +74,14 @@ test.beforeAll(async () => {
   await upsertEvent({
     id: EXPIRED_ID,
     title: "E2E Expired Approved Event",
+    eventDate: localIsoDate(-1),
     startsAtUtc: new Date(now - 3 * 60 * 60 * 1000),
     endsAtUtc: new Date(now - 2 * 60 * 60 * 1000),
   });
   await upsertEvent({
     id: RUNNING_ID,
     title: "E2E Running Event",
+    eventDate: localIsoDate(0),
     startsAtUtc: new Date(now - 60 * 60 * 1000),
     endsAtUtc: new Date(now + 2 * 60 * 60 * 1000),
   });
@@ -83,15 +92,23 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function eventIds(events: { id: string }[]) {
-  return events.map((event) => event.id);
+async function publicEventIds(
+  request: import("@playwright/test").APIRequestContext,
+  query = "",
+) {
+  const res = await request.get(`/api/events${query ? `?${query}` : ""}`);
+  expect(res.ok()).toBeTruthy();
+  const body = await res.json();
+  // The listing moved to a paginated envelope; tolerate the old array shape so
+  // this spec keeps testing lifecycle filtering rather than the envelope.
+  const events = Array.isArray(body) ? body : body.events;
+  return (events as { id: string }[]).map((event) => event.id);
 }
 
 test.describe("event lifecycle reads", () => {
   test("an expired approved row never appears in public discovery, even with no worker run", async ({ request }) => {
-    const res = await request.get("/api/events");
-    expect(res.ok()).toBeTruthy();
-    expect(eventIds(await res.json())).not.toContain(EXPIRED_ID);
+    expect(await publicEventIds(request, "q=E2E%20Expired%20Approved%20Event"))
+      .not.toContain(EXPIRED_ID);
 
     // A read does not write the row. The scheduled worker owns that transition.
     const row = await prisma.event.findUnique({
@@ -112,8 +129,7 @@ test.describe("event lifecycle reads", () => {
   });
 
   test("a running event stays discoverable but cannot be registered for", async ({ page, request }) => {
-    const res = await request.get("/api/events");
-    expect(eventIds(await res.json())).toContain(RUNNING_ID);
+    expect(await publicEventIds(request, "q=E2E%20Running%20Event")).toContain(RUNNING_ID);
 
     const availability = await request.get(`/api/events/${RUNNING_ID}/availability`);
     expect(availability.status()).toBe(404);
