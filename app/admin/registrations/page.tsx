@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, startTransition } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, RefreshCw, RotateCcw, DollarSign } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -188,36 +189,44 @@ function RegistrationsContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId") ?? undefined;
 
-  const [regs,       setRegs]       = useState<Registration[] | null>(null);
-  const loading = regs === null;
   const [search,     setSearch]     = useState("");
   const [query,      setQuery]      = useState("");
   const [activeTab,  setActiveTab]  = useState<RegStatus | "ALL">("ALL");
-  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
-  const fetchRegs = useCallback(async (status: RegStatus | "ALL", q: string, p: number) => {
+  const fetchRegs = useCallback(async (signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (activeTab !== "ALL") params.set("status", activeTab);
+    if (query) params.set("search", query);
+    if (eventId) params.set("eventId", eventId);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: "50" });
-      if (status !== "ALL") params.set("status", status);
-      if (q) params.set("search", q);
-      if (eventId) params.set("eventId", eventId);
-      const res  = await fetch(`/api/admin/registrations?${params}`);
-      const data = await res.json() as { registrations: Registration[]; total: number; totalPages: number };
-      if (res.ok) {
-        setRegs(data.registrations);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setRegs([]);
-      }
-    } catch {
-      setRegs([]);
+      const res = await fetch(`/api/admin/registrations?${params}`, { signal });
+      const data = await res.json() as {
+        registrations: Registration[];
+        total: number;
+        totalPages: number;
+      };
+      if (!res.ok) return { registrations: [], total: 0, totalPages: 1 };
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { registrations: [], total: 0, totalPages: 1 };
     }
-  }, [eventId]);
+  }, [activeTab, query, page, eventId]);
 
-  useEffect(() => { startTransition(() => fetchRegs(activeTab, query, page)); }, [activeTab, query, page, fetchRegs]);
+  const {
+    data,
+    loading,
+    reload: reloadRegs,
+    setData: setRegistrationPage,
+  } = useApiResource<{
+    registrations: Registration[];
+    total: number;
+    totalPages: number;
+  }>(fetchRegs, { key: `${activeTab}:${query}:${page}:${eventId ?? ""}` });
+  const regs = data?.registrations ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,7 +235,10 @@ function RegistrationsContent() {
   };
 
   const handleRefunded = (id: string) => {
-    setRegs((prev) => (prev ?? []).map((r) => r.id === id ? { ...r, status: "REFUNDED" } : r));
+    setRegistrationPage((prev) => prev ? {
+      ...prev,
+      registrations: prev.registrations.map((r) => r.id === id ? { ...r, status: "REFUNDED" } : r),
+    } : prev);
   };
 
   return (
@@ -249,7 +261,7 @@ function RegistrationsContent() {
               )}
             </div>
             <button
-              onClick={() => fetchRegs(activeTab, query, page)}
+              onClick={() => void reloadRegs()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh

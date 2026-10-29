@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense, startTransition } from "react";
+import { useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ShieldAlert, Flag, RefreshCw, Bot } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -57,22 +58,21 @@ function AdminSecurityContent() {
   const filterParam  = (searchParams.get("type") ?? "all").toLowerCase() as Filter;
   const activeFilter = TABS.find((t) => t.filter === filterParam)?.filter ?? "all";
 
-  const [events, setEvents] = useState<SecurityEventRow[] | null>(null);
-  const [reports, setReports] = useState<ReviewReportRow[] | null>(null);
-  const loading = events === null || reports === null;
-
-  const fetchData = (filter: Filter) => {
-    fetch(`/api/admin/security?type=${filter}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setEvents(Array.isArray(data.events) ? data.events : []);
-        setReports(Array.isArray(data.reports) ? data.reports : []);
-      });
-  };
-
-  useEffect(() => {
-    startTransition(() => fetchData(activeFilter));
+  const fetchData = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/admin/security?type=${activeFilter}`, { signal });
+    const data = await response.json();
+    return {
+      events: Array.isArray(data.events) ? data.events as SecurityEventRow[] : [],
+      reports: Array.isArray(data.reports) ? data.reports as ReviewReportRow[] : [],
+    };
   }, [activeFilter]);
+
+  const { data, loading, reload: reloadData } = useApiResource<{
+    events: SecurityEventRow[];
+    reports: ReviewReportRow[];
+  }>(fetchData, { key: activeFilter });
+  const events = data?.events ?? [];
+  const reports = data?.reports ?? [];
 
   const switchFilter = (filter: Filter) => {
     router.push(`/admin/security?type=${filter}`, { scroll: false });
@@ -93,7 +93,7 @@ function AdminSecurityContent() {
               </h1>
             </div>
             <button
-              onClick={() => fetchData(activeFilter)}
+              onClick={() => void reloadData()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh

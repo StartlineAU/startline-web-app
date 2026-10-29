@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useState } from "react";
 import Link from "next/link";
 import {
   QrCode, UserCheck, CheckCircle2, AlertCircle, LogIn,
@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import SignInModal from "@/components/SignInModal";
 import { useAuthContext } from "@/context/AuthContext";
+import { useApiResource } from "@/hooks/useApiResource";
 
 interface CheckinEvent {
   title: string;
@@ -60,30 +61,34 @@ export default function CheckinPage({
   const { eventId, shortCode } = use(params);
   const { status } = useAuthContext();
 
-  const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [data, setData] = useState<CheckinData | null>(null);
   const [isSignInOpen, setIsSignInOpen] = useState(false);
-
   const [checkingIn, setCheckingIn] = useState(false);
   const [error, setError] = useState("");
 
-  // Load on mount and re-load once the sign-in gate clears (status flips to
-  // "authenticated"). All setState happens after an await so the fetch is
-  // cancellable and the effect stays free of synchronous state updates.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const res = await fetch(`/api/checkin/${eventId}/${shortCode}`);
-      if (cancelled) return;
-      if (res.status === 404) { setLoadState("notfound"); return; }
-      if (res.status === 401) { setLoadState("unauth"); return; }
-      const d: CheckinData = await res.json();
-      if (cancelled) return;
-      setData(d);
-      setLoadState(d.registration ? "ready" : "unregistered");
-    })();
-    return () => { cancelled = true; };
-  }, [eventId, shortCode, status]);
+  // Re-load once the sign-in gate clears (status flips to "authenticated").
+  const fetchCheckin = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/checkin/${eventId}/${shortCode}`, { signal });
+    if (response.status === 404) return { state: "notfound" as const, data: null };
+    if (response.status === 401) return { state: "unauth" as const, data: null };
+    const data = await response.json() as CheckinData;
+    return {
+      state: data.registration ? "ready" as const : "unregistered" as const,
+      data,
+    };
+  }, [eventId, shortCode]);
+
+  const { data: loaded, setData: setCheckinData } = useApiResource<{
+    state: LoadState;
+    data: CheckinData | null;
+  }>(fetchCheckin, { key: `${eventId}:${shortCode}:${status}` });
+  const loadState = loaded?.state ?? "loading";
+  const data = loaded?.data ?? null;
+  const setData = (update: (current: CheckinData | null) => CheckinData | null) => {
+    setCheckinData((current) => {
+      const next = update(current?.data ?? null);
+      return next ? { state: current?.state ?? "ready", data: next } : current;
+    });
+  };
 
   const doCheckIn = async () => {
     setError("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, startTransition } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import RejectPanel from "@/components/admin/RejectPanel";
 import { approvalBlocker } from "@/lib/event-approval";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -552,34 +553,36 @@ function AdminEventsContent() {
   const statusParam  = (searchParams.get("status") ?? "PENDING").toUpperCase() as EventStatus;
   const activeTab    = TABS.find((t) => t.status === statusParam)?.status ?? "PENDING";
 
-  const [events,      setEvents]      = useState<AdminEventRow[] | null>(null);
-  const loading = events === null;
-  const [total,       setTotal]       = useState(0);
   const [page,        setPage]        = useState(1);
-  const [totalPages,  setTotalPages]  = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const fetchEvents = useCallback(async (status: EventStatus, p = 1) => {
+  const fetchEvents = useCallback(async (signal: AbortSignal) => {
     try {
-      const res  = await fetch(`/api/admin/events?status=${status}&page=${p}&limit=50`);
+      const res = await fetch(`/api/admin/events?status=${activeTab}&page=${page}&limit=50`, { signal });
       const data = await res.json() as { events: AdminEventRow[]; total: number; totalPages: number };
-      if (res.ok && Array.isArray(data.events)) {
-        setEvents(data.events);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setEvents([]);
-        setTotal(0);
-        setTotalPages(1);
+      if (!res.ok || !Array.isArray(data.events)) {
+        return { events: [], total: 0, totalPages: 1 };
       }
-    } catch {
-      setEvents([]);
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { events: [], total: 0, totalPages: 1 };
     }
-  }, []);
+  }, [activeTab, page]);
 
-  useEffect(() => {
-    startTransition(() => fetchEvents(activeTab, 1));
-  }, [activeTab, fetchEvents]);
+  const {
+    data,
+    loading,
+    reload: reloadEvents,
+    setData: setEventPage,
+  } = useApiResource<{
+    events: AdminEventRow[];
+    total: number;
+    totalPages: number;
+  }>(fetchEvents, { key: `${activeTab}:${page}` });
+  const events = data?.events ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const switchTab = (status: EventStatus) => {
     setSelectedIds(new Set());
@@ -603,21 +606,27 @@ function AdminEventsContent() {
   };
 
   const handleReviewed = (id: string) => {
-    setEvents((prev) => (prev ?? []).filter((e) => e.id !== id));
+    setEventPage((prev) => prev ? { ...prev, events: prev.events.filter((e) => e.id !== id) } : prev);
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
   };
 
   const handleDeleted = (id: string) => {
-    setEvents((prev) => (prev ?? []).filter((e) => e.id !== id));
+    setEventPage((prev) => prev ? { ...prev, events: prev.events.filter((e) => e.id !== id) } : prev);
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
   };
 
   const handlePinToggled = (id: string, isPinned: boolean) => {
-    setEvents((prev) => (prev ?? []).map((e) => e.id === id ? { ...e, isPinned } : e));
+    setEventPage((prev) => prev ? {
+      ...prev,
+      events: prev.events.map((e) => e.id === id ? { ...e, isPinned } : e),
+    } : prev);
   };
 
   const handleBulkDone = (ids: string[]) => {
-    setEvents((prev) => (prev ?? []).filter((e) => !ids.includes(e.id)));
+    setEventPage((prev) => prev ? {
+      ...prev,
+      events: prev.events.filter((e) => !ids.includes(e.id)),
+    } : prev);
   };
 
   const allSelected = events != null && events.length > 0 && selectedIds.size === events.length;
@@ -655,7 +664,7 @@ function AdminEventsContent() {
                 <Plus className="w-3.5 h-3.5" /> Create event
               </Link>
               <button
-                onClick={() => fetchEvents(activeTab, page)}
+                onClick={() => void reloadEvents()}
                 className="flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -735,7 +744,7 @@ function AdminEventsContent() {
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { const p = page - 1; setPage(p); fetchEvents(activeTab, p); }}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
                     className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
@@ -743,7 +752,7 @@ function AdminEventsContent() {
                   </button>
                   <span>Page {page} of {totalPages}</span>
                   <button
-                    onClick={() => { const p = page + 1; setPage(p); fetchEvents(activeTab, p); }}
+                    onClick={() => setPage((p) => p + 1)}
                     disabled={page >= totalPages}
                     className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >

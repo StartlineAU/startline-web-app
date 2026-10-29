@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, startTransition } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2, Crown, UserCog, Mail, Plus, Trash2, RefreshCw, ArrowLeft, X, LogOut,
 } from "lucide-react";
+import { useApiResource } from "@/hooks/useApiResource";
 
 interface Member {
   id: string;
@@ -16,11 +17,6 @@ interface Member {
 
 export default function MembersPage() {
   const router            = useRouter();
-  const [members,       setMembers]       = useState<Member[] | null>(null);
-  const [role,          setRole]          = useState<"OWNER" | "MANAGER" | null>(null);
-  const [currentMemberId, setCurrentMemberId] = useState<string | null>(null);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState("");
   const [addEmail,      setAddEmail]      = useState("");
   const [adding,        setAdding]        = useState(false);
   const [addMsg,        setAddMsg]        = useState("");
@@ -28,34 +24,37 @@ export default function MembersPage() {
   const [confirmLeave,  setConfirmLeave]  = useState(false);
   const [transferTo,    setTransferTo]    = useState<Member | null>(null);
   const [busy,          setBusy]          = useState(false);
+  const [actionError,   setActionError]   = useState("");
 
-  const fetchMembers = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const fetchMembers = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/organiser/members", { signal });
+    if (response.status === 403) throw new Error("You do not have access to members.");
+    if (!response.ok) throw new Error("Could not load members.");
     try {
-      const r = await fetch("/api/organiser/members");
-      if (!r.ok) {
-        setError("You do not have access to members.");
-        setMembers([]);
-        return;
-      }
-      const data = await r.json();
-      startTransition(() => {
-        setMembers(data.members ?? []);
-        setRole(data.role ?? null);
-        setCurrentMemberId(data.currentMemberId ?? null);
-      });
+      return await response.json() as {
+        members: Member[];
+        role: "OWNER" | "MANAGER" | null;
+        currentMemberId: string | null;
+      };
     } catch {
-      setError("Could not load members.");
-      setMembers([]);
-    } finally {
-      setLoading(false);
+      throw new Error("Could not load members.");
     }
   }, []);
 
-  useEffect(() => {
-    startTransition(() => fetchMembers());
-  }, [fetchMembers]);
+  const {
+    data,
+    loading,
+    error: loadError,
+    reload: reloadMembers,
+  } = useApiResource<{
+    members: Member[];
+    role: "OWNER" | "MANAGER" | null;
+    currentMemberId: string | null;
+  }>(fetchMembers);
+  const members = data?.members ?? null;
+  const role = data?.role ?? null;
+  const currentMemberId = data?.currentMemberId ?? null;
+  const error = loadError ?? actionError;
 
   const isOwner = role === "OWNER";
 
@@ -76,7 +75,7 @@ export default function MembersPage() {
       } else {
         setAddMsg("");
         setAddEmail("");
-        startTransition(() => fetchMembers());
+        void reloadMembers();
       }
     } catch {
       setAddMsg("Could not add member.");
@@ -91,14 +90,14 @@ export default function MembersPage() {
       const r = await fetch(`/api/organiser/members/${member.id}`, { method: "DELETE" });
       const data = await r.json();
       if (!r.ok) {
-        setError(data.error ?? "Could not remove member.");
+        setActionError(data.error ?? "Could not remove member.");
       } else {
-        setError("");
+        setActionError("");
         setConfirmRemove(null);
-        startTransition(() => fetchMembers());
+        void reloadMembers();
       }
     } catch {
-      setError("Could not remove member.");
+      setActionError("Could not remove member.");
     } finally {
       setBusy(false);
     }
@@ -110,13 +109,13 @@ export default function MembersPage() {
       const r = await fetch("/api/organiser/members/leave", { method: "POST" });
       const data = await r.json();
       if (!r.ok) {
-        setError(data.error ?? "Could not leave organisation.");
+        setActionError(data.error ?? "Could not leave organisation.");
         setConfirmLeave(false);
       } else {
         router.push("/");
       }
     } catch {
-      setError("Could not leave organisation.");
+      setActionError("Could not leave organisation.");
       setConfirmLeave(false);
     } finally {
       setBusy(false);
@@ -125,18 +124,18 @@ export default function MembersPage() {
 
   const handleTransfer = async (member: Member) => {
     setBusy(true);
-    setError("");
+    setActionError("");
     try {
       const r = await fetch(`/api/organiser/members/${member.id}/transfer-ownership`, { method: "POST" });
       const data = await r.json();
       if (!r.ok) {
-        setError(data.error ?? "Could not transfer ownership.");
+        setActionError(data.error ?? "Could not transfer ownership.");
       } else {
         setTransferTo(null);
-        startTransition(() => fetchMembers());
+        void reloadMembers();
       }
     } catch {
-      setError("Could not transfer ownership.");
+      setActionError("Could not transfer ownership.");
     } finally {
       setBusy(false);
     }
