@@ -65,19 +65,18 @@ function isEmpty(prefill: IndividualPrefill): boolean {
   return Object.keys(prefill).length === 0;
 }
 
-export async function createConnectedAccount(
-  stripe: Stripe,
-  email: string,
-  prefill: IndividualPrefill = {},
-): Promise<Account> {
+/**
+ * Creates an account without fixing its legal entity type. Stripe's hosted
+ * onboarding asks whether the organiser is an individual or a company, then
+ * collects the identity details that belong to that answer. Setting a type or
+ * sending individual details here would answer that question for them and send
+ * a company through individual verification (issue #336).
+ */
+export async function createConnectedAccount(stripe: Stripe, email: string): Promise<Account> {
   return stripe.v2.core.accounts.create({
     contact_email: email,
     dashboard:     "express",
-    identity: {
-      country:     "AU",
-      entity_type: "individual",
-      ...(isEmpty(prefill) ? {} : { individual: prefill }),
-    },
+    identity: { country: "AU" },
     defaults: {
       currency: "aud",
       // What v1 `type: "express"` implied: the platform pays Stripe's fees and
@@ -93,9 +92,11 @@ export async function createConnectedAccount(
 }
 
 /**
- * Fills in what an existing, unfinished account is still missing. Anything
- * Stripe already holds is left alone: the organiser may have typed it into
- * Stripe's own form, and that is the copy Stripe verifies.
+ * Fills in what an existing, unfinished individual account is still missing.
+ * Anything Stripe already holds is left alone: the organiser may have typed it
+ * into Stripe's own form, and that is the copy Stripe verifies. Company accounts
+ * and accounts that have not chosen a type yet are left for Stripe's onboarding
+ * to ask about (issue #336).
  */
 export async function prefillExistingAccount(
   stripe: Stripe,
@@ -104,6 +105,7 @@ export async function prefillExistingAccount(
 ): Promise<void> {
   if (isEmpty(prefill)) return;
   const account = await stripe.v2.core.accounts.retrieve(accountId, { include: ["identity"] });
+  if (account.identity?.entity_type !== "individual") return;
   const held = account.identity?.individual;
 
   const missing: IndividualPrefill = {};
