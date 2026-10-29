@@ -139,7 +139,11 @@ test.describe("new listing wizard", () => {
     await expect(addrInput).toHaveValue(label);
     await expect(page.getByPlaceholder("e.g. Melbourne")).toHaveValue("Sydney");
     await expect(page.getByRole("combobox", { name: "State" })).toContainText("NSW");
-    await expect(page.getByTestId("location-preview-map")).toBeVisible();
+    // With a Mapbox token the map renders; CI has none, so the preview shows
+    // its token-missing state. Either proves the selected coordinates reached it.
+    await expect(
+      page.getByTestId("location-preview-map").or(page.getByTestId("location-preview-no-token")),
+    ).toBeVisible();
     await expect(page.getByTestId("location-preview-empty")).toHaveCount(0);
   });
 
