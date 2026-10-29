@@ -21,6 +21,7 @@ export async function GET(
     await archivePastEvents();
     const event = await prisma.event.findUnique({
       where: { id },
+      include: { organiser: { select: { orgName: true } } },
     });
 
     if (!event)                            return NextResponse.json({ error: "Not found." },  { status: 404 });
@@ -90,6 +91,7 @@ export async function GET(
       event: {
         id:                event.id,
         title:             event.title,
+        organiserName:     event.organiser.orgName,
         discipline:        event.discipline,
         eventDate:         event.eventDate,
         endDate:           event.endDate,
