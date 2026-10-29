@@ -185,11 +185,14 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="4.2" title="Stripe">
           <p>
-            Stripe processes payments, refunds and payouts. When an organiser connects Stripe, we
-            pass Stripe the legal name and date of birth they gave us (2.4), so they do not have to
-            enter them twice. Organisers give their bank account and other identity details
-            directly to Stripe, which handles them under its own privacy policy. Startline does not
-            receive those, and keeps only a reference to the organiser’s Stripe account.
+            Stripe processes payments, refunds and payouts. When an organiser connects Stripe, Stripe
+            establishes whether they are an individual or a company and collects the matching identity
+            details,
+            including the legal name and date of birth of the person responsible, directly from them.
+            Organisers also give us the legal name, date of birth and ABN or ACN we need for tax reporting
+            (2.4). Where the Stripe account is an individual account, we may pass the legal name and date of
+            birth to Stripe so they do not have to enter them twice. Startline does not receive bank account
+            details and keeps only a reference to the organiser’s Stripe account.
           </p>
         </Clause>
         <Clause n="4.3" title="Service providers">
