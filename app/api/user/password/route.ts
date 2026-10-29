@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     await setAccountPassword(session, parsed.data.newPassword);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof Error && err.name === "NotAuthorizedException") {
+    if (err instanceof Error && (err.name === "NotAuthorizedException" || err.name === "AccessDeniedException")) {
       console.error("Cognito AdminSetUserPassword failed:", err);
       return NextResponse.json(
         { error: "Could not set your password. Please try again." },

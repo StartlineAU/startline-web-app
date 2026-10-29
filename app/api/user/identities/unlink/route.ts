@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     await unlinkProvider(session, identity);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof Error && err.name === "NotAuthorizedException") {
+    if (err instanceof Error && (err.name === "NotAuthorizedException" || err.name === "AccessDeniedException")) {
       console.error("Cognito AdminDisableProviderForUser failed:", err);
       return NextResponse.json(
         { error: "Could not unlink that sign-in method. Please try again." },
