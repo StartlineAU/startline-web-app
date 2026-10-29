@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { EVENT_TYPE_OPTIONS } from "@/types";
+import { publicDiscoveryWhere } from "@/lib/event-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   // without naming the discipline.
   const divisionSource = await prisma.event.findMany({
     where: {
-      status: "APPROVED",
+      ...publicDiscoveryWhere(),
       ...(matchedTypes.length
         ? {}
         : { discipline: { in: EVENT_TYPE_OPTIONS.map((o) => o.value) } }),
@@ -113,7 +114,7 @@ export async function GET(req: NextRequest) {
 
   const events = await prisma.event.findMany({
     where: {
-      status: "APPROVED",
+      ...publicDiscoveryWhere(),
       ...(where ? { AND: [locationFilter] } : {}),
       OR: [
         { title: { contains: q, mode: "insensitive" } },

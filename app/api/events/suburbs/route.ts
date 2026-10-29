@@ -5,6 +5,7 @@ import { resolvePlace } from "@/lib/geocode";
 import { rateLimitPaid } from "@/lib/rate-limit";
 import { haversineDistance } from "@/lib/distance";
 import { getEventCoords } from "@/lib/australia-coords";
+import { publicDiscoveryWhere } from "@/lib/event-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ interface SuburbRow {
 async function loadEventSuburbs(filter: { type?: string; division?: string }): Promise<SuburbRow[]> {
   const events = await prisma.event.findMany({
     where: {
-      status: "APPROVED",
+      ...publicDiscoveryWhere(),
       ...(filter.type ? { discipline: filter.type } : {}),
     },
     select: { city: true, state: true, venue: true, categories: true, latitude: true, longitude: true },

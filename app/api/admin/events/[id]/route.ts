@@ -5,6 +5,9 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 
 export async function GET(
   _req: NextRequest,
@@ -50,7 +53,10 @@ export async function PATCH(
   try {
     const existing = await prisma.event.findUnique({
       where:  { id },
-      select: { title: true, status: true },
+      select: {
+        title: true, status: true,
+        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
+      },
     });
 
     if (!existing) {
@@ -67,19 +73,34 @@ export async function PATCH(
       }
     }
 
-    // Live events stay live after an admin edit; everything else re-enters the review queue.
-    const nextStatus = submit
-      ? (existing.status === "APPROVED" ? "APPROVED" : "PENDING")
+    // Live events stay live after an admin edit; everything else re-enters the
+    // review queue. Archived events stay archived rather than reopening.
+    const submittedAs = submit
+      ? existing.status === "APPROVED" || existing.status === "IN_PROGRESS"
+        ? "APPROVED"
+        : existing.status === "ARCHIVED"
+          ? "ARCHIVED"
+          : "PENDING"
       : existing.status;
+
+    const times = eventTimeData({
+      eventDate: data.eventDate ?? existing.eventDate,
+      endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+      startTime: data.startTime ?? existing.startTime,
+      endTime: data.endTime !== undefined ? data.endTime : existing.endTime,
+      state: data.state ?? existing.state,
+    });
+    const nextStatus = effectiveEventStatus({ status: submittedAs, ...times });
 
     const updated = await prisma.event.update({
       where: { id },
       data: {
+        ...times,
         title:             data.title             ?? undefined,
         discipline:        data.discipline        ?? undefined,
         description:       data.description       ?? undefined,
         eventDate:         data.eventDate         ?? undefined,
-        endDate:           data.endDate           ?? null,
+        endDate:           data.endDate !== undefined ? data.endDate : undefined,
         startTime:         data.startTime         ?? undefined,
         endTime:           data.endTime           ?? undefined,
         venue:             data.venue             ?? undefined,
@@ -109,6 +130,10 @@ export async function PATCH(
         status:            nextStatus,
       },
     });
+
+    await syncEventSchedules(updated).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
 
     writeAuditLog({
       adminId: session.sub,
@@ -147,6 +172,9 @@ export async function DELETE(
     }
 
     await prisma.event.delete({ where: { id } });
+    await cancelEventSchedules(id).catch((err) =>
+      console.error("Event schedule cleanup failed:", err),
+    );
 
     writeAuditLog({
       adminId: session.sub,

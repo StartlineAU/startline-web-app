@@ -14,7 +14,11 @@ export async function GET(
   // The shortCode is the event's unguessable check-in code. Resolving by it
   // (not eventId alone) means a mistyped or fabricated link gets a 404.
   const event = await prisma.event.findFirst({
-    where: { id: eventId, checkInCode: shortCode, status: "APPROVED" },
+    where: {
+      id: eventId,
+      checkInCode: shortCode,
+      status: { in: ["APPROVED", "IN_PROGRESS"] },
+    },
     select: {
       title: true, eventDate: true, startTime: true,
       venue: true, city: true, state: true,

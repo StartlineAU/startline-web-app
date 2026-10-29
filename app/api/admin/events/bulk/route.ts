@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { writeAuditLog } from "@/lib/audit";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { syncEventSchedules, type SchedulableEvent } from "@/lib/event-scheduler";
 import { approvalBlocker } from "@/lib/event-approval";
 import { z } from "zod";
 
@@ -36,18 +39,12 @@ export async function POST(req: NextRequest) {
       const result = await prisma.event.deleteMany({ where: { id: { in: ids } } });
       affected = result.count;
     } else {
-      let approvable = ids;
-
-      // Bulk approve used to write straight through, so it could publish an
-      // event that the single-approve route refuses. Both gates are re-checked
-      // here or the rule is one checkbox away from being bypassed. The ABN test
-      // counts digits, which SQL cannot express, so the partition happens here
-      // rather than in the where clause.
       if (action === "approve") {
         const candidates = await prisma.event.findMany({
           where:  { id: { in: ids }, status: "PENDING" },
           select: {
             id: true, title: true, registrationType: true, waves: true,
+            eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
             organiser: { select: { abn: true, stripeOnboardingComplete: true } },
           },
         });
@@ -55,24 +52,61 @@ export async function POST(req: NextRequest) {
           .map((e) => ({ id: e.id, title: e.title, reason: approvalBlocker(e) }))
           .filter((e): e is { id: string; title: string; reason: string } => e.reason !== null);
         const blockedIds = new Set(blocked.map((e) => e.id));
-        approvable = ids.filter((id) => !blockedIds.has(id));
-      }
+        const approvable = candidates.filter((e) => !blockedIds.has(e.id));
 
-      const newStatus = action === "approve" ? "APPROVED" : "REJECTED";
-      const result = approvable.length
-        ? await prisma.event.updateMany({
-            where: { id: { in: approvable }, status: "PENDING" },
+        // The effective status may be IN_PROGRESS or ARCHIVED when an admin
+        // approves an old submission. Group by it so one update can still set
+        // the right state for each event.
+        const byStatus = new Map<string, typeof approvable>();
+        for (const candidate of approvable) {
+          const status = effectiveEventStatus({
+            status: "APPROVED",
+            ...eventTimeData(candidate),
+          });
+          byStatus.set(status, [...(byStatus.get(status) ?? []), candidate]);
+        }
+
+        let approvedCount = 0;
+        for (const [status, group] of byStatus) {
+          const result = await prisma.event.updateMany({
+            where: { id: { in: group.map((e) => e.id) }, status: "PENDING" },
             data: {
-              status: newStatus,
+              status: status as import("@prisma/client").EventStatus,
               reviewedById: session.sub,
               reviewedAt: new Date(),
-              ...(action === "reject"
-                ? { rejectionReason: reason!.trim() }
-                : { rejectionReason: null }),
+              rejectionReason: null,
             },
-          })
-        : { count: 0 };
-      affected = result.count;
+          });
+          approvedCount += result.count;
+        }
+        affected = approvedCount;
+
+        const schedulable = approvable
+          .map((e) => ({
+            id: e.id,
+            status: effectiveEventStatus({ status: "APPROVED", ...eventTimeData(e) }),
+            ...eventTimeData(e),
+          }))
+          .filter((e) => e.status === "APPROVED" || e.status === "IN_PROGRESS");
+        await Promise.all(
+          schedulable.map((e) =>
+            syncEventSchedules(e as SchedulableEvent).catch((err) =>
+              console.error(`Event lifecycle schedule sync failed for ${e.id}:`, err),
+            ),
+          ),
+        );
+      } else {
+        const result = await prisma.event.updateMany({
+          where: { id: { in: ids }, status: "PENDING" },
+          data: {
+            status: "REJECTED",
+            reviewedById: session.sub,
+            reviewedAt: new Date(),
+            rejectionReason: reason!.trim(),
+          },
+        });
+        affected = result.count;
+      }
     }
 
     writeAuditLog({

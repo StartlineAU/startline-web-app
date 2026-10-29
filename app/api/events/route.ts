@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
     originLng: origin?.lng,
   };
 
-  const events = await getAllEvents({ archivePast: false });
+  const events = await getAllEvents();
   const request: EventListRequest = {
     page: parsed.page,
     pageSize,

@@ -20,7 +20,7 @@ export async function POST(
     where: {
       eventId,
       status: "CONFIRMED",
-      event: { status: "APPROVED" },
+      event: { status: { in: ["APPROVED", "IN_PROGRESS"] } },
       OR: [
         { athleteEmail: { equals: session.email, mode: "insensitive" } },
         { userId: session.sub },

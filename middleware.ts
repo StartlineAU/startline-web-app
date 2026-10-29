@@ -139,6 +139,10 @@ export async function middleware(req: NextRequest) {
         // account-events is the Accounts v2 event destination (#379).
         || pathname === "/api/stripe/webhook"
         || pathname === "/api/stripe/account-events"
+        // The scheduled lifecycle worker calls the apex host. Without this the
+        // waitlist rewrite answers 200 with HTML and nothing ever transitions.
+        // The route validates a shared secret before touching the database.
+        || pathname === "/api/internal/events/lifecycle"
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         // Google and Apple hand back here from /organiser-setup, the one page
         // that can sign people in while the apex is in waitlist mode, and the

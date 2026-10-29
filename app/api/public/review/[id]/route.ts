@@ -51,7 +51,11 @@ export async function PATCH(
   let eventTitle: string | null = null;
   if (parsed.data.eventId) {
     const event = await prisma.event.findFirst({
-      where: { id: parsed.data.eventId, organiserId: review.organiserId, status: "APPROVED" },
+      where: {
+        id: parsed.data.eventId,
+        organiserId: review.organiserId,
+        status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] },
+      },
       select: { id: true, title: true },
     });
     if (!event) return NextResponse.json({ error: "Event not found for this organiser." }, { status: 400 });

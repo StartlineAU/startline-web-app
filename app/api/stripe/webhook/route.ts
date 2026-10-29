@@ -75,7 +75,9 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     where: { id: eventId },
     select: {
       id: true, title: true, status: true, feeStructure: true, registrationType: true,
-      waves: true, cap: true, eventDate: true, startTime: true, venue: true, city: true, state: true,
+      waves: true, cap: true, eventDate: true, startTime: true,
+      startsAtUtc: true, endsAtUtc: true,
+      venue: true, city: true, state: true,
       organiserId: true,
     },
   });
@@ -85,7 +87,13 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     console.error("PaymentIntent references an unknown/mismatched event:", paymentIntent.id);
     return;
   }
-  if (event.status !== "APPROVED" || event.registrationType !== "startline") {
+  // A payment started before the event began can settle while the event is in
+  // progress. New registrations are already blocked at the start by checkout;
+  // this exception is only for money that was legitimately taken beforehand.
+  if (
+    (event.status !== "APPROVED" && event.status !== "IN_PROGRESS") ||
+    event.registrationType !== "startline"
+  ) {
     console.error("PaymentIntent references a non-bookable event:", paymentIntent.id);
     return;
   }

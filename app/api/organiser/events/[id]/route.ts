@@ -7,6 +7,9 @@ import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { takesPayments } from "@/lib/event-approval";
 
 export async function GET(
@@ -56,7 +59,10 @@ export async function PATCH(
   try {
     const existing = await prisma.event.findUnique({
       where:  { id },
-      select: { organiserId: true, status: true, title: true, registrationType: true, waves: true },
+      select: {
+        organiserId: true, status: true, title: true, registrationType: true, waves: true,
+        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
+      },
     });
 
     if (!existing)
@@ -93,6 +99,15 @@ export async function PATCH(
       ? (session.verified && abnOk ? "APPROVED" : "PENDING")
       : "DRAFT";
 
+    const times = eventTimeData({
+      eventDate: data.eventDate ?? existing.eventDate,
+      endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+      startTime: data.startTime ?? existing.startTime,
+      endTime: data.endTime !== undefined ? data.endTime : existing.endTime,
+      state: data.state ?? existing.state,
+    });
+    const lifecycleStatus = effectiveEventStatus({ status: nextStatus, ...times });
+
     // Only a rename reassigns the slug; every other edit leaves it alone so links
     // already in the wild keep resolving, and skips the lookup entirely.
     const renamed = data.title !== undefined && data.title !== existing.title;
@@ -102,11 +117,12 @@ export async function PATCH(
       where: { id },
       data: {
         slug,
+        ...times,
         title:             data.title             ?? undefined,
         discipline:        data.discipline        ?? undefined,
         description:       data.description       ?? undefined,
         eventDate:         data.eventDate         ?? undefined,
-        endDate:           data.endDate           ?? null,
+        endDate:           data.endDate !== undefined ? data.endDate : undefined,
         startTime:         data.startTime         ?? undefined,
         endTime:           data.endTime           ?? undefined,
         venue:             data.venue             ?? undefined,
@@ -133,7 +149,7 @@ export async function PATCH(
         coverImageUrl:     data.coverImageUrl     ?? undefined,
         informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
         photos:            Array.isArray(data.photos) ? data.photos : undefined,
-        status:            nextStatus,
+        status:            lifecycleStatus,
       },
       });
 
@@ -141,8 +157,12 @@ export async function PATCH(
       ? await withUniqueSlug(data.title!, runUpdate, { excludeId: id })
       : await runUpdate(undefined);
 
+    await syncEventSchedules(updated).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
+
     // Existing was DRAFT (enforced above); notify when submit goes straight to live.
-    if (updated.status === "APPROVED") {
+    if (nextStatus === "APPROVED") {
       // Awaited, not fired and forgotten: Amplify's compute freezes the
       // container once the response is returned, so a floating promise is
       // dropped at random. A notify failure still must not fail the publish.
@@ -201,6 +221,9 @@ export async function DELETE(
     if (existing.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     await prisma.event.delete({ where: { id } });
+    await cancelEventSchedules(id).catch((err) =>
+      console.error("Event schedule cleanup failed:", err),
+    );
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Event delete error:", err);

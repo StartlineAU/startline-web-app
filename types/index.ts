@@ -44,6 +44,11 @@ export interface UserEvent {
   endDate?: string;
   time: string;
   endTime?: string;
+  /** Persisted lifecycle status. Public discovery never includes ended events. */
+  status?: "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+  timeZone?: string;
+  startsAtUtc?: string | null;
+  endsAtUtc?: string | null;
   dates?: string[];
   location: string;
   address?: string;

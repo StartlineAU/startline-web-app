@@ -2,26 +2,37 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
-import { archivePastEvents } from "@/lib/archive-events";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { ArrowRight, Clock, CheckCircle, XCircle, Users, UserCircle, ClipboardList, BarChart2, ScrollText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 async function getStats() {
-  await archivePastEvents();
   try {
-    const [pending, approved, rejected, organisers, users, registrations] = await Promise.all([
+    const [pending, lifecycleEvents, rejected, organisers, users, registrations] = await Promise.all([
       prisma.event.count({ where: { status: "PENDING"   } }),
-      prisma.event.count({ where: { status: "APPROVED"  } }),
+      prisma.event.findMany({
+        where: { status: { in: ["APPROVED", "IN_PROGRESS"] } },
+        select: { status: true, startsAtUtc: true, endsAtUtc: true },
+      }),
       prisma.event.count({ where: { status: "REJECTED"  } }),
       prisma.organiser.count(),
       prisma.user.count(),
       prisma.registration.count({ where: { status: "CONFIRMED" } }),
     ]);
-    return { pending, approved, rejected, organisers, users, registrations };
+
+    const now = new Date();
+    const approved = lifecycleEvents.filter(
+      (event) => effectiveEventStatus(event, now) === "APPROVED",
+    ).length;
+    const inProgress = lifecycleEvents.filter(
+      (event) => effectiveEventStatus(event, now) === "IN_PROGRESS",
+    ).length;
+
+    return { pending, approved: approved + inProgress, inProgress, rejected, organisers, users, registrations };
   } catch (err) {
     console.error("Admin dashboard stats error:", err);
-    return { pending: 0, approved: 0, rejected: 0, organisers: 0, users: 0, registrations: 0 };
+    return { pending: 0, approved: 0, inProgress: 0, rejected: 0, organisers: 0, users: 0, registrations: 0 };
   }
 }
 
@@ -114,7 +125,7 @@ export default async function AdminDashboardPage() {
             <StatCard
               label="Published events"
               value={stats.approved}
-              sub="approved and live"
+              sub={stats.inProgress > 0 ? `${stats.inProgress} in progress` : "approved and live"}
               icon={<CheckCircle className="w-5 h-5" />}
               accent="text-primary"
               href="/admin/events?status=APPROVED"

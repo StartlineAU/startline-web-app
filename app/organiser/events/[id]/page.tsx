@@ -11,7 +11,7 @@ import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 interface EventDetail {
   id: string;
@@ -80,6 +80,15 @@ const STATUS_META: Record<EventStatus, {
     headline:    "This event is live.",
     description: "Your event is published and taking registrations.",
   },
+  IN_PROGRESS: {
+    label:       "In progress",
+    color:       "text-amber-300",
+    bg:          "bg-amber-300/10",
+    border:      "border-amber-300/20",
+    icon:        Clock,
+    headline:    "This event is underway.",
+    description: "Registration has closed. Use the event dashboard for check-in and race-day operations.",
+  },
   REJECTED: {
     label:       "Rejected",
     color:       "text-red-300",
@@ -127,7 +136,9 @@ export default function EventStatusPage({
   } = useApiResource<EventDetail>(fetchEvent, { key: id });
 
   useEffect(() => {
-    if (event?.status === "APPROVED") router.replace(`/organiser/events/${id}/dashboard`);
+    if (event?.status === "APPROVED" || event?.status === "IN_PROGRESS") {
+      router.replace(`/organiser/events/${id}/dashboard`);
+    }
   }, [event, id, router]);
 
   const loadEvent = useCallback(() => { void reload(); }, [reload]);

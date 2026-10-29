@@ -17,14 +17,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 const STATUS_ORDER: Record<EventStatus, number> = {
-  APPROVED: 0,
-  PENDING:  1,
-  REJECTED: 2,
-  DRAFT:    3,
-  ARCHIVED: 4,
+  IN_PROGRESS: 0,
+  APPROVED: 1,
+  PENDING:  2,
+  REJECTED: 3,
+  DRAFT:    4,
+  ARCHIVED: 5,
 };
 
 interface EventRow {
@@ -50,6 +51,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: strin
   DRAFT:    { bg: "bg-amber-400/10", text: "text-amber-300", label: "Draft"     },
   PENDING:  { bg: "bg-blue-400/10",  text: "text-blue-300",  label: "Pending"   },
   APPROVED: { bg: "bg-primary/10",   text: "text-primary",   label: "Published" },
+  IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
   ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Archived"  },
 };
@@ -61,6 +63,7 @@ type Filter    = EventStatus | "all";
 const FILTERS: { k: Filter; l: string }[] = [
   { k: "all",      l: "All"       },
   { k: "APPROVED", l: "Published" },
+  { k: "IN_PROGRESS", l: "In progress" },
   { k: "PENDING",  l: "Pending"   },
   { k: "DRAFT",    l: "Drafts"    },
   { k: "REJECTED", l: "Rejected"  },
@@ -234,7 +237,7 @@ export default function ListingsPage() {
   };
 
   const handleRowClick = (e: EventRow) => {
-    if (e.status === "APPROVED") {
+    if (e.status === "APPROVED" || e.status === "IN_PROGRESS") {
       router.push(`/organiser/events/${e.id}/dashboard`);
     } else {
       router.push(`/organiser/events/${e.id}`);
@@ -364,7 +367,7 @@ export default function ListingsPage() {
                   {/* ── Desktop table row (≥ sm) — inset rail (no layout shift vs hover:border-l) ── */}
                   <div
                     className={`hidden sm:grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer transition-colors
-                      ${e.status === "APPROVED"
+                      ${e.status === "APPROVED" || e.status === "IN_PROGRESS"
                         ? "hover:bg-primary/5 hover:shadow-[inset_2px_0_0_0_#B3E153]"
                         : "hover:bg-white/5 hover:shadow-[inset_2px_0_0_0_#353535]"}`}
                     onClick={() => handleRowClick(e)}

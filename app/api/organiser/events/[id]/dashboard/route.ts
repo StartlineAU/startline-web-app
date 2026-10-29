@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { archivePastEvents } from "@/lib/archive-events";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FIXED_CENTS } from "@/lib/platform-fee";
 import { idParams } from "@/lib/schemas";
 
@@ -18,7 +18,6 @@ export async function GET(
   const { id } = parsedParams.data;
 
   try {
-    await archivePastEvents();
     const event = await prisma.event.findUnique({
       where: { id },
       include: { organiser: { select: { orgName: true } } },
@@ -26,7 +25,10 @@ export async function GET(
 
     if (!event)                            return NextResponse.json({ error: "Not found." },  { status: 404 });
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    if (event.status !== "APPROVED")       return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
+    const status = effectiveEventStatus(event);
+    if (status !== "APPROVED" && status !== "IN_PROGRESS") {
+      return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
+    }
 
     const waves = (event.waves as { label: string; price: string; qty?: number }[]) ?? [];
     const lowestPrice = waves.length

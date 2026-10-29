@@ -8,6 +8,9 @@ import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserNotificationRecipients } from "@/lib/organiser-notification-recipients";
 import { idParams } from "@/lib/schemas";
 import { hasAbn } from "@/lib/abn";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { syncEventSchedules } from "@/lib/event-scheduler";
 import { takesPayments } from "@/lib/event-approval";
 import { z } from "zod";
 
@@ -44,7 +47,8 @@ export async function POST(
       where:  { id },
       select: {
         id: true, title: true, status: true, registrationType: true, waves: true,
-        eventDate: true, city: true,
+        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
+        city: true,
         organiser: {
           select: {
             id: true, email: true, orgName: true, stripeOnboardingComplete: true, abn: true,
@@ -89,7 +93,9 @@ export async function POST(
       }
     }
 
-    const newStatus = action === "approve" ? "APPROVED" : "REJECTED";
+    const times = eventTimeData(event);
+    const approvedStatus = effectiveEventStatus({ status: "APPROVED", ...times });
+    const newStatus = action === "approve" ? approvedStatus : "REJECTED";
 
     const organiserEmail = organiserNotificationRecipients(event.organiser);
     const organiserId    = event.organiser.id;
@@ -113,6 +119,7 @@ export async function POST(
         where: { id },
         data: {
           status:          newStatus,
+          ...times,
           reviewedById:    session.sub,
           reviewedAt:      new Date(),
           rejectionReason: action === "reject" ? reason!.trim() : null,
@@ -124,6 +131,13 @@ export async function POST(
         ? [prisma.notification.create({ data: { organiserId, eventId: id, ...notifData } })]
         : []),
     ]);
+
+    await syncEventSchedules({
+      id,
+      status: newStatus,
+      startsAtUtc: times.startsAtUtc,
+      endsAtUtc: times.endsAtUtc,
+    }).catch((err) => console.error("Event lifecycle schedule sync failed:", err));
 
     // Awaited, not fired and forgotten: Amplify's compute freezes the container
     // once the response is returned, so a floating promise is dropped at random

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { shiftIsoDate } from "@/lib/duplicate-event";
 import { idParams } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
+import { eventTimeData } from "@/lib/event-time";
 
 /** POST /api/organiser/events/[id]/duplicate — copy listing fields into a new DRAFT (+7 days). */
 export async function POST(
@@ -41,6 +42,14 @@ export async function POST(
         endDate,
         startTime: source.startTime,
         endTime: source.endTime,
+        ...eventTimeData({
+          eventDate,
+          endDate,
+          startTime: source.startTime,
+          endTime: source.endTime,
+          state: source.state,
+          timeZone: source.timeZone,
+        }),
         venue: source.venue,
         address: source.address,
         city: source.city,
