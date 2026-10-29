@@ -7,6 +7,10 @@ import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
   sub:          string;
+  // Cognito username, which AdminGetUser and AdminLinkProviderForUser take.
+  // Usually the email for password users and a UUID for provider users, so it
+  // is not interchangeable with `sub`.
+  username?:    string;
   email:        string;
   groups:       string[];
   phoneNumber?: string;
@@ -106,6 +110,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
     const sub   = payload.sub as string;
+    const username = typeof payload.username === "string" ? payload.username : undefined;
     const phoneNumber = payload.phone_number as string | undefined;
     const birthdate   = payload.birthdate as string | undefined;
 
@@ -139,7 +144,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
       }
     }
 
-    return { sub, email, groups, phoneNumber, birthdate, name, emailTrusted };
+    return { sub, username, email, groups, phoneNumber, birthdate, name, emailTrusted };
   } catch {
     return null;
   }

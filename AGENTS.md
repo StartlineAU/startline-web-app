@@ -254,6 +254,7 @@ host that started it. Amplify's OAuth listener (imported in
 | Keys | `startline/ci-bootstrap`: `google_client_id_<env>`, `google_client_secret_<env>`, `apple_client_id_<env>`, `apple_team_id`, `apple_key_id`, `apple_private_key` |
 | Buttons, return path, error copy | `components/SocialSignInButtons.tsx`, `lib/social-sign-in.ts` |
 | Callback | `app/(user)/auth/callback/` |
+| Manage linked accounts | `components/settings/SignInMethodsCard.tsx`, `app/api/user/sign-in-methods/`, `app/(user)/auth/link/callback/` |
 
 - **The Cognito hosts are `auth.startlineau.com` (prod) and
   `sl-staging.auth.ap-southeast-2.amazoncognito.com` (staging).** Each one's
@@ -273,6 +274,22 @@ host that started it. Amplify's OAuth listener (imported in
   app or in `admins` are refused, because provider sign-in skips Cognito's TOTP
   check. A password sign-up for an email that only has a Google or Apple user
   is refused too.
+- **Managing links.** Settings → Login & security lists the Google and Apple
+  identities on the account and can connect or disconnect either. Linking has
+  its own callback, `/auth/link/callback`, because the provider authorization
+  must not become a sign-in as the provider's own Cognito user. The browser
+  holds the state and PKCE verifier in httpOnly cookies; the server exchanges
+  the code, deletes the throwaway external profile Cognito created, then calls
+  `AdminLinkProviderForUser`. An identity already attached to another local
+  account is refused rather than merged.
+- **Never remove the last way in.** A provider-only account cannot disconnect
+  its only identity; a password or another linked provider has to remain.
+  TOTP does not count, since provider sign-in skips it.
+- **Infra must allow the link flow.** Both environments' `callback_urls` need
+  `${origin}/auth/link/callback`, and the Amplify role needs
+  `cognito-idp:AdminLinkProviderForUser` and
+  `cognito-idp:AdminDisableProviderForUser`. `AdministratorAccess-Amplify` does
+  not include either action.
 - `NEXT_PUBLIC_SOCIAL_SIGN_IN` lists the providers whose keys exist, and the
   buttons render only for those. Without `NEXT_PUBLIC_COGNITO_DOMAIN` there are
   none, which is local dev unless `.env.local` sets it.
