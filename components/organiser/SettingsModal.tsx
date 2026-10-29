@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ import { useSettings, type SettingsSection } from "@/context/SettingsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { uploadFile } from "@/lib/upload-client";
 import { TYPE_MIMES } from "@/lib/upload-limits";
+import { useApiResource } from "@/hooks/useApiResource";
 
 // ── shared form primitives ──────────────────────────────────────────────────
 
@@ -233,38 +234,52 @@ function PersonalInfoForm() {
   const { notifyProfileSaved } = useSettings();
   const router = useRouter();
   const [form,           setForm]           = useState<ProfileForm>(EMPTY_FORM);
-  const [loadingForm,    setLoadingForm]     = useState(true);
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
-  const [error,          setError]          = useState("");
+  const [actionError,    setActionError]    = useState("");
   const [logoUploading,  setLogoUploading]  = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
   const logoRef  = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
+  const initialized = useRef(false);
 
-  useEffect(() => {
-    fetch("/api/organiser/profile")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return;
-        setForm({
-          orgName:       data.orgName       ?? "",
-          bio:           data.bio           ?? "",
-          contactName:   data.contactName   ?? "",
-          contactEmail:  data.contactEmail  ?? "",
-          phone:         data.phone         ?? "",
-          facebook:      data.facebook      ?? "",
-          logoUrl:       data.logoUrl       ?? "",
-          logoPosition:  data.logoPosition  ?? "50% 50%",
-          coverImageUrl: data.coverImageUrl ?? "",
-          coverPosition: data.coverPosition ?? "50% 50%",
-        });
-      })
-      .catch(() => {})
-      .finally(() => setLoadingForm(false));
+  const fetchProfile = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/organiser/profile", { signal });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      orgName:       data.orgName       ?? "",
+      bio:           data.bio           ?? "",
+      contactName:   data.contactName   ?? "",
+      contactEmail:  data.contactEmail  ?? "",
+      phone:         data.phone         ?? "",
+      facebook:      data.facebook      ?? "",
+      logoUrl:       data.logoUrl       ?? "",
+      logoPosition:  data.logoPosition  ?? "50% 50%",
+      coverImageUrl: data.coverImageUrl ?? "",
+      coverPosition: data.coverPosition ?? "50% 50%",
+    } satisfies ProfileForm;
   }, []);
 
-  const patch = (p: Partial<ProfileForm>) => setForm(f => ({ ...f, ...p }));
+  const {
+    data: loadedProfile,
+    loading: loadingForm,
+    error: loadError,
+    markDirty,
+    commit,
+  } = useApiResource<ProfileForm | null>(fetchProfile);
+  const error = loadError ?? actionError;
+
+  useEffect(() => {
+    if (!loadedProfile || initialized.current) return;
+    initialized.current = true;
+    setForm(loadedProfile);
+  }, [loadedProfile]);
+
+  const patch = (p: Partial<ProfileForm>) => {
+    markDirty();
+    setForm(f => ({ ...f, ...p }));
+  };
 
   const uploadImage = (file: File, type: "logo" | "cover") => uploadFile(file, type);
 
@@ -275,10 +290,10 @@ function PersonalInfoForm() {
       const updated = { ...form, logoUrl: url };
       const res = await fetch("/api/organiser/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(data.error ?? "Logo upload failed."); return; }
-      patch({ logoUrl: url });
+      if (!res.ok) { setActionError(data.error ?? "Logo upload failed."); return; }
+      commit(updated);
       router.refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "Logo upload failed."); }
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Logo upload failed."); }
     finally { setLogoUploading(false); }
   };
 
@@ -289,27 +304,28 @@ function PersonalInfoForm() {
       const updated = { ...form, coverImageUrl: url };
       const res = await fetch("/api/organiser/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updated) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(data.error ?? "Cover upload failed."); return; }
-      patch({ coverImageUrl: url });
+      if (!res.ok) { setActionError(data.error ?? "Cover upload failed."); return; }
+      commit(updated);
       router.refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "Cover upload failed."); }
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Cover upload failed."); }
     finally { setCoverUploading(false); }
   };
 
   const handleSave = async () => {
-    setSaving(true); setError("");
+    setSaving(true); setActionError("");
     try {
       const res = await fetch("/api/organiser/profile", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Save failed."); return; }
+      if (!res.ok) { setActionError(data.error ?? "Save failed."); return; }
+      commit(form);
       setSaved(true);
       notifyProfileSaved();
       router.refresh();
       setTimeout(() => setSaved(false), 2500);
-    } catch { setError("Something went wrong."); }
+    } catch { setActionError("Something went wrong."); }
     finally { setSaving(false); }
   };
 

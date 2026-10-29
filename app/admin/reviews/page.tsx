@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense, startTransition } from "react";
+import { useCallback, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Star, Eye, EyeOff, BadgeCheck, Trash2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -168,18 +169,19 @@ function AdminReviewsContent() {
   const filterParam  = (searchParams.get("filter") ?? "all").toLowerCase() as Filter;
   const activeFilter = TABS.find((t) => t.filter === filterParam)?.filter ?? "all";
 
-  const [reviews, setReviews] = useState<ReviewRow[] | null>(null);
-  const loading = reviews === null;
-
-  const fetchReviews = (filter: Filter) => {
-    fetch(`/api/admin/reviews?filter=${filter}`)
-      .then(r => r.json())
-      .then(data => { setReviews(Array.isArray(data) ? data : []); });
-  };
-
-  useEffect(() => {
-    startTransition(() => fetchReviews(activeFilter));
+  const fetchReviews = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/admin/reviews?filter=${activeFilter}`, { signal });
+    const data = await response.json();
+    return Array.isArray(data) ? data as ReviewRow[] : [];
   }, [activeFilter]);
+
+  const {
+    data: reviewsData,
+    loading,
+    reload: reloadReviews,
+    setData: setReviews,
+  } = useApiResource<ReviewRow[]>(fetchReviews, { key: activeFilter });
+  const reviews = reviewsData ?? [];
 
   const switchFilter = (filter: Filter) => {
     router.push(`/admin/reviews?filter=${filter}`, { scroll: false });
@@ -216,7 +218,7 @@ function AdminReviewsContent() {
               </h1>
             </div>
             <button
-              onClick={() => fetchReviews(activeFilter)}
+              onClick={() => void reloadReviews()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh

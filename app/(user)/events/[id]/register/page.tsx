@@ -18,6 +18,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { useApiResource } from "@/hooks/useApiResource";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 const BOT_CHECK_HOSTS = ["startlineau.com", "www.startlineau.com", "staging.startlineau.com"];
@@ -194,10 +195,6 @@ function RegisterContent() {
   const preselectedWave = searchParams.get("wave") ?? "";
   const { status, user } = useAuthContext();
 
-  const [event, setEvent] = useState<EventData | null>(null);
-  const [availability, setAvailability] = useState<Availability | null>(null);
-  const [loading, setLoading] = useState(true);
-
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [payPhase, setPayPhase] = useState<"verify" | "pay">("pay");
   const [error, setError] = useState("");
@@ -238,46 +235,48 @@ function RegisterContent() {
   const prefilledRef = useRef(false);
 
   // ── Load event ──
-  useEffect(() => {
-    fetch(`/api/events`)
-      .then((r) => r.json())
-      .then((events: EventData[]) => {
-        const found = events.find((e) => e.id === eventId);
-        if (found) setEvent(found);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+  const fetchEvent = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/events", { signal });
+    const events = await response.json() as EventData[];
+    return events.find((candidate) => candidate.id === eventId) ?? null;
   }, [eventId]);
 
+  const { data: event, loading } = useApiResource<EventData | null>(fetchEvent, { key: eventId });
+
   // ── Load live availability (cap + per-tier confirmed counts) ──
-  useEffect(() => {
-    fetch(`/api/events/${eventId}/availability`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: Availability | null) => {
-        if (!data) return;
-        setAvailability(data);
-        // Trim any preselected/held quantities that exceed what's actually left
-        // (e.g. a `?wave=` deep link into a now-sold-out or nearly-full tier).
-        const byLabel: Record<string, WaveAvailability> = {};
-        for (const w of data.waves) byLabel[w.label] = w;
-        setQuantities((prev) => {
-          let changed = false;
-          let running = 0;
-          const next: Record<string, number> = {};
-          for (const [label, qty] of Object.entries(prev)) {
-            const w = byLabel[label];
-            const tierLeft = w && w.qty != null ? Math.max(0, w.qty - w.confirmed) : Infinity;
-            const capLeft = data.cap != null ? Math.max(0, data.cap - data.confirmed - running) : Infinity;
-            const allowed = Math.max(0, Math.min(qty, tierLeft, capLeft));
-            if (allowed !== qty) changed = true;
-            next[label] = allowed;
-            running += allowed;
-          }
-          return changed ? next : prev;
-        });
-      })
-      .catch(() => {});
+  const fetchAvailability = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/events/${eventId}/availability`, { signal });
+    return response.ok ? await response.json() as Availability : null;
   }, [eventId]);
+
+  const { data: availability } = useApiResource<Availability | null>(fetchAvailability, {
+    key: eventId,
+  });
+
+  useEffect(() => {
+    if (!availability) return;
+    // Trim any preselected/held quantities that exceed what's actually left
+    // (e.g. a `?wave=` deep link into a now-sold-out or nearly-full tier).
+    const byLabel: Record<string, WaveAvailability> = {};
+    for (const wave of availability.waves) byLabel[wave.label] = wave;
+    startTransition(() => {
+      setQuantities((prev) => {
+        let changed = false;
+        let running = 0;
+        const next: Record<string, number> = {};
+        for (const [label, qty] of Object.entries(prev)) {
+          const wave = byLabel[label];
+          const tierLeft = wave && wave.qty != null ? Math.max(0, wave.qty - wave.confirmed) : Infinity;
+          const capLeft = availability.cap != null ? Math.max(0, availability.cap - availability.confirmed - running) : Infinity;
+          const allowed = Math.max(0, Math.min(qty, tierLeft, capLeft));
+          if (allowed !== qty) changed = true;
+          next[label] = allowed;
+          running += allowed;
+        }
+        return changed ? next : prev;
+      });
+    });
+  }, [availability]);
 
   // ── Prefill first participant from profile (signed-in) ──
   useEffect(() => {

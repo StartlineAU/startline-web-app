@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useCallback } from "react";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -71,32 +72,31 @@ const ALL_ACTIONS = [
 ];
 
 export default function AdminAuditPage() {
-  const [logs,       setLogs]       = useState<AuditLog[] | null>(null);
-  const loading = logs === null;
   const [filter,     setFilter]     = useState("");
-  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
-  const fetchLogs = useCallback(async (action: string, p: number) => {
+  const fetchLogs = useCallback(async (signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (filter) params.set("action", filter);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: "50" });
-      if (action) params.set("action", action);
-      const res  = await fetch(`/api/admin/audit?${params}`);
+      const res = await fetch(`/api/admin/audit?${params}`, { signal });
       const data = await res.json() as { logs: AuditLog[]; total: number; totalPages: number };
-      if (res.ok) {
-        setLogs(data.logs);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setLogs([]);
-      }
-    } catch {
-      setLogs([]);
+      if (!res.ok) return { logs: [], total: 0, totalPages: 1 };
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { logs: [], total: 0, totalPages: 1 };
     }
-  }, []);
+  }, [filter, page]);
 
-  useEffect(() => { startTransition(() => fetchLogs(filter, page)); }, [filter, page, fetchLogs]);
+  const { data, loading, reload: reloadLogs } = useApiResource<{
+    logs: AuditLog[];
+    total: number;
+    totalPages: number;
+  }>(fetchLogs, { key: `${filter}:${page}` });
+  const logs = data?.logs ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const handleFilterChange = (action: string) => {
     setFilter(action);
@@ -118,7 +118,7 @@ export default function AdminAuditPage() {
               </h1>
             </div>
             <button
-              onClick={() => fetchLogs(filter, page)}
+              onClick={() => void reloadLogs()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh

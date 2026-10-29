@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
 import { isNative, openExternal } from "@/lib/capacitor";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -46,51 +47,60 @@ function PaymentsContent() {
   const searchParams = useSearchParams();
   const refreshed    = searchParams.get("refresh") === "1";
 
-  const [profile,    setProfile]    = useState<Profile | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [saving,     setSaving]     = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [error,      setError]      = useState("");
+  const [actionError, setActionError] = useState("");
+  const initialized = useRef(false);
 
   const [legalName,         setLegalName]         = useState("");
   const [abn,               setAbn]               = useState("");
   const [dob,               setDob]               = useState("");
   const [insuranceDeclared, setInsuranceDeclared] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/organiser/profile")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data: Profile | null) => {
-        if (!data) return;
-        setProfile(data);
-        setLegalName(data.legalName ?? "");
-        setAbn(data.abn ?? "");
-        setDob(data.dob ?? "");
-        setInsuranceDeclared(data.insuranceDeclared ?? false);
-      })
-      .finally(() => setLoading(false));
+  const fetchProfile = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/organiser/profile", { signal });
+    if (!response.ok) return null;
+    return await response.json() as Profile;
   }, []);
+
+  const {
+    data: loadedProfile,
+    loading,
+    error: loadError,
+  } = useApiResource<Profile | null>(fetchProfile);
+  const error = loadError ?? actionError;
+
+  useEffect(() => {
+    if (!loadedProfile || initialized.current) return;
+    initialized.current = true;
+    setProfile(loadedProfile);
+    setLegalName(loadedProfile.legalName ?? "");
+    setAbn(loadedProfile.abn ?? "");
+    setDob(loadedProfile.dob ?? "");
+    setInsuranceDeclared(loadedProfile.insuranceDeclared ?? false);
+  }, [loadedProfile]);
 
   const profileIncomplete =
     !profile?.orgName || !profile?.contactName || !profile?.contactEmail || !profile?.phone;
 
   const saveAndConnect = async () => {
-    setError("");
+    setActionError("");
 
     if (profileIncomplete) {
-      setError("Please complete your organiser profile before connecting Stripe.");
+      setActionError("Please complete your organiser profile before connecting Stripe.");
       return;
     }
     if (!legalName.trim()) {
-      setError("Legal name is required before connecting your Stripe account.");
+      setActionError("Legal name is required before connecting your Stripe account.");
       return;
     }
     if (!abn.trim()) {
-      setError("ABN or ACN is required before connecting your Stripe account (required for ATO reporting under ToS §3.2).");
+      setActionError("ABN or ACN is required before connecting your Stripe account (required for ATO reporting under ToS §3.2).");
       return;
     }
     if (!insuranceDeclared) {
-      setError("You must declare that you hold current public liability insurance ($10M minimum) before connecting.");
+      setActionError("You must declare that you hold current public liability insurance ($10M minimum) before connecting.");
       return;
     }
 
@@ -113,7 +123,7 @@ function PaymentsContent() {
 
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError((d as { error?: string }).error ?? "Failed to save profile.");
+        setActionError((d as { error?: string }).error ?? "Failed to save profile.");
         return;
       }
     } finally {
@@ -125,7 +135,7 @@ function PaymentsContent() {
       const res  = await fetch("/api/organiser/stripe/connect", { method: "POST" });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        setError(data.error ?? "Failed to generate Stripe onboarding link. Please try again.");
+        setActionError(data.error ?? "Failed to generate Stripe onboarding link. Please try again.");
         return;
       }
       await goToStripe(data.url);
@@ -140,7 +150,7 @@ function PaymentsContent() {
       const res  = await fetch("/api/organiser/stripe/connect", { method: "POST" });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        setError(data.error ?? "Failed to generate Stripe link.");
+        setActionError(data.error ?? "Failed to generate Stripe link.");
         return;
       }
       await goToStripe(data.url);

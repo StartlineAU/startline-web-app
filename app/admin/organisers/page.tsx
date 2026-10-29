@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon, ShieldCheck, ShieldX, Ban, CircleCheck, Building2, X, Crown, UserCog } from "lucide-react";
+import { useApiResource } from "@/hooks/useApiResource";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
 
@@ -148,19 +149,23 @@ function OrganiserCard({
 }
 
 export default function AdminOrganisersPage() {
-  const [organisers, setOrganisers] = useState<OrganiserRow[] | null>(null);
   const [viewOrg,    setViewOrg]    = useState<OrganiserRow | null>(null);
   const [members,    setMembers]    = useState<Member[] | null>(null);
   const [loadingMembers, setLoadingMembers] = useState(false);
-  const loading     = organisers === null;
 
-  const fetchOrganisers = useCallback(() => {
-    fetch("/api/admin/organisers")
-      .then(r => r.json())
-      .then(data => { setOrganisers(Array.isArray(data) ? data : []); });
+  const fetchOrganisers = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/admin/organisers", { signal });
+    const data = await response.json();
+    return Array.isArray(data) ? data as OrganiserRow[] : [];
   }, []);
 
-  useEffect(() => { fetchOrganisers(); }, [fetchOrganisers]);
+  const {
+    data: organiserData,
+    loading,
+    reload: reloadOrganisers,
+    setData: setOrganisers,
+  } = useApiResource<OrganiserRow[]>(fetchOrganisers);
+  const organisers = organiserData ?? [];
 
   const viewMembers = useCallback(async (o: OrganiserRow) => {
     setViewOrg(o);
@@ -185,7 +190,7 @@ export default function AdminOrganisersPage() {
         setOrganisers((prev) => (prev ?? []).map((o) => o.id === id ? { ...o, verified: updated.verified } : o));
       }
     } catch { /* silent */ }
-  }, []);
+  }, [setOrganisers]);
 
   const toggleSuspend = useCallback(async (id: string) => {
     try {
@@ -195,7 +200,7 @@ export default function AdminOrganisersPage() {
         setOrganisers((prev) => (prev ?? []).map((o) => o.id === id ? { ...o, status: updated.status } : o));
       }
     } catch { /* silent */ }
-  }, []);
+  }, [setOrganisers]);
 
   return (
     <div className="min-h-screen bg-dark-darker">
@@ -214,7 +219,7 @@ export default function AdminOrganisersPage() {
               </h1>
             </div>
             <button
-              onClick={fetchOrganisers}
+              onClick={() => void reloadOrganisers()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh

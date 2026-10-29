@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, startTransition } from "react";
+import { useState, useCallback } from "react";
 import EventFormWizard from "@/components/event/EventFormWizard";
+import { useApiResource } from "@/hooks/useApiResource";
 
 interface OrganiserOption {
   id: string;
@@ -13,18 +14,15 @@ interface OrganiserOption {
 }
 
 export default function AdminCreateEventPage() {
-  const [organisers, setOrganisers] = useState<OrganiserOption[] | null>(null);
   const [organiserId, setOrganiserId] = useState("");
 
-  useEffect(() => {
-    fetch("/api/admin/organisers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) startTransition(() => setOrganisers(data));
-        else setOrganisers([]);
-      })
-      .catch(() => setOrganisers([]));
+  const fetchOrganisers = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/admin/organisers", { signal });
+    const data = await response.json();
+    return Array.isArray(data) ? data as OrganiserOption[] : [];
   }, []);
+
+  const { data: organisers } = useApiResource<OrganiserOption[]>(fetchOrganisers);
 
   const label = (o: OrganiserOption) =>
     o.orgName || o.contactName || o.email;

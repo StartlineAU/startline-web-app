@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
   DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 import { validateUsername } from "@/lib/username-validation";
 import { STATE_OPTIONS } from "@/types";
+import { useApiResource } from "@/hooks/useApiResource";
 
 const inputCls = "w-full bg-dark-light border border-dark-lighter rounded-md px-3 py-2.5 font-headline text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
 
@@ -34,44 +35,44 @@ export default function EditUserDialog({
   onSaved: () => void;
 }) {
   const [form, setForm] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [usernameError, setUsernameError] = useState("");
+  const initialized = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!userId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`);
-      if (!res.ok) {
-        setForm(null);
-        return;
-      }
-      const data = await res.json();
-      setForm({
-        id: data.id,
-        email: data.email,
-        name: data.name ?? "",
-        username: data.username ?? "",
-        bio: data.bio ?? "",
-        profilePicUrl: data.profilePicUrl ?? "",
-        isPublic: data.isPublic,
-        city: data.city ?? "",
-        state: data.state ?? "",
-      });
-      setUsernameError("");
-    } catch {
-      setForm(null);
-    } finally {
-      setLoading(false);
-    }
+  const fetchUser = useCallback(async (signal: AbortSignal) => {
+    if (!userId) return null;
+    const res = await fetch(`/api/admin/users/${userId}`, { signal });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      id: data.id,
+      email: data.email,
+      name: data.name ?? "",
+      username: data.username ?? "",
+      bio: data.bio ?? "",
+      profilePicUrl: data.profilePicUrl ?? "",
+      isPublic: data.isPublic,
+      city: data.city ?? "",
+      state: data.state ?? "",
+    } satisfies UserData;
   }, [userId]);
 
+  const {
+    data: loadedUser,
+    loading,
+    error: loadError,
+  } = useApiResource<UserData | null>(fetchUser, {
+    key: userId,
+    enabled: open && Boolean(userId),
+  });
+  const error = loadError ?? actionError;
+
   useEffect(() => {
-    if (open && userId) startTransition(() => load());
-  }, [open, userId, load]);
+    if (!open || !loadedUser || initialized.current) return;
+    initialized.current = true;
+    setForm(loadedUser);
+  }, [loadedUser, open]);
 
   const set = (patch: Partial<UserData>) => setForm((f) => (f ? { ...f, ...patch } : f));
 
@@ -88,7 +89,7 @@ export default function EditUserDialog({
     if (form.username?.trim() && usernameError) return;
 
     setSaving(true);
-    setError("");
+    setActionError("");
     try {
       const res = await fetch(`/api/admin/users/${form.id}`, {
         method: "PUT",
@@ -106,20 +107,28 @@ export default function EditUserDialog({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { error?: string };
-        setError(data.error ?? "Failed to save changes.");
+        setActionError(data.error ?? "Failed to save changes.");
         return;
       }
       onSaved();
       onClose();
     } catch {
-      setError("Something went wrong. Please try again.");
+      setActionError("Something went wrong. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
+  const closeDialog = () => {
+    initialized.current = false;
+    setForm(null);
+    setUsernameError("");
+    setActionError("");
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) closeDialog(); }}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit user</DialogTitle>

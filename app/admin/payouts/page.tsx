@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useCallback } from "react";
 import { Send, RefreshCw, CheckCircle, Clock } from "lucide-react";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -25,35 +26,30 @@ function formatDate(iso: string) {
 }
 
 export default function AdminPayoutsPage() {
-  const [events, setEvents] = useState<PayoutEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [running, setRunning] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
+  const [actionError, setActionError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/admin/payouts");
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error ?? "Failed to load payouts.");
-      }
-      const data = await res.json() as { events: PayoutEvent[] };
-      setEvents(data.events);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load payouts.");
-    } finally {
-      setLoading(false);
-    }
+  const fetchPayouts = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/admin/payouts", { signal });
+    const data = await response.json() as { events: PayoutEvent[]; error?: string };
+    if (!response.ok) throw new Error(data.error ?? "Failed to load payouts.");
+    return data.events;
   }, []);
 
-  useEffect(() => { startTransition(() => { load(); }); }, [load]);
+  const {
+    data: eventsData,
+    loading,
+    error: loadError,
+    reload: load,
+    setData: setEvents,
+  } = useApiResource<PayoutEvent[]>(fetchPayouts);
+  const events = eventsData ?? [];
+  const error = loadError ?? actionError;
 
   const runPayout = async (eventId: string) => {
     setRunning(eventId);
-    setError("");
+    setActionError("");
     try {
       const res = await fetch("/api/admin/payouts", {
         method: "POST",
@@ -65,9 +61,9 @@ export default function AdminPayoutsPage() {
         throw new Error(data.error ?? "Payout failed.");
       }
       setDone((prev) => [...prev, eventId]);
-      setEvents((prev) => prev.filter((event) => event.id !== eventId));
+      setEvents((prev) => (prev ?? []).filter((event) => event.id !== eventId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Payout failed.");
+      setActionError(err instanceof Error ? err.message : "Payout failed.");
     } finally {
       setRunning(null);
     }
@@ -96,7 +92,7 @@ export default function AdminPayoutsPage() {
             Ready to pay out
           </span>
           <button
-            onClick={load}
+            onClick={() => void load()}
             className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />

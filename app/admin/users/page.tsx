@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useCallback } from "react";
 import { Search, RefreshCw, Ban, CheckCircle2, Building2, UserX, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import EditUserDialog from "@/components/admin/EditUserDialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -135,34 +136,37 @@ function UserRowItem({
 }
 
 export default function AdminUsersPage() {
-  const [users,      setUsers]      = useState<UserRow[] | null>(null);
-  const loading = users === null;
   const [search,     setSearch]     = useState("");
   const [query,      setQuery]      = useState("");
-  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(async (q: string, p: number) => {
+  const fetchUsers = useCallback(async (signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (query) params.set("search", query);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: "50" });
-      if (q) params.set("search", q);
-      const res  = await fetch(`/api/admin/users?${params}`);
+      const res = await fetch(`/api/admin/users?${params}`, { signal });
       const data = await res.json() as { users: UserRow[]; total: number; totalPages: number };
-      if (res.ok) {
-        setUsers(data.users);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setUsers([]);
-      }
-    } catch {
-      setUsers([]);
+      if (!res.ok) return { users: [], total: 0, totalPages: 1 };
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { users: [], total: 0, totalPages: 1 };
     }
-  }, []);
+  }, [query, page]);
 
-  useEffect(() => { startTransition(() => fetchUsers(query, page)); }, [query, page, fetchUsers]);
+  const {
+    data,
+    loading,
+    reload: reloadUsers,
+    setData: setUserPage,
+  } = useApiResource<{ users: UserRow[]; total: number; totalPages: number }>(
+    fetchUsers,
+    { key: `${query}:${page}` },
+  );
+  const users = data?.users ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,7 +175,10 @@ export default function AdminUsersPage() {
   };
 
   const handleBanToggled = (id: string, isBanned: boolean) => {
-    setUsers((prev) => (prev ?? []).map((u) => u.id === id ? { ...u, isBanned } : u));
+    setUserPage((prev) => prev ? {
+      ...prev,
+      users: prev.users.map((u) => u.id === id ? { ...u, isBanned } : u),
+    } : prev);
   };
 
   return (
@@ -191,7 +198,7 @@ export default function AdminUsersPage() {
               </h1>
             </div>
             <button
-              onClick={() => fetchUsers(query, page)}
+              onClick={() => void reloadUsers()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -278,7 +285,7 @@ export default function AdminUsersPage() {
         userId={editingUserId}
         open={editingUserId !== null}
         onClose={() => setEditingUserId(null)}
-        onSaved={() => startTransition(() => fetchUsers(query, page))}
+        onSaved={() => void reloadUsers()}
       />
     </div>
   );

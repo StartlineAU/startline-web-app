@@ -10,6 +10,7 @@ import {
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useApiResource } from "@/hooks/useApiResource";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -163,21 +164,25 @@ function SortButton({
 // ── Main page ───────────────────────────────────────────────────────────────
 export default function ListingsPage() {
   const router = useRouter();
-  const [events,     setEvents]     = useState<EventRow[] | null>(null);
-  const loading = events === null;
   const [filter,     setFilter]     = useState<Filter>("all");
   const [confirmDel, setConfirmDel] = useState<EventRow | null>(null);
   const [deleting,   setDeleting]   = useState(false);
   const [sortField,  setSortField]  = useState<SortField>("status");
   const [sortDir,    setSortDir]    = useState<SortDir>("asc");
 
-  const fetchEvents = useCallback(() => {
-    fetch("/api/organiser/events")
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { setEvents(Array.isArray(data) ? data : []); });
+  const fetchEvents = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/organiser/events", { signal });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data as EventRow[] : [];
   }, []);
 
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  const {
+    data: events,
+    loading,
+    reload: reloadEvents,
+    setData: setEvents,
+  } = useApiResource<EventRow[]>(fetchEvents);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -271,7 +276,7 @@ export default function ListingsPage() {
                 {l} <span className="opacity-60 ml-1">({counts[k] ?? 0})</span>
               </Button>
             ))}
-            <Button size="icon" variant="outline" onClick={fetchEvents} title="Refresh" className="shrink-0">
+            <Button size="icon" variant="outline" onClick={() => void reloadEvents()} title="Refresh" className="shrink-0">
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </div>

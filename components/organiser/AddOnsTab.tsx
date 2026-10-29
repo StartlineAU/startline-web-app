@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ShoppingBag, RefreshCw, Package, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import {
 } from "@/lib/add-on-drafts";
 import { addOnStockLabel } from "@/lib/add-ons";
 import { STOCK_HOLDING_STATUSES } from "@/lib/add-on-stock";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export interface RegistrationAddOnView {
   id: string;
@@ -67,49 +68,49 @@ export default function AddOnsTab({
   /** Reload the registrations so a decided refund leaves the queue. */
   onRefetch: () => void;
 }) {
-  const [drafts, setDrafts] = useState<AddOnDraft[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [deciding, setDeciding] = useState<string | null>(null);
 
-  // Counts edits made in the editor. A catalogue response that was already in
-  // flight when the organiser started typing must not replace what they have
-  // written: it arrives holding the server's older products and would take the
-  // unsaved one with it. Saving reloads explicitly, which is what publishes
-  // their work.
-  const edits = useRef(0);
-
-  const editDrafts = useCallback((next: AddOnDraft[]) => {
-    edits.current++;
-    setDrafts(next);
-  }, []);
-
-  const loadCatalogue = useCallback(() => {
-    const editsAtStart = edits.current;
-    fetch(`/api/organiser/events/${eventId}/add-ons`)
-      .then(async (r) => {
-        const json = await r.json();
-        if (!r.ok) throw new Error(json.error ?? "Failed to load add-ons.");
-        if (edits.current !== editsAtStart) return;
-        setDrafts(draftsFromCatalogue(json.addOns ?? []));
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
+  const loadCatalogue = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/organiser/events/${eventId}/add-ons`, { signal });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error ?? "Failed to load add-ons.");
+    return draftsFromCatalogue(json.addOns ?? []) as AddOnDraft[];
   }, [eventId]);
 
-  useEffect(loadCatalogue, [loadCatalogue]);
+  const {
+    data: catalogue,
+    loading,
+    error: loadError,
+    reload: reloadCatalogue,
+    setData: setDrafts,
+    markDirty,
+    commit,
+  } = useApiResource<AddOnDraft[]>(loadCatalogue, { key: eventId });
+  const drafts = catalogue ?? [];
+  const error = loadError ?? actionError;
+
+  // Any edit marks the catalogue dirty. A background response that arrives
+  // while the organiser is typing is discarded rather than replacing their
+  // unsaved products. A successful save commits the server's version and
+  // clears the guard.
+  const editDrafts = useCallback((next: AddOnDraft[]) => {
+    markDirty();
+    setDrafts(next);
+  }, [markDirty, setDrafts]);
 
   const save = async () => {
-    setError("");
+    setActionError("");
     setMessage("");
     const validationError = draftValidationError(drafts);
     if (validationError) {
-      setError(validationError);
+      setActionError(validationError);
       return;
     }
     setSaving(true);
+    markDirty();
     try {
       const withImages = await uploadAddOnImages(drafts);
       setDrafts(withImages);
@@ -122,12 +123,12 @@ export default function AddOnsTab({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not save your add-ons.");
-      setDrafts(draftsFromCatalogue(json.addOns ?? []));
+      commit(draftsFromCatalogue(json.addOns ?? []) as AddOnDraft[]);
       setMessage("Add-ons saved.");
     } catch (e) {
       // Keep the profile items already published, so a retry does not repeat them.
       if (e instanceof PublishToProfileError) setDrafts(e.drafts);
-      setError(e instanceof Error ? e.message : "Could not save your add-ons.");
+      setActionError(e instanceof Error ? e.message : "Could not save your add-ons.");
     } finally {
       setSaving(false);
     }
@@ -146,7 +147,7 @@ export default function AddOnsTab({
 
   const decide = async (itemId: string, decision: "approve" | "decline") => {
     setDeciding(itemId);
-    setError("");
+    setActionError("");
     setMessage("");
     try {
       const res = await fetch(`/api/organiser/events/${eventId}/add-ons/refunds/${itemId}`, {
@@ -158,9 +159,9 @@ export default function AddOnsTab({
       if (!res.ok) throw new Error(json.error ?? "Could not record that decision.");
       setMessage(decision === "approve" ? "Refund approved and sent." : "Refund request declined.");
       onRefetch();
-      loadCatalogue();
+      await reloadCatalogue({ silent: true });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not record that decision.");
+      setActionError(e instanceof Error ? e.message : "Could not record that decision.");
     } finally {
       setDeciding(null);
     }
