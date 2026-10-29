@@ -121,6 +121,22 @@ export function mayRemoveProvider(methods: SignInMethods, provider: SocialProvid
   return methods.providers.find((method) => method.provider === provider)?.canRemove ?? false;
 }
 
+export function linkedProviders(methods: SignInMethods): SocialProvider[] {
+  return methods.providers.filter((method) => method.linked).map((method) => method.provider);
+}
+
+// An email change is only durable once no provider can write the address back
+// on the next provider sign-in. A password is needed as the remaining way in.
+export function canChangeEmail(methods: SignInMethods): boolean {
+  return methods.hasPassword && linkedProviders(methods).length === 0;
+}
+
+// TOTP is a challenge on the Cognito password flow. A provider sign-in goes
+// through the provider and may bypass it, so setup needs a password first.
+export function canUseMfa(methods: SignInMethods): boolean {
+  return methods.hasPassword;
+}
+
 // What /auth/link/callback can put in the URL. Kept here so the callback and
 // the settings card cannot drift apart.
 export function linkErrorMessage(code: string | null): string | null {

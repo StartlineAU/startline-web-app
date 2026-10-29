@@ -282,9 +282,18 @@ host that started it. Amplify's OAuth listener (imported in
   the code, deletes the throwaway external profile Cognito created, then calls
   `AdminLinkProviderForUser`. An identity already attached to another local
   account is refused rather than merged.
-- **Never remove the last way in.** A provider-only account cannot disconnect
-  its only identity; a password or another linked provider has to remain.
-  TOTP does not count, since provider sign-in skips it.
+- **Set a password before disconnecting.** A provider-only account can add a
+  password to the existing Cognito profile, but cannot disconnect a provider
+  until that password exists. TOTP does not count, since provider sign-in skips
+  it. The password keeps the same Cognito subject, so the app account and its
+  data stay put. The password route is `/api/user/password`.
+- **Provider-managed email.** An in-app email change is only offered once every
+  Google/Apple identity is disconnected; until then the provider owns the
+  address and can write it back on the next sign-in.
+- **TOTP is password-only.** The authenticator app is a Cognito challenge on the
+  password flow. A linked Google/Apple sign-in may bypass it, so the settings
+  copy says so and setup needs a password. The pre sign-up trigger still refuses
+  to add a new provider to an account with TOTP enabled.
 - **Infra must allow the link flow.** Both environments' `callback_urls` need
   `${origin}/auth/link/callback`, and the Amplify role needs
   `cognito-idp:AdminLinkProviderForUser` and
@@ -325,6 +334,8 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
 - Organisation images save on their own through `PATCH /api/organiser/profile`. The text fields save only on Save (`PUT`).
 - Login & security also holds changing the sign-in email (`/api/user/email`,
   a code to the new address first) and deleting the account (`/api/user/account`).
+  Email changes are refused while a Google/Apple identity is linked; disconnect
+  it first so the provider cannot overwrite the new address.
 - Deleting an account keeps the person's entries, detached, because they are
   the organiser's records. It is refused while they are the only owner of an
   organisation; they transfer ownership or delete it. An organisation can only

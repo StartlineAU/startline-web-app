@@ -3,6 +3,7 @@ import {
   AdminDisableProviderForUserCommand,
   AdminGetUserCommand,
   AdminLinkProviderForUserCommand,
+  AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "./prisma";
@@ -61,6 +62,27 @@ export async function getSignInMethods(
 ): Promise<SignInMethods> {
   const snapshot = await getCognitoUserSnapshot(username);
   return signInMethodsFromCognito(snapshot, enabledProviders);
+}
+
+/**
+ * Add a permanent password to the existing Cognito profile. A provider-only
+ * user moves from EXTERNAL_PROVIDER to CONFIRMED but keeps the same subject
+ * and provider-generated username.
+ */
+export async function setPassword(username: string, password: string): Promise<void> {
+  if (!userPoolId) {
+    throw new SignInMethodError("unavailable", 503, "Sign-in methods cannot be managed in this environment.");
+  }
+  try {
+    await client.send(new AdminSetUserPasswordCommand({
+      UserPoolId: userPoolId,
+      Username:   username,
+      Password:   password,
+      Permanent:  true,
+    }));
+  } catch (error) {
+    throw mapCognitoError(error, "Could not set your password.");
+  }
 }
 
 export async function unlinkProvider({

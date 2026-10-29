@@ -6,6 +6,7 @@ import {
   SignInMethodError,
   unlinkProvider,
 } from "@/lib/cognito-sign-in-methods";
+import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import {
   createLinkRequest,
   LINK_COOKIE_MAX_AGE,
@@ -44,14 +45,10 @@ function errorResponse(error: unknown) {
 export async function GET() {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
-  if (!session.username) return unavailable();
 
-  try {
-    const methods = await getSignInMethods(session.username, enabledSocialProviders());
-    return NextResponse.json(methods);
-  } catch (error) {
-    return errorResponse(error);
-  }
+  const methods = await getSessionSignInMethods(session);
+  if (!methods) return unavailable();
+  return NextResponse.json(methods);
 }
 
 export async function POST(req: Request) {
@@ -68,6 +65,17 @@ export async function POST(req: Request) {
 
   try {
     if (body.action === "unlink") {
+      const current = await getSignInMethods(session.username, enabled);
+      if (!current.hasPassword) {
+        return NextResponse.json(
+          {
+            error: "Set a password before disconnecting a sign-in method.",
+            code: "password-required",
+          },
+          { status: 409 },
+        );
+      }
+
       const methods = await unlinkProvider({
         username: session.username,
         provider: body.provider,

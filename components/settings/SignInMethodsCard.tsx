@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Link2 } from "lucide-react";
+import { useAuthContext } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ErrorNote, SuccessNote, cardCls, outlineBtnCls,
@@ -38,7 +39,15 @@ function flashFromQuery(query: URLSearchParams): Message {
   return null;
 }
 
-export default function SignInMethodsCard() {
+export default function SignInMethodsCard({
+  onChanged, refreshKey,
+}: {
+  onChanged?: () => void | Promise<void>;
+  // Bumped by the settings page after a password is added, so this card
+  // reloads hasPassword and enables disconnect.
+  refreshKey?: number;
+}) {
+  const { user } = useAuthContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -80,7 +89,7 @@ export default function SignInMethodsCard() {
       });
 
     return () => { cancelled = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refreshKey]);
 
   const connect = async (provider: SocialProvider) => {
     setBusy(provider);
@@ -115,6 +124,7 @@ export default function SignInMethodsCard() {
       setMethods(data as SignInMethods);
       setConfirming(null);
       setMessage({ kind: "success", text: `${provider === "google" ? "Google" : "Apple"} is no longer connected.` });
+      await onChanged?.();
     } catch {
       setMessage({ kind: "error", text: "Something went wrong. Please try again." });
     } finally {
@@ -131,8 +141,9 @@ export default function SignInMethodsCard() {
         <div>
           <h4 className="font-headline text-[13px] font-bold uppercase tracking-widest text-light">Google and Apple</h4>
           <p className="text-muted text-[12px] mt-0.5 leading-relaxed">
-            Connect a Google or Apple account to sign in with it as well as your email and password.
+            Manage the Google and Apple accounts that can sign in to Startline.
           </p>
+          {user?.email && <p className="text-muted-dark text-[11px] mt-1 break-all">{user.email}</p>}
         </div>
       </div>
 
@@ -164,12 +175,26 @@ export default function SignInMethodsCard() {
                     <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-light">{name}</div>
                     <p className="text-[12px] text-muted mt-1 leading-relaxed">
                       {method.linked
-                        ? "Connected. You can sign in with this account."
+                        ? methods.hasPassword
+                          ? "Connected. You can sign in with this account."
+                          : `You sign in with ${name}. Your email address is managed by ${name}.`
                         : method.enabled
                           ? "Not connected."
                           : "Not available on this deployment."}
                     </p>
-                    {method.linked && !method.canRemove && (
+                    {method.linked && !methods.hasPassword && (
+                      <p className="text-[11px] text-muted-dark mt-1 leading-relaxed">
+                        This is your only way to sign in. Set a password before disconnecting it.
+                        Your email is managed by {name}; change it there, then sign in again.
+                      </p>
+                    )}
+                    {method.linked && methods.hasPassword && (
+                      <p className="text-[11px] text-muted-dark mt-1 leading-relaxed">
+                        You can also sign in with your password. To change your email here,
+                        disconnect {name} first.
+                      </p>
+                    )}
+                    {method.linked && methods.hasPassword && !method.canRemove && (
                       <p className="text-[11px] text-muted-dark mt-1 leading-relaxed">
                         This is your only way to sign in. Connect another before disconnecting it.
                       </p>
@@ -180,7 +205,7 @@ export default function SignInMethodsCard() {
                     <button
                       type="button"
                       onClick={() => { setMessage(null); setConfirming(method.provider); }}
-                      disabled={!method.canRemove || busy !== null}
+                      disabled={!method.canRemove || !methods.hasPassword || busy !== null}
                       className={dangerBtn + " shrink-0"}
                     >
                       Disconnect
