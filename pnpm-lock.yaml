@@ -87,8 +87,8 @@ importers:
         specifier: ^6.9.4
         version: 6.12.3(@react-email/render@2.0.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       stripe:
-        specifier: ^22.2.0
-        version: 22.2.0(@types/node@22.19.19)
+        specifier: ^23.0.0
+        version: 23.0.1(@types/node@22.19.19)
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.6.0
@@ -3036,6 +3036,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -4431,11 +4432,11 @@ packages:
   strip-literal@3.1.0:
     resolution: {integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==}
 
-  stripe@22.2.0:
-    resolution: {integrity: sha512-WFGpMOom9QZqso1kcnSwJsCdC1QHDlMoCOxBZRf3JraMzhkfw7dgSdD2a1CFZrqC+mzAfqeEtYILrZhWKIDruA==}
-    engines: {node: '>=18'}
+  stripe@23.0.1:
+    resolution: {integrity: sha512-VFLs9IAzSZ8GIm6/vqhjqOL0fbYrSNYCpgZ3LS3YkSi/i5RnyMpu/Hf9YxPTOCYwc3mZKU3IJvuvKffQH2NLMg==}
+    engines: {node: '>=20'}
     peerDependencies:
-      '@types/node': '>=18'
+      '@types/node': '>=20'
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -9470,7 +9471,7 @@ snapshots:
     dependencies:
       js-tokens: 9.0.1
 
-  stripe@22.2.0(@types/node@22.19.19):
+  stripe@23.0.1(@types/node@22.19.19):
     optionalDependencies:
       '@types/node': 22.19.19
 

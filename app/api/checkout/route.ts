@@ -229,6 +229,7 @@ export async function POST(req: NextRequest) {
       currency: "aud",
       // Card-only checkout to match the registration payment design (plain
       // card number / expiry / CVC, no multi-method accordion).
+      // @ts-expect-error v23 types describe the newer API; the pinned version still accepts this.
       payment_method_types: ["card"],
       ...(useConnect
         ? {

@@ -16,6 +16,8 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:seed": "npx tsx prisma/seed.ts",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/stripe/webhook",
+    "stripe:listen:accounts": "stripe listen --thin-events \"v2.core.account[configuration.merchant].capability_status_updated,v2.core.account[configuration.recipient].capability_status_updated,v2.core.account[requirements].updated\" --forward-thin-to localhost:3000/api/stripe/account-events",
+    "stripe:account-events": "node scripts/create-stripe-account-events-destination.mjs",
     "stripe:setup": "node scripts/setup-stripe-local.mjs",
     "test:registration": "node scripts/test-registration-payment.mjs",
     "staging:db:start": "aws rds start-db-instance --db-instance-identifier startline-staging-postgres"
@@ -47,7 +49,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "resend": "^6.9.4",
-    "stripe": "^22.2.0",
+    "stripe": "^23.0.0",
     "tailwind-merge": "^3.5.0"
   },
   "prisma": {

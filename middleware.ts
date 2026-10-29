@@ -110,6 +110,12 @@ export async function middleware(req: NextRequest) {
   if (host === USER_DOMAIN || host === `www.${USER_DOMAIN}`) {
     if (pathname === "/waitlist"
         || pathname.startsWith("/api/waitlist")
+        // Stripe posts to the apex domain, and the rewrite below would answer
+        // with the waitlist page: a 200 Stripe reads as delivered while no
+        // payment is ever confirmed and no onboarding ever completes. Safe to
+        // expose — both handlers verify the Stripe signature before anything.
+        || pathname === "/api/stripe/webhook"
+        || pathname === "/api/stripe/account-events"
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")
         || pathname.startsWith("/favicon")) {
