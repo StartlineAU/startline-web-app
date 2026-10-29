@@ -42,9 +42,9 @@ export async function POST(req: Request) {
     const providers = [...new Set(signIn.identities.map((identity) => identity.provider))];
     return NextResponse.json(
       {
-        error: providers.length
-          ? `Unlink ${providerListLabel(providers)} before changing your email. The provider controls that address.`
-          : "Set a password before changing your email.",
+        error: !signIn.hasPassword
+          ? "Set a password before changing your email."
+          : `Unlink ${providerListLabel(providers)} before changing your email. The provider controls that address.`,
       },
       { status: 409 },
     );
