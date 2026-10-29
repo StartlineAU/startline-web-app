@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 import { getOrganiserSession } from "@/lib/amplify-server";
+import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
+import { isOnboardingComplete, retrieveConnectStatus } from "@/lib/stripe-connect";
 
 export async function GET() {
   const session = await getOrganiserSession();
@@ -14,28 +15,23 @@ export async function GET() {
     });
 
     if (!organiser?.stripeAccountId) {
-      return NextResponse.json({ connected: false, chargesEnabled: false, payoutsEnabled: false });
+      return NextResponse.json({ connected: false, chargesEnabled: false, payoutsEnabled: false, actionRequired: true });
     }
 
     if (organiser.stripeOnboardingComplete) {
-      return NextResponse.json({ connected: true, chargesEnabled: true, payoutsEnabled: true });
+      return NextResponse.json({ connected: true, chargesEnabled: true, payoutsEnabled: true, actionRequired: false });
     }
 
-    const stripe  = getStripe();
-    const account = await stripe.accounts.retrieve(organiser.stripeAccountId);
+    const status = await retrieveConnectStatus(getStripe(), organiser.stripeAccountId);
 
-    const chargesEnabled  = account.charges_enabled  ?? false;
-    const payoutsEnabled  = account.payouts_enabled   ?? false;
-    const fullyOnboarded  = chargesEnabled && payoutsEnabled;
-
-    if (fullyOnboarded) {
+    if (isOnboardingComplete(status)) {
       await prisma.organiser.update({
         where: { id: session.sub },
         data:  { stripeOnboardingComplete: true },
       });
     }
 
-    return NextResponse.json({ connected: true, chargesEnabled, payoutsEnabled });
+    return NextResponse.json({ connected: true, ...status });
   } catch (err) {
     console.error("Stripe status error:", err);
     return NextResponse.json({ error: "Failed to check Stripe status." }, { status: 503 });
