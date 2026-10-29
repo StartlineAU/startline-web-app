@@ -1070,9 +1070,7 @@ function EventsListingInner() {
     </div>
   );
 
-  const emptyState = whereChoices
-    ? whereChoicePending("lg")
-    : eventsLoading ? loadingState : noResults("lg");
+  const emptyState = whereChoices ? whereChoicePending("lg") : noResults("lg");
 
   const loadingState = (
     <div className="flex items-center justify-center gap-2 py-10 font-headline text-xs uppercase tracking-widest text-muted">
@@ -1103,7 +1101,7 @@ function EventsListingInner() {
     <div className={view === "list" ? "flex-1 overflow-y-auto px-3 py-4" : "hidden"}>
       <div className={`${CARD_COLUMN_WIDTH} mx-auto`}>
         {displayEvents.length === 0 ? (
-          eventsLoading ? loadingState : emptyState
+          whereChoices ? emptyState : eventsLoading ? loadingState : emptyState
         ) : (
           <>
             <div className={CARD_LIST}>
