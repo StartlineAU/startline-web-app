@@ -448,7 +448,7 @@ export default function SecuritySection() {
         {notice && <SuccessNote>{notice}</SuccessNote>}
         {state.hasPassword && state.providers.length === 0 && <EmailCard />}
         {state.hasPassword ? <PasswordCard /> : <SetPasswordCard onSet={() => { setNotice("Password added."); reload(); }} />}
-        <SignInMethodsCard onChanged={methodsChanged} />
+        <SignInMethodsCard onChanged={methodsChanged} refreshKey={reloadKey} />
         <AuthenticatorCard
           enabled={state.mfaEnabled}
           canUse={state.hasPassword}

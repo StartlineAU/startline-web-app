@@ -40,9 +40,12 @@ function flashFromQuery(query: URLSearchParams): Message {
 }
 
 export default function SignInMethodsCard({
-  onChanged,
+  onChanged, refreshKey,
 }: {
   onChanged?: () => void | Promise<void>;
+  // Bumped by the settings page after a password is added, so this card
+  // reloads hasPassword and enables disconnect.
+  refreshKey?: number;
 }) {
   const { user } = useAuthContext();
   const router = useRouter();
@@ -86,7 +89,7 @@ export default function SignInMethodsCard({
       });
 
     return () => { cancelled = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refreshKey]);
 
   const connect = async (provider: SocialProvider) => {
     setBusy(provider);
