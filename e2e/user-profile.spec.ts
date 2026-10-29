@@ -16,7 +16,7 @@ const BYPASS_COOKIE = { name: "__e2e_bypass", value: "1", domain: "localhost", p
 const COASTAL_ORG = "Coastal Fitness Collective";
 
 async function coastalOrganiserId(page: import("@playwright/test").Page): Promise<string> {
-  const events = await (await page.request.get("/api/events")).json();
+  const { events } = await (await page.request.get("/api/events")).json();
   const event = events.find((e: { organizer?: string; organiser?: { orgName?: string } }) =>
     e.organizer === COASTAL_ORG || e.organiser?.orgName === COASTAL_ORG
   );

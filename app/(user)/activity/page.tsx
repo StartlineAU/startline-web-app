@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Bell, RefreshCw, UserCheck, Flag, Megaphone, Undo2, Banknote } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserEvent } from "@/types";
+import type { PublicEvent } from "@/lib/event-types";
 import { getRegisteredEventIds, fetchSavedEventIds } from "@/lib/client-lists";
 import { toUserEvents } from "@/lib/user-events";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
@@ -350,12 +351,45 @@ export default function ActivityPage() {
   };
 
   useEffect(() => {
-    fetch("/api/events")
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { setEvents(Array.isArray(data) ? toUserEvents(data) : []); })
-      .catch(() => {})
-      .finally(() => setEventsLoading(false));
-  }, []);
+    const ids = Array.from(new Set([...savedIds, ...registeredIds].filter(Boolean)));
+    if (ids.length === 0) {
+      const timer = setTimeout(() => {
+        setEvents([]);
+        setEventsLoading(false);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    let cancelled = false;
+    // The event listing API caps one request; chunk an unusually long list so a
+    // visitor who saved many events still sees all of them.
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
+
+    Promise.all(
+      chunks.map((chunk) =>
+        fetch(`/api/events?ids=${encodeURIComponent(chunk.join(","))}`)
+          .then((r) => (r.ok ? r.json() : { events: [] }))
+          .then((data: { events?: PublicEvent[] }) => data.events ?? []),
+      ),
+    )
+      .then((pages) => {
+        if (cancelled) return;
+        const found = pages.flat();
+        const byId = new Map(found.map((event) => [event.id, event]));
+        setEvents(toUserEvents(ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))));
+      })
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEventsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [savedIds, registeredIds]);
 
   useEffect(() => {
     if (status !== "authenticated") return;

@@ -7,7 +7,7 @@ import { test, expect } from "@playwright/test";
 async function getOrganiserId(page: import("@playwright/test").Page): Promise<string> {
   const eventsRes = await page.request.get("/api/events");
   expect(eventsRes.ok()).toBeTruthy();
-  const events = await eventsRes.json();
+  const { events } = await eventsRes.json();
   const organiserId = events.find((e: { organiserId?: string }) => e.organiserId)?.organiserId;
   expect(organiserId).toBeTruthy();
   return organiserId as string;
