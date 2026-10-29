@@ -4,29 +4,24 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import { fetchAuthSession } from "aws-amplify/auth";
-import {
-  ArrowRight, Check, Copy, Eye, EyeOff, KeyRound, Link2, Plus, Shield, Trash2, Unlink,
-} from "lucide-react";
+import { ArrowRight, Check, Copy, Eye, EyeOff, KeyRound, Plus, Shield, Trash2 } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
-import {
-  providerLabel,
-  providerListLabel,
-  type SignInProvider,
-} from "@/lib/account-sign-in-shared";
+import type { SocialProvider } from "@/lib/social-providers";
 import PasswordRequirements from "@/components/PasswordRequirements";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ErrorNote, SectionShell, SuccessNote, cardCls, inputCls, labelCls, outlineBtnCls,
 } from "@/components/settings/primitives";
 import { DeleteAccountCard, EmailCard, SessionsCard } from "@/components/settings/AccountCards";
+import SignInMethodsCard from "@/components/settings/SignInMethodsCard";
 
 const btnCls = outlineBtnCls;
 
 type Message = { kind: "error" | "success"; text: string } | null;
 
 type SecurityState = {
-  providers:   SignInProvider[];
+  providers:   SocialProvider[];
   hasPassword: boolean;
   mfaEnabled:  boolean;
 };
@@ -43,99 +38,6 @@ async function postMfa(body: Record<string, unknown>): Promise<{ ok: boolean; da
     body: JSON.stringify(body),
   });
   return { ok: r.ok, data: await r.json().catch(() => ({})) };
-}
-
-// ── Sign-in method ───────────────────────────────────────────────────────────
-// A Google or Apple profile owns the email address. Until every provider is
-// unlinked, the email field here would only be overwritten on the next
-// provider sign-in, so it is replaced by this card.
-
-function ProviderSignInCard({
-  providers, hasPassword, email, onUnlink,
-}: {
-  providers: SignInProvider[];
-  hasPassword: boolean;
-  email: string;
-  onUnlink: (provider: SignInProvider) => Promise<void>;
-}) {
-  const [confirming, setConfirming] = useState<SignInProvider | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  if (providers.length === 0) return null;
-
-  const names = providerListLabel(providers);
-
-  const unlink = async (provider: SignInProvider) => {
-    setBusy(true);
-    setError("");
-    try {
-      await onUnlink(provider);
-      setConfirming(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not unlink that sign-in method.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className={cardCls}>
-      <div className="flex items-start gap-3">
-        <Link2 className="w-5 h-5 mt-0.5 shrink-0 text-muted-dark" />
-        <div className="min-w-0">
-          <h4 className="font-headline text-[13px] font-bold uppercase tracking-widest text-light">Sign-in method</h4>
-          <p className="text-muted text-[12px] mt-0.5 leading-relaxed">
-            You sign in with <span className="text-light">{names}</span>.
-          </p>
-          <p className="text-muted text-[12px] mt-1 break-all">{email || "The address held by your provider."}</p>
-          <p className="text-muted-dark text-[11px] mt-2 leading-relaxed">
-            {hasPassword
-              ? `Your password works too. To change your email here, unlink ${names} first.`
-              : `Your email is managed by ${names}. Change it there, then sign in again.`}
-          </p>
-        </div>
-      </div>
-
-      {hasPassword && (
-        <div className="border-t border-dark-lighter pt-4 space-y-2">
-          <p className="text-[12px] text-muted leading-relaxed">
-            Unlinking removes {names} from this account. Keep your password somewhere safe:
-            you will use it to sign in afterwards.
-          </p>
-          {providers.map((provider) => (
-            <div key={provider}>
-              {confirming === provider ? (
-                <div className="border border-dark-lighter rounded-lg p-3 space-y-3">
-                  <p className="text-[12px] text-red-300 leading-relaxed">
-                    Unlink {providerLabel(provider)}? If you sign in with it again before
-                    changing your email, it may be linked back to this account.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => unlink(provider)} disabled={busy}
-                      className={btnCls + " border-red-500/30 text-red-400 hover:bg-red-500/10"}>
-                      <Unlink className="w-3.5 h-3.5" /> {busy ? "Unlinking…" : `Yes, unlink ${providerLabel(provider)}`}
-                    </button>
-                    <button type="button" onClick={() => { setConfirming(null); setError(""); }} disabled={busy}
-                      className={btnCls + " border-dark-lighter text-muted hover:text-light"}>
-                      Keep it
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" onClick={() => { setConfirming(provider); setError(""); }}
-                  className={btnCls + " border-dark-lighter text-muted hover:text-light"}>
-                  <Unlink className="w-3.5 h-3.5" /> Unlink {providerLabel(provider)}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && <ErrorNote>{error}</ErrorNote>}
-    </div>
-  );
 }
 
 // ── Set a password ───────────────────────────────────────────────────────────
@@ -478,7 +380,6 @@ function AuthenticatorCard({
 // ── Section ──────────────────────────────────────────────────────────────────
 
 export default function SecuritySection() {
-  const { user } = useAuthContext();
   const [state, setState] = useState<SecurityState | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -510,25 +411,15 @@ export default function SecuritySection() {
     setReloadKey((key) => key + 1);
   };
 
-  const unlink = async (provider: SignInProvider) => {
-    const r = await fetch("/api/user/identities/unlink", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      throw new Error(typeof data.error === "string" ? data.error : "Could not unlink that sign-in method.");
-    }
+  const methodsChanged = async () => {
     // The ID token still carries the old identity until it is refreshed.
     await fetchAuthSession({ forceRefresh: true }).catch(() => {});
-    setNotice(`${providerLabel(provider)} unlinked.`);
     reload();
   };
 
   if (error) {
     return (
-      <SectionShell title="Login & security" description="Your email, your password and the second step you use to sign in.">
+      <SectionShell title="Login & security" description="Your email, your password, the accounts you sign in with and the second step you use to sign in.">
         <div className="space-y-4">
           <ErrorNote>{error}</ErrorNote>
           <button type="button" onClick={reload} className={btnCls + " border-dark-lighter text-muted hover:text-light"}>
@@ -541,7 +432,7 @@ export default function SecuritySection() {
 
   if (!state) {
     return (
-      <SectionShell title="Login & security" description="Your email, your password and the second step you use to sign in.">
+      <SectionShell title="Login & security" description="Your email, your password, the accounts you sign in with and the second step you use to sign in.">
         <div className="space-y-5">
           <Skeleton className="h-24 w-full rounded-xl" />
           <Skeleton className="h-48 w-full rounded-xl" />
@@ -552,20 +443,12 @@ export default function SecuritySection() {
   }
 
   return (
-    <SectionShell title="Login & security" description="Your email, your password and the second step you use to sign in.">
+    <SectionShell title="Login & security" description="Your email, your password, the accounts you sign in with and the second step you use to sign in.">
       <div className="space-y-5">
         {notice && <SuccessNote>{notice}</SuccessNote>}
-        {state.providers.length > 0 ? (
-          <ProviderSignInCard
-            providers={state.providers}
-            hasPassword={state.hasPassword}
-            email={user?.email ?? ""}
-            onUnlink={unlink}
-          />
-        ) : state.hasPassword ? (
-          <EmailCard />
-        ) : null}
+        {state.hasPassword && state.providers.length === 0 && <EmailCard />}
         {state.hasPassword ? <PasswordCard /> : <SetPasswordCard onSet={() => { setNotice("Password added."); reload(); }} />}
+        <SignInMethodsCard onChanged={methodsChanged} />
         <AuthenticatorCard
           enabled={state.mfaEnabled}
           canUse={state.hasPassword}

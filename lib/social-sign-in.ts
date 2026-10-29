@@ -1,22 +1,16 @@
 import { signInWithRedirect } from "aws-amplify/auth";
+import type { SocialProvider } from "./social-providers";
 
-export type SocialProvider = "google" | "apple";
+// The provider list is shared with the server-side account-linking routes.
+// Re-exported here so callers that already use this module keep working.
+export type { SocialProvider } from "./social-providers";
+export { enabledSocialProviders } from "./social-providers";
 
 const AMPLIFY_PROVIDER = { google: "Google", apple: "Apple" } as const;
 
 const RETURN_TO_KEY = "startline_social_return_to";
 const PROVIDER_KEY  = "startline_social_provider";
 const RETRIED_KEY   = "startline_social_retried";
-
-// Terraform lists only the providers whose keys are in ci-bootstrap, and a
-// deployment without a Cognito domain (local dev, the Docker image) has none.
-export function enabledSocialProviders(): SocialProvider[] {
-  if (!process.env.NEXT_PUBLIC_COGNITO_DOMAIN) return [];
-  return (process.env.NEXT_PUBLIC_SOCIAL_SIGN_IN ?? "")
-    .split(",")
-    .map((p) => p.trim())
-    .filter((p): p is SocialProvider => p === "google" || p === "apple");
-}
 
 // Leaves the page for Google or Apple. The return path and provider sit in
 // sessionStorage so /auth/callback can send the person back where they were,

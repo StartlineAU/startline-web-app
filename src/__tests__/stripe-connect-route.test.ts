@@ -56,7 +56,10 @@ describe("POST /api/organiser/stripe/connect", () => {
     mocks.createAccount.mockResolvedValue({ id: "acct_new" });
     mocks.createAccountLink.mockResolvedValue({ url: "https://connect.stripe.com/setup/e/acct_new" });
     mocks.updateBalanceSettings.mockResolvedValue({});
-    mocks.retrieveAccount.mockResolvedValue({ id: "acct_old", identity: { individual: null } });
+    mocks.retrieveAccount.mockResolvedValue({
+      id: "acct_old",
+      identity: { entity_type: "individual", individual: null },
+    });
     mocks.updateAccount.mockResolvedValue({});
   });
 
@@ -88,7 +91,7 @@ describe("POST /api/organiser/stripe/connect", () => {
     expect(mocks.createAccount).toHaveBeenCalledWith(expect.objectContaining({
       contact_email: "hugo@example.com",
       dashboard:     "express",
-      identity:      { country: "AU", entity_type: "individual" },
+      identity:      { country: "AU" },
       defaults:      expect.objectContaining({
         currency:         "aud",
         responsibilities: { fees_collector: "application", losses_collector: "application" },
@@ -111,9 +114,10 @@ describe("POST /api/organiser/stripe/connect", () => {
     });
   });
 
-  // The Payments page asks for these first; Stripe's form opens with them
-  // instead of asking again.
-  it("creates the account with the legal name and date of birth filled in", async () => {
+  // Issue #336: the organiser may be a company. Stripe's hosted onboarding asks
+  // which legal entity it is, so the account must not be created as an
+  // individual or preloaded with a person's details.
+  it("leaves the legal entity type for Stripe to ask during onboarding", async () => {
     mocks.organiser.findUnique.mockResolvedValue({
       stripeAccountId: null, email: "hugo@example.com",
       legalName: "Hugo Van Der Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
@@ -124,45 +128,19 @@ describe("POST /api/organiser/stripe/connect", () => {
 
     expect(res.status).toBe(200);
     expect(mocks.createAccount).toHaveBeenCalledWith(expect.objectContaining({
-      identity: {
-        country:     "AU",
-        entity_type: "individual",
-        individual:  {
-          given_name:    "Hugo Van Der",
-          surname:       "Berg",
-          date_of_birth: { day: 7, month: 4, year: 1990 },
-        },
-      },
+      identity: { country: "AU" },
     }));
   });
 
-  it("makes the account without the prefill when Stripe refuses it", async () => {
-    mocks.organiser.findUnique.mockResolvedValue({
-      stripeAccountId: null, email: "hugo@example.com",
-      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
-    });
-    mocks.createAccount
-      .mockRejectedValueOnce(stripeError("parameter_invalid_empty"))
-      .mockResolvedValueOnce({ id: "acct_new" });
-    const POST = await loadRoute();
-
-    const res = await POST();
-
-    expect(res.status).toBe(200);
-    expect(mocks.createAccount).toHaveBeenCalledTimes(2);
-    expect(mocks.createAccount).toHaveBeenLastCalledWith(expect.objectContaining({
-      identity: { country: "AU", entity_type: "individual" },
-    }));
-  });
-
-  it("fills in what an unfinished existing account is missing, and nothing it holds", async () => {
+  it("fills in what an unfinished existing individual account is missing, and nothing it holds", async () => {
     mocks.organiser.findUnique.mockResolvedValue({
       stripeAccountId: "acct_old", email: "hugo@example.com",
       legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
     });
     // Typed into Stripe's own form on an earlier visit: Stripe's copy wins.
     mocks.retrieveAccount.mockResolvedValue({
-      id: "acct_old", identity: { individual: { given_name: "Hugh", surname: "Berg" } },
+      id: "acct_old",
+      identity: { entity_type: "individual", individual: { given_name: "Hugh", surname: "Berg" } },
     });
     const POST = await loadRoute();
 
@@ -173,6 +151,37 @@ describe("POST /api/organiser/stripe/connect", () => {
     expect(mocks.updateAccount).toHaveBeenCalledWith("acct_old", {
       identity: { individual: { date_of_birth: { day: 7, month: 4, year: 1990 } } },
     });
+  });
+
+  it("does not give a company account an individual's details", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: "acct_old", email: "hugo@example.com",
+      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
+    });
+    mocks.retrieveAccount.mockResolvedValue({
+      id: "acct_old",
+      identity: { entity_type: "company", individual: null },
+    });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
+  });
+
+  it("does not prefill an account whose entity type Stripe has not set", async () => {
+    mocks.organiser.findUnique.mockResolvedValue({
+      stripeAccountId: "acct_old", email: "hugo@example.com",
+      legalName: "Hugo Berg", dob: "1990-04-07", stripeOnboardingComplete: false,
+    });
+    mocks.retrieveAccount.mockResolvedValue({ id: "acct_old", identity: {} });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
   });
 
   it("leaves a finished account alone", async () => {

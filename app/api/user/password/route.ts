@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getServerSession } from "@/lib/amplify-server";
-import { getAccountSignInState, setAccountPassword } from "@/lib/account-sign-in";
-import { describeCognitoError } from "@/lib/cognito-user";
+import {
+  getSignInMethods,
+  setPassword,
+  SignInMethodError,
+} from "@/lib/cognito-sign-in-methods";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
+import { enabledSocialProviders } from "@/lib/social-providers";
 
 const setPasswordSchema = z.object({
   newPassword: z.string().min(1).max(256),
@@ -15,7 +19,12 @@ const setPasswordSchema = z.object({
 export async function POST(req: Request) {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
-  if (session.bypass) return NextResponse.json({ error: "No Cognito session." }, { status: 401 });
+  if (!session.username) {
+    return NextResponse.json(
+      { error: "Sign-in methods cannot be managed in this environment." },
+      { status: 503 },
+    );
+  }
 
   const parsed = setPasswordSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -28,29 +37,22 @@ export async function POST(req: Request) {
     );
   }
 
-  const state = await getAccountSignInState(session);
-  if (!state) {
-    return NextResponse.json({ error: "Could not read your sign-in methods." }, { status: 503 });
-  }
-  if (state.hasPassword) {
-    return NextResponse.json(
-      { error: "You already have a password. Use Change password instead." },
-      { status: 409 },
-    );
-  }
-
   try {
-    await setAccountPassword(session, parsed.data.newPassword);
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    if (err instanceof Error && (err.name === "NotAuthorizedException" || err.name === "AccessDeniedException")) {
-      console.error("Cognito AdminSetUserPassword failed:", err);
+    const methods = await getSignInMethods(session.username, enabledSocialProviders());
+    if (methods.hasPassword) {
       return NextResponse.json(
-        { error: "Could not set your password. Please try again." },
-        { status: 500 },
+        { error: "You already have a password. Use Change password instead." },
+        { status: 409 },
       );
     }
-    const { status, error } = describeCognitoError(err);
-    return NextResponse.json({ error }, { status });
+
+    await setPassword(session.username, parsed.data.newPassword);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof SignInMethodError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+    console.error("Could not set a Cognito password:", error);
+    return NextResponse.json({ error: "Could not set your password. Please try again." }, { status: 500 });
   }
 }

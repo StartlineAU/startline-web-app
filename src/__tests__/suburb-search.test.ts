@@ -5,6 +5,7 @@ vi.mock("@/lib/prisma", () => ({
   default: { event: { findMany: vi.fn() } },
 }));
 vi.mock("@/lib/geocode", () => ({ geocodePlace: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({ rateLimitPaid: vi.fn().mockResolvedValue(null) }));
 
 import prisma from "@/lib/prisma";
 import { geocodePlace } from "@/lib/geocode";

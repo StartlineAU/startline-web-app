@@ -189,6 +189,13 @@ JWT verification in `middleware.ts` via `jose`. Tokens in Cognito-managed cookie
 
 Every user has a **User** record (created on first login). Users can create an **Organiser** profile (1:1). Organiser records can be verified (auto-publish events) or unverified (admin approval needed). See `lib/amplify-server.ts` for session helpers (`ServerSession`, `UserSession`, `OrganiserSession`, `AdminSession`).
 
+Admin alerts (new event to review, review reported) go to every deliverable
+address in the Cognito `admins` group at send time, through
+`lib/admin-notification-recipients.ts`. Group membership is the source of truth,
+so a new admin is reached before their first admin-portal sign-in. The `Admin`
+row is still created on that first visit and kept for audit and review
+attribution; do not use it to choose notification recipients.
+
 Organiser notifications belong to the organisation, not to a person. Event
 approved/rejected emails go to the list built by
 `lib/organiser-notification-recipients.ts`: the account email, the onboarding
@@ -247,6 +254,7 @@ host that started it. Amplify's OAuth listener (imported in
 | Keys | `startline/ci-bootstrap`: `google_client_id_<env>`, `google_client_secret_<env>`, `apple_client_id_<env>`, `apple_team_id`, `apple_key_id`, `apple_private_key` |
 | Buttons, return path, error copy | `components/SocialSignInButtons.tsx`, `lib/social-sign-in.ts` |
 | Callback | `app/(user)/auth/callback/` |
+| Manage linked accounts | `components/settings/SignInMethodsCard.tsx`, `app/api/user/sign-in-methods/`, `app/(user)/auth/link/callback/` |
 
 - **The Cognito hosts are `auth.startlineau.com` (prod) and
   `sl-staging.auth.ap-southeast-2.amazoncognito.com` (staging).** Each one's
@@ -266,6 +274,31 @@ host that started it. Amplify's OAuth listener (imported in
   app or in `admins` are refused, because provider sign-in skips Cognito's TOTP
   check. A password sign-up for an email that only has a Google or Apple user
   is refused too.
+- **Managing links.** Settings → Login & security lists the Google and Apple
+  identities on the account and can connect or disconnect either. Linking has
+  its own callback, `/auth/link/callback`, because the provider authorization
+  must not become a sign-in as the provider's own Cognito user. The browser
+  holds the state and PKCE verifier in httpOnly cookies; the server exchanges
+  the code, deletes the throwaway external profile Cognito created, then calls
+  `AdminLinkProviderForUser`. An identity already attached to another local
+  account is refused rather than merged.
+- **Set a password before disconnecting.** A provider-only account can add a
+  password to the existing Cognito profile, but cannot disconnect a provider
+  until that password exists. TOTP does not count, since provider sign-in skips
+  it. The password keeps the same Cognito subject, so the app account and its
+  data stay put. The password route is `/api/user/password`.
+- **Provider-managed email.** An in-app email change is only offered once every
+  Google/Apple identity is disconnected; until then the provider owns the
+  address and can write it back on the next sign-in.
+- **TOTP is password-only.** The authenticator app is a Cognito challenge on the
+  password flow. A linked Google/Apple sign-in may bypass it, so the settings
+  copy says so and setup needs a password. The pre sign-up trigger still refuses
+  to add a new provider to an account with TOTP enabled.
+- **Infra must allow the link flow.** Both environments' `callback_urls` need
+  `${origin}/auth/link/callback`, and the Amplify role needs
+  `cognito-idp:AdminLinkProviderForUser` and
+  `cognito-idp:AdminDisableProviderForUser`. `AdministratorAccess-Amplify` does
+  not include either action.
 - `NEXT_PUBLIC_SOCIAL_SIGN_IN` lists the providers whose keys exist, and the
   buttons render only for those. Without `NEXT_PUBLIC_COGNITO_DOMAIN` there are
   none, which is local dev unless `.env.local` sets it.
@@ -301,6 +334,8 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
 - Organisation images save on their own through `PATCH /api/organiser/profile`. The text fields save only on Save (`PUT`).
 - Login & security also holds changing the sign-in email (`/api/user/email`,
   a code to the new address first) and deleting the account (`/api/user/account`).
+  Email changes are refused while a Google/Apple identity is linked; disconnect
+  it first so the provider cannot overwrite the new address.
 - Deleting an account keeps the person's entries, detached, because they are
   the organiser's records. It is refused while they are the only owner of an
   organisation; they transfer ownership or delete it. An organisation can only
@@ -448,8 +483,6 @@ gh api graphql -f query='mutation { setIssueFieldValue(input: { issueId: "ISSUE_
 ```
 
 Get `issueId` (node ID) and re-verify all issues via the read query above.
-
-Configured in `opencode.json`: stripe, resend, aws, cloudflare.
 
 ## Terraform + CI/CD
 

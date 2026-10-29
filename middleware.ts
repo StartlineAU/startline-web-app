@@ -145,6 +145,11 @@ export async function middleware(req: NextRequest) {
         // onboarding step a first provider sign-up still owes has to be reachable.
         || pathname === "/auth/callback"
         || pathname === "/auth/onboarding"
+        // Linking a provider to an already signed-in account has its own
+        // callback so it never becomes a sign-in as that provider's user.
+        || pathname === "/auth/link/callback"
+        // Settings reads and changes the account's sign-in methods from here.
+        || pathname.startsWith("/api/user/sign-in-methods")
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")
         || pathname.startsWith("/favicon")) {

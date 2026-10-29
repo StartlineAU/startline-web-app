@@ -411,7 +411,11 @@ function PaymentsContent() {
                     Step 2 — Connect Stripe
                   </h2>
                   <p className="text-[13px] text-muted mb-5">
-                    You&apos;ll be taken to Stripe&apos;s secure, hosted onboarding. Stripe will collect your date of birth (for identity verification) and bank account details for payouts. Startline never sees or stores this information.
+                    You&apos;ll be taken to Stripe&apos;s secure, hosted onboarding. Stripe will confirm
+                    whether this is an individual or company account, then collect the details that match,
+                    your date of birth (for identity verification) and bank account details for payouts.
+                    Stripe handles the verification and holds your bank details; Startline keeps only a
+                    reference to your Stripe account.
                   </p>
                   <button
                     onClick={saveAndConnect}

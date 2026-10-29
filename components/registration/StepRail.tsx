@@ -3,13 +3,24 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STEPS = ["Select ticket", "Your details", "Review & pay"] as const;
+const REGISTRATION_STEPS = ["Select ticket", "Your details", "Review & pay"] as const;
+const RSVP_STEPS = ["Select ticket", "Confirm RSVP"] as const;
 
-export default function StepRail({ current }: { current: 0 | 1 | 2 }) {
+export default function StepRail({
+  current,
+  variant = "registration",
+}: {
+  current: 0 | 1 | 2;
+  /** A fully free event collects no details or payment, so it has two steps. */
+  variant?: "registration" | "rsvp";
+}) {
+  const steps = variant === "rsvp" ? RSVP_STEPS : REGISTRATION_STEPS;
+  const active = Math.min(current, steps.length - 1);
+
   return (
     <div className="flex items-start mb-7">
-      {STEPS.map((label, i) => {
-        const state = i < current ? "done" : i === current ? "active" : "idle";
+      {steps.map((label, i) => {
+        const state = i < active ? "done" : i === active ? "active" : "idle";
         return (
           <div key={label} className="contents">
             <div className="flex flex-col items-center gap-1.5">
@@ -34,11 +45,11 @@ export default function StepRail({ current }: { current: 0 | 1 | 2 }) {
                 {label}
               </div>
             </div>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div
                 className={cn(
                   "flex-1 h-px mt-[15px] mx-1.5 min-w-4 transition-colors",
-                  i < current ? "bg-primary" : "bg-dark-lighter"
+                  i < active ? "bg-primary" : "bg-dark-lighter"
                 )}
               />
             )}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type Stripe from "stripe";
 import { NextRequest } from "next/server";
-import { actionRequiredFromAccount, connectStatusFromAccount, individualPrefill, isOnboardingComplete } from "@/lib/stripe-connect";
+import { actionRequiredFromAccount, connectStatusFromAccount, individualPrefill, isOnboardingComplete, prefillExistingAccount } from "@/lib/stripe-connect";
 
 // Issue #379: organiser accounts on Accounts v2. charges_enabled and
 // payouts_enabled are gone; onboarding is read from capability statuses, by the
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   requireOrganiser: vi.fn(),
   organiser: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   retrieveAccount: vi.fn(),
+  updateAccount: vi.fn(),
   parseEventNotification: vi.fn(),
   configured: { value: true },
 }));
@@ -20,7 +21,7 @@ vi.mock("@/lib/prisma", () => ({ default: { organiser: mocks.organiser } }));
 vi.mock("@/lib/stripe", () => ({
   isStripeConfigured: () => mocks.configured.value,
   getStripe: () => ({
-    v2: { core: { accounts: { retrieve: mocks.retrieveAccount } } },
+    v2: { core: { accounts: { retrieve: mocks.retrieveAccount, update: mocks.updateAccount } } },
     parseEventNotification: mocks.parseEventNotification,
   }),
 }));
@@ -67,6 +68,47 @@ describe("individualPrefill", () => {
     expect(individualPrefill(null, "2999-01-01")).toEqual({});
     const tenYearsAgo = `${new Date().getUTCFullYear() - 10}-01-01`;
     expect(individualPrefill(null, tenYearsAgo)).toEqual({});
+  });
+});
+
+// Issue #336: a new account lets Stripe ask whether the organiser is an
+// individual or a company. Only an account Stripe has already established as
+// an individual can take a person's details.
+describe("prefillExistingAccount", () => {
+  const stripe = {
+    v2: { core: { accounts: { retrieve: mocks.retrieveAccount, update: mocks.updateAccount } } },
+  } as unknown as Stripe;
+  const prefill = { given_name: "Hugo", surname: "Berg" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateAccount.mockResolvedValue({});
+  });
+
+  it("fills in an individual account", async () => {
+    mocks.retrieveAccount.mockResolvedValue({ identity: { entity_type: "individual", individual: null } });
+
+    await prefillExistingAccount(stripe, "acct_1", prefill);
+
+    expect(mocks.updateAccount).toHaveBeenCalledWith("acct_1", {
+      identity: { individual: prefill },
+    });
+  });
+
+  it("leaves a company account's representative for Stripe to collect", async () => {
+    mocks.retrieveAccount.mockResolvedValue({ identity: { entity_type: "company", individual: null } });
+
+    await prefillExistingAccount(stripe, "acct_1", prefill);
+
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
+  });
+
+  it("leaves an account with no entity type for onboarding to ask", async () => {
+    mocks.retrieveAccount.mockResolvedValue({ identity: {} });
+
+    await prefillExistingAccount(stripe, "acct_1", prefill);
+
+    expect(mocks.updateAccount).not.toHaveBeenCalled();
   });
 });
 

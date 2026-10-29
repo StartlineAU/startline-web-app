@@ -90,12 +90,32 @@ export async function insertConfirmedRegistrations(opts: {
    * so the guard is the athlete's own identity.
    */
   rejectExistingEntries?: boolean;
+  /**
+   * Refuse a second entry for the signed-in account. A free RSVP carries no
+   * name or date of birth from the athlete, so the email-and-person check above
+   * cannot see an earlier RSVP that was stored with a date of birth.
+   */
+  rejectExistingUserEntries?: boolean;
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
   const registrationIds = entries.map(() => randomUUID());
 
   return prisma.$transaction(async (tx) => {
+    if (opts.rejectExistingUserEntries && buyerUserId) {
+      const existingForAccount = await tx.registration.findFirst({
+        where: { eventId: event.id, userId: buyerUserId, status: { not: "CANCELLED" } },
+        select: { id: true },
+      });
+      if (existingForAccount) {
+        return {
+          ok: false as const,
+          reason: "duplicate" as const,
+          error: "You are already registered for this event.",
+        };
+      }
+    }
+
     if (opts.rejectExistingEntries) {
       const emails = [...new Set(entries.map((e) => normalizeEmail(e.participant.em)).filter(Boolean))];
       const existing = await tx.registration.findMany({

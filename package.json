@@ -57,6 +57,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-map-gl": "^8.1.1",
+    "read-excel-file": "9.3.13",
     "recharts": "^3.10.1",
     "resend": "^6.9.4",
     "stripe": "^23.0.0",

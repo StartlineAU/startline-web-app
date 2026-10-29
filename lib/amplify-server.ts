@@ -7,6 +7,10 @@ import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
   sub:          string;
+  // Cognito username, which AdminGetUser and AdminLinkProviderForUser take.
+  // Usually the email for password users and a UUID for provider users, so it
+  // is not interchangeable with `sub`.
+  username?:    string;
   email:        string;
   groups:       string[];
   phoneNumber?: string;
@@ -15,10 +19,6 @@ export type ServerSession = {
   // only for a Google or Apple sign-in whose provider did not verify the email.
   name?:         string;
   emailTrusted?: boolean;
-  // The Cognito username. Federated users get a provider-generated one
-  // (`Google_...`), which is not their email, so admin calls cannot use the
-  // address. Only set for a real session.
-  cognitoUsername?: string;
   // The dev/E2E identity that produced this session, if any. Used by the
   // settings screen to model provider-only and linked accounts without Cognito.
   bypass?: string;
@@ -89,9 +89,9 @@ export async function getServerSession(): Promise<ServerSession | null> {
         // that use them, so tests never mutate the shared seed users.
         "profile":  { sub: "dev-bypass-profile-test", email: "profile.test@startline.test", groups: [] },
         "noabn":    { sub: "dev-bypass-noabn-test",   email: "noabn.organiser@startline.test", groups: [] },
-        // Login & security states for issue #389. The state itself is simulated
-        // by lib/account-sign-in.ts; these identities only give the page a
-        // signed-in visitor.
+        // Login & security states for issue #389. The sign-in-methods route
+        // returns a fixed state for these; they only give the page a signed-in
+        // visitor without contacting Cognito.
         "social":   { sub: "dev-bypass-social-test",  email: "social.test@startline.test", groups: [] },
         "apple":    { sub: "dev-bypass-apple-test",   email: "apple.test@startline.test",  groups: [] },
         "linked":   { sub: "dev-bypass-linked-test",  email: "linked.test@startline.test", groups: [] },
@@ -119,6 +119,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
     const sub   = payload.sub as string;
+    const username = typeof payload.username === "string" ? payload.username : undefined;
     const phoneNumber = payload.phone_number as string | undefined;
     const birthdate   = payload.birthdate as string | undefined;
 
@@ -152,10 +153,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
       }
     }
 
-    return {
-      sub, email, groups, phoneNumber, birthdate, name, emailTrusted,
-      cognitoUsername: lastAuthUser,
-    };
+    return { sub, username, email, groups, phoneNumber, birthdate, name, emailTrusted };
   } catch {
     return null;
   }

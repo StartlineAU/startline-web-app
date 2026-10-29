@@ -73,18 +73,13 @@ export async function POST() {
   if (organiser === undefined) return NextResponse.json({ error: GENERIC_ERROR }, { status: 503 });
   if (!organiser) return NextResponse.json({ error: "Organiser not found." }, { status: 404 });
 
-  // The Payments page saves these just before calling here, so Stripe's form
-  // can open with them rather than asking the organiser a second time.
+  // The Payments page saves these just before calling here, so an existing
+  // individual account can be filled in rather than asking a second time. A new
+  // account is left for Stripe to ask about once it knows the entity type.
   const prefill = individualPrefill(organiser.legalName, organiser.dob);
 
   const newAccount = async () => {
-    // A detail Stripe refuses must not cost the organiser their account: make it
-    // without the prefill, and Stripe's form asks for everything instead.
-    const account = await createConnectedAccount(stripe, organiser.email, prefill).catch((err: unknown) => {
-      if (Object.keys(prefill).length === 0) throw err;
-      logStripeError("create account with prefill, retrying without", err);
-      return createConnectedAccount(stripe, organiser.email);
-    });
+    const account = await createConnectedAccount(stripe, organiser.email);
     await prisma.organiser.update({
       where: { id: session.sub },
       data:  { stripeAccountId: account.id, stripeOnboardingComplete: false },

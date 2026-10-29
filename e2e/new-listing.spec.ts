@@ -99,36 +99,52 @@ test.describe("new listing wizard", () => {
     await expect(title).toHaveValue("Back Swipe Classic");
   });
 
-  test("address autocomplete shows suggestions", async ({ page }) => {
+  // #352: the old test passed when AWS was unavailable, so it never proved the
+  // selection filled the form. Stub both lookups and assert the whole handoff.
+  test("address autocomplete fills city, state and location preview", async ({ page }) => {
+    const label = "123 Test St, Sydney NSW 2000";
+    await page.route("**/api/places/autocomplete**", (route) =>
+      route.fulfill({
+        json: {
+          results: [{ placeId: "place-1", label, title: "123 Test St", placeType: "Address" }],
+        },
+      }),
+    );
+    await page.route("**/api/places/geocode**", (route) =>
+      route.fulfill({
+        json: {
+          result: {
+            label,
+            city: "Sydney",
+            stateCode: "nsw",
+            latitude: -33.8688,
+            longitude: 151.2093,
+          },
+        },
+      }),
+    );
+
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
 
-    // Fill step 1 basics to get to step 2
     await page.getByPlaceholder(/Apex Throwdown/i).fill("Address Test");
     await page.getByRole("button", { name: /continue/i }).click();
     await expect(page.getByText(/when and where/i).first()).toBeVisible();
 
-    // Set date and time
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
-    await page.getByRole("button", { name: /\d{4}/i }).first().click();
-    await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
-
-    // Type into address autocomplete
     const addrInput = page.getByPlaceholder(/start typing an address/i);
-    await addrInput.fill("George St Sydney");
+    await addrInput.fill("123 Test St Sydney");
+    await page.locator("#address-suggestions button").first().click();
 
-    // Wait for suggestion dropdown (may require valid AWS GeoPlaces credentials)
-    const dropdown = page.locator("#address-suggestions");
-    if (await dropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const count = await dropdown.locator("button").count();
-      expect(count).toBeGreaterThan(0);
-      await dropdown.locator("button").first().click();
-      const filledAddr = await addrInput.inputValue();
-      expect(filledAddr.length).toBeGreaterThan(0);
-    }
-    // Skips if the AWS GeoPlaces API is unavailable in the test env.
+    await expect(addrInput).toHaveValue(label);
+    await expect(page.getByPlaceholder("e.g. Melbourne")).toHaveValue("Sydney");
+    await expect(page.getByRole("combobox", { name: "State" })).toContainText("NSW");
+    // With a Mapbox token the map renders; CI has none, so the preview shows
+    // its token-missing state. Either proves the selected coordinates reached it.
+    await expect(
+      page.getByTestId("location-preview-map").or(page.getByTestId("location-preview-no-token")),
+    ).toBeVisible();
+    await expect(page.getByTestId("location-preview-empty")).toHaveCount(0);
   });
 
   test("blocks an end time at or before the start time", async ({ page }) => {
@@ -388,8 +404,7 @@ test.describe("new listing wizard: leaving for Payments without an ABN", () => {
   });
 
   test.afterAll(async () => {
-    // Event.organiser has no cascade, so the events go before the organiser.
-    await prisma.event.deleteMany({ where: { organiserId } });
+    // The organiser's events cascade with it.
     await prisma.organiser.deleteMany({ where: { email: EMAIL } });
     await prisma.user.deleteMany({ where: { email: EMAIL } });
     await prisma.$disconnect();

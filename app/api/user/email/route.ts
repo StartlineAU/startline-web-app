@@ -6,11 +6,8 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "@/lib/prisma";
 import { getServerSession, getUserSession } from "@/lib/amplify-server";
-import {
-  canChangeEmail,
-  getAccountSignInState,
-  providerListLabel,
-} from "@/lib/account-sign-in";
+import { canChangeEmail } from "@/lib/sign-in-methods";
+import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
 
@@ -34,17 +31,20 @@ export async function POST(req: Request) {
 
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
-  const signIn = await getAccountSignInState(cognitoSession);
-  if (!signIn) {
+  const methods = await getSessionSignInMethods(cognitoSession);
+  if (!methods) {
     return NextResponse.json({ error: "Could not read your sign-in methods." }, { status: 503 });
   }
-  if (!canChangeEmail(signIn)) {
-    const providers = [...new Set(signIn.identities.map((identity) => identity.provider))];
+  if (!canChangeEmail(methods)) {
+    const names = methods.providers
+      .filter((method) => method.linked)
+      .map((method) => method.label)
+      .join(" and ");
     return NextResponse.json(
       {
-        error: !signIn.hasPassword
+        error: !methods.hasPassword
           ? "Set a password before changing your email."
-          : `Unlink ${providerListLabel(providers)} before changing your email. The provider controls that address.`,
+          : `Unlink ${names} before changing your email. The provider controls that address.`,
       },
       { status: 409 },
     );

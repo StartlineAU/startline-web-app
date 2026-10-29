@@ -8,7 +8,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
 import { customerHref, organiserHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
-import { providerListLabel, type SignInProvider } from "@/lib/account-sign-in-shared";
+import { socialProviderLabel, type SocialProvider } from "@/lib/social-providers";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ErrorNote, SuccessNote, cardCls, inputCls, labelCls, outlineBtnCls,
@@ -141,13 +141,13 @@ export function SessionsCard({
   hasPassword, providers,
 }: {
   hasPassword: boolean;
-  providers: SignInProvider[];
+  providers: SocialProvider[];
 }) {
   const host = usePortalHost();
   const [confirming, setConfirming] = useState(false);
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState("");
-  const providerNames = providerListLabel(providers);
+  const providerNames = providers.map(socialProviderLabel).join(" and ");
   const signInMethods = hasPassword
     ? providerNames ? `your password or ${providerNames}` : "your password"
     : providerNames || "your sign-in method";
