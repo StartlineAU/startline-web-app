@@ -89,6 +89,43 @@ test("organiser generates a scannable check-in QR for their event", async ({ pag
   await expect(page.getByRole("dialog").getByRole("img", { name: /Check-in QR code/ })).toBeVisible();
 });
 
+test("downloads a print-ready A4 check-in poster", async ({ page }) => {
+  await getCheckinUrl(page);
+  const dialog = page.getByRole("dialog");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("link", { name: /download a4 pdf/i }).click(),
+  ]);
+
+  expect(download.suggestedFilename()).toMatch(/-check-in-qr\.pdf$/i);
+  const file = await download.path();
+  expect(file).toBeTruthy();
+  const bytes = readFileSync(file!);
+  expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+});
+
+test("downloads a branded QR image", async ({ page }) => {
+  await getCheckinUrl(page);
+  const dialog = page.getByRole("dialog");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: /download qr image/i }).click(),
+  ]);
+
+  expect(download.suggestedFilename()).toMatch(/-check-in-qr\.png$/i);
+  const file = await download.path();
+  expect(file).toBeTruthy();
+  const bytes = readFileSync(file!);
+  expect(bytes.subarray(0, 8)).toEqual(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  );
+  // The PNG is composed at 1200×1200 (IHDR width/height live at 16 and 20).
+  expect(bytes.readUInt32BE(16)).toBe(1200);
+  expect(bytes.readUInt32BE(20)).toBe(1200);
+});
+
 test("logged-out visitor scanning the QR is prompted to sign in", async ({ page }) => {
   const url = await getCheckinUrl(page);
   await page.context().clearCookies();
