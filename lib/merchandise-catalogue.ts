@@ -45,7 +45,10 @@ export async function publicMerchandiseForOrganiser(
       select: {
         ...VIEW_SELECT,
         eventAddOns: {
-          where: { active: true, event: { status: "APPROVED", organiserId } },
+          where: {
+            active: true,
+            event: { status: "APPROVED", organiserId, endsAtUtc: { gt: new Date() } },
+          },
           select: { event: { select: { id: true, title: true, eventDate: true } } },
         },
       },

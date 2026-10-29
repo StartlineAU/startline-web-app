@@ -10,6 +10,7 @@ import ShareEventButton from "@/components/ShareEventButton";
 import { Button } from "@/components/ui/button";
 import type { EventDetailData } from "@/lib/event-detail";
 import { isFreeEvent, todayIso } from "@/lib/event-types";
+import { getEventPhase } from "@/lib/event-status";
 import { describeTiers, parseTiers, REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { STATE_LABELS } from "@/types";
@@ -51,9 +52,13 @@ export default function EventDetailView({
     return { ...drop, closes, isClosed: !!closes && closes < today };
   });
 
+  const phase = getEventPhase(event);
+  const isRunning = phase === "in_progress";
+  const registrationClosed = phase !== "upcoming";
   const hasRegistration =
-    !!event.registrationUrl ||
-    (event.registrationType === "startline" && !!event.ticketDrops && event.ticketDrops.length > 0);
+    !registrationClosed &&
+    (!!event.registrationUrl ||
+      (event.registrationType === "startline" && !!event.ticketDrops && event.ticketDrops.length > 0));
 
   return (
     <div className={isPanel ? "@container" : undefined}>
@@ -216,7 +221,14 @@ export default function EventDetailView({
                 no sticky bar, so it always shows them. */}
             <div className="flex flex-col gap-3">
               <div className={`flex-col gap-3 ${isPanel ? "flex" : "hidden lg:flex"}`}>
-                {event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0 && (
+                {registrationClosed && (
+                  <div className="rounded-lg border border-dark-lighter bg-white/5 px-4 py-3 text-center">
+                    <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                      {isRunning ? "Event in progress" : "Registration closed"}
+                    </div>
+                  </div>
+                )}
+                {!registrationClosed && event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0 && (
                   <Button asChild variant="machined" size="ctaLg">
                     <Link href={`/events/${event.id}/register`}>
                       Register Now
@@ -224,7 +236,7 @@ export default function EventDetailView({
                     </Link>
                   </Button>
                 )}
-                {event.registrationUrl && (
+                {!registrationClosed && event.registrationUrl && (
                   <Button asChild variant="machined" size="ctaLg">
                     <a href={event.registrationUrl ?? undefined} target="_blank" rel="noopener noreferrer">
                       Register Now

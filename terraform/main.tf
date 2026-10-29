@@ -61,6 +61,43 @@ resource "aws_iam_role_policy" "amplify_geo_places" {
   })
 }
 
+# Event writes create/update the one-time triggers that move an event to
+# IN_PROGRESS and then ARCHIVED. The role may only manage schedules inside the
+# per-environment lifecycle groups, and may only pass the matching scheduler
+# execution role to the scheduler service.
+resource "aws_iam_role_policy" "amplify_event_scheduler" {
+  role = aws_iam_role.amplify.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "scheduler:CreateSchedule",
+          "scheduler:GetSchedule",
+          "scheduler:UpdateSchedule",
+          "scheduler:DeleteSchedule",
+        ]
+        Resource = [
+          for env in module.env :
+          "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${env.event_schedule_group_name}/*"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = [for env in module.env : env.event_scheduler_role_arn]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "scheduler.amazonaws.com"
+          }
+        }
+      },
+    ]
+  })
+}
+
 locals {
   connect_repository = var.amplify_repository_url != null ? trimspace(var.amplify_repository_url) != "" : false
 
@@ -152,25 +189,25 @@ resource "aws_amplify_app" "this" {
 locals {
   environments = {
     prod = {
-      branch_name                     = "prod"
-      amplify_stage                   = "PRODUCTION"
-      auto_build_enabled              = false
-      enable_pull_request_preview     = true
-      cognito_deletion_protection     = true
-      bucket_cors_allowed_origins     = ["https://startlineau.com", "https://organiser.startlineau.com", "https://admin.startlineau.com"]
-      site_url                        = "https://startlineau.com"
+      branch_name                 = "prod"
+      amplify_stage               = "PRODUCTION"
+      auto_build_enabled          = false
+      enable_pull_request_preview = true
+      cognito_deletion_protection = true
+      bucket_cors_allowed_origins = ["https://startlineau.com", "https://organiser.startlineau.com", "https://admin.startlineau.com"]
+      site_url                    = "https://startlineau.com"
     }
     staging = {
-      branch_name                     = "main"
-      amplify_stage                   = "BETA"
-      auto_build_enabled              = false
-      enable_pull_request_preview     = true
-      cognito_deletion_protection     = false
-      bucket_cors_allowed_origins     = ["*"]
+      branch_name                 = "main"
+      amplify_stage               = "BETA"
+      auto_build_enabled          = false
+      enable_pull_request_preview = true
+      cognito_deletion_protection = false
+      bucket_cors_allowed_origins = ["*"]
       # Ignored — staging.startlineau.com has never been delegated, so the real
       # value is computed from the Amplify branch domain below. Kept here as the
       # intended hostname for whenever that DNS record is created.
-      site_url                        = "https://staging.startlineau.com"
+      site_url = "https://staging.startlineau.com"
     }
   }
 

@@ -13,6 +13,7 @@ import {
 import { assertGuestEmailsVerifiedForCheckout } from "@/lib/guest-email-verification";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import { todayIso } from "@/lib/event-types";
+import { registrationOpenAt } from "@/lib/event-lifecycle";
 import { priceAddOnSelection, type PricedAddOnLine } from "@/lib/add-on-pricing";
 import { getStockError, requestedByVariant } from "@/lib/add-on-stock";
 import { catalogueVariantsForEvent, heldByVariant, stockByVariant } from "@/lib/add-on-catalogue";
@@ -85,6 +86,8 @@ export interface OrderEvent {
   cap: number | null;
   eventDate: string;
   startTime: string;
+  startsAtUtc: Date | string | null;
+  endsAtUtc: Date | string | null;
   venue: string;
   city: string;
   state: string;
@@ -210,13 +213,17 @@ export async function resolveCheckoutOrder(
     where: { id: eventId },
     select: {
       id: true, title: true, status: true, feeStructure: true, registrationType: true,
-      waves: true, cap: true, eventDate: true, startTime: true, venue: true, city: true, state: true,
+      waves: true, cap: true, eventDate: true, startTime: true,
+      startsAtUtc: true, endsAtUtc: true,
+      venue: true, city: true, state: true,
       organiser: { select: { id: true, stripeAccountId: true, stripeOnboardingComplete: true } },
     },
   });
 
   if (!event) return { error: "Event not found.", status: 404 };
-  if (event.status !== "APPROVED") {
+  // Registration closes at the advertised start time, regardless of whether the
+  // background worker has already moved the row to IN_PROGRESS.
+  if (!registrationOpenAt(event)) {
     return { error: "This event is not currently accepting registrations.", status: 409 };
   }
   if (event.registrationType !== "startline") {

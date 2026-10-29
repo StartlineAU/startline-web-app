@@ -18,7 +18,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: async () => null }));
-vi.mock("@/lib/archive-events", () => ({ archivePastEvents: async () => {} }));
+vi.mock("@/lib/event-scheduler", () => ({ syncEventSchedules: async () => {} }));
 vi.mock("@/lib/slugs", () => ({
   withUniqueSlug: async (_t: string, write: (s: string) => unknown) => write("slug"),
 }));

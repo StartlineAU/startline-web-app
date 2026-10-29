@@ -112,7 +112,11 @@ export async function POST(
   let eventTitle: string | null = null;
   if (eventIdInput) {
     const event = await prisma.event.findFirst({
-      where: { id: eventIdInput, organiserId, status: "APPROVED" },
+      where: {
+        id: eventIdInput,
+        organiserId,
+        status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] },
+      },
       select: { id: true, title: true },
     });
     if (!event) return badRequest("Event not found for this organiser.");

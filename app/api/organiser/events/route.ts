@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
-import { archivePastEvents } from "@/lib/archive-events";
 import { getEventCoords } from "@/lib/australia-coords";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { syncEventSchedules } from "@/lib/event-scheduler";
 import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserEventPayloadSchema } from "@/lib/schemas";
@@ -11,7 +13,6 @@ import { rateLimit } from "@/lib/rate-limit";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 export async function GET() {
-  await archivePastEvents();
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
   const session = auth.session;
@@ -23,13 +24,24 @@ export async function GET() {
       select: {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, startTime: true, status: true, createdAt: true,
+        startsAtUtc: true, endsAtUtc: true,
         waves: true, registrationType: true, feeStructure: true, registrationUrl: true, cap: true, isPinned: true,
         coverImageUrl: true,
         _count: { select: { registrations: true } },
       },
     });
+    const now = new Date();
     return NextResponse.json(
-      events.map(({ _count, ...rest }: { _count: { registrations: number } }) => ({ ...rest, registrationCount: _count.registrations }))
+      events.map((event) => {
+        const { _count, ...rest } = event;
+        return {
+          ...rest,
+          // Derive the display state too, so an event is not shown as upcoming
+          // between its start time and the worker's next tick.
+          status: effectiveEventStatus({ status: rest.status, startsAtUtc: rest.startsAtUtc, endsAtUtc: rest.endsAtUtc }, now),
+          registrationCount: _count.registrations,
+        };
+      })
     );
   } catch {
     return NextResponse.json([]);
@@ -121,12 +133,25 @@ export async function POST(req: NextRequest) {
     ? (verified && abnOk ? "APPROVED" : "PENDING")
     : "DRAFT";
 
+  // Persist the status the event should have right now, not just the status
+  // the review queue implies. Publishing an event whose start has already
+  // passed must not briefly make it look bookable.
+  const times = eventTimeData({
+    eventDate: body.eventDate ?? "",
+    endDate: body.endDate ?? null,
+    startTime: body.startTime ?? "",
+    endTime: body.endTime ?? null,
+    state: body.state ?? "",
+  });
+  const lifecycleStatus = effectiveEventStatus({ status: eventStatus, ...times });
+
   try {
     const event = await withUniqueSlug(body.title ?? "", (slug) =>
       prisma.event.create({
       data: {
         organiserId,
-        status:           eventStatus,
+        status:           lifecycleStatus,
+        ...times,
         slug,
         title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
@@ -163,7 +188,7 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    if (event.status === "APPROVED") {
+    if (eventStatus === "APPROVED") {
       // Awaited, not fired and forgotten: Amplify's compute freezes the
       // container once the response is returned, so a floating promise is
       // dropped at random. A notify failure still must not fail the publish.
@@ -181,6 +206,10 @@ export async function POST(req: NextRequest) {
         )
         .catch((err) => console.error("Follower notify failed:", err));
     }
+
+    await syncEventSchedules(event).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
 
     if (event.status === "PENDING") {
       // Awaited for the same reason as the follower notify above.

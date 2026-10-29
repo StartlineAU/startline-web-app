@@ -28,7 +28,7 @@ export async function GET() {
         _sum: { platformFeeCents: true },
       }),
       prisma.event.findMany({
-        where: { status: "APPROVED" },
+        where: { status: { in: ["APPROVED", "IN_PROGRESS"] } },
         orderBy: { registrations: { _count: "desc" } },
         take: 5,
         select: {
@@ -62,6 +62,7 @@ export async function GET() {
         draft:    statusMap["DRAFT"]    ?? 0,
         pending:  statusMap["PENDING"]  ?? 0,
         approved: statusMap["APPROVED"] ?? 0,
+        inProgress: statusMap["IN_PROGRESS"] ?? 0,
         rejected: statusMap["REJECTED"] ?? 0,
         archived: statusMap["ARCHIVED"] ?? 0,
       },

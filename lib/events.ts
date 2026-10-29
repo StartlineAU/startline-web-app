@@ -1,13 +1,13 @@
+import type { EventStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { archivePastEvents } from "@/lib/archive-events";
+import { publicDiscoveryWhere } from "@/lib/event-lifecycle";
 import { getOrganiserRatings } from "@/lib/reviews";
 import { lowestPrice, normaliseInformationPdfs, type PublicEvent, type PublicWave } from "./event-types";
 
 export async function getAllEvents() {
   try {
-    await archivePastEvents();
     const events = await prisma.event.findMany({
-      where: { status: "APPROVED" },
+      where: publicDiscoveryWhere(),
       orderBy: { eventDate: "asc" },
       select: {
         id: true,
@@ -19,6 +19,10 @@ export async function getAllEvents() {
         endDate: true,
         startTime: true,
         endTime: true,
+        status: true,
+        timeZone: true,
+        startsAtUtc: true,
+        endsAtUtc: true,
         venue: true,
         address: true,
         city: true,
@@ -75,6 +79,10 @@ const publicEventSelect = {
   endDate: true,
   startTime: true,
   endTime: true,
+  status: true,
+  timeZone: true,
+  startsAtUtc: true,
+  endsAtUtc: true,
   venue: true,
   address: true,
   city: true,
@@ -127,7 +135,9 @@ async function findEventById(
     const event = await prisma.event.findFirst({
       where: {
         OR: [{ id }, { slug: id }],
-        ...(publicOnly ? { status: { in: ["APPROVED", "ARCHIVED"] } } : {}),
+        ...(publicOnly
+          ? { status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] as EventStatus[] } }
+          : {}),
       },
       select: publicEventSelect,
     });
@@ -151,14 +161,19 @@ async function findEventById(
 /** Archived (past) events for an organiser profile carousel — most recent first. */
 export async function getOrganiserPastEvents(organiserId: string, limit = 20): Promise<PublicEvent[]> {
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
     const events = await prisma.event.findMany({
       where: {
         organiserId,
         OR: [
           { status: "ARCHIVED" },
+          { status: { in: ["APPROVED", "IN_PROGRESS"] }, endsAtUtc: { lte: now } },
+          // Rows created before the UTC columns existed still fall back to the
+          // local date fields until the next write fills them.
           {
             status: "APPROVED",
+            endsAtUtc: null,
             OR: [
               { endDate: { not: null, lt: today } },
               { endDate: null, eventDate: { lt: today } },

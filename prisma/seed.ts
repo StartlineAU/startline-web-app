@@ -22,6 +22,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { getEventCoords } from "../lib/australia-coords";
 import { uniqueSlug } from "../lib/slugs";
+import { eventTimeData } from "../lib/event-time";
 
 function seedCoords(city: string, state: string, coords?: [number, number]) {
   const [latitude, longitude] = coords ?? getEventCoords(city, state);
@@ -36,7 +37,7 @@ function seedCoords(city: string, state: string, coords?: [number, number]) {
  * ago that was.
  *
  * Without the shift the fixtures rot: a seed written with an event ten days out
- * eventually seeds it in the past, archivePastEvents archives it, and every
+ * eventually seeds it in the past, the lifecycle worker archives it, and every
  * test that registers for it or looks for it in the listing fails for reasons
  * that have nothing to do with the code (#338).
  */
@@ -590,10 +591,11 @@ async function main() {
     bagDrop: "Bag drop at Gate 3 from 6:45am.", parking: "MSAC car park $12/day.", accessibilityInfo: "Wheelchair accessible venue.",
   };
 
+  const apexTimes = eventTimeData(apexThrowdown);
   const event1 = await prisma.event.upsert({
     where:  { id: "seed-event-001" },
-    update: apexThrowdown,
-    create: { id: "seed-event-001", slug: await uniqueSlug(apexThrowdown.title), organiserId: org.id, ...apexThrowdown },
+    update: { ...apexThrowdown, ...apexTimes },
+    create: { id: "seed-event-001", slug: await uniqueSlug(apexThrowdown.title), organiserId: org.id, ...apexThrowdown, ...apexTimes },
   });
 
   // Mirror the event's JSON start waves into the StartWave table — the new source
@@ -628,6 +630,7 @@ async function main() {
       description: "Trail running, loaded carries, obstacle crawls, and a surprise finale.",
       eventDate: seedDate("2026-09-06"), startTime: "08:00", endTime: "14:00",
       venue: "Kokoda Track Memorial Walkway", city: "Scoresby", state: "vic", ...seedCoords("Scoresby", "vic"),
+      ...eventTimeData({ eventDate: seedDate("2026-09-06"), startTime: "08:00", endTime: "14:00", state: "vic" }),
       format: "individual", level: "open", categories: ["Open Male", "Open Female", "Masters 40+"],
       cap: 150, minAge: 16, waves: [{ label: "General Entry", date: seedDate("2026-07-01"), price: "75", qty: 150 }],
       inclusions: "Race entry, finisher medal, recovery snack bag",
@@ -644,6 +647,7 @@ async function main() {
       title: "Team Throwdown Summer Series", discipline: "functional_fitness", description: "Draft — details TBC",
       eventDate: seedDate("2026-12-05"), startTime: "09:00", endTime: "15:00",
       venue: "TBC", city: "Sydney", state: "nsw", ...seedCoords("Sydney", "nsw"), format: "team", level: "open",
+      ...eventTimeData({ eventDate: seedDate("2026-12-05"), startTime: "09:00", endTime: "15:00", state: "nsw" }),
       categories: [], waves: [], registrationType: "startline", feeStructure: "athlete",
       coverImageUrl: DISCIPLINE_COVERS.functional_fitness,
     },
@@ -657,6 +661,7 @@ async function main() {
       description: "A scenic trail run through the Yarra Valley vineyards.",
       eventDate: seedDate("2026-04-11"), startTime: "07:30", endTime: "13:00",
       venue: "Yering Station", city: "Yering", state: "vic", ...seedCoords("Yering", "vic"),
+      ...eventTimeData({ eventDate: seedDate("2026-04-11"), startTime: "07:30", endTime: "13:00", state: "vic" }),
       format: "individual", level: "open", categories: ["5K", "10K", "Half Marathon"],
       cap: 500, waves: [{ label: "5K Entry", price: "45" }, { label: "10K Entry", price: "55" }, { label: "Half Marathon", price: "75" }],
       registrationType: "startline", feeStructure: "athlete",
@@ -707,6 +712,7 @@ async function main() {
       where: { id: e.id }, update: {},
       create: { id: e.id, slug: await uniqueSlug(e.title), organiserId: ownerId, status: e.status, title: e.title, discipline: e.discipline,
         photos: DISCIPLINE_PHOTOS[e.discipline] ?? [], description: e.description, eventDate: e.eventDate, startTime: e.startTime, endTime: e.endTime,
+        ...eventTimeData({ eventDate: e.eventDate, startTime: e.startTime, endTime: e.endTime, state: e.state }),
         venue: e.venue, city: e.city, state: e.state, ...seedCoords(e.city, e.state, "coords" in e ? e.coords : undefined), format: e.format, level: e.level, categories: e.categories,
         cap: e.cap, waves: e.waves, registrationType: "startline", feeStructure: "athlete",
         // Bulk events share the default policy so every seeded event quotes the

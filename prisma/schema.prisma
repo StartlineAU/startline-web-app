@@ -149,7 +149,14 @@ model Event {
   endDate   String? // optional multi-day end (ISO yyyy-mm-dd)
   startTime String
   endTime   String
-  venue     String
+  // Venue-local date/time is what the organiser edits. These derived fields are
+  // the same moments in UTC, used for lifecycle transitions, registration
+  // cutoffs and public listing filters so none of them depend on the server's
+  // timezone or on a request happening to write first.
+  timeZone    String    @default("Australia/Sydney")
+  startsAtUtc DateTime?
+  endsAtUtc   DateTime?
+  venue       String
   address   String?
   city      String
   state     String
@@ -220,6 +227,8 @@ model Event {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([status, endsAtUtc])
+  @@index([status, startsAtUtc])
   @@map("events")
 }
 
@@ -259,9 +268,10 @@ model StartWave {
 enum EventStatus {
   DRAFT // saved, not submitted
   PENDING // submitted — awaiting admin review
-  APPROVED // live on the platform
+  APPROVED // published and upcoming
+  IN_PROGRESS // the event has started and has not finished
   REJECTED // admin denied
-  ARCHIVED // organiser archived
+  ARCHIVED // finished, or retired by the organiser
 }
 
 // ─── Athlete reviews ──────────────────────────────────────────────────────────

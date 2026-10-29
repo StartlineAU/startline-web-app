@@ -132,6 +132,10 @@ export async function middleware(req: NextRequest) {
         // payment is ever confirmed and no onboarding ever completes. Safe to
         // expose — the handler verifies the Stripe signature before anything.
         || pathname === "/api/stripe/webhook"
+        // The scheduled lifecycle worker calls the apex host. Without this the
+        // waitlist rewrite answers 200 with HTML and nothing ever transitions.
+        // The route validates a shared secret before touching the database.
+        || pathname === "/api/internal/events/lifecycle"
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")

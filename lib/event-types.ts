@@ -36,6 +36,10 @@ export interface PublicEvent {
   endDate: string | null;
   startTime: string;
   endTime: string;
+  status: string;
+  timeZone: string;
+  startsAtUtc: Date | string | null;
+  endsAtUtc: Date | string | null;
   venue: string;
   address: string | null;
   city: string;

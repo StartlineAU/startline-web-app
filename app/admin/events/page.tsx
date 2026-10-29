@@ -16,7 +16,7 @@ import { approvalBlocker } from "@/lib/event-approval";
 
 export const dynamic = "force-dynamic";
 
-type EventStatus = "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 interface AdminEventRow {
   id: string;
@@ -46,6 +46,7 @@ interface AdminEventRow {
 const TABS: { status: EventStatus; label: string }[] = [
   { status: "PENDING",  label: "Pending"  },
   { status: "APPROVED", label: "Approved" },
+  { status: "IN_PROGRESS", label: "In progress" },
   { status: "REJECTED", label: "Rejected" },
   { status: "ARCHIVED", label: "Archived" },
 ];
@@ -53,6 +54,7 @@ const TABS: { status: EventStatus; label: string }[] = [
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
   PENDING:  { bg: "bg-blue-400/10",  text: "text-blue-300",  dot: "bg-blue-400",   label: "Pending"  },
   APPROVED: { bg: "bg-primary/10",   text: "text-primary",   dot: "bg-primary",    label: "Approved" },
+  IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", dot: "bg-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-400",   dot: "bg-red-400",    label: "Rejected" },
   ARCHIVED: { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark", label: "Archived" },
 };
@@ -264,7 +266,7 @@ function EventRow({
             </>
           )}
 
-          {event.status === "APPROVED" && (
+          {(event.status === "APPROVED" || event.status === "IN_PROGRESS") && (
             <button
               onClick={handlePin}
               disabled={pinning}

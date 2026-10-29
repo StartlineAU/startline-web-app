@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { archivePastEvents } from "@/lib/archive-events";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import {
   buildTrendDays,
   computeCurrentStats,
@@ -11,8 +11,6 @@ export async function GET(req: NextRequest) {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
   const session = auth.session;
-
-  await archivePastEvents();
 
   const eventId = req.nextUrl.searchParams.get("eventId")?.trim() || null;
   const daysParam = Number(req.nextUrl.searchParams.get("days") ?? "30");
@@ -33,6 +31,8 @@ export async function GET(req: NextRequest) {
           eventDate: true,
           startTime: true,
           status: true,
+          startsAtUtc: true,
+          endsAtUtc: true,
           cap: true,
           coverImageUrl: true,
           waves: true,
@@ -70,14 +70,20 @@ export async function GET(req: NextRequest) {
       allTimeRevenueCents += Math.max(0, r.amountCents - r.platformFeeCents);
     }
 
-    const eventInputs = events.map((e) => ({
+    const now = new Date();
+    const withLifecycle = events.map((e) => ({
+      ...e,
+      effectiveStatus: effectiveEventStatus(e, now),
+    }));
+
+    const eventInputs = withLifecycle.map((e) => ({
       id: e.id,
-      status: e.status,
+      status: e.effectiveStatus,
       eventDate: e.eventDate,
       cap: e.cap,
     }));
 
-    const current = computeCurrentStats(eventInputs, confirmedByEvent);
+    const current = computeCurrentStats(eventInputs, confirmedByEvent, now);
     const allTime = {
       registrations: allConfirmed.length,
       revenueCents: allTimeRevenueCents,
@@ -85,7 +91,7 @@ export async function GET(req: NextRequest) {
       events: events.length,
     };
 
-    const eventsOut = events.map((e) => ({
+    const eventsOut = withLifecycle.map((e) => ({
       id: e.id,
       title: e.title,
       discipline: e.discipline,
@@ -93,7 +99,7 @@ export async function GET(req: NextRequest) {
       state: e.state,
       eventDate: e.eventDate,
       startTime: e.startTime,
-      status: e.status,
+      status: e.effectiveStatus,
       cap: e.cap,
       coverImageUrl: e.coverImageUrl,
       waves: e.waves,

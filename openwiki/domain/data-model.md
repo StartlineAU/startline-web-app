@@ -83,7 +83,7 @@ DRAFT ──(submit)──> PENDING ──(admin approve)──> APPROVED
 - **REJECTED**: Denied by admin with optional rejection reason
 - **ARCHIVED**: Past events or organiser-archived
 
-Archival happens automatically for past-dated events via `archivePastEvents()` in `/lib/archive-events.ts`, called by `getAllEvents()`.
+Event lifecycle is derived from `startsAtUtc` / `endsAtUtc`: published events become `IN_PROGRESS` at their start and `ARCHIVED` at their end. A scheduled background worker and the app's internal lifecycle route persist those transitions; user-facing reads never write. Public discovery queries also filter on the UTC end so a late worker cannot surface a finished event.
 
 ## Key Business Rules
 

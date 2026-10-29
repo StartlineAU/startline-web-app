@@ -1,4 +1,5 @@
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
 
 # Per-environment infrastructure: VPC + networking, RDS, Cognito, Amplify branch.
 #
@@ -213,6 +214,153 @@ resource "aws_cognito_user_group" "this" {
   name         = each.key
 }
 
+# ===== Event lifecycle =====
+#
+# The app writes UTC start/end instants on the event and creates one-time
+# EventBridge schedules for those instants. The schedules (and a one-minute
+# reconciliation) invoke a tiny Lambda that calls the app's internal lifecycle
+# route. Putting the transition rules in the app keeps the Lambda free of
+# database credentials and makes a retried invocation harmless.
+
+resource "random_password" "event_lifecycle" {
+  length  = 40
+  special = false
+}
+
+resource "aws_scheduler_schedule_group" "event_lifecycle" {
+  name = "${var.project_name}-${var.name}-event-lifecycle"
+
+  tags = {
+    Environment = local.environment_tag
+    Service     = var.project_name
+  }
+}
+
+resource "aws_iam_role" "event_lifecycle_scheduler" {
+  name = "${var.project_name}-${var.name}-event-lifecycle-scheduler"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+      }
+    }]
+  })
+
+  tags = {
+    Environment = local.environment_tag
+    Service     = var.project_name
+  }
+}
+
+resource "aws_iam_role" "event_lifecycle_lambda" {
+  name = "${var.project_name}-${var.name}-event-lifecycle-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = {
+    Environment = local.environment_tag
+    Service     = var.project_name
+  }
+}
+
+resource "aws_iam_role_policy" "event_lifecycle_lambda" {
+  role = aws_iam_role.event_lifecycle_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "arn:aws:logs:*:*:*"
+    }]
+  })
+}
+
+data "archive_file" "event_lifecycle" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/event-lifecycle/index.mjs"
+  output_path = "${path.module}/lambda/event-lifecycle.zip"
+}
+
+resource "aws_lambda_function" "event_lifecycle" {
+  function_name    = "${var.project_name}-${var.name}-event-lifecycle"
+  role             = aws_iam_role.event_lifecycle_lambda.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
+  architectures    = ["arm64"]
+  filename         = data.archive_file.event_lifecycle.output_path
+  source_code_hash = data.archive_file.event_lifecycle.output_base64sha256
+  timeout          = 30
+
+  environment {
+    variables = {
+      APP_URL                = trimsuffix(var.site_url, "/")
+      EVENT_LIFECYCLE_SECRET = random_password.event_lifecycle.result
+    }
+  }
+
+  tags = {
+    Environment = local.environment_tag
+    Service     = var.project_name
+  }
+}
+
+resource "aws_iam_role_policy" "event_lifecycle_scheduler" {
+  role = aws_iam_role.event_lifecycle_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.event_lifecycle.arn
+    }]
+  })
+}
+
+resource "aws_lambda_permission" "event_lifecycle" {
+  statement_id   = "AllowEventLifecycleScheduler"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.event_lifecycle.function_name
+  principal      = "scheduler.amazonaws.com"
+  source_arn     = "arn:aws:scheduler:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.event_lifecycle.name}/*"
+  source_account = data.aws_caller_identity.current.account_id
+}
+
+# Safety net: repairs schedules missed while an event was edited and advances
+# any transition whose one-time trigger did not arrive.
+resource "aws_scheduler_schedule" "event_lifecycle_reconcile" {
+  name       = "${var.project_name}-${var.name}-event-lifecycle-reconcile"
+  group_name = aws_scheduler_schedule_group.event_lifecycle.name
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression = "rate(1 minute)"
+
+  target {
+    arn      = aws_lambda_function.event_lifecycle.arn
+    role_arn = aws_iam_role.event_lifecycle_scheduler.arn
+  }
+
+  depends_on = [aws_lambda_permission.event_lifecycle]
+}
+
 # ===== Amplify branch =====
 
 locals {
@@ -264,6 +412,11 @@ resource "aws_amplify_branch" "this" {
       CDN_URL                         = var.cdn_custom_domain != null ? "https://${var.cdn_custom_domain}" : "https://${aws_cloudfront_distribution.cdn.domain_name}"
       NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN = var.mapbox_access_token
       NEXT_PUBLIC_TURNSTILE_SITE_KEY  = var.turnstile_site_key
+      AWS_REGION                      = data.aws_region.current.name
+      EVENT_SCHEDULE_GROUP            = aws_scheduler_schedule_group.event_lifecycle.name
+      EVENT_SCHEDULER_ROLE_ARN        = aws_iam_role.event_lifecycle_scheduler.arn
+      EVENT_LIFECYCLE_LAMBDA_ARN      = aws_lambda_function.event_lifecycle.arn
+      EVENT_LIFECYCLE_SECRET          = random_password.event_lifecycle.result
     },
     local.runtime_secret_variables,
     var.extra_branch_environment_variables,

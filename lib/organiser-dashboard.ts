@@ -43,7 +43,7 @@ export function computeCapacityFilledPct(
   let filled = 0;
   let capTotal = 0;
   for (const e of events) {
-    if (e.status !== "APPROVED" || e.cap == null || e.cap <= 0) continue;
+    if ((e.status !== "APPROVED" && e.status !== "IN_PROGRESS") || e.cap == null || e.cap <= 0) continue;
     capTotal += e.cap;
     filled += confirmedByEvent.get(e.id) ?? 0;
   }
@@ -108,7 +108,7 @@ export function computeCurrentStats(
   confirmedByEvent: Map<string, number>,
   now = new Date(),
 ) {
-  const liveEvents = events.filter((e) => e.status === "APPROVED");
+  const liveEvents = events.filter((e) => e.status === "APPROVED" || e.status === "IN_PROGRESS");
   let liveRegistrations = 0;
   for (const e of liveEvents) {
     liveRegistrations += confirmedByEvent.get(e.id) ?? 0;

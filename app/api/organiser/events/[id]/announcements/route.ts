@@ -64,7 +64,9 @@ export async function POST(
     });
     if (!event)                            return NextResponse.json({ error: "Not found." },  { status: 404 });
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    if (event.status !== "APPROVED")       return NextResponse.json({ error: "Announcements can only be posted for live events." }, { status: 409 });
+    if (event.status !== "APPROVED" && event.status !== "IN_PROGRESS") {
+      return NextResponse.json({ error: "Announcements can only be posted for live events." }, { status: 409 });
+    }
 
     const parsed = announcementSchema.safeParse(await req.json());
     if (!parsed.success) {

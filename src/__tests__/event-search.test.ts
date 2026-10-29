@@ -64,11 +64,12 @@ describe("GET /api/events/search", () => {
     expect(body.results[0].href).toBe("/events/evt-1");
   });
 
-  it("searches only approved events, across title, venue, city and organiser", async () => {
+  it("searches only live, unexpired events, across title, venue, city and organiser", async () => {
     await call("q=sydney");
 
     const where = findMany.mock.calls[1][0].where;
-    expect(where.status).toBe("APPROVED");
+    expect(where.status).toEqual({ in: ["APPROVED", "IN_PROGRESS"] });
+    expect(where.endsAtUtc.gt).toBeInstanceOf(Date);
     // Mirrors the client-side filterEvents search in lib/utils.ts.
     expect(where.OR.map((c: Record<string, unknown>) => Object.keys(c)[0]))
       .toEqual(["title", "venue", "city", "organiser"]);

@@ -27,7 +27,10 @@ export async function GET() {
           select: { events: true, reviews: true, registrations: true, members: true },
         },
         events: {
-          where:  { status: "APPROVED" },
+          where: {
+            status: { in: ["APPROVED", "IN_PROGRESS"] },
+            endsAtUtc: { gt: new Date() },
+          },
           select: { id: true },
         },
       },

@@ -16,7 +16,10 @@ export async function getOrganiserPublicStats(organiserId: string): Promise<Orga
       where: { organiserId },
     }),
     prisma.event.count({
-      where: { organiserId, status: "APPROVED" },
+      where: {
+        organiserId,
+        status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] },
+      },
     }),
   ]);
 

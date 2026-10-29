@@ -4,6 +4,7 @@ import { sendGuestEmailVerificationCode } from "@/lib/guest-email-verification";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
+import { registrationOpenAt } from "@/lib/event-lifecycle";
 
 const verifyEmailSendSchema = z.object({
   eventId: z.string().max(255),
@@ -32,11 +33,14 @@ export async function POST(req: NextRequest) {
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, title: true, status: true, registrationType: true },
+      select: {
+        id: true, title: true, status: true, registrationType: true,
+        startsAtUtc: true, endsAtUtc: true,
+      },
     });
 
     if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
-    if (event.status !== "APPROVED" || event.registrationType !== "startline") {
+    if (!registrationOpenAt(event) || event.registrationType !== "startline") {
       return NextResponse.json({ error: "This event is not accepting registrations." }, { status: 409 });
     }
 

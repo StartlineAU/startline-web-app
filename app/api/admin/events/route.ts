@@ -5,9 +5,13 @@ import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
 import { adminEventPayloadSchema, eventPayloadSchema } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import type { Prisma } from "@prisma/client";
+import { syncEventSchedules } from "@/lib/event-scheduler";
 import { z } from "zod";
 
-const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "REJECTED", "ARCHIVED"] as const;
+const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
 
 const eventListQuery = z.object({
@@ -25,6 +29,8 @@ const EVENT_SELECT = {
   eventDate:       true,
   startTime:       true,
   status:          true,
+  startsAtUtc:     true,
+  endsAtUtc:       true,
   isPinned:        true,
   createdAt:       true,
   coverImageUrl:   true,
@@ -54,21 +60,44 @@ export async function GET(req: NextRequest) {
     Object.fromEntries(searchParams),
   );
   const skip = (page - 1) * limit;
+  const now = new Date();
+
+  // The status tab must agree with the effective lifecycle, not wait for the
+  // worker. Approved means "has not started"; an event whose start has passed is
+  // in progress, and one whose end has passed is archived.
+  const where: Prisma.EventWhereInput =
+    status === "APPROVED"
+      ? { status, OR: [{ startsAtUtc: null }, { startsAtUtc: { gt: now } }] }
+      : status === "IN_PROGRESS"
+        ? {
+            OR: [
+              { status: "IN_PROGRESS" },
+              { status: "APPROVED", startsAtUtc: { lte: now }, endsAtUtc: { gt: now } },
+            ],
+          }
+        : status === "ARCHIVED"
+          ? {
+              OR: [
+                { status: "ARCHIVED" },
+                { status: { in: ["APPROVED", "IN_PROGRESS"] }, endsAtUtc: { lte: now } },
+              ],
+            }
+          : { status };
 
   try {
     const [events, total] = await Promise.all([
       prisma.event.findMany({
-        where:   { status },
+        where,
         orderBy: { createdAt: "desc" },
         select:  EVENT_SELECT,
         skip,
         take: limit,
       }),
-      prisma.event.count({ where: { status } }),
+      prisma.event.count({ where }),
     ]);
 
     const response = NextResponse.json({
-      events,
+      events: events.map((event) => ({ ...event, status: effectiveEventStatus(event, now) })),
       total,
       page,
       totalPages: Math.ceil(total / limit),
@@ -125,13 +154,22 @@ export async function POST(req: NextRequest) {
   }
 
   const eventStatus = submit ? (organiser.verified ? "APPROVED" : "PENDING") : "DRAFT";
+  const times = eventTimeData({
+    eventDate: body.eventDate ?? "",
+    endDate: body.endDate ?? null,
+    startTime: body.startTime ?? "",
+    endTime: body.endTime ?? null,
+    state: body.state ?? "",
+  });
+  const lifecycleStatus = effectiveEventStatus({ status: eventStatus, ...times });
 
   try {
     const event = await withUniqueSlug(body.title ?? "", (slug) =>
       prisma.event.create({
       data: {
         organiserId:      organiserId,
-        status:           eventStatus,
+        status:           lifecycleStatus,
+        ...times,
         slug,
         title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
@@ -166,6 +204,10 @@ export async function POST(req: NextRequest) {
         photos:           Array.isArray(body.photos) ? body.photos : [],
       },
       }),
+    );
+
+    await syncEventSchedules(event).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
     );
 
     writeAuditLog({

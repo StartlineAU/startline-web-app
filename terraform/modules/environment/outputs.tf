@@ -54,3 +54,18 @@ output "cdn_distribution_domain_name" {
   description = "CloudFront distribution domain name for the upload CDN."
   value       = aws_cloudfront_distribution.cdn.domain_name
 }
+
+output "event_schedule_group_name" {
+  description = "EventBridge Scheduler group that owns per-event lifecycle triggers."
+  value       = aws_scheduler_schedule_group.event_lifecycle.name
+}
+
+output "event_scheduler_role_arn" {
+  description = "Execution role EventBridge Scheduler uses to invoke the lifecycle worker."
+  value       = aws_iam_role.event_lifecycle_scheduler.arn
+}
+
+output "event_lifecycle_lambda_arn" {
+  description = "Lifecycle trigger Lambda invoked by schedules and reconciliation."
+  value       = aws_lambda_function.event_lifecycle.arn
+}

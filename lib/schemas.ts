@@ -82,20 +82,25 @@ export const eventPayloadSchema = z
   })
   .superRefine((data, ctx) => {
     // Cross-field ordering checks (only when both values are present, so
-    // partially-filled drafts keep saving). HH:MM and YYYY-MM-DD strings
-    // compare correctly in lexicographic order.
-    if (data.startTime && data.endTime && data.endTime <= data.startTime) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endTime"],
-        message: "End time must be after start time.",
-      });
-    }
+    // partially-filled drafts keep saving). Compare the combined local
+    // date/time, not the time-of-day alone: a multi-day event may legitimately
+    // finish at 10:00 the next day.
     if (data.eventDate && data.endDate && data.endDate < data.eventDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endDate"],
         message: "End date must be on or after the start date.",
+      });
+    }
+    // Time-of-day ordering only applies on the same day (or on a partial
+    // payload with no date). A multi-day event may finish at 10:00 tomorrow.
+    const sameLocalDay =
+      !data.eventDate || !data.endDate || data.endDate === data.eventDate;
+    if (sameLocalDay && data.startTime && data.endTime && data.endTime <= data.startTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: "End time must be after start time.",
       });
     }
     // Ticket categories cannot close after the event ends.
