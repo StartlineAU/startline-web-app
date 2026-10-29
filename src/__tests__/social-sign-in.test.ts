@@ -113,7 +113,7 @@ describe("enabledSocialProviders", () => {
   });
 
   it("keeps only known providers", () => {
-    vi.stubEnv("NEXT_PUBLIC_COGNITO_DOMAIN", "sl-staging.auth.ap-southeast-2.amazoncognito.com");
+    vi.stubEnv("NEXT_PUBLIC_COGNITO_DOMAIN", "auth-staging.startlineau.com");
     vi.stubEnv("NEXT_PUBLIC_SOCIAL_SIGN_IN", " google , facebook,apple");
     expect(enabledSocialProviders()).toEqual(["google", "apple"]);
   });

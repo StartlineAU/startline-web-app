@@ -34,10 +34,11 @@ const nextConfig: NextConfig = {
 
     // After a Google or Apple sign-in the browser POSTs the authorization code
     // to our Cognito hosted domain, which connect-src has to allow or the
-    // callback hangs with no server-side trace. Staging and local dev use the
-    // amazoncognito.com host; production uses its own domain, so the host is
-    // taken from the same variable the app builds its OAuth config from rather
-    // than spelled out here, where it drifts.
+    // callback hangs with no server-side trace. Deployed environments use
+    // their own domain (auth.startlineau.com, auth-staging.startlineau.com),
+    // while local dev and the e2e suite use an amazoncognito.com host, so both
+    // are allowed. The custom host comes from the same variable the app builds
+    // its OAuth config from rather than being spelled out here, where it drifts.
     const cognitoDomain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
     const cognitoConnectSrc = [
       "https://*.auth.ap-southeast-2.amazoncognito.com",
