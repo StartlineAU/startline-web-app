@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Upload, Download,
   AlertCircle, RefreshCw, CheckCircle2, Circle, Plus, Bell,
@@ -31,170 +31,11 @@ import {
   type ExportColumnKey,
 } from "@/lib/registration-export";
 
+import { useApiResource } from "@/hooks/useApiResource";
+import ExportMenu from "@/components/organiser/race-management/ExportMenu";
+import type { PageData, Registration, StartWave } from "@/components/organiser/race-management/types";
+
 const GENDER_CHOICES = ["Male", "Female", "Non-binary", "Other"];
-
-function ExportMenu({ eventId }: { eventId: string }) {
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<ExportColumnKey>>(
-    () => new Set(DEFAULT_EXPORT_COLUMN_KEYS),
-  );
-
-  const base = `/api/organiser/events/${eventId}/registrations/export`;
-  const orderedKeys = EXPORT_COLUMNS.map((c) => c.key).filter((k) => selected.has(k));
-  const columnsQuery = encodeURIComponent(orderedKeys.join(","));
-
-  const toggleColumn = (key: ExportColumnKey, required?: boolean) => {
-    if (required) return;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      if (!next.has("name")) next.add("name");
-      return next;
-    });
-  };
-
-  const selectAll = () => setSelected(new Set(DEFAULT_EXPORT_COLUMN_KEYS));
-  const selectMinimal = () => setSelected(new Set<ExportColumnKey>(["name"]));
-
-  return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-      >
-        <Download className="w-4 h-4" /> Export
-      </Button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <Download className="w-5 h-5 text-primary" />
-              </div>
-              <DialogTitle>Export registrations</DialogTitle>
-            </div>
-            <DialogDescription>
-              Choose which columns to include, then download as Excel or a PDF start list.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-              Columns to include
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={selectAll}
-                className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary hover:underline"
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                onClick={selectMinimal}
-                className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-light hover:text-white transition-colors"
-              >
-                Name only
-              </button>
-            </div>
-          </div>
-
-          <div className="max-h-64 overflow-y-auto rounded-xl border border-dark-lighter bg-dark-light/40 px-2 py-2 grid grid-cols-1 sm:grid-cols-2 gap-0.5">
-            {EXPORT_COLUMNS.map((col) => {
-              const checked = selected.has(col.key);
-              return (
-                <label
-                  key={col.key}
-                  className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                    col.required ? "opacity-80" : "hover:bg-white/[0.04]"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={col.required}
-                    onChange={() => toggleColumn(col.key, col.required)}
-                    className="rounded border-dark-lighter bg-dark text-primary focus:ring-primary focus:ring-offset-0"
-                  />
-                  <span className="text-[13px] text-white/85">{col.label}</span>
-                  {col.required && (
-                    <span className="ml-auto font-headline text-[9px] uppercase tracking-widest text-muted-light">
-                      Required
-                    </span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
-
-          <DialogFooter className="flex-col sm:flex-col gap-2 !items-stretch mt-4">
-            <a
-              role="menuitem"
-              href={`${base}?format=xlsx&columns=${columnsQuery}`}
-              onClick={() => setOpen(false)}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-dark font-headline text-[13px] font-bold uppercase tracking-widest shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform"
-            >
-              <FileSpreadsheet className="w-4 h-4" /> Excel workbook
-            </a>
-            <a
-              role="menuitem"
-              href={`${base}?format=pdf`}
-              onClick={() => setOpen(false)}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-dark-lighter bg-transparent text-light font-headline text-[13px] font-bold uppercase tracking-widest hover:bg-dark-light hover:border-primary transition-colors"
-            >
-              <FileText className="w-4 h-4" /> PDF start list
-            </a>
-            <p className="text-[11px] text-muted-light text-center leading-snug pt-1">
-              Column choices apply to Excel. PDF uses the standard start-list layout.
-            </p>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-interface Registration {
-  id: string;
-  name: string;
-  email: string;
-  category: string | null;
-  waveId: string | null;
-  wave: string | null;
-  waveNotified: string | null;
-  bibNumber: string | null;
-  gender: string | null;
-  dateOfBirth: string | null;
-  estimatedFinishMinutes: number | null;
-  medicalNotes: string | null;
-  status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED";
-  amount: number;
-  refundAmountCents: number | null;
-  refundPercent: number | null;
-  refundRequestedAt: string | null;
-  refundOutsidePolicy: boolean;
-  createdAt: string;
-  resultDistance: string | null;
-  resultTime: string | null;
-  resultPlacement: string | null;
-  isPersonalBest: boolean;
-  isTopResult: boolean;
-}
-
-interface StartWave extends WaveDef {
-  sortOrder: number;
-  assigned: number;
-}
-
-interface PageData {
-  event: { id: string; title: string; startWaves: StartWave[] };
-  registrations: Registration[];
-}
 
 const STATUS_STYLE: Record<Registration["status"], string> = {
   CONFIRMED:        "bg-primary/10 text-primary border-primary/30",
@@ -213,10 +54,6 @@ const STATUS_LABEL: Record<Registration["status"], string> = {
 /** Race-day console: waves, results, refunds. Embedded on the event dashboard. */
 export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const id = eventId;
-
-  const [data, setData] = useState<PageData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   const [editReg, setEditReg] = useState<Registration | null>(null);
   const [editWave, setEditWave] = useState("");
@@ -247,21 +84,20 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   // Splits the page into before-race setup (waves, bibs) and after-race results.
   const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">("setup");
 
-  const load = useCallback((opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true);
-    setError("");
-    fetch(`/api/organiser/events/${id}/registrations`)
-      .then(async (r) => {
-        const json = await r.json();
-        if (!r.ok) throw new Error(json.error ?? "Failed to load");
-        setData(json);
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
+  const fetchRegistrations = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/organiser/events/${id}/registrations`, { signal });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error ?? "Failed to load");
+    return json as PageData;
   }, [id]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
-  useEffect(() => { load(); }, [load]);
+  const {
+    data,
+    loading,
+    error,
+    reload: load,
+    setData,
+  } = useApiResource<PageData>(fetchRegistrations, { key: id });
 
   // Optimistically move athletes between waves, rolling back if the server rejects.
   // Organisers do this under time pressure on flaky venue wifi, so the UI must feel
@@ -299,7 +135,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         return { ok: false as const, error: "Move failed. Check your connection." };
       }
     },
-    [data, id],
+    [data, id, setData],
   );
 
   // Live preview of how the builder's waves would place confirmed athletes.

@@ -156,6 +156,6 @@ jobs:
         run: |
           # The app needs a non-empty pool and client id to build an authorize
           # URL at all; social-sign-in.spec.ts then intercepts the redirect.
-          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid pnpm dev -p 3000 &
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
       - run: pnpm test:e2e

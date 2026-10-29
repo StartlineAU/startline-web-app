@@ -139,11 +139,10 @@ test.describe("new listing wizard", () => {
     await expect(addrInput).toHaveValue(label);
     await expect(page.getByPlaceholder("e.g. Melbourne")).toHaveValue("Sydney");
     await expect(page.getByRole("combobox", { name: "State" })).toContainText("NSW");
-    // With a Mapbox token the map renders; CI has none, so the preview shows
-    // its token-missing state. Either proves the selected coordinates reached it.
-    await expect(
-      page.getByTestId("location-preview-map").or(page.getByTestId("location-preview-no-token")),
-    ).toBeVisible();
+    // The preview must render the real map. The token-missing state used to
+    // pass this test, which hid a deployment with no Mapbox token (#352).
+    await expect(page.getByTestId("location-preview-map")).toBeVisible();
+    await expect(page.getByTestId("location-preview-no-token")).toHaveCount(0);
     await expect(page.getByTestId("location-preview-empty")).toHaveCount(0);
   });
 

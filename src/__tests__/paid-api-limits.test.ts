@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     rateLimitPaid: vi.fn(),
     send,
     geocodePlace: vi.fn(),
+    resolvePlace: vi.fn(),
     lookupAbn: vi.fn(),
     findMany: vi.fn(),
     AutocompleteCommand,
@@ -27,7 +28,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/lib/amplify-server", () => ({ getServerSession: mocks.getServerSession }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitPaid: mocks.rateLimitPaid }));
-vi.mock("@/lib/geocode", () => ({ geocodePlace: mocks.geocodePlace }));
+vi.mock("@/lib/geocode", () => ({ geocodePlace: mocks.geocodePlace, resolvePlace: mocks.resolvePlace }));
 vi.mock("@/lib/abn", () => ({ lookupAbn: mocks.lookupAbn }));
 vi.mock("@aws-sdk/client-geo-places", () => ({
   GeoPlacesClient: mocks.GeoPlacesClient,
@@ -39,6 +40,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { GET as autocomplete } from "@/app/api/places/autocomplete/route";
 import { GET as geocode } from "@/app/api/places/geocode/route";
+import { GET as resolve } from "@/app/api/places/resolve/route";
 import { GET as abn } from "@/app/api/abn/route";
 import { GET as suburbs } from "@/app/api/events/suburbs/route";
 
@@ -59,6 +61,10 @@ beforeEach(() => {
   mocks.rateLimitPaid.mockResolvedValue(null);
   mocks.send.mockResolvedValue({ ResultItems: [] });
   mocks.geocodePlace.mockResolvedValue({ latitude: -33.8688, longitude: 151.2093 });
+  mocks.resolvePlace.mockResolvedValue({
+    result: { latitude: -33.8688, longitude: 151.2093 },
+    choices: [],
+  });
   mocks.lookupAbn.mockResolvedValue({ abn: "12345678901" });
   mocks.findMany.mockResolvedValue([
     {
@@ -128,6 +134,27 @@ describe("paid address lookups", () => {
     expect(mocks.geocodePlace).toHaveBeenCalledWith("St Kilda");
   });
 
+  it("does not resolve a place when the limiter blocks", async () => {
+    mocks.rateLimitPaid.mockResolvedValue(tooMany());
+
+    const res = await resolve(get("/api/places/resolve?q=St%20Kilda"));
+
+    expect(res.status).toBe(429);
+    expect(mocks.resolvePlace).not.toHaveBeenCalled();
+  });
+
+  it("uses the shared route budget for public place resolution", async () => {
+    const res = await resolve(get("/api/places/resolve?q=St%20Kilda"));
+
+    expect(res.status).toBe(200);
+    expect(mocks.rateLimitPaid).toHaveBeenCalledWith(expect.anything(), {
+      prefix: "places-resolve",
+      limit: 30,
+      windowSeconds: 60,
+    });
+    expect(mocks.resolvePlace).toHaveBeenCalledWith("St Kilda");
+  });
+
   it("does not call ABR for a signed-out caller", async () => {
     mocks.getServerSession.mockResolvedValue(null);
 
@@ -166,7 +193,7 @@ describe("paid address lookups", () => {
     const res = await suburbs(get("/api/events/suburbs?q=St%20Kilda"));
 
     expect(res.status).toBe(429);
-    expect(mocks.geocodePlace).not.toHaveBeenCalled();
+    expect(mocks.resolvePlace).not.toHaveBeenCalled();
   });
 
   it("does not spend a geocode slot when the event suburb matches a row", async () => {
@@ -174,6 +201,6 @@ describe("paid address lookups", () => {
 
     expect(res.status).toBe(200);
     expect(mocks.rateLimitPaid).not.toHaveBeenCalled();
-    expect(mocks.geocodePlace).not.toHaveBeenCalled();
+    expect(mocks.resolvePlace).not.toHaveBeenCalled();
   });
 });

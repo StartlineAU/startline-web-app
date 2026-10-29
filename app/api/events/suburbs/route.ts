@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
-import { geocodePlace } from "@/lib/geocode";
+import { resolvePlace } from "@/lib/geocode";
 import { rateLimitPaid } from "@/lib/rate-limit";
 import { haversineDistance } from "@/lib/distance";
 import { getEventCoords } from "@/lib/australia-coords";
@@ -150,9 +150,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Nothing by that name hosts an event: locate the query and offer the closest
-  // suburbs that do. This is the route's only call to the paid geocoder, so the
-  // limit and shared billable budget go here rather than on every keystroke's
-  // cheap database lookup above.
+  // suburbs that do. This is the route's only call to the paid location service,
+  // so the limit and shared billable budget go here rather than on every
+  // keystroke's cheap database lookup above.
   const blocked = await rateLimitPaid(req, {
     prefix: "event-suburb-geocode",
     limit: 20,
@@ -160,7 +160,12 @@ export async function GET(req: NextRequest) {
   });
   if (blocked) return blocked;
 
-  const place = await geocodePlace(parsed.data.q);
+  const { result: place, choices } = await resolvePlace(parsed.data.q);
+  // A name that exists in several states needs an explicit choice. Picking the
+  // first result silently sent "St Kilda" to Queensland (#352).
+  if (choices.length > 0) {
+    return NextResponse.json({ results: [], nearby: false, choices });
+  }
   if (!place || place.latitude == null || place.longitude == null) {
     return NextResponse.json({ results: [], nearby: false });
   }

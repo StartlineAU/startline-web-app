@@ -4,15 +4,15 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/prisma", () => ({
   default: { event: { findMany: vi.fn() } },
 }));
-vi.mock("@/lib/geocode", () => ({ geocodePlace: vi.fn() }));
+vi.mock("@/lib/geocode", () => ({ resolvePlace: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitPaid: vi.fn().mockResolvedValue(null) }));
 
 import prisma from "@/lib/prisma";
-import { geocodePlace } from "@/lib/geocode";
+import { resolvePlace } from "@/lib/geocode";
 import { GET } from "@/app/api/events/suburbs/route";
 
 const findMany = prisma.event.findMany as ReturnType<typeof vi.fn>;
-const geocode = geocodePlace as ReturnType<typeof vi.fn>;
+const resolve = resolvePlace as ReturnType<typeof vi.fn>;
 
 const call = (q: string, extra = "") =>
   GET(new NextRequest(`http://localhost:3000/api/events/suburbs?q=${encodeURIComponent(q)}${extra}`));
@@ -29,7 +29,7 @@ const EVENTS = [
 describe("GET /api/events/suburbs", () => {
   beforeEach(() => {
     findMany.mockReset();
-    geocode.mockReset();
+    resolve.mockReset();
     findMany.mockResolvedValue(EVENTS);
   });
 
@@ -38,12 +38,12 @@ describe("GET /api/events/suburbs", () => {
 
     expect(body.nearby).toBe(false);
     expect(body.results).toEqual([{ city: "Sydney", state: "nsw", eventCount: 3 }]);
-    expect(geocode).not.toHaveBeenCalled();
+    expect(resolve).not.toHaveBeenCalled();
   });
 
   it("does not geocode when a name matches, keeping the lookup free", async () => {
     await call("newcastle");
-    expect(geocode).not.toHaveBeenCalled();
+    expect(resolve).not.toHaveBeenCalled();
   });
 
   it("orders prefix matches ahead of mid-word ones, then by event count", async () => {
@@ -59,7 +59,7 @@ describe("GET /api/events/suburbs", () => {
 
   it("falls back to the nearest hosting suburbs when nothing matches by name", async () => {
     // Parramatta hosts no events but sits ~23 km west of Sydney.
-    geocode.mockResolvedValue({ latitude: -33.815, longitude: 151.0, city: "Parramatta" });
+    resolve.mockResolvedValue({ result: { latitude: -33.815, longitude: 151.0, city: "Parramatta" }, choices: [] });
 
     const body = await (await call("parramatta")).json();
 
@@ -71,8 +71,24 @@ describe("GET /api/events/suburbs", () => {
     expect(body.results.map((r: { city: string }) => r.city)).not.toContain("Perth");
   });
 
+  it("offers a state choice instead of silently using the first matching locality", async () => {
+    resolve.mockResolvedValue({
+      result: null,
+      choices: [
+        { label: "St Kilda, QLD 4671, Australia", city: "St Kilda", stateCode: "qld", stateName: "Queensland" },
+        { label: "St Kilda, Melbourne, VIC 3182, Australia", city: "Melbourne", stateCode: "vic", stateName: "Victoria" },
+      ],
+    });
+
+    const body = await (await call("st kilda")).json();
+
+    expect(body.nearby).toBe(false);
+    expect(body.results).toEqual([]);
+    expect(body.choices.map((choice: { stateCode: string }) => choice.stateCode)).toEqual(["qld", "vic"]);
+  });
+
   it("returns nothing when the query cannot be located either", async () => {
-    geocode.mockResolvedValue(null);
+    resolve.mockResolvedValue({ result: null, choices: [] });
 
     const body = await (await call("nowhere-at-all")).json();
     expect(body.results).toEqual([]);
@@ -96,7 +112,7 @@ describe("GET /api/events/suburbs", () => {
     expect(body.results).toEqual([
       { city: "Sydney", state: "nsw", venue: "Bondi Beach", eventCount: 2 },
     ]);
-    expect(geocode).not.toHaveBeenCalled();
+    expect(resolve).not.toHaveBeenCalled();
   });
 
   it("lists city matches ahead of venue matches", async () => {
@@ -142,7 +158,7 @@ describe("GET /api/events/suburbs", () => {
     findMany.mockResolvedValue([
       { city: "Melbourne", state: "vic", venue: "Albert Park Circuit", categories: ["100K"], latitude: -37.8, longitude: 144.9 },
     ]);
-    geocode.mockResolvedValue(null);
+    resolve.mockResolvedValue({ result: null, choices: [] });
 
     const body = await (await call("albert park", "&type=running&division=10K")).json();
     expect(body.results).toEqual([]);
