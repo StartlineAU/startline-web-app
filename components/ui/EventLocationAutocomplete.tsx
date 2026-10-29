@@ -12,11 +12,24 @@ interface SuburbSuggestion {
   distanceKm?: number;
 }
 
+/** A state's match for a name that exists in more than one state. */
+interface PlaceChoice {
+  label: string;
+  city: string;
+  stateCode: string;
+  stateName: string;
+}
+
+type Option =
+  | { kind: "place"; item: PlaceChoice }
+  | { kind: "event"; item: SuburbSuggestion };
+
 interface Props {
   value: string;
   onChange: (city: string) => void;
   onSelect?: (city: string) => void;
-  onEnter?: () => void;
+  /** Receives the current text so a fast Enter cannot use a stale value. */
+  onEnter?: (query?: string) => void;
   placeholder?: string;
   className?: string;
   /**
@@ -46,7 +59,7 @@ export default function EventLocationAutocomplete({
   filter,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<SuburbSuggestion[]>([]);
+  const [options, setOptions] = useState<Option[]>([]);
   const [nearby, setNearby] = useState(false);
   const [searched, setSearched] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,7 +82,7 @@ export default function EventLocationAutocomplete({
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const fetchSuggestions = async (q: string) => {
-    if (q.trim().length < 2) { setSuggestions([]); setOpen(false); return; }
+    if (q.trim().length < 2) { setOptions([]); setOpen(false); return; }
     const seq = ++requestRef.current;
     setLoading(true);
     try {
@@ -80,13 +93,18 @@ export default function EventLocationAutocomplete({
       const data = await res.json();
       if (seq !== requestRef.current) return;
       const results: SuburbSuggestion[] = data.results ?? [];
-      setSuggestions(results);
+      const places: PlaceChoice[] = data.choices ?? [];
+      const next: Option[] = [
+        ...places.map((item) => ({ kind: "place" as const, item })),
+        ...results.map((item) => ({ kind: "event" as const, item })),
+      ];
+      setOptions(next);
       setNearby(Boolean(data.nearby));
       setSearched(data.searched ?? q.trim());
-      setOpen(results.length > 0);
+      setOpen(next.length > 0);
       setActiveIdx(-1);
     } catch {
-      if (seq === requestRef.current) setSuggestions([]);
+      if (seq === requestRef.current) setOptions([]);
     } finally {
       if (seq === requestRef.current) setLoading(false);
     }
@@ -108,10 +126,19 @@ export default function EventLocationAutocomplete({
     timerRef.current = setTimeout(() => fetchSuggestions(text), 250);
   };
 
-  const select = (item: SuburbSuggestion) => {
+  const select = (option: Option) => {
+    if (option.kind === "place") {
+      // The label carries the state, so the distance search resolves to the
+      // place the visitor chose instead of the first match for the plain name.
+      onChange(option.item.label);
+      setOpen(false);
+      onSelect?.(option.item.label);
+      return;
+    }
+
     // A venue match narrows to that venue; the listing's where filter matches
     // venue as well as city, so the more specific term is the useful one.
-    const text = item.venue ?? item.city;
+    const text = option.item.venue ?? option.item.city;
     onChange(text);
     setOpen(false);
     onSelect?.(text);
@@ -122,16 +149,20 @@ export default function EventLocationAutocomplete({
     if (e.key === "Enter") {
       if (open && activeIdx >= 0) {
         e.preventDefault();
-        select(suggestions[activeIdx]);
+        select(options[activeIdx]);
+      } else if (open && options.some((option) => option.kind === "place")) {
+        // Several states match: make the visitor choose rather than silently
+        // searching the first one (#352).
+        e.preventDefault();
       } else {
-        onEnter?.();
+        onEnter?.(value);
       }
       return;
     }
     if (!open) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIdx(i => Math.min(i + 1, suggestions.length - 1));
+      setActiveIdx(i => Math.min(i + 1, options.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIdx(i => Math.max(i - 1, 0));
@@ -145,14 +176,14 @@ export default function EventLocationAutocomplete({
         type="text"
         value={value}
         onChange={e => handleInput(e.target.value)}
-        onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
+        onFocus={() => { if (options.length > 0) setOpen(true); }}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         className={className}
         autoComplete="off"
         role="combobox"
         aria-expanded={open}
-        aria-controls={open && suggestions.length > 0 ? "suburb-event-suggestions" : undefined}
+        aria-controls={open && options.length > 0 ? "suburb-event-suggestions" : undefined}
         aria-autocomplete="list"
       />
       {loading && (
@@ -160,32 +191,59 @@ export default function EventLocationAutocomplete({
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      {open && suggestions.length > 0 && (
+      {open && options.length > 0 && (
         <div ref={listRef} id="suburb-event-suggestions" data-testid="suburb-suggestions"
           className="absolute top-full left-0 mt-2 z-50 w-full min-w-[280px] bg-dark border border-dark-lighter rounded-xl shadow-xl overflow-hidden modal-in">
-          {nearby && (
+          {options.some((option) => option.kind === "place") && (
+            <div className="px-4 pt-2.5 pb-1 font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark">
+              Several places match · choose one
+            </div>
+          )}
+          {nearby && !options.some((option) => option.kind === "place") && (
             <div className="px-4 pt-2.5 pb-1 font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark">
               No events in {searched} · nearest instead
             </div>
           )}
-          {suggestions.map((item, i) => (
-            <button key={`${item.city}-${item.state}-${item.venue ?? ""}`} type="button"
-              data-testid="suburb-suggestion"
-              onClick={() => select(item)}
-              onMouseEnter={() => setActiveIdx(i)}
-              className={`w-full px-4 py-2.5 text-left block transition-colors
-                ${i === activeIdx ? "bg-primary/10" : "hover:bg-white/5"}`}>
-              <span className={`block font-headline text-[14px] truncate ${i === activeIdx ? "text-primary" : "text-light"}`}>
-                {item.venue ?? item.city}
-                {!item.venue && `, ${item.state.toUpperCase()}`}
-              </span>
-              <span className="block font-headline text-[11px] uppercase tracking-widest text-muted truncate">
-                {item.venue && `${item.city}, ${item.state.toUpperCase()} · `}
-                {item.distanceKm != null && `${item.distanceKm} km · `}
-                {item.eventCount} {item.eventCount === 1 ? "event" : "events"}
-              </span>
-            </button>
-          ))}
+          {options.map((option, i) => {
+            if (option.kind === "place") {
+              const item = option.item;
+              return (
+                <button key={`place-${item.label}`} type="button"
+                  data-testid="place-choice"
+                  onClick={() => select(option)}
+                  onMouseEnter={() => setActiveIdx(i)}
+                  className={`w-full px-4 py-2.5 text-left block transition-colors
+                    ${i === activeIdx ? "bg-primary/10" : "hover:bg-white/5"}`}>
+                  <span className={`block font-headline text-[14px] truncate ${i === activeIdx ? "text-primary" : "text-light"}`}>
+                    {item.label}
+                  </span>
+                  <span className="block font-headline text-[11px] uppercase tracking-widest text-muted truncate">
+                    {item.stateName || item.stateCode.toUpperCase()}
+                  </span>
+                </button>
+              );
+            }
+
+            const item = option.item;
+            return (
+              <button key={`${item.city}-${item.state}-${item.venue ?? ""}`} type="button"
+                data-testid="suburb-suggestion"
+                onClick={() => select(option)}
+                onMouseEnter={() => setActiveIdx(i)}
+                className={`w-full px-4 py-2.5 text-left block transition-colors
+                  ${i === activeIdx ? "bg-primary/10" : "hover:bg-white/5"}`}>
+                <span className={`block font-headline text-[14px] truncate ${i === activeIdx ? "text-primary" : "text-light"}`}>
+                  {item.venue ?? item.city}
+                  {!item.venue && `, ${item.state.toUpperCase()}`}
+                </span>
+                <span className="block font-headline text-[11px] uppercase tracking-widest text-muted truncate">
+                  {item.venue && `${item.city}, ${item.state.toUpperCase()} · `}
+                  {item.distanceKm != null && `${item.distanceKm} km · `}
+                  {item.eventCount} {item.eventCount === 1 ? "event" : "events"}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
