@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Upload, Download,
   AlertCircle, RefreshCw, CheckCircle2, Circle, Plus, Bell,
@@ -21,23 +21,178 @@ import { nextAvailableBib } from "@/lib/bib-assignment";
 import { assignAthletesToWaves, unassignedReason, type WaveDef } from "@/lib/wave-assignment";
 import { parseFinishToMinutes, formatFinishMinutes, calcAgeFromIsoDate } from "@/lib/registration-form";
 import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
-import { parseCsvTable } from "@/lib/registration-csv";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
-import AddOnsTab, { type RegistrationAddOnView } from "@/components/organiser/AddOnsTab";
+import ResultsImportDialog from "@/components/organiser/ResultsImportDialog";
 import {
   DEFAULT_EXPORT_COLUMN_KEYS,
   EXPORT_COLUMNS,
   type ExportColumnKey,
 } from "@/lib/registration-export";
-import { useApiResource } from "@/hooks/useApiResource";
-import ExportMenu from "@/components/organiser/race-management/ExportMenu";
-import RaceDialogs from "@/components/organiser/race-management/RaceDialogs";
-import type { Registration, StartWave } from "@/components/organiser/race-management/types";
+
+const GENDER_CHOICES = ["Male", "Female", "Non-binary", "Other"];
+
+function ExportMenu({ eventId }: { eventId: string }) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<ExportColumnKey>>(
+    () => new Set(DEFAULT_EXPORT_COLUMN_KEYS),
+  );
+
+  const base = `/api/organiser/events/${eventId}/registrations/export`;
+  const orderedKeys = EXPORT_COLUMNS.map((c) => c.key).filter((k) => selected.has(k));
+  const columnsQuery = encodeURIComponent(orderedKeys.join(","));
+
+  const toggleColumn = (key: ExportColumnKey, required?: boolean) => {
+    if (required) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      if (!next.has("name")) next.add("name");
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelected(new Set(DEFAULT_EXPORT_COLUMN_KEYS));
+  const selectMinimal = () => setSelected(new Set<ExportColumnKey>(["name"]));
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+      >
+        <Download className="w-4 h-4" /> Export
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5 text-primary" />
+              </div>
+              <DialogTitle>Export registrations</DialogTitle>
+            </div>
+            <DialogDescription>
+              Choose which columns to include, then download as Excel or a PDF start list.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+              Columns to include
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary hover:underline"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={selectMinimal}
+                className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-light hover:text-white transition-colors"
+              >
+                Name only
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-dark-lighter bg-dark-light/40 px-2 py-2 grid grid-cols-1 sm:grid-cols-2 gap-0.5">
+            {EXPORT_COLUMNS.map((col) => {
+              const checked = selected.has(col.key);
+              return (
+                <label
+                  key={col.key}
+                  className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                    col.required ? "opacity-80" : "hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={col.required}
+                    onChange={() => toggleColumn(col.key, col.required)}
+                    className="rounded border-dark-lighter bg-dark text-primary focus:ring-primary focus:ring-offset-0"
+                  />
+                  <span className="text-[13px] text-white/85">{col.label}</span>
+                  {col.required && (
+                    <span className="ml-auto font-headline text-[9px] uppercase tracking-widest text-muted-light">
+                      Required
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-col gap-2 !items-stretch mt-4">
+            <a
+              role="menuitem"
+              href={`${base}?format=xlsx&columns=${columnsQuery}`}
+              onClick={() => setOpen(false)}
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-dark font-headline text-[13px] font-bold uppercase tracking-widest shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Excel workbook
+            </a>
+            <a
+              role="menuitem"
+              href={`${base}?format=pdf`}
+              onClick={() => setOpen(false)}
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-dark-lighter bg-transparent text-light font-headline text-[13px] font-bold uppercase tracking-widest hover:bg-dark-light hover:border-primary transition-colors"
+            >
+              <FileText className="w-4 h-4" /> PDF start list
+            </a>
+            <p className="text-[11px] text-muted-light text-center leading-snug pt-1">
+              Column choices apply to Excel. PDF uses the standard start-list layout.
+            </p>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+interface Registration {
+  id: string;
+  name: string;
+  email: string;
+  category: string | null;
+  waveId: string | null;
+  wave: string | null;
+  waveNotified: string | null;
+  bibNumber: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  estimatedFinishMinutes: number | null;
+  medicalNotes: string | null;
+  status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED";
+  amount: number;
+  refundAmountCents: number | null;
+  refundPercent: number | null;
+  refundRequestedAt: string | null;
+  refundOutsidePolicy: boolean;
+  createdAt: string;
+  resultDistance: string | null;
+  resultTime: string | null;
+  resultPlacement: string | null;
+  isPersonalBest: boolean;
+  isTopResult: boolean;
+}
+
+interface StartWave extends WaveDef {
+  sortOrder: number;
+  assigned: number;
+}
 
 interface PageData {
-  event: { id: string; title: string; startWaves: StartWave[]; feeStructure?: string };
+  event: { id: string; title: string; startWaves: StartWave[] };
   registrations: Registration[];
 }
 
@@ -59,6 +214,10 @@ const STATUS_LABEL: Record<Registration["status"], string> = {
 export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const id = eventId;
 
+  const [data, setData] = useState<PageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [editReg, setEditReg] = useState<Registration | null>(null);
   const [editWave, setEditWave] = useState("");
   const [editBib, setEditBib] = useState("");
@@ -78,32 +237,31 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const [savingResult, setSavingResult] = useState(false);
   const [resultError, setResultError] = useState("");
 
-  const [csvOpen, setCsvOpen] = useState(false);
-  const [csvText, setCsvText] = useState("");
-  const [csvUploading, setCsvUploading] = useState(false);
-  const [csvMessage, setCsvMessage] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
 
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifySaving, setNotifySaving] = useState(false);
   const [notifyMsg, setNotifyMsg] = useState("");
 
   // Splits the page into before-race setup (waves, bibs) and after-race results.
-  const [activeTab, setActiveTab] = useState<"setup" | "results" | "addons" | "refunds">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">("setup");
 
-  const fetchRegistrations = useCallback(async (signal: AbortSignal) => {
-    const response = await fetch(`/api/organiser/events/${id}/registrations`, { signal });
-    const json = await response.json();
-    if (!response.ok) throw new Error(json.error ?? "Failed to load");
-    return json as PageData;
+  const load = useCallback((opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    setError("");
+    fetch(`/api/organiser/events/${id}/registrations`)
+      .then(async (r) => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json.error ?? "Failed to load");
+        setData(json);
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  const {
-    data,
-    loading,
-    error,
-    reload: load,
-    setData,
-  } = useApiResource<PageData>(fetchRegistrations, { key: id });
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
+  useEffect(() => { load(); }, [load]);
 
   // Optimistically move athletes between waves, rolling back if the server rejects.
   // Organisers do this under time pressure on flaky venue wifi, so the UI must feel
@@ -141,7 +299,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         return { ok: false as const, error: "Move failed. Check your connection." };
       }
     },
-    [data, id, setData],
+    [data, id],
   );
 
   // Live preview of how the builder's waves would place confirmed athletes.
@@ -300,58 +458,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
       setResultError("Could not save this result. Check your connection.");
     } finally {
       setSavingResult(false);
-    }
-  };
-
-  const uploadCsv = async () => {
-    setCsvMessage("");
-    const { header, rows } = parseCsvTable(csvText);
-    if (header.length === 0 || rows.length === 0) {
-      setCsvMessage("Add a header row plus at least one result row.");
-      return;
-    }
-    const col = (name: string) => header.indexOf(name);
-    const emailCol = col("email");
-    if (emailCol === -1) {
-      setCsvMessage('CSV must include an "email" column.');
-      return;
-    }
-
-    const payload = rows.map((cells) => {
-      const boolVal = (i: number) => i !== -1 && /^(true|1|yes)$/i.test(cells[i] ?? "");
-      return {
-        athleteEmail: cells[emailCol],
-        // distance column ignored — division comes from registration.category
-        resultTime: col("time") !== -1 ? (cells[col("time")] || null) : undefined,
-        resultPlacement: col("placement") !== -1 ? (cells[col("placement")] || null) : undefined,
-        isPersonalBest: boolVal(col("ispersonalbest")),
-        isTopResult: boolVal(col("istopresult")),
-      };
-    });
-
-    setCsvUploading(true);
-    try {
-      const res = await fetch(`/api/organiser/events/${id}/results`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ results: payload }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setCsvMessage(json.error ?? "Upload failed.");
-        return;
-      }
-      setCsvMessage(
-        `Updated ${json.updated} result${json.updated === 1 ? "" : "s"}.` +
-        (json.unmatched?.length ? ` No athlete matched: ${json.unmatched.join(", ")}.` : "") +
-        (json.invalidTimes?.length
-          ? ` Skipped ${json.invalidTimes.length} row${json.invalidTimes.length === 1 ? "" : "s"} with an unreadable time: ` +
-            `${json.invalidTimes.map((t: { athlete: string; value: string }) => `${t.athlete} (${t.value})`).join(", ")}.`
-          : "")
-      );
-      load();
-    } finally {
-      setCsvUploading(false);
     }
   };
 
@@ -516,10 +622,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     .filter((r) => r.status === "REFUND_REQUESTED" || r.status === "REFUNDED")
     .sort((a, b) => Number(a.status !== "REFUND_REQUESTED") - Number(b.status !== "REFUND_REQUESTED"));
   const refundPending = registrations.filter((r) => r.status === "REFUND_REQUESTED").length;
-  const addOnRefundPending = registrations.reduce(
-    (sum, r) => sum + (r.addOns ?? []).filter((a) => a.status === "REFUND_REQUESTED").length,
-    0,
-  );
 
   const openNotify = () => { setNotifyMsg(""); setNotifyOpen(true); };
 
@@ -529,12 +631,10 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           {([
             { id: "setup", label: "Before race" },
             { id: "results", label: "After race" },
-            { id: "addons", label: "Add-ons" },
             { id: "refunds", label: "Refunds" },
           ] as const).map((t) => {
             const on = activeTab === t.id;
-            const badge =
-              t.id === "refunds" ? refundPending : t.id === "addons" ? addOnRefundPending : 0;
+            const badge = t.id === "refunds" ? refundPending : 0;
             return (
               <button
                 key={t.id}
@@ -609,15 +709,21 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
             )}
             {activeTab === "results" && (
               <Button
-                onClick={() => { setCsvMessage(""); setCsvText(""); setCsvOpen(true); }}
+                onClick={() => { setImportMessage(""); setImportOpen(true); }}
                 className="shadow-machined"
               >
-                <Upload className="w-4 h-4" /> Upload results CSV
+                <Upload className="w-4 h-4" /> Import results
               </Button>
             )}
             <ExportMenu eventId={id} />
           </div>
         </div>
+
+        {activeTab === "results" && importMessage && (
+          <p className="flex items-center gap-2 text-[13px] text-primary mb-4">
+            <CheckCircle2 className="w-4 h-4" /> {importMessage}
+          </p>
+        )}
 
         {activeTab === "setup" && assignMsg && !manageOpen && (
           <p className="text-[13px] text-muted-light mb-4">{assignMsg}</p>
@@ -703,15 +809,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           </Card>
         )}
 
-        {activeTab === "addons" && (
-          <AddOnsTab
-            eventId={id}
-            registrations={registrations}
-            feeStructure={data?.event?.feeStructure === "organiser" ? "organiser" : "athlete"}
-            onRefetch={() => load({ silent: true })}
-          />
-        )}
-
         {activeTab === "refunds" && (
           <>
             <Card className="mb-6">
@@ -791,23 +888,343 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           </>
         )}
 
-      <RaceDialogs
-        event={event}
-        edit={{
-          editReg, setEditReg, editWave, setEditWave, editBib, setEditBib, editNextBib,
-          editStatus, setEditStatus, editFinish, setEditFinish, savingEdit, editError, saveEdit,
-        }}
-        results={{
-          editingResult, setEditingResult, resultTime, setResultTime, resultPlacement,
-          setResultPlacement, savingResult, resultError, saveResult,
-        }}
-        csv={{ csvOpen, setCsvOpen, csvText, setCsvText, csvUploading, csvMessage, uploadCsv }}
-        notify={{ notifyOpen, setNotifyOpen, notifySaving, notifyMsg, pendingNotify, runNotifyWaves }}
-        waves={{
-          manageOpen, setManageOpen, builderWaves, assignPreview, addWave, updateWave, removeWave,
-          toggleWaveGender, assignMsg, assignSaving, saveAndAssign,
-        }}
-      />
+      {/* Edit athlete */}
+      <Dialog open={!!editReg} onOpenChange={(open) => { if (!open) setEditReg(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit: {editReg?.name}</DialogTitle>
+            <DialogDescription>
+              Update wave, bib number, or registration status.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="edit-wave" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
+                Start wave
+              </label>
+              <FormSelect
+                id="edit-wave"
+                value={editWave}
+                onChange={setEditWave}
+                options={[
+                  { value: "", label: "No wave" },
+                  ...event.startWaves.map((w) => ({
+                    value: w.label,
+                    label: w.startTime ? `${w.label} · ${w.startTime}` : w.label,
+                  })),
+                ]}
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-bib" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
+                Bib number
+              </label>
+              <input
+                id="edit-bib"
+                value={editBib}
+                onChange={(e) => setEditBib(e.target.value)}
+                placeholder="e.g. 42"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+              />
+              {editNextBib && editBib.trim() !== editNextBib && (
+                <button
+                  type="button"
+                  onClick={() => setEditBib(editNextBib)}
+                  className="mt-2 font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
+                >
+                  Assign next free bib (#{editNextBib})
+                </button>
+              )}
+            </div>
+            <div>
+              <label htmlFor="edit-finish" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
+                Estimated finish time
+              </label>
+              <input
+                id="edit-finish"
+                value={editFinish}
+                onChange={(e) => setEditFinish(e.target.value)}
+                placeholder="e.g. 0:45 or 3:30"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+              />
+              <p className="text-[12px] text-muted-dark mt-1.5">Used to seed start waves by pace. Leave blank if unknown.</p>
+            </div>
+            <div>
+              <label htmlFor="edit-status" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
+                Status
+              </label>
+              <FormSelect
+                id="edit-status"
+                value={editStatus}
+                onChange={(v) => setEditStatus(v as Registration["status"])}
+                options={[
+                  { value: "CONFIRMED", label: "Confirmed" },
+                  { value: "REFUND_REQUESTED", label: "Refund requested" },
+                  { value: "REFUNDED", label: "Refunded" },
+                  { value: "CANCELLED", label: "Cancelled" },
+                ]}
+              />
+            </div>
+            {editError && (
+              <p className="text-[13px] text-red-300">{editError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditReg(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={savingEdit}>
+              {savingEdit ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Result editor */}
+      <Dialog open={!!editingResult} onOpenChange={(open) => { if (!open) setEditingResult(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Race result: {editingResult?.name}</DialogTitle>
+            <DialogDescription>
+              Recorded results appear on this athlete&apos;s public profile.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Division</div>
+              <div className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-muted-light">
+                {editingResult?.category?.trim() || "No division on registration"}
+              </div>
+            </div>
+            <div>
+              <label htmlFor="result-time" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Time</label>
+              <input
+                id="result-time"
+                value={resultTime}
+                onChange={(e) => setResultTime(e.target.value)}
+                placeholder="e.g. 41:05"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="result-placement" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Placement</label>
+              <input
+                id="result-placement"
+                value={resultPlacement}
+                onChange={(e) => setResultPlacement(e.target.value)}
+                placeholder="e.g. 8th / 512"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+              />
+            </div>
+            {resultError && <p className="text-[13px] text-red-300">{resultError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditingResult(null)}>Cancel</Button>
+            <Button onClick={saveResult} disabled={savingResult}>
+              {savingResult ? "Saving…" : "Save result"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {importOpen && (
+        <ResultsImportDialog
+          eventId={id}
+          registrations={registrations}
+          onClose={() => setImportOpen(false)}
+          onImported={(count) => {
+            setImportOpen(false);
+            setImportMessage(`Updated ${count} result${count === 1 ? "" : "s"}.`);
+            load({ silent: true });
+          }}
+        />
+      )}
+
+      {/* Notify athletes of wave */}
+      <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Let athletes know their wave</DialogTitle>
+            <DialogDescription>
+              Sends each athlete their wave and start time, by app notification and email. Only people whose
+              wave changed since you last told them are messaged, so no one gets spammed by small edits.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {pendingNotify > 0 ? (
+              <p className="flex items-center gap-2 text-[13px] text-light bg-primary/10 border border-primary/20 rounded-lg px-3 py-2.5">
+                <Bell className="w-4 h-4 text-primary shrink-0" />
+                <span>
+                  <strong className="font-semibold text-primary">{pendingNotify} athlete{pendingNotify === 1 ? "" : "s"}</strong>{" "}
+                  {pendingNotify === 1 ? "has" : "have"} a new or changed wave and will be notified.
+                </span>
+              </p>
+            ) : (
+              <p className="flex items-center gap-2 text-[13px] text-muted-light bg-dark border border-dark-lighter rounded-lg px-3 py-2.5">
+                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                Everyone is up to date. There&apos;s nothing new to send right now.
+              </p>
+            )}
+            {notifyMsg && <p className="text-[13px] text-muted-light">{notifyMsg}</p>}
+          </div>
+          <DialogFooter>
+            {pendingNotify === 0 ? (
+              <Button onClick={() => setNotifyOpen(false)}>Done</Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => setNotifyOpen(false)}>Cancel</Button>
+                <Button onClick={runNotifyWaves} disabled={notifySaving} className="shadow-machined">
+                  {notifySaving
+                    ? "Sending…"
+                    : `Notify ${pendingNotify} athlete${pendingNotify === 1 ? "" : "s"}`}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Wave builder: create waves with conditions + capacity, then sort athletes in */}
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Build start waves</DialogTitle>
+            <DialogDescription>
+              Create your start waves and set each one&apos;s time, size, and who it&apos;s for. Save to sort
+              athletes in automatically. This is separate from the ticket tiers people bought.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1 space-y-3">
+            {builderWaves.length === 0 ? (
+              <div className="text-center py-10 px-4 rounded-xl border border-dashed border-dark-lighter">
+                <p className="font-headline text-[13px] font-bold text-light mb-1">No start waves yet</p>
+                <p className="text-[12.5px] text-muted-dark mb-4">Add a wave, set who it&apos;s for, then save to seed athletes in.</p>
+                <Button variant="outline" size="sm" onClick={addWave}>
+                  <Plus className="w-4 h-4" /> Add your first wave
+                </Button>
+              </div>
+            ) : builderWaves.map((w) => {
+              const count = assignPreview?.perWave[w.label] ?? 0;
+              return (
+                <div key={w.id} className="rounded-xl border border-dark-lighter bg-dark p-3.5">
+                  {/* Name / time / capacity / remove */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <input
+                      value={w.label}
+                      onChange={(e) => updateWave(w.id, { label: e.target.value })}
+                      placeholder="Wave name"
+                      aria-label={`Wave name for ${w.label || "new wave"}`}
+                      className="flex-1 min-w-0 bg-dark-light border border-dark-lighter rounded-lg px-2.5 py-2 text-[14px] font-headline font-bold text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                    />
+                    <div className="flex items-center gap-1.5" title="Start time">
+                      <Clock className="w-3.5 h-3.5 text-muted-dark shrink-0" />
+                      <input
+                        type="time"
+                        value={w.startTime ?? ""}
+                        onChange={(e) => updateWave(w.id, { startTime: e.target.value })}
+                        aria-label={`Start time for ${w.label || "new wave"}`}
+                        className="bg-dark-light border border-dark-lighter rounded-lg px-2 py-2 text-[13px] text-light focus:border-primary focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeWave(w.id)}
+                      className="shrink-0 p-2 text-muted-dark hover:text-red-400 transition-colors"
+                      aria-label={`Remove ${w.label || "wave"}`}
+                      title="Remove wave"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Conditions */}
+                  <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark mb-2">Who goes in this wave</p>
+                  <div className="grid sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label htmlFor={`${w.id}-finish-min`} className="text-[11px] text-muted-dark block mb-1">Finish time (mins)</label>
+                      <div className="flex items-center gap-1.5">
+                        <input type="number" min={0} value={w.finishMin ?? ""} placeholder="min"
+                          id={`${w.id}-finish-min`} aria-label={`Minimum finish minutes for ${w.label || "this wave"}`}
+                          onChange={(e) => updateWave(w.id, { finishMin: e.target.value === "" ? null : Number(e.target.value) })}
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
+                        <span className="text-muted-dark text-[12px]">-</span>
+                        <input type="number" min={0} value={w.finishMax ?? ""} placeholder="max"
+                          aria-label={`Maximum finish minutes for ${w.label || "this wave"}`}
+                          onChange={(e) => updateWave(w.id, { finishMax: e.target.value === "" ? null : Number(e.target.value) })}
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor={`${w.id}-age-min`} className="text-[11px] text-muted-dark block mb-1">Age</label>
+                      <div className="flex items-center gap-1.5">
+                        <input type="number" min={0} value={w.ageMin ?? ""} placeholder="min"
+                          id={`${w.id}-age-min`} aria-label={`Minimum age for ${w.label || "this wave"}`}
+                          onChange={(e) => updateWave(w.id, { ageMin: e.target.value === "" ? null : Number(e.target.value) })}
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
+                        <span className="text-muted-dark text-[12px]">-</span>
+                        <input type="number" min={0} value={w.ageMax ?? ""} placeholder="max"
+                          aria-label={`Maximum age for ${w.label || "this wave"}`}
+                          onChange={(e) => updateWave(w.id, { ageMax: e.target.value === "" ? null : Number(e.target.value) })}
+                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor={`${w.id}-capacity`} className="text-[11px] text-muted-dark block mb-1">Max athletes</label>
+                      <input type="number" min={0} value={w.capacity ?? ""} placeholder="Any"
+                        id={`${w.id}-capacity`} aria-label={`Maximum athletes in ${w.label || "this wave"}`}
+                        onChange={(e) => updateWave(w.id, { capacity: e.target.value === "" ? null : Number(e.target.value) })}
+                        className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
+                    </div>
+                  </div>
+
+                  {/* Gender + live count */}
+                  <div className="flex items-center justify-between gap-3 mt-2.5 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] text-muted-dark mr-0.5">Gender:</span>
+                      {GENDER_CHOICES.map((g) => {
+                        const on = (w.genders ?? []).includes(g);
+                        return (
+                          <button key={g} type="button" onClick={() => toggleWaveGender(w.id, g)}
+                            className={`px-2 py-1 rounded-md text-[11px] font-headline font-bold uppercase tracking-wide border transition-colors ${
+                              on ? "bg-primary/15 border-primary/40 text-primary" : "bg-dark-light border-dark-lighter text-muted-dark hover:text-light"
+                            }`}>
+                            {g}
+                          </button>
+                        );
+                      })}
+                      {(w.genders ?? []).length === 0 && <span className="text-[11px] text-muted-dark">any</span>}
+                    </div>
+                    <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                      <span className="text-primary font-black italic">{count}</span> athlete{count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {builderWaves.length > 0 && (
+              <button type="button" onClick={addWave}
+                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-dark-lighter py-2.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary hover:border-primary/40 transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Add another wave
+              </button>
+            )}
+          </div>
+
+          {assignPreview && builderWaves.length > 0 && assignPreview.unassigned > 0 && (
+            <p className="flex items-center gap-2 text-[12.5px] text-muted-light bg-dark border border-dark-lighter rounded-lg px-3 py-2 mt-1">
+              <AlertCircle className="w-4 h-4 text-amber-300 shrink-0" />
+              {assignPreview.unassigned} athlete{assignPreview.unassigned === 1 ? "" : "s"} match no wave and will stay unassigned.
+            </p>
+          )}
+          {assignMsg && <p className="text-[13px] text-muted-light mt-1">{assignMsg}</p>}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setManageOpen(false)}>Close</Button>
+            <Button onClick={saveAndAssign} disabled={assignSaving || builderWaves.length === 0} className="shadow-machined">
+              {assignSaving ? "Saving…" : "Save & sort athletes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

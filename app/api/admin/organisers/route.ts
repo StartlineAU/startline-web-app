@@ -21,7 +21,6 @@ export async function GET() {
         status:                   true,
         verified:                 true,
         stripeOnboardingComplete: true,
-        insuranceDeclared:        true,
         createdAt:                true,
         _count: {
           select: { events: true, reviews: true, registrations: true, members: true },

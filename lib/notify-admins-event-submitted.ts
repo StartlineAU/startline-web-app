@@ -1,50 +1,32 @@
 import prisma from "@/lib/prisma";
 import { sendEventSubmittedForReviewEmails } from "@/lib/email";
 import { approvalBlocker } from "@/lib/event-approval";
-
-// RFC 2606 / 6761 names that can never receive mail. The seed creates its
-// admins on @startline.test, and staging's database holds them, so sending to
-// every admin row there would bounce and hurt the sender's reputation.
-const UNDELIVERABLE_TLDS = [".test", ".example", ".invalid", ".localhost"];
-
-/** Deliverable, de-duplicated admin addresses. */
-export function adminReviewRecipients(emails: (string | null | undefined)[]): string[] {
-  const seen = new Set<string>();
-  for (const raw of emails) {
-    const email = raw?.trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
-    if (UNDELIVERABLE_TLDS.some((tld) => email.endsWith(tld))) continue;
-    seen.add(email);
-  }
-  return [...seen];
-}
+import { listAdminReviewRecipients } from "@/lib/admin-notification-recipients";
 
 /**
  * Email every platform admin that an organiser's event is waiting for review
  * (issue #321). Call only on a transition into PENDING from the organiser side.
  *
- * Recipients are the Admin rows, which exist for everyone in the Cognito
- * `admins` group who has signed in to the admin portal, so a new team member
- * starts receiving these once they have logged in once.
+ * Recipients come from the Cognito `admins` group at send time (issue #337),
+ * not the Admin table, which only has rows for admins who have signed in to
+ * the admin portal at least once.
  */
 export async function notifyAdminsEventSubmitted(eventId: string): Promise<{ emailed: number }> {
-  const [event, admins] = await Promise.all([
-    prisma.event.findUnique({
-      where:  { id: eventId },
-      select: {
-        id: true, title: true, status: true, eventDate: true, city: true, state: true,
-        discipline: true, registrationType: true,
-        organiser: {
-          select: { orgName: true, contactName: true, email: true, abn: true, stripeOnboardingComplete: true },
-        },
+  const event = await prisma.event.findUnique({
+    where:  { id: eventId },
+    select: {
+      id: true, title: true, status: true, eventDate: true, city: true, state: true,
+      discipline: true, registrationType: true, waves: true,
+      organiser: {
+        select: { orgName: true, contactName: true, email: true, abn: true, stripeOnboardingComplete: true },
       },
-    }),
-    prisma.admin.findMany({ select: { email: true } }),
-  ]);
+    },
+  });
 
+  // Don't pay for a Cognito call when there is nothing to announce.
   if (!event || event.status !== "PENDING") return { emailed: 0 };
 
-  const recipients = adminReviewRecipients(admins.map((a) => a.email));
+  const recipients = await listAdminReviewRecipients();
   if (recipients.length === 0) return { emailed: 0 };
 
   await sendEventSubmittedForReviewEmails(recipients, {

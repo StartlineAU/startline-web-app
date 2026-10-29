@@ -3,9 +3,9 @@ import { archivePastEvents } from "@/lib/archive-events";
 import { getOrganiserRatings } from "@/lib/reviews";
 import { lowestPrice, normaliseInformationPdfs, type PublicEvent, type PublicWave } from "./event-types";
 
-export async function getAllEvents() {
+export async function getAllEvents({ archivePast = true }: { archivePast?: boolean } = {}) {
   try {
-    await archivePastEvents();
+    if (archivePast) await archivePastEvents();
     const events = await prisma.event.findMany({
       where: { status: "APPROVED" },
       orderBy: { eventDate: "asc" },
@@ -104,6 +104,36 @@ const publicEventSelect = {
     select: { registrations: true },
   },
 } as const;
+
+/**
+ * Public events by id, for surfaces that need a specific handful (the saved and
+ * registered tabs) rather than the event catalogue. Bounded by the caller so a
+ * request cannot turn into a catalogue download again.
+ */
+export async function getPublicEventsByIds(ids: string[]): Promise<PublicEvent[]> {
+  if (ids.length === 0) return [];
+
+  try {
+    const events = await prisma.event.findMany({
+      where: { id: { in: ids }, status: "APPROVED" },
+      orderBy: { eventDate: "asc" },
+      select: publicEventSelect,
+    });
+
+    const ratings = await getOrganiserRatings(events.map((e) => e.organiserId));
+    return events.map((e) => ({
+      ...e,
+      informationPdfs: normaliseInformationPdfs(e.informationPdfs),
+      fromPrice: lowestPrice(e.waves),
+      registrationCount: e._count.registrations,
+      organiser: e.organiser
+        ? { ...e.organiser, rating: ratings.get(e.organiserId) ?? null }
+        : e.organiser,
+    })) as PublicEvent[];
+  } catch {
+    return [];
+  }
+}
 
 /** Single public event by id or slug — live or archived (past) listings. */
 export async function getPublicEventById(id: string): Promise<PublicEvent | null> {

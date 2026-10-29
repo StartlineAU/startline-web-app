@@ -352,38 +352,14 @@ export function validateRegistrationForm(data: RegistrationFormData): string | n
   return validateParticipants([data]).firstMessage;
 }
 
-export function normalizeGuestEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-export function getEmailsRequiringVerification(
-  participantEmails: string[],
-  authenticatedEmail?: string | null
-): string[] {
-  const unique = [...new Set(
-    participantEmails
-      .map(normalizeGuestEmail)
-      .filter((email) => email.length > 0)
-  )];
-
-  if (!authenticatedEmail) return unique;
-
-  const accountEmail = normalizeGuestEmail(authenticatedEmail);
-  return unique.filter((email) => email !== accountEmail);
-}
-
 /**
  * For each slot in `nextWaves`, the index of the previous ticket it inherits
  * from, or null for a brand-new slot. Tier first, then positionally through
  * whatever is left over.
  *
  * This is the one rule deciding which previous ticket becomes which new one,
- * and it exists as its own function because more than one thing hangs off a
- * ticket. The buyer's details follow this mapping, and so do the add-ons they
- * chose. Working it out twice, or applying it to details while leaving extras
- * pinned to their old position, puts one participant's shirt size on a
- * different participant - which is the whole point of choosing sizes per
- * person.
+ * and it exists as its own function so the buyer's details cannot drift from
+ * the ticket they belong to when a ticket is added or removed.
  */
 export function matchPreviousTickets(
   prevCount: number,

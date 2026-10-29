@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, use, useCallback, Suspense } from "react";
+import { useState, useEffect, use, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
   MapPin, Calendar, ChevronRight, ChevronDown, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
+  Download, ImageDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,14 +20,14 @@ import RaceManagementPanel from "@/components/organiser/RaceManagementPanel";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { buildCheckInQrImage, checkInQrImageFilename } from "@/lib/check-in-qr-image";
 import { stripHtml } from "@/lib/utils";
-import { useApiResource } from "@/hooks/useApiResource";
 
 interface Wave { label: string; price: string; qty?: number; sold?: number }
 
 interface DashboardData {
   event: {
-    id: string; title: string; discipline: string;
+    id: string; title: string; organiserName?: string | null; discipline: string;
     eventDate: string; endDate?: string | null;
     startTime: string; endTime: string;
     venue: string; city: string; state: string;
@@ -127,19 +128,9 @@ function EventDashboardInner({
 
   const setManagePanel = (on: boolean) => setPanel(on ? "manage" : null);
 
-  const fetchDashboard = useCallback(async (signal: AbortSignal) => {
-    const response = await fetch(`/api/organiser/events/${id}/dashboard`, { signal });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? "Failed to load");
-    return payload as DashboardData;
-  }, [id]);
-
-  const {
-    data,
-    loading,
-    error,
-    setData,
-  } = useApiResource<DashboardData>(fetchDashboard, { key: id });
+  const [data,    setData]    = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
 
   const [annTitle,    setAnnTitle]      = useState("");
   const [annBody,     setAnnBody]       = useState("");
@@ -158,11 +149,14 @@ function EventDashboardInner({
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError,   setQrError]   = useState("");
   const [copied,    setCopied]    = useState(false);
+  const [imageDownloading, setImageDownloading] = useState(false);
+  const [downloadError,    setDownloadError]    = useState("");
 
   const openCheckInQr = async () => {
     setQrOpen(true);
     setQrLoading(true);
     setQrError("");
+    setDownloadError("");
     setQr(null);
     try {
       const res = await fetch(`/api/organiser/events/${id}/check-in-qr`, { method: "POST" });
@@ -184,6 +178,39 @@ function EventDashboardInner({
       setTimeout(() => setCopied(false), 2000);
     } catch { /* clipboard unavailable */ }
   };
+
+  const downloadQrImage = async () => {
+    if (!qr) return;
+    setImageDownloading(true);
+    setDownloadError("");
+    try {
+      const blob = await buildCheckInQrImage({
+        qrDataUrl: qr.qrDataUrl,
+        eventTitle: data?.event.title ?? "Event",
+        organiserName: data?.event.organiserName,
+      });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = checkInQrImageFilename(data?.event.title ?? "event");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+    } catch {
+      setDownloadError("Could not create the QR image. Please try again.");
+    } finally {
+      setImageDownloading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetch(`/api/organiser/events/${id}/dashboard`)
+      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error ?? "Failed to load")))
+      .then((d: DashboardData) => setData(d))
+      .catch((e: string) => setError(e))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   // Clear the announcement draft when the panel closes. Adjusting state during
   // render (rather than in an effect) keeps this to a single render pass — the
@@ -491,7 +518,18 @@ function EventDashboardInner({
                         <Megaphone className="w-5 h-5 text-muted-dark" />
                       </div>
                       <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-1">No announcements yet</div>
-                      <div className="text-[13px] text-muted-dark">Use New announcement to notify registered athletes.</div>
+                      <div className="text-[13px] text-muted-dark">Post one to notify registered athletes.</div>
+                      {!announcePanel && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="mt-4"
+                          onClick={() => setPanel("announce")}
+                        >
+                          <Plus className="w-4 h-4" /> New announcement
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -719,7 +757,7 @@ function EventDashboardInner({
               <DialogTitle>Check-in QR</DialogTitle>
             </div>
             <DialogDescription>
-              Display this QR on a screen or print it at the gate. Athletes scan it with their phone camera to check themselves in.
+              Display this QR on a screen or print the A4 poster at the gate. Athletes scan it with their phone camera to check themselves in.
             </DialogDescription>
           </DialogHeader>
 
@@ -749,6 +787,32 @@ function EventDashboardInner({
                   {copied ? <CheckCheck className="w-4 h-4" /> : "Copy"}
                 </Button>
               </div>
+              <div className="mt-4 grid w-full gap-2 sm:grid-cols-2">
+                <Button variant="outline" asChild>
+                  <a
+                    href={`/api/organiser/events/${id}/check-in-qr/pdf`}
+                    download
+                  >
+                    <Download className="w-4 h-4" /> Download A4 PDF
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={downloadQrImage}
+                  disabled={imageDownloading}
+                >
+                  {imageDownloading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <ImageDown className="w-4 h-4" />}
+                  {imageDownloading ? "Preparing…" : "Download QR image"}
+                </Button>
+              </div>
+              {downloadError && (
+                <div className="mt-3 w-full px-3 py-2 bg-red-400/10 border border-red-400/20 rounded-lg text-[12px] text-red-300">
+                  {downloadError}
+                </div>
+              )}
               <div className="mt-4 w-full text-center font-headline text-[11px] uppercase tracking-widest text-muted">
                 {event.checkedInCount} of {event.registrationCount} checked in
               </div>

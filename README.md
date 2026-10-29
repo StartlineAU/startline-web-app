@@ -14,7 +14,7 @@ Startline helps performance-driven fitness individuals discover competitive even
 - **Email**: Resend (transactional) + Mailpit (local dev)
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Hosting**: AWS Amplify
-- **Infrastructure**: Terraform
+- **Infrastructure**: Terraform ([`StartlineAU/startline-infra`](https://github.com/StartlineAU/startline-infra))
 
 ## Architecture
 
@@ -78,13 +78,21 @@ Open [http://localhost:3000](http://localhost:3000) to view the site.
 
 Secrets are stored in AWS Secrets Manager and loaded via direnv (`.envrc` is gitignored, managed locally):
 
-- `startline/ci-bootstrap` — CI/CD bootstrap secrets (API keys for Cloudflare, Resend, Amplify)
+- `startline/automation` — Trusted CI/Terraform credentials (Cloudflare, Neon, Amplify, DigitalOcean tokens). Read only by workflows on protected branches, never by a PR.
 - `startline/staging/app` — Staging env vars (Cognito IDs, Stripe test keys, S3 creds, etc.)
 - `startline/prod/app` — Prod env vars (live values)
+- `startline/docs` — Outline documentation server only
 
 No `.env` file in the repo. See `AGENTS.md` for local setup details.
 
 **Rotating a key:** Update the secret in AWS Secrets Manager, trigger an Amplify rebuild, done. No code changes.
+
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for supported versions and how to report a
+vulnerability. Report privately through
+[GitHub security advisories](https://github.com/StartlineAU/startline-web-app/security/advisories/new)
+or `admin@startlineau.com` — never in a public issue.
 
 ## License
 

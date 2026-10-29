@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Send, RefreshCw, CheckCircle, Clock } from "lucide-react";
-import { useApiResource } from "@/hooks/useApiResource";
+import { useState, useEffect, useCallback, startTransition } from "react";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Link2,
+  RefreshCw,
+  RotateCcw,
+  Send,
+} from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +20,18 @@ interface PayoutEvent {
   endDate: string | null;
   organiser: { id: string; orgName: string | null };
   netCents: number;
+}
+
+interface PayoutAttention {
+  eventId: string;
+  title: string;
+  eventDate: string;
+  endDate: string | null;
+  organiser: { id: string; orgName: string | null };
+  netCents: number;
+  status: "SUBMITTING" | "NEEDS_RECONCILIATION";
+  lastError: string | null;
+  updatedAt: string;
 }
 
 const formatAud = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -26,30 +45,42 @@ function formatDate(iso: string) {
 }
 
 export default function AdminPayoutsPage() {
+  const [events, setEvents] = useState<PayoutEvent[]>([]);
+  const [attention, setAttention] = useState<PayoutAttention[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [running, setRunning] = useState<string | null>(null);
+  const [reconciling, setReconciling] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
-  const [actionError, setActionError] = useState("");
+  const [payoutIds, setPayoutIds] = useState<Record<string, string>>({});
 
-  const fetchPayouts = useCallback(async (signal: AbortSignal) => {
-    const response = await fetch("/api/admin/payouts", { signal });
-    const data = await response.json() as { events: PayoutEvent[]; error?: string };
-    if (!response.ok) throw new Error(data.error ?? "Failed to load payouts.");
-    return data.events;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/payouts");
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error ?? "Failed to load payouts.");
+      }
+      const data = await res.json() as {
+        events: PayoutEvent[];
+        attention?: PayoutAttention[];
+      };
+      setEvents(data.events);
+      setAttention(data.attention ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load payouts.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const {
-    data: eventsData,
-    loading,
-    error: loadError,
-    reload: load,
-    setData: setEvents,
-  } = useApiResource<PayoutEvent[]>(fetchPayouts);
-  const events = eventsData ?? [];
-  const error = loadError ?? actionError;
+  useEffect(() => { startTransition(() => { load(); }); }, [load]);
 
   const runPayout = async (eventId: string) => {
     setRunning(eventId);
-    setActionError("");
+    setError("");
     try {
       const res = await fetch("/api/admin/payouts", {
         method: "POST",
@@ -61,12 +92,53 @@ export default function AdminPayoutsPage() {
         throw new Error(data.error ?? "Payout failed.");
       }
       setDone((prev) => [...prev, eventId]);
-      setEvents((prev) => (prev ?? []).filter((event) => event.id !== eventId));
+      setEvents((prev) => prev.filter((event) => event.id !== eventId));
+      await load();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Payout failed.");
+      setError(err instanceof Error ? err.message : "Payout failed.");
     } finally {
       setRunning(null);
     }
+  };
+
+  const reconcile = async (
+    eventId: string,
+    resolution: "link" | "no_payout",
+    stripePayoutId?: string,
+  ) => {
+    setReconciling(eventId);
+    setError("");
+    try {
+      const body = resolution === "link"
+        ? { eventId, resolution, stripePayoutId }
+        : { eventId, resolution, confirm: true };
+      const res = await fetch("/api/admin/payouts/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        throw new Error(data.error ?? "Could not reconcile the payout.");
+      }
+      setPayoutIds((prev) => {
+        const next = { ...prev };
+        delete next[eventId];
+        return next;
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reconcile the payout.");
+    } finally {
+      setReconciling(null);
+    }
+  };
+
+  const confirmNoPayout = (event: PayoutAttention) => {
+    const confirmed = window.confirm(
+      `Only confirm this after checking ${event.organiser.orgName ?? "the organiser"}'s Stripe account and seeing no ${formatAud(event.netCents)} payout. The event will be available to pay out again.`,
+    );
+    if (confirmed) void reconcile(event.eventId, "no_payout");
   };
 
   return (
@@ -86,13 +158,83 @@ export default function AdminPayoutsPage() {
         </div>
       )}
 
+      {attention.length > 0 && (
+        <div className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/[0.06]">
+          <div className="flex items-center gap-2 border-b border-amber-400/20 px-5 py-4">
+            <AlertTriangle className="w-4 h-4 text-amber-300" />
+            <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-amber-200">
+              Needs attention
+            </span>
+          </div>
+          <ul className="divide-y divide-amber-400/10">
+            {attention.map((event) => (
+              <li key={event.eventId} className="px-5 py-4">
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                  <p className="font-headline text-[15px] font-black italic tracking-tighter text-light">
+                    {event.title}
+                  </p>
+                  <span className="font-headline text-[13px] font-black text-amber-200">
+                    {formatAud(event.netCents)}
+                  </span>
+                </div>
+                <p className="font-headline text-[11px] uppercase tracking-widest text-muted mt-0.5">
+                  {event.organiser.orgName ?? "Organiser"} · {event.status === "SUBMITTING"
+                    ? "request in progress or interrupted"
+                    : "reconciliation required"}
+                </p>
+                {event.lastError && (
+                  <p className="font-headline text-[11px] text-amber-200/80 mt-2">
+                    {event.lastError}
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    aria-label={`Stripe payout ID for ${event.title}`}
+                    value={payoutIds[event.eventId] ?? ""}
+                    onChange={(e) => setPayoutIds((prev) => ({
+                      ...prev,
+                      [event.eventId]: e.target.value,
+                    }))}
+                    placeholder="Stripe payout ID (po_…)"
+                    className="w-56 rounded border border-white/[0.12] bg-[#0b0b0b] px-3 py-2 font-headline text-[12px] text-light placeholder:text-muted focus:border-primary focus:outline-none"
+                  />
+                  <button
+                    onClick={() => void reconcile(
+                      event.eventId,
+                      "link",
+                      payoutIds[event.eventId]?.trim(),
+                    )}
+                    disabled={
+                      reconciling === event.eventId
+                      || !payoutIds[event.eventId]?.trim()
+                    }
+                    className="inline-flex items-center gap-1.5 rounded border border-primary/60 px-3 py-2 font-headline text-[11px] font-bold uppercase tracking-widest text-primary disabled:opacity-50"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    {reconciling === event.eventId ? "Saving…" : "Link payout"}
+                  </button>
+                  <button
+                    onClick={() => confirmNoPayout(event)}
+                    disabled={reconciling === event.eventId}
+                    className="inline-flex items-center gap-1.5 rounded px-3 py-2 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    No payout — retry
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="rounded-lg border border-white/[0.06] bg-[#111]">
         <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
           <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-light">
             Ready to pay out
           </span>
           <button
-            onClick={() => void load()}
+            onClick={load}
             className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />

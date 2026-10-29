@@ -8,6 +8,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, KeyRound } from "lucide-react";
 import { resetPassword, confirmResetPassword } from "aws-amplify/auth";
 import { mapResetPasswordError } from "@/lib/auth-errors";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
+import { resolveSignInUsername } from "@/lib/sign-in-username";
 import PasswordRequirements from "@/components/PasswordRequirements";
 
 type Step = "request" | "confirm";
@@ -17,6 +18,7 @@ function ForgotPasswordForm() {
   const searchParams = useSearchParams();
   const [step,        setStep]        = useState<Step>("request");
   const [email,       setEmail]       = useState(searchParams.get("email") ?? "");
+  const [signInUsername, setSignInUsername] = useState("");
   const [code,        setCode]        = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm,     setConfirm]     = useState("");
@@ -30,7 +32,9 @@ function ForgotPasswordForm() {
     setError("");
     setLoading(true);
     try {
-      await resetPassword({ username: email });
+      const username = await resolveSignInUsername(email);
+      setSignInUsername(username);
+      await resetPassword({ username });
       setStep("confirm");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
@@ -55,7 +59,7 @@ function ForgotPasswordForm() {
     setLoading(true);
     try {
       await confirmResetPassword({
-        username:        email,
+        username:        signInUsername || email,
         confirmationCode: code.trim(),
         newPassword,
       });

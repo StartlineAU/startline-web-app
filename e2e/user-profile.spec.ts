@@ -1,4 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureDatabaseUrl } from "./helpers";
+
+ensureDatabaseUrl();
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 const BYPASS_COOKIE = { name: "__e2e_bypass", value: "1", domain: "localhost", path: "/", sameSite: "Lax" as const };
 
@@ -7,7 +16,7 @@ const BYPASS_COOKIE = { name: "__e2e_bypass", value: "1", domain: "localhost", p
 const COASTAL_ORG = "Coastal Fitness Collective";
 
 async function coastalOrganiserId(page: import("@playwright/test").Page): Promise<string> {
-  const events = await (await page.request.get("/api/events")).json();
+  const { events } = await (await page.request.get("/api/events")).json();
   const event = events.find((e: { organizer?: string; organiser?: { orgName?: string } }) =>
     e.organizer === COASTAL_ORG || e.organiser?.orgName === COASTAL_ORG
   );
@@ -37,6 +46,43 @@ test.describe("public profile", () => {
     await expect(page.getByRole("button", { name: /edit profile/i })).toHaveCount(0);
     // Public view must not use the old "Events Attended" list layout
     await expect(page.getByText(/events attended/i)).toHaveCount(0);
+  });
+});
+
+// An account that never picked a handle used to get an empty heading beside
+// the avatar. It runs on a row of its own (the "profile" bypass identity, and a
+// user this spec creates), not a shared seed user: the admin user-edit spec
+// renames Harper Jones, so mutating that row here raced it.
+test.describe("user profile: heading without a handle", () => {
+  const EMAIL = "profile.test@startline.test";
+
+  test.beforeAll(async () => {
+    await prisma.user.upsert({
+      where: { email: EMAIL },
+      update: { cognitoSub: "dev-bypass-profile-test", username: null, name: null },
+      create: { cognitoSub: "dev-bypass-profile-test", email: EMAIL, username: null, name: null },
+    });
+  });
+
+  test.afterAll(async () => {
+    await prisma.user.deleteMany({ where: { email: EMAIL } });
+    await prisma.$disconnect();
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([{ ...BYPASS_COOKIE, value: "profile" }]);
+  });
+
+  test("falls back to the account name", async ({ page }) => {
+    await prisma.user.update({ where: { email: EMAIL }, data: { name: "Profile Test Athlete" } });
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "Profile Test Athlete", exact: true })).toBeVisible();
+  });
+
+  test("falls back to the email prefix when there is no name either", async ({ page }) => {
+    await prisma.user.update({ where: { email: EMAIL }, data: { name: null } });
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { level: 1, name: "profile.test", exact: true })).toBeVisible();
   });
 });
 
@@ -79,7 +125,11 @@ test.describe("user profile: race history", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(/profile photo/i)).toBeVisible();
     await expect(dialog.getByText(/^Public profile$/).first()).toBeVisible();
-    await expect(dialog.getByText(/private details/i)).toBeVisible();
+    await expect(dialog.getByText(/user id/i)).toHaveCount(0);
+    await expect(dialog.getByText(/location/i)).toHaveCount(0);
+    // Private details have their own section, apart from the public profile.
+    await expect(dialog.getByLabel(/full name/i)).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Personal details" }).click();
     await expect(dialog.getByText(/prefill your own event registrations/i)).toBeVisible();
     await expect(dialog.getByLabel(/full name/i)).toBeVisible();
     await expect(dialog.getByLabel(/^phone$/i)).toBeVisible();
@@ -87,12 +137,14 @@ test.describe("user profile: race history", () => {
     await expect(dialog.getByLabel(/^gender$/i)).toBeVisible();
     await expect(dialog.getByLabel(/emergency contact name/i)).toBeVisible();
     await expect(dialog.getByLabel(/emergency contact phone/i)).toBeVisible();
-    await expect(dialog.getByText(/user id/i)).toHaveCount(0);
-    await expect(dialog.getByText(/location/i)).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Profile", exact: true }).click();
 
     await dialog.getByPlaceholder("A short line about you as an athlete").fill("#testing");
     await dialog.getByRole("button", { name: /^save$/i }).click();
-    await expect(dialog).toBeHidden({ timeout: 10000 });
+    // The settings menu stays open after a save and says so.
+    await expect(dialog.getByText("Saved")).toBeVisible({ timeout: 10000 });
+    await dialog.getByRole("button", { name: "Close settings" }).click();
+    await expect(dialog).toBeHidden();
     await expect(page.getByText("#testing").last()).toBeVisible();
   });
 

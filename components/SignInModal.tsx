@@ -7,12 +7,15 @@ import Link from "next/link";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import Image from "next/image";
-import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, ChevronDown, Check, AtSign, ShieldAlert } from "lucide-react";
+import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, Check, AtSign, ShieldAlert } from "lucide-react";
 import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
+import { resolveSignInUsername } from "@/lib/sign-in-username";
+import { calcAge, MIN_AGE } from "@/lib/age";
 import PasswordRequirements from "@/components/PasswordRequirements";
+import SocialSignInButtons from "@/components/SocialSignInButtons";
 
 type View = "signin" | "signup" | "onboarding" | "username" | "mfa";
 
@@ -20,15 +23,6 @@ interface SignInModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-}
-
-function calcAge(dobStr: string): number {
-  const dob   = new Date(dobStr);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-  return age;
 }
 
 function totpUri(details: unknown): string | null {
@@ -41,7 +35,10 @@ function totpUri(details: unknown): string | null {
 
 export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalProps) {
   // The modal also opens on the organiser portal, where /contact does not exist.
-  const contactHref = customerHref("/contact", usePortalHost());
+  const portalHost  = usePortalHost();
+  const contactHref = customerHref("/contact", portalHost);
+  const termsHref   = customerHref("/terms", portalHost);
+  const privacyHref = customerHref("/privacy", portalHost);
   const router      = useRouter();
   const { refresh } = useAuthContext();
 
@@ -54,8 +51,6 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [dobYear,         setDobYear]         = useState("");
 
   const [acceptedTerms,   setAcceptedTerms]   = useState(false);
-  const [showTerms,       setShowTerms]       = useState(false);
-  const [showPrivacy,     setShowPrivacy]     = useState(false);
   const [password,        setPassword]        = useState("");
   const [confirm,         setConfirm]         = useState("");
   const [pwFocused,       setPwFocused]       = useState(false);
@@ -69,6 +64,9 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [checkingEmail,   setCheckingEmail]   = useState(false);
   const [userExists,      setUserExists]      = useState<boolean | null>(null);
   const [userStatus,      setUserStatus]      = useState<string | null>(null);
+  // Cognito's username for a password sign-in. Usually the email; a Google or
+  // Apple profile keeps its provider-generated username after a password is set.
+  const [signInUsername,  setSignInUsername]  = useState("");
   const [resetCode,       setResetCode]       = useState("");
   const [newPassword,     setNewPassword]     = useState("");
   const [newPwConfirm,    setNewPwConfirm]    = useState("");
@@ -96,11 +94,11 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setView("signin");
       setEmail(""); setFirstName(""); setLastName("");
       setDobDay(""); setDobMonth(""); setDobYear("");
-      setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
+      setAcceptedTerms(false);
       setPassword(""); setConfirm("");
       setError(""); setShowPw(false); setPwFocused(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
-      setCheckingEmail(false); setUserExists(null); setUserStatus(null);
+      setCheckingEmail(false); setUserExists(null); setUserStatus(null); setSignInUsername("");
       setResetCode(""); setNewPassword(""); setNewPwConfirm("");
       setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
       setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
@@ -145,13 +143,16 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       if (!data.exists) {
         setUserExists(false);
         setUserStatus(null);
+        setSignInUsername("");
       } else {
         setUserExists(true);
         setUserStatus(data.status === "UNCONFIRMED" ? "CONFIRMED" : data.status);
+        setSignInUsername(await resolveSignInUsername(email));
       }
     } catch {
       setUserExists(true);
       setUserStatus("CONFIRMED");
+      setSignInUsername(email);
     } finally {
       setCheckingEmail(false);
     }
@@ -164,7 +165,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setLoading(true);
     try {
       await signOut({ global: false }).catch(() => {});
-      const result = await signIn({ username: email, password });
+      const result = await signIn({ username: signInUsername || email, password });
 
       if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
         onClose(); router.push("/auth/verify-email?email=" + encodeURIComponent(email)); return;
@@ -337,7 +338,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setError("");
     setLoading(true);
     try {
-      await resetPassword({ username: email });
+      await resetPassword({ username: signInUsername || email });
       setResetSent(true);
       setNewPwStep("sent");
     } catch (err: unknown) {
@@ -360,7 +361,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setLoading(true);
     try {
       await confirmResetPassword({
-        username: email,
+        username: signInUsername || email,
         confirmationCode: resetCode,
         newPassword,
       });
@@ -369,7 +370,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setError("");
       try {
         await signOut({ global: false }).catch(() => {});
-        const result = await signIn({ username: email, password: newPassword });
+        const result = await signIn({ username: signInUsername || email, password: newPassword });
         if (result.nextStep.signInStep === "DONE") {
           await fetch("/api/user/auth/session", { method: "POST" });
           await refresh();
@@ -408,7 +409,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     if (!isPasswordValid(password)) { setError("Password must be " + PASSWORD_POLICY_SUMMARY); return; }
     if (password !== confirm) { setError("Passwords do not match."); return; }
     setFirstName(""); setLastName(""); setDobDay(""); setDobMonth(""); setDobYear("");
-    setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
+    setAcceptedTerms(false);
     setView("onboarding");
   };
 
@@ -435,10 +436,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     }
 
     const age = calcAge(isoDate);
-    if (age < 13)  { setError("You must be at least 13 years old to create an account."); return; }
-    if (age > 120) { setError("Please enter a valid date of birth."); return; }
+    if (age === null || age > 120) { setError("Please enter a valid date of birth."); return; }
+    if (age < MIN_AGE) { setError(`You must be ${MIN_AGE} or older to create an account. A parent or guardian can enter you into events.`); return; }
 
-    if (!acceptedTerms) { setError("You must accept the Terms & Conditions and Privacy Policy to continue."); return; }
+    if (!acceptedTerms) { setError("Please agree to the Terms of Service to continue."); return; }
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
 
@@ -464,6 +465,13 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("UsernameExistsException")) {
         setError("An account with that email already exists.");
+      } else if (msg.includes("STARTLINE_FEDERATED_ACCOUNT")) {
+        // Refused by the pre sign-up trigger in startline-infra.
+        setError("This email already signs in with Google or Apple. Use that button on the Sign In tab.");
+      } else if (msg.includes("STARTLINE_LOOKUP_FAILED")) {
+        // The trigger could not check for an existing account, so it refused
+        // rather than risk creating a second one.
+        setError("We couldn't check your account just now. Please try again in a moment.");
       } else if (msg.includes("InvalidPasswordException")) {
         setError("Password must be " + PASSWORD_POLICY_SUMMARY);
       } else {
@@ -496,6 +504,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const goBackToEmail = () => {
     setUserExists(null);
     setUserStatus(null);
+    setSignInUsername("");
     setPassword("");
     setError("");
     setPwFocused(false);
@@ -560,6 +569,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
             </div>
 
             {error && <div className={errCls}>{error}</div>}
+
+            <div className="mb-4">
+              <SocialSignInButtons termsHref={termsHref} privacyHref={privacyHref} />
+            </div>
 
             <form onSubmit={handleCheckEmail} className="space-y-4">
               <div>
@@ -830,6 +843,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
 
             {error && <div className={errCls}>{error}</div>}
 
+            <div className="mb-4">
+              <SocialSignInButtons termsHref={termsHref} privacyHref={privacyHref} />
+            </div>
+
             <form onSubmit={handleSignUp} className="space-y-3">
               <div>
                 <label htmlFor="signup-email" className={labelCls}>Email</label>
@@ -973,41 +990,15 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                   </div>
                   <span className="font-headline text-[11px] uppercase tracking-widest text-muted leading-relaxed">
                     I agree to the{" "}
-                    <button type="button" onClick={(e) => { e.preventDefault(); setShowTerms(s => !s); setShowPrivacy(false); }} className="text-primary hover:underline">
-                      Terms &amp; Conditions
-                    </button>
-                    {" "}and{" "}
-                    <button type="button" onClick={(e) => { e.preventDefault(); setShowPrivacy(s => !s); setShowTerms(false); }} className="text-primary hover:underline">
+                    <a href={termsHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Terms of Service
+                    </a>
+                    {" "}and have read the{" "}
+                    <a href={privacyHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                       Privacy Policy
-                    </button>
+                    </a>
                   </span>
                 </label>
-
-                {showTerms && (
-                  <div className="rounded-lg border border-dark-lighter bg-dark overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Terms &amp; Conditions</span>
-                      <button type="button" onClick={() => setShowTerms(false)}><ChevronDown className="w-4 h-4 text-muted rotate-180" /></button>
-                    </div>
-                    <div className="px-4 py-3 max-h-36 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-                      <p>Terms and Conditions content coming soon.</p>
-                      <p>By creating an account you agree to use this platform in accordance with our guidelines and applicable laws.</p>
-                    </div>
-                  </div>
-                )}
-
-                {showPrivacy && (
-                  <div className="rounded-lg border border-dark-lighter bg-dark overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Privacy Policy</span>
-                      <button type="button" onClick={() => setShowPrivacy(false)}><ChevronDown className="w-4 h-4 text-muted rotate-180" /></button>
-                    </div>
-                    <div className="px-4 py-3 max-h-36 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-                      <p>Privacy Policy content coming soon.</p>
-                      <p>We are committed to protecting your personal information and will only use your data in accordance with applicable privacy legislation.</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <button onClick={handleContinueOnboarding} disabled={loading} className={btnCls}>

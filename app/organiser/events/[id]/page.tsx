@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, use, useCallback } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
-import { useApiResource } from "@/hooks/useApiResource";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
@@ -107,26 +107,28 @@ export default function EventStatusPage({
   const { id }  = use(params);
   const router  = useRouter();
 
+  const [event,      setEvent]      = useState<EventDetail | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState("");
 
-  const fetchEvent = useCallback(async (signal: AbortSignal) => {
-    const response = await fetch(`/api/organiser/events/${id}`, { signal });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? "Failed to load");
-    return payload as EventDetail;
-  }, [id]);
+  const loadEvent = useCallback(() => {
+    fetch(`/api/organiser/events/${id}`)
+      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error ?? "Failed to load")))
+      .then((d: EventDetail) => {
+        if (d.status === "APPROVED") {
+          router.replace(`/organiser/events/${id}/dashboard`);
+          return;
+        }
+        setEvent(d);
+      })
+      .catch((e: string) => setError(e))
+      .finally(() => setLoading(false));
+  }, [id, router]);
 
-  const {
-    data: event,
-    loading,
-    error,
-    setData: setEvent,
-  } = useApiResource<EventDetail>(fetchEvent, { key: id });
-
-  useEffect(() => {
-    if (event?.status === "APPROVED") router.replace(`/organiser/events/${id}/dashboard`);
-  }, [event, id, router]);
+  useEffect(() => { loadEvent(); }, [loadEvent]);
+  useOnOrganiserEventsChanged(loadEvent);
 
   const submitForReview = async () => {
     if (!event) return;

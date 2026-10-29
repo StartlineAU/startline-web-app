@@ -30,6 +30,24 @@ export function toOrganiserRating(
   return { average: Math.round(average * 10) / 10, count };
 }
 
+/**
+ * Groups reviews of the same event: by id when it is known, else by the
+ * lower-cased title, so reviews of a since-deleted event (id nulled, title
+ * kept) still group together. Null when the review names no event.
+ *
+ * Titles are not unique, so anything that tells two events apart must key on
+ * the id — the title is only a fallback, never the identity.
+ */
+export function reviewEventKey(event: {
+  eventId?: string | null;
+  eventTitle?: string | null;
+}): string | null {
+  const id = event.eventId?.trim();
+  if (id) return `id:${id}`;
+  const title = event.eventTitle?.trim();
+  return title ? `title:${title.toLowerCase()}` : null;
+}
+
 /** Top events by average overall rating, then review count. Max `limit`. */
 export function topRatedEventsFromReviews(
   reviews: Array<{
@@ -42,18 +60,16 @@ export function topRatedEventsFromReviews(
   const buckets = new Map<string, { eventId: string | null; eventTitle: string; sum: number; count: number }>();
 
   for (const r of reviews) {
-    const title = r.eventTitle?.trim() || null;
-    const id = r.eventId?.trim() || null;
-    if (!id && !title) continue;
-    const key = id ? `id:${id}` : `title:${title!.toLowerCase()}`;
+    const key = reviewEventKey(r);
+    if (!key) continue;
     const existing = buckets.get(key);
     if (existing) {
       existing.sum += r.overallRating;
       existing.count += 1;
     } else {
       buckets.set(key, {
-        eventId: id,
-        eventTitle: title ?? "Event",
+        eventId: r.eventId?.trim() || null,
+        eventTitle: r.eventTitle?.trim() || "Event",
         sum: r.overallRating,
         count: 1,
       });
@@ -80,4 +96,23 @@ export function displayNameFromUser(user: {
   if (user.username?.trim()) return user.username.trim().slice(0, 80);
   const local = user.email.split("@")[0]?.trim();
   return (local || "Startline user").slice(0, 80);
+}
+
+/** Reasons offered when reporting a review. The API accepts only these. */
+export const REVIEW_REPORT_REASONS = [
+  "Spam or advertising",
+  "Offensive or abusive",
+  "False or misleading",
+  "Not about this organiser",
+  "Other",
+] as const;
+
+export type ReviewReportReason = (typeof REVIEW_REPORT_REASONS)[number];
+
+export const REVIEW_REPORT_DETAILS_MAX = 400;
+
+/** "Reason" or "Reason: details", the shape stored in ReviewReport.reason. */
+export function formatReviewReportReason(reason: ReviewReportReason, details?: string | null): string {
+  const extra = details?.trim();
+  return extra ? `${reason}: ${extra}` : reason;
 }

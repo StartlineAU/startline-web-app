@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { sendEventApprovedEmail, sendEventRejectedEmail } from "@/lib/email";
+import { wantsNotification } from "@/lib/organiser-notification-preferences";
 import { writeAuditLog } from "@/lib/audit";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserNotificationRecipients } from "@/lib/organiser-notification-recipients";
 import { idParams } from "@/lib/schemas";
 import { hasAbn } from "@/lib/abn";
+import { takesPayments } from "@/lib/event-approval";
 import { z } from "zod";
 
 const reviewActionSchema = z.object({
@@ -41,12 +43,13 @@ export async function POST(
     const event = await prisma.event.findUnique({
       where:  { id },
       select: {
-        id: true, title: true, status: true, registrationType: true,
+        id: true, title: true, status: true, registrationType: true, waves: true,
         eventDate: true, city: true,
         organiser: {
           select: {
             id: true, email: true, orgName: true, stripeOnboardingComplete: true, abn: true,
             contactEmail: true, notifyManagers: true,
+            notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
             members: { select: { role: true, user: { select: { email: true } } } },
           },
         },
@@ -63,9 +66,11 @@ export async function POST(
     }
 
     // The organiser is no longer blocked from submitting without an ABN, so the
-    // requirement has to hold here instead: a marketplace listing cannot go live
-    // until the organiser's profile carries one.
-    if (action === "approve" && event.registrationType === "startline") {
+    // requirement has to hold here instead: a paid listing cannot go live until
+    // the organiser's profile carries one. A free one takes no money, so it needs
+    // neither this nor Stripe (lib/event-approval.ts).
+    const paid = takesPayments(event.registrationType, event.waves);
+    if (action === "approve" && paid) {
       if (!hasAbn(event.organiser.abn)) {
         return NextResponse.json(
           { error: "This organiser has no ABN on file. Marketplace events cannot be approved until their profile is complete.", code: "ABN_MISSING" },
@@ -74,8 +79,8 @@ export async function POST(
       }
     }
 
-    // Per ToS §3.4 — marketplace listings cannot go live until Stripe onboarding is complete
-    if (action === "approve" && event.registrationType === "startline") {
+    // Per ToS §3.4 — paid listings cannot go live until Stripe onboarding is complete
+    if (action === "approve" && paid) {
       if (!event.organiser.stripeOnboardingComplete) {
         return NextResponse.json(
           { error: "This organiser has not completed Stripe Express onboarding. Marketplace events cannot be approved until their payout account is verified (ToS §3.4).", code: "STRIPE_NOT_ONBOARDED" },
@@ -101,6 +106,8 @@ export async function POST(
           body:  `Your event "${event.title}" was not approved. Reason: ${reason?.trim() ?? "No reason provided."}`,
         };
 
+    const notifyOrganiser = wantsNotification(event.organiser, notifData.type);
+
     await prisma.$transaction([
       prisma.event.update({
         where: { id },
@@ -111,9 +118,11 @@ export async function POST(
           rejectionReason: action === "reject" ? reason!.trim() : null,
         },
       }),
-      prisma.notification.create({
-        data: { organiserId, eventId: id, ...notifData },
-      }),
+      // The organisation can turn either kind off; then it gets no feed
+      // entry and, below, no email.
+      ...(notifyOrganiser
+        ? [prisma.notification.create({ data: { organiserId, eventId: id, ...notifData } })]
+        : []),
     ]);
 
     // Awaited, not fired and forgotten: Amplify's compute freezes the container
@@ -122,9 +131,11 @@ export async function POST(
     // failures still must not fail the review itself.
     if (action === "approve") {
       await Promise.all([
-        sendEventApprovedEmail(organiserEmail, event.title).catch((err) =>
-          console.error("Failed to send approval email:", err),
-        ),
+        notifyOrganiser
+          ? sendEventApprovedEmail(organiserEmail, event.title).catch((err) =>
+              console.error("Failed to send approval email:", err),
+            )
+          : Promise.resolve(),
         notifyOrganiserFollowers({
           organiserId,
           eventId: id,
@@ -134,7 +145,7 @@ export async function POST(
           city: event.city || null,
         }).catch((err) => console.error("Follower notify failed:", err)),
       ]);
-    } else {
+    } else if (notifyOrganiser) {
       await sendEventRejectedEmail(organiserEmail, event.title, reason?.trim()).catch((err) =>
         console.error("Failed to send rejection email:", err),
       );

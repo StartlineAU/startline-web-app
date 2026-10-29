@@ -16,7 +16,8 @@
  *      Stripe refund created + registration REFUNDED
  *   5. Exercises the payout path: admin-triggered payout against the connected
  *      Express account, asserts payoutTriggered / payoutAmountCents /
- *      payoutAt, and asserts a retry returns 409 with no double-pay
+ *      payoutAt, simulates losing the result write, and asserts the resume path
+ *      reuses the idempotency key with no double-pay
  *
  * Prerequisites:
  *   - STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET in .env.local (test mode)
@@ -109,6 +110,9 @@ async function ensureFixtureEvents(prisma, organiserId) {
 async function resetFixtures(prisma) {
   const ids = [ATHLETE_REFUND_EVENT, ORGANISER_REFUND_EVENT, ATHLETE_PAYOUT_EVENT, ORGANISER_PAYOUT_EVENT];
   await prisma.registration.deleteMany({ where: { eventId: { in: ids } } });
+  await prisma.payoutOperation.deleteMany({
+    where: { eventId: { in: [ATHLETE_PAYOUT_EVENT, ORGANISER_PAYOUT_EVENT] } },
+  });
   await prisma.event.updateMany({
     where: { id: { in: [ATHLETE_PAYOUT_EVENT, ORGANISER_PAYOUT_EVENT] } },
     data: { payoutTriggered: false, payoutAmountCents: null, payoutAt: null },
@@ -356,6 +360,11 @@ async function runPayoutFlow({ stripe, prisma, eventId, feeStructure, accountId,
   check("admin payout triggered", res.status === 200 && body.ok === true, `got ${res.status} ${JSON.stringify(body)}`);
 
   const event = await prisma.event.findUnique({ where: { id: eventId } });
+  const operation = await prisma.payoutOperation.findUnique({
+    where: { eventId },
+    include: { attempts: { orderBy: { attemptNumber: "desc" } } },
+  });
+  const firstAttempt = operation?.attempts[0];
   check("payoutTriggered = true", event?.payoutTriggered === true, `got ${event?.payoutTriggered}`);
   check("payoutAt set", Boolean(event?.payoutAt));
   check(
@@ -363,17 +372,70 @@ async function runPayoutFlow({ stripe, prisma, eventId, feeStructure, accountId,
     event?.payoutAmountCents === expectedNet,
     `got ${event?.payoutAmountCents}, expected ${expectedNet}`
   );
+  check("payout operation submitted", operation?.status === "SUBMITTED", `got ${operation?.status}`);
+  check("payout attempt succeeded", firstAttempt?.status === "SUCCEEDED", `got ${firstAttempt?.status}`);
+  check("payout idempotency key recorded", Boolean(firstAttempt?.idempotencyKey));
 
-  // No double-pay: the second POST must be rejected (409) and no new Stripe
-  // payout object may appear after the first succeeded.
   const payoutsAfterFirst = await stripe.payouts.list({ limit: 100 }, { stripeAccount: accountId });
-  const retry = await postWithBypass("/api/admin/payouts", "admin", { eventId });
-  check("retry payout rejected (no double-pay)", retry.status === 409, `got ${retry.status}`);
+
+  // Simulate the process dying after Stripe created the payout but before the
+  // result transaction committed. The next request must resume the same attempt
+  // with the same key, not create a second payout.
+  if (operation && firstAttempt) {
+    await prisma.payoutOperation.update({
+      where: { id: operation.id },
+      data: { status: "SUBMITTING", stripePayoutId: null, lastError: null },
+    });
+    await prisma.payoutAttempt.update({
+      where: { id: firstAttempt.id },
+      data: {
+        status: "STARTED",
+        stripePayoutId: null,
+        createdAt: new Date(Date.now() - 5 * 60 * 1000),
+      },
+    });
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { payoutTriggered: false, payoutAmountCents: null, payoutAt: null },
+    });
+  }
+
+  const afterLostWrite = await postWithBypass("/api/admin/payouts", "admin", { eventId });
+  const afterLostWriteBody = await afterLostWrite.json().catch(() => ({}));
+  check(
+    "lost result write retried",
+    afterLostWrite.status === 200 && afterLostWriteBody.ok === true,
+    `got ${afterLostWrite.status} ${JSON.stringify(afterLostWriteBody)}`
+  );
+
   const payoutsAfterRetry = await stripe.payouts.list({ limit: 100 }, { stripeAccount: accountId });
   check(
-    "no new Stripe payout on retry",
+    "no new Stripe payout after lost write",
     payoutsAfterRetry.data.length === payoutsAfterFirst.data.length,
     `${payoutsAfterFirst.data.length} → ${payoutsAfterRetry.data.length}`
+  );
+
+  const recovered = await prisma.event.findUnique({ where: { id: eventId } });
+  check("recovered payoutTriggered = true", recovered?.payoutTriggered === true);
+  check(
+    "recovered payoutAmountCents",
+    recovered?.payoutAmountCents === expectedNet,
+    `got ${recovered?.payoutAmountCents}`
+  );
+
+  // A completed payout is returned from the record rather than sent again.
+  const completedRetry = await postWithBypass("/api/admin/payouts", "admin", { eventId });
+  const completedRetryBody = await completedRetry.json().catch(() => ({}));
+  check(
+    "completed retry returns the recorded payout",
+    completedRetry.status === 200 && completedRetryBody.alreadyProcessed === true,
+    `got ${completedRetry.status} ${JSON.stringify(completedRetryBody)}`
+  );
+  const payoutsAfterCompletedRetry = await stripe.payouts.list({ limit: 100 }, { stripeAccount: accountId });
+  check(
+    "no new Stripe payout on completed retry",
+    payoutsAfterCompletedRetry.data.length === payoutsAfterFirst.data.length,
+    `${payoutsAfterFirst.data.length} → ${payoutsAfterCompletedRetry.data.length}`
   );
 }
 

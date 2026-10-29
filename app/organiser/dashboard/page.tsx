@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -14,7 +14,7 @@ import DashboardTrendChart, {
 } from "@/components/organiser/DashboardTrendChart";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { formatAudFromCents } from "@/lib/organiser-dashboard";
-import { useApiResource } from "@/hooks/useApiResource";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
 
@@ -124,27 +124,51 @@ function MetricStrip({
   );
 }
 
+const ACTION_BUTTON_CLS =
+  "whitespace-nowrap text-[11px] px-3 py-3 sm:text-sm sm:px-6 sm:py-4";
+
 function formatCount(n: number): string {
   return n.toLocaleString("en-AU");
 }
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [data, setData] = useState<DashboardPayload | null>(null);
+  const [loading, setLoading] = useState(true);
   const [trendEventId, setTrendEventId] = useState("");
   const [trendRangeDays, setTrendRangeDays] = useState(30);
 
-  const load = useCallback(async (signal: AbortSignal) => {
+  const load = useCallback(async (eventId: string, rangeDays: number) => {
     const params = new URLSearchParams();
-    if (trendEventId) params.set("eventId", trendEventId);
-    params.set("days", String(trendRangeDays));
+    if (eventId) params.set("eventId", eventId);
+    params.set("days", String(rangeDays));
     const qs = params.toString();
-    const res = await fetch(`/api/organiser/dashboard${qs ? `?${qs}` : ""}`, { signal });
+    const res = await fetch(`/api/organiser/dashboard${qs ? `?${qs}` : ""}`);
     if (!res.ok) return null;
     return (await res.json()) as DashboardPayload;
-  }, [trendEventId, trendRangeDays]);
+  }, []);
 
-  const { data, loading } = useApiResource<DashboardPayload | null>(load, {
-    key: `${trendEventId}:${trendRangeDays}`,
+  useEffect(() => {
+    let cancelled = false;
+    const initial = data == null;
+    load(trendEventId, trendRangeDays)
+      .then((payload) => {
+        if (!cancelled && payload) setData(payload);
+      })
+      .finally(() => {
+        if (!cancelled && initial) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally omit `data` — only reload when filter changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, trendEventId, trendRangeDays]);
+
+  useOnOrganiserEventsChanged(() => {
+    load(trendEventId, trendRangeDays).then((payload) => {
+      if (payload) setData(payload);
+    });
   });
 
   const events = data?.events ?? [];
@@ -180,15 +204,17 @@ export default function DashboardPage() {
           {/* Metrics + actions */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-10">
             <MetricStrip eyebrow="All time" items={allTimeItems} />
-            <div className="flex items-center gap-2 self-start sm:self-end shrink-0">
-              <Button asChild size="lg" variant="outline">
+            {/* On a phone the pair shares the row equally, sized down so each
+                label stays on one line; from sm up they are the usual lg buttons. */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:self-end shrink-0">
+              <Button asChild size="lg" variant="outline" className={ACTION_BUTTON_CLS}>
                 <Link href="/organiser/new-listing">
-                  <Plus className="w-4 h-4" /> Add listing
+                  <Plus className="w-4 h-4 shrink-0" /> Add listing
                 </Link>
               </Button>
-              <Button asChild size="lg">
+              <Button asChild size="lg" className={ACTION_BUTTON_CLS}>
                 <Link href="/organiser/listings">
-                  <CalendarDays className="w-4 h-4" /> View my events
+                  <CalendarDays className="w-4 h-4 shrink-0" /> View my events
                 </Link>
               </Button>
             </div>
@@ -212,9 +238,9 @@ export default function DashboardPage() {
               </h2>
               <Link
                 href="/organiser/listings"
-                className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary flex items-center gap-1 transition-colors"
+                className="group inline-flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary font-headline text-[11px] font-bold uppercase tracking-widest hover:bg-primary/20 transition-colors"
               >
-                See all <ArrowRight className="w-3 h-3" />
+                See all <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 

@@ -54,6 +54,10 @@ export default function EventDetailView({
   const hasRegistration =
     !!event.registrationUrl ||
     (event.registrationType === "startline" && !!event.ticketDrops && event.ticketDrops.length > 0);
+  const freeEvent = isFreeEvent(event.ticketDrops);
+  // A fully free Startline event is an RSVP for the signed-in account, not a
+  // ticket checkout, so the button says what the next screen will do.
+  const freeRsvp = freeEvent && event.registrationType === "startline";
 
   return (
     <div className={isPanel ? "@container" : undefined}>
@@ -219,7 +223,7 @@ export default function EventDetailView({
                 {event.registrationType === "startline" && event.ticketDrops && event.ticketDrops.length > 0 && (
                   <Button asChild variant="machined" size="ctaLg">
                     <Link href={`/events/${event.id}/register`}>
-                      Register Now
+                      {freeRsvp ? "I'm going" : "Register Now"}
                       <Ticket className="w-4 h-4" />
                     </Link>
                   </Button>
@@ -236,8 +240,8 @@ export default function EventDetailView({
                   <Link href={`https://maps.google.com/?q=${encodeURIComponent(
                     (event.address || event.location) + ", " + event.city + ", Australia"
                   )}`} target="_blank" rel="noopener noreferrer">
-                    <MapPin className="w-4 h-4" />
                     View on Maps
+                    <MapPin className="w-4 h-4" />
                   </Link>
                 </Button>
               </div>
@@ -357,7 +361,7 @@ export default function EventDetailView({
             )}
 
             {/* A free event takes no money, so there is no policy to publish. */}
-            {!isFreeEvent(event.ticketDrops) && (
+            {!freeEvent && (
             <div className="bg-dark rounded-xl p-5 sm:p-6">
               <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-2">Refund &amp; Transfer Policy</h3>
               <ul className="space-y-1">
@@ -396,7 +400,7 @@ export default function EventDetailView({
                   href={`/events/${event.id}/register`}
                   className="flex items-center justify-center gap-2 bg-primary text-dark font-headline text-sm font-black uppercase tracking-widest px-6 h-12 rounded-xl flex-shrink-0 active:scale-[0.97] transition-transform"
                 >
-                  Register Now
+                  {freeRsvp ? "I'm going" : "Register Now"}
                   <Ticket className="w-4 h-4" />
                 </Link>
               ) : (

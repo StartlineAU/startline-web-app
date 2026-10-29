@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Facebook, Link2, Mail, Share2 } from "lucide-react";
+import { Check, Copy, Link2, Mail, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -131,7 +131,8 @@ export default function ShareEventButton({ eventId, slug, title, className = "",
               onClick={() => setOpen(false)}
               className="w-full flex items-center gap-3 px-4 py-3 font-headline text-[12px] font-bold uppercase tracking-widest text-white/70 hover:text-white hover:bg-white/10 transition-colors"
             >
-              <Facebook className="w-4 h-4" />
+              {/* Lucide v1 removed brand icons; the label carries the brand. */}
+              <Share2 className="w-4 h-4" />
               Facebook
             </a>
             <a

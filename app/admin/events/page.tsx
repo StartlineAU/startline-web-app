@@ -34,6 +34,7 @@ interface AdminEventRow {
   rejectionReason: string | null;
   reviewedAt: string | null;
   registrationType: string | null;
+  waves: unknown;
   organiser: {
     id: string;
     orgName: string | null;

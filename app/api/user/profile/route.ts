@@ -5,6 +5,7 @@ import { validateUsername } from "@/lib/username-validation";
 import { containsProfanity } from "@/lib/profanity";
 import { getOrganiserRatings } from "@/lib/reviews";
 import { GENDER_OPTIONS } from "@/lib/registration-form";
+import { isAtLeastYearsOld, MIN_AGE } from "@/lib/age";
 import { z } from "zod";
 
 function badRequest(msg: string) {
@@ -24,6 +25,7 @@ const profileUpdateSchema = z.object({
   gender: z.string().max(50).nullable().optional(),
   emergencyContactName: z.string().max(200).nullable().optional(),
   emergencyContactPhone: z.string().max(50).nullable().optional(),
+  notifyFollowedOrganiserEvents: z.boolean().optional(),
 });
 
 const privateSelect = {
@@ -45,6 +47,7 @@ const profileSelect = {
   city: true,
   state: true,
   createdAt: true,
+  notifyFollowedOrganiserEvents: true,
   ...privateSelect,
 } as const;
 
@@ -185,6 +188,7 @@ export async function PUT(req: Request) {
   if ("bio" in body) data.bio = normalizeOptionalString(body.bio);
   if ("profilePicUrl" in body) data.profilePicUrl = body.profilePicUrl || null;
   if ("isPublic" in body) data.isPublic = body.isPublic;
+  if ("notifyFollowedOrganiserEvents" in body) data.notifyFollowedOrganiserEvents = body.notifyFollowedOrganiserEvents;
   if ("city" in body) data.city = normalizeOptionalString(body.city);
   if ("state" in body) data.state = normalizeOptionalString(body.state);
 
@@ -193,6 +197,11 @@ export async function PUT(req: Request) {
     const dob = normalizeOptionalString(body.dateOfBirth);
     if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
       return badRequest("Date of birth must be YYYY-MM-DD.");
+    }
+    // The age gate lives here as well as in the forms: a client-side check is
+    // only a courtesy, and this is the one write that stores the answer.
+    if (dob && !isAtLeastYearsOld(dob)) {
+      return badRequest(`You must be at least ${MIN_AGE} years old to use Startline.`);
     }
     data.dateOfBirth = dob;
   }

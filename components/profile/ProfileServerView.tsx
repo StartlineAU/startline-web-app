@@ -85,8 +85,14 @@ export default async function ProfileServerView({
     registrations.map((r) => r.event.organiser.id),
   );
 
+  // A profile without a handle is only ever rendered to its owner (/profile),
+  // so falling back to the private name or email prefix exposes nothing.
+  const displayName =
+    user.username || user.name?.trim() || user.email.split("@")[0] || "Athlete";
+
   const profile = {
     username: user.username ?? "",
+    displayName,
     bio: user.bio,
     profilePicUrl: user.profilePicUrl,
     history: {
@@ -104,32 +110,10 @@ export default async function ProfileServerView({
     },
   };
 
-  const ownerData = isOwner
-    ? {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        username: user.username,
-        bio: user.bio,
-        isPublic: user.isPublic,
-        city: user.city,
-        state: user.state,
-        profilePicUrl: user.profilePicUrl,
-        mobile: user.mobile,
-        dateOfBirth: user.dateOfBirth,
-        gender: user.gender,
-        emergencyContactName: user.emergencyContactName,
-        emergencyContactPhone: user.emergencyContactPhone,
-        createdAt: user.createdAt,
-        organiser: user.memberships[0]?.organiser ?? null,
-      }
-    : null;
-
   return (
     <ProfilePageClient
       profile={profile}
       isOwner={isOwner}
-      ownerData={ownerData}
     />
   );
 }
