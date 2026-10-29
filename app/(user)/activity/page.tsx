@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Bell, RefreshCw, UserCheck, Flag, Megaphone, Undo2, Banknote } from "lucide-react";
@@ -9,6 +9,7 @@ import type { UserEvent } from "@/types";
 import type { PublicEvent } from "@/lib/event-types";
 import { getRegisteredEventIds, fetchSavedEventIds } from "@/lib/client-lists";
 import { toUserEvents } from "@/lib/user-events";
+import { useApiResource } from "@/hooks/useApiResource";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import { useAuthContext } from "@/context/AuthContext";
 import EventCard from "@/components/EventCard";
@@ -295,9 +296,7 @@ export default function ActivityPage() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [registeredIds, setRegisteredIds] = useState(() => getRegisteredEventIds());
   const [following, setFollowing] = useState<FollowingOrganiser[]>([]);
-  const [events, setEvents] = useState<UserEvent[]>([]);
   const [regMeta, setRegMeta] = useState<Record<string, RegMeta>>({});
-  const [eventsLoading, setEventsLoading] = useState(true);
   const [followingLoading, setFollowingLoading] = useState(false);
   const [notifs, setNotifs] = useState<UserNotif[]>([]);
   const [refundTarget, setRefundTarget] = useState<{ meta: RegMeta; title: string } | null>(null);
@@ -350,46 +349,33 @@ export default function ActivityPage() {
     }).catch(() => {});
   };
 
-  useEffect(() => {
+  const fetchEvents = useCallback(async (signal: AbortSignal) => {
     const ids = Array.from(new Set([...savedIds, ...registeredIds].filter(Boolean)));
-    if (ids.length === 0) {
-      const timer = setTimeout(() => {
-        setEvents([]);
-        setEventsLoading(false);
-      }, 0);
-      return () => clearTimeout(timer);
-    }
+    if (ids.length === 0) return [];
 
-    let cancelled = false;
     // The event listing API caps one request; chunk an unusually long list so a
     // visitor who saved many events still sees all of them.
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50));
 
-    Promise.all(
+    const pages = await Promise.all(
       chunks.map((chunk) =>
-        fetch(`/api/events?ids=${encodeURIComponent(chunk.join(","))}`)
-          .then((r) => (r.ok ? r.json() : { events: [] }))
+        fetch(`/api/events?ids=${encodeURIComponent(chunk.join(","))}`, { signal })
+          .then((response) => (response.ok ? response.json() : { events: [] }))
           .then((data: { events?: PublicEvent[] }) => data.events ?? []),
       ),
-    )
-      .then((pages) => {
-        if (cancelled) return;
-        const found = pages.flat();
-        const byId = new Map(found.map((event) => [event.id, event]));
-        setEvents(toUserEvents(ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))));
-      })
-      .catch(() => {
-        if (!cancelled) setEvents([]);
-      })
-      .finally(() => {
-        if (!cancelled) setEventsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    );
+    const found = pages.flat();
+    const byId = new Map(found.map((event) => [event.id, event]));
+    return toUserEvents(ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])));
   }, [savedIds, registeredIds]);
+
+  const eventKey = [...savedIds, ...registeredIds].filter(Boolean).sort().join(",");
+  const { data: loadedEvents, loading: eventsLoading } = useApiResource<UserEvent[]>(
+    fetchEvents,
+    { key: eventKey },
+  );
+  const events = loadedEvents ?? [];
 
   useEffect(() => {
     if (status !== "authenticated") return;

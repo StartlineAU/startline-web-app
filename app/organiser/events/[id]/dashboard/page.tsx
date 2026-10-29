@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use, Suspense } from "react";
+import { useState, useEffect, use, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -22,6 +22,7 @@ import CapacityBar from "@/components/ui/CapacityBar";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { buildCheckInQrImage, checkInQrImageFilename } from "@/lib/check-in-qr-image";
 import { stripHtml } from "@/lib/utils";
+import { useApiResource } from "@/hooks/useApiResource";
 
 interface Wave { label: string; price: string; qty?: number; sold?: number }
 
@@ -128,9 +129,19 @@ function EventDashboardInner({
 
   const setManagePanel = (on: boolean) => setPanel(on ? "manage" : null);
 
-  const [data,    setData]    = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState("");
+  const fetchDashboard = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/organiser/events/${id}/dashboard`, { signal });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error ?? "Failed to load");
+    return payload as DashboardData;
+  }, [id]);
+
+  const {
+    data,
+    loading,
+    error,
+    setData,
+  } = useApiResource<DashboardData>(fetchDashboard, { key: id });
 
   const [annTitle,    setAnnTitle]      = useState("");
   const [annBody,     setAnnBody]       = useState("");
@@ -203,14 +214,6 @@ function EventDashboardInner({
       setImageDownloading(false);
     }
   };
-
-  useEffect(() => {
-    fetch(`/api/organiser/events/${id}/dashboard`)
-      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error ?? "Failed to load")))
-      .then((d: DashboardData) => setData(d))
-      .catch((e: string) => setError(e))
-      .finally(() => setLoading(false));
-  }, [id]);
 
   // Clear the announcement draft when the panel closes. Adjusting state during
   // render (rather than in an effect) keeps this to a single render pass — the

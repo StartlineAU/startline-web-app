@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useCallback } from "react";
 import {
   AlertTriangle,
   CheckCircle,
@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Send,
 } from "lucide-react";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -45,42 +46,37 @@ function formatDate(iso: string) {
 }
 
 export default function AdminPayoutsPage() {
-  const [events, setEvents] = useState<PayoutEvent[]>([]);
-  const [attention, setAttention] = useState<PayoutAttention[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [running, setRunning] = useState<string | null>(null);
   const [reconciling, setReconciling] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
   const [payoutIds, setPayoutIds] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/admin/payouts");
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error ?? "Failed to load payouts.");
-      }
-      const data = await res.json() as {
-        events: PayoutEvent[];
-        attention?: PayoutAttention[];
-      };
-      setEvents(data.events);
-      setAttention(data.attention ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load payouts.");
-    } finally {
-      setLoading(false);
-    }
+  const load = useCallback(async (signal: AbortSignal) => {
+    const res = await fetch("/api/admin/payouts", { signal });
+    const data = await res.json() as {
+      events?: PayoutEvent[];
+      attention?: PayoutAttention[];
+      error?: string;
+    };
+    if (!res.ok) throw new Error(data.error ?? "Failed to load payouts.");
+    return { events: data.events ?? [], attention: data.attention ?? [] };
   }, []);
 
-  useEffect(() => { startTransition(() => { load(); }); }, [load]);
+  const {
+    data,
+    loading,
+    error: loadError,
+    reload: reloadPayouts,
+    setData: setPayoutPage,
+  } = useApiResource<{ events: PayoutEvent[]; attention: PayoutAttention[] }>(load);
+  const events = data?.events ?? [];
+  const attention = data?.attention ?? [];
+  const error = loadError ?? actionError;
 
   const runPayout = async (eventId: string) => {
     setRunning(eventId);
-    setError("");
+    setActionError("");
     try {
       const res = await fetch("/api/admin/payouts", {
         method: "POST",
@@ -92,10 +88,13 @@ export default function AdminPayoutsPage() {
         throw new Error(data.error ?? "Payout failed.");
       }
       setDone((prev) => [...prev, eventId]);
-      setEvents((prev) => prev.filter((event) => event.id !== eventId));
-      await load();
+      setPayoutPage((prev) => prev ? {
+        ...prev,
+        events: prev.events.filter((event) => event.id !== eventId),
+      } : prev);
+      await reloadPayouts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Payout failed.");
+      setActionError(err instanceof Error ? err.message : "Payout failed.");
     } finally {
       setRunning(null);
     }
@@ -107,7 +106,7 @@ export default function AdminPayoutsPage() {
     stripePayoutId?: string,
   ) => {
     setReconciling(eventId);
-    setError("");
+    setActionError("");
     try {
       const body = resolution === "link"
         ? { eventId, resolution, stripePayoutId }
@@ -126,9 +125,9 @@ export default function AdminPayoutsPage() {
         delete next[eventId];
         return next;
       });
-      await load();
+      await reloadPayouts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reconcile the payout.");
+      setActionError(err instanceof Error ? err.message : "Could not reconcile the payout.");
     } finally {
       setReconciling(null);
     }
@@ -234,7 +233,7 @@ export default function AdminPayoutsPage() {
             Ready to pay out
           </span>
           <button
-            onClick={load}
+            onClick={() => void reloadPayouts()}
             className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />

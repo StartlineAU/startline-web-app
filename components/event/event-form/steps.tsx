@@ -18,30 +18,23 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { takesPayments } from "@/lib/event-approval";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
 import SuburbAutocomplete   from "@/components/ui/SuburbAutocomplete";
 import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
 import DatePicker           from "@/components/ui/DatePicker";
 import SelectMenu           from "@/components/ui/SelectMenu";
 import TimePicker           from "@/components/ui/TimePicker";
-import AddOnEditor, {
-  uploadAddOnImages,
-  publishAddOnsToProfile,
-  PublishToProfileError,
-} from "@/components/organiser/AddOnEditor";
-import {
-  type AddOnDraft,
-  draftsFromCatalogue,
-  draftsToPayload,
-  draftValidationError,
-} from "@/lib/add-on-drafts";
 
+/* ── Step definitions ───────────────────────────────────────── */
 
 import {
-  Field, RichTextEditor, fmt24to12, inputCls, textareaCls,
+  Field, RichTextEditor, fmt24to12, inputCls, textareaCls, stripHtml, waveIsComplete,
   DISCIPLINES, DISCIPLINE_CATS, FORMATS, INTENSITY_LEVELS,
   type FormState, type Wave, type InfoPdf, type Discipline, type Format,
-  type Intensity, type AusState, stripHtml,
+  type Intensity, type AusState, type Requirement,
 } from "./shared";
 
 export const AGE_PRESETS = ["18"];
@@ -287,7 +280,7 @@ export function WhenStep({ form, update }: { form: FormState; update: (p: Partia
             Overall start. Per-wave start times can be set in Tickets & Pricing.
           </p>
         </Field>
-        <Field label="Cut-off time" hint="Last finisher">
+        <Field label="Cut-off time (if required)">
           <TimePicker value={form.endTime} onChange={v => update({ endTime: v })} placeholder="Select end time" ariaLabel="Cut-off time" />
           {timeInvalid && (
             <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">
@@ -356,30 +349,14 @@ export function WhenStep({ form, update }: { form: FormState; update: (p: Partia
  * anything that parses to a number at or above zero counts as priced. A bare "."
  * or an empty box does not.
  */
-export function waveIsComplete(w: { label: string; price: string }): boolean {
-  const price = parseFloat(w.price);
-  return w.label.trim().length > 0 && Number.isFinite(price) && price >= 0;
-}
+
 
 export const STARTLINE_PCT  = 0.0395;
 export const STARTLINE_FLAT = 1.45;
 export const STRIPE_PCT     = 0.0175;
 export const STRIPE_FLAT    = 0.30;
 
-export function TicketsStep({
-  form,
-  update,
-  addOns,
-  setAddOns,
-  showAddOns,
-}: {
-  form: FormState;
-  update: (p: Partial<FormState>) => void;
-  addOns: AddOnDraft[];
-  setAddOns: (next: AddOnDraft[]) => void;
-  /** Organiser portal only: the admin portal has no add-ons route. */
-  showAddOns: boolean;
-}) {
+export function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
   const updateWave = (i: number, patch: Partial<Wave>) => {
     const waves = [...form.waves]; waves[i] = { ...waves[i], ...patch }; update({ waves });
   };
@@ -526,23 +503,6 @@ export function TicketsStep({
           </button>
         </div>
       </Field>
-
-      {/* Merchandise sold alongside the entry. Editable at any time, including
-          after the event is published, which is why it saves through its own
-          route rather than the DRAFT-locked event PATCH. */}
-      {showAddOns && (
-        <Field label="Merchandise" hint="Optional">
-          <p className="font-headline text-[10px] uppercase tracking-widest text-light mb-3">
-            Extras athletes can buy with their entry, like a tee or a parking pass. Add, restock or
-            retire these at any time, including after the event goes live.
-          </p>
-          <AddOnEditor
-            addOns={addOns}
-            onChange={setAddOns}
-            feeStructure={form.feeStructure === "organiser" ? "organiser" : "athlete"}
-          />
-        </Field>
-      )}
 
       {/* Prize money toggle */}
       <div className="border border-dark-lighter rounded-xl overflow-hidden mb-6">
@@ -879,16 +839,21 @@ export const INTENSITY_LABELS: Record<string, string> = {
   low: "Low", moderate: "Moderate", high: "High", extreme: "Extreme",
 };
 
-export function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice }: {
+export function ReviewStep({ form, setStep, confirmed, onConfirm, onLeave, showAbnNotice, missing }: {
   form: FormState; setStep: (n: number) => void; confirmed: boolean; onConfirm: (v: boolean) => void;
+  onLeave: (destination: string) => void;
   showAbnNotice: boolean;
+  missing: Requirement[];
 }) {
-  const rows: { k: string; v: string; step: number }[] = [
+  const termsHref = customerHref("/terms#organisers", usePortalHost());
+  const hasCategories = !!DISCIPLINE_CATS[form.discipline as Discipline];
+  const allRows: { k: string; v: string; step: number }[] = [
     { k: "Title",          v: form.title || "—",                                                                   step: 0 },
     { k: "Discipline",     v: form.discipline ? form.discipline.toUpperCase() : "—",                               step: 0 },
     { k: "Format",         v: form.format || "—",                                                                  step: 0 },
     { k: "Intensity",      v: form.level ? INTENSITY_LABELS[form.level] : "—",                                    step: 0 },
     { k: "Cap / Min age",  v: `${form.cap === "0" ? "Open" : form.cap ? parseInt(form.cap).toLocaleString() : "—"} · ${form.minAge === "0" ? "Open to all" : form.minAge ? `${form.minAge}+` : "—"}`, step: 0 },
+    { k: "Categories",     v: form.categories.length ? form.categories.join(", ") : "—",                           step: 0 },
     { k: "Date",           v: form.date
         ? form.endDate && form.endDate !== form.date
           ? `${new Date(form.date + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })} — ${new Date(form.endDate + "T00:00:00").toLocaleDateString("en-AU", { day:"numeric", month:"short", year:"numeric" })}`
@@ -906,40 +871,90 @@ export function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice 
     { k: "Description",    v: form.description ? `${stripHtml(form.description).slice(0, 60)}…` : "—", step: 3 },
   ];
 
+  const missingByRow = new Map(missing.map((m) => [m.row, m.message]));
+
+  // The table shows what is required by default. A row for something optional,
+  // or for a requirement that does not apply to this event, only appears once
+  // there is something in it to review. A flagged row always shows.
+  const hasContent: Record<string, boolean> = {
+    // Saved categories count too: an event from before the picker only offered
+    // running/cycling/swimming divisions still has them on the record, and the
+    // summary must show what the event will publish.
+    "Categories":    hasCategories || form.categories.length > 0,
+    "Refund policy": !isFreeEvent(form.waves),
+    "Prize money":   form.prizeMoney,
+    "Info PDFs":     form.informationPdfs.length > 0,
+    "Gallery":       form.photoUrls.length + form.photos.length > 0,
+  };
+  const rows = allRows.filter((r) => missingByRow.has(r.k) || (hasContent[r.k] ?? true));
+
   return (
     <div>
       <div className="bg-dark border border-dark-lighter rounded-lg overflow-hidden mb-6">
-        {rows.map((r, i) => (
-          <div key={r.k} className={`flex items-center gap-4 px-5 py-4 ${i === rows.length - 1 ? "" : "border-b border-white/5"}`}>
-            <div className="font-headline text-[11px] uppercase tracking-widest text-light w-32 flex-shrink-0">{r.k}</div>
-            <div className="flex-1 font-headline text-[14px] text-light truncate">{r.v}</div>
-            <button onClick={() => setStep(r.step)}
-              className="font-headline text-[11px] uppercase tracking-widest text-light hover:text-primary flex items-center gap-1 transition-colors">
-              Edit <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
+        {rows.map((r, i) => {
+          // A row with something required still missing says so in place of its
+          // value, so the table is where the organiser finds out, before they
+          // try to publish, rather than a warning that appears afterwards.
+          const problem = missingByRow.get(r.k);
+          return (
+            // On a phone the label sits above its value and the value wraps; from
+            // sm up they share a line and a long value truncates. min-w-0 is what
+            // lets either happen: without it a long value widened the whole step.
+            <div key={r.k} data-missing={problem ? "true" : undefined}
+              className={`flex items-start sm:items-center gap-4 px-4 sm:px-5 py-4 ${problem ? "bg-orange-500/[0.07]" : ""} ${i === rows.length - 1 ? "" : "border-b border-white/5"}`}>
+              <div className="flex-1 min-w-0 sm:flex sm:items-center sm:gap-4">
+                <div className={`font-headline text-[11px] uppercase tracking-widest mb-1 sm:mb-0 sm:w-32 sm:flex-shrink-0 ${problem ? "text-orange-400" : "text-muted-dark sm:text-light"}`}>{r.k}</div>
+                {problem ? (
+                  <div className="min-w-0 sm:flex-1 flex items-start sm:items-center gap-2 font-headline text-[14px] text-orange-300">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
+                    <span className="break-words">{problem}</span>
+                  </div>
+                ) : (
+                  <div className="min-w-0 sm:flex-1 font-headline text-[14px] text-light break-words sm:truncate">{r.v}</div>
+                )}
+              </div>
+              <button onClick={() => setStep(r.step)}
+                className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest transition-colors ${problem
+                  ? "border-orange-400/50 bg-orange-400/10 text-orange-300 hover:bg-orange-400/20 hover:border-orange-400"
+                  : "border-dark-lighter text-light hover:border-primary/50 hover:text-primary"}`}>
+                {problem ? "Fix" : "Edit"} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="bg-primary/5 border border-primary/30 rounded-md p-5 mb-6">
-        <div className="font-headline text-[14px] font-black italic tracking-tighter text-light mb-1">Your listing is ready to publish.</div>
-        <p className="font-headline text-[13px] text-light leading-relaxed">
-          Once published, athletes will be able to find your event in search and carousels.
-          You&apos;ll receive a notification each time someone registers.
-        </p>
-      </div>
+      {missing.length > 0 ? (
+        <div className="bg-orange-500/[0.07] border border-orange-500/30 rounded-md p-5 mb-6">
+          <div className="font-headline text-[14px] font-black italic tracking-tighter text-orange-300 mb-1">
+            {missing.length === 1 ? "1 required item still needs fixing." : `${missing.length} required items still need fixing.`}
+          </div>
+          <p className="font-headline text-[13px] text-light leading-relaxed">
+            They are highlighted in the table above. Fix each one and you can publish.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-primary/5 border border-primary/30 rounded-md p-5 mb-6">
+          <div className="font-headline text-[14px] font-black italic tracking-tighter text-light mb-1">Your listing is ready to publish.</div>
+          <p className="font-headline text-[13px] text-light leading-relaxed">
+            Once published, athletes will be able to find your event in search and carousels.
+            You&apos;ll receive a notification each time someone registers.
+          </p>
+        </div>
+      )}
 
       {/* Deliberately advisory, not a block. Submitting still works; the event
           waits for review instead of going live, and the organiser is told
           again on the confirmation screen once the work is safely saved. */}
       {showAbnNotice && (
-        <div className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-md p-4 mb-6">
+        <div data-testid="abn-notice" className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-md p-4 mb-6">
           <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="font-headline text-[13px] text-amber-200 leading-relaxed">
             <span className="font-bold">Your organiser profile isn&apos;t finished.</span>{" "}
             You can publish this listing now, but without an ABN it goes to Startline for review
             instead of straight to live. Add yours in{" "}
-            <Link href="/organiser/payments" className="underline hover:text-amber-100">Payments</Link>{" "}
+            <Link href="/organiser/payments" className="underline hover:text-amber-100"
+              onClick={(e) => { e.preventDefault(); onLeave("/organiser/payments"); }}>Payments</Link>{" "}
             to publish immediately.
           </div>
         </div>
@@ -949,13 +964,15 @@ export function ReviewStep({ form, setStep, confirmed, onConfirm, showAbnNotice 
         <input type="checkbox" checked={confirmed} onChange={e => onConfirm(e.target.checked)}
           className="accent-primary w-4 h-4 mt-1 cursor-pointer" />
         <span className="font-headline text-[13px] text-light leading-relaxed">
-          I confirm I have the rights to host this event and the information provided is accurate.
-          I agree to the{" "}
-          <span className="text-primary hover:underline cursor-pointer">Organiser Terms</span> and{" "}
-          <span className="text-primary hover:underline cursor-pointer">Event Listing Policy</span>.
+          I confirm I have the right to run this event, that it has the insurance and permits it
+          needs, and that these details are accurate. I agree to the organiser terms in the{" "}
+          <a href={termsHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>.
         </span>
       </label>
     </div>
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   LIVE PREVIEW SIDEBAR
+   ══════════════════════════════════════════════════════════════ */

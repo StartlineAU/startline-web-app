@@ -18,38 +18,27 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { takesPayments } from "@/lib/event-approval";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
 import SuburbAutocomplete   from "@/components/ui/SuburbAutocomplete";
 import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
 import DatePicker           from "@/components/ui/DatePicker";
 import SelectMenu           from "@/components/ui/SelectMenu";
 import TimePicker           from "@/components/ui/TimePicker";
-import AddOnEditor, {
-  uploadAddOnImages,
-  publishAddOnsToProfile,
-  PublishToProfileError,
-} from "@/components/organiser/AddOnEditor";
-import {
-  type AddOnDraft,
-  draftsFromCatalogue,
-  draftsToPayload,
-  draftValidationError,
-} from "@/lib/add-on-drafts";
 
+/* ── Step definitions ───────────────────────────────────────── */
 
 import {
-  Field, fmt24to12, inputCls,
+  fmt24to12, stripHtml,
   type FormState,
-  stripHtml,
 } from "./shared";
 
 const INTENSITY_LABELS: Record<string, string> = {
   low: "Low", moderate: "Moderate", high: "High", extreme: "Extreme",
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   LIVE PREVIEW SIDEBAR
-   ══════════════════════════════════════════════════════════════ */
 export const DISC_LABEL: Record<string, string> = {
   crossfit: "CrossFit", running: "Running", hybrid: "Hybrid",
   cycling: "Cycling", swimming: "Swimming", other: "Other",
@@ -71,7 +60,9 @@ export function LivePreview({ form }: { form: FormState }) {
 
   return (
     <div>
-      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary/70 block mb-4">
+      {/* Desktop sidebar only. On a phone the card sits inside the "Event
+          preview" toggle, which already names it. */}
+      <span className="hidden lg:block font-headline text-[11px] font-bold uppercase tracking-widest text-primary/70 mb-4">
         Live preview
       </span>
 
@@ -217,17 +208,34 @@ export function EventFullPreview({ form, onClose }: { form: FormState; onClose: 
   const prizeAmount = form.prizeMoney ? normalisePrizeAmount(form.prizeMoneyAmount) : "";
   const cap = form.cap ? parseInt(form.cap) : null;
 
+  // The preview covers the whole screen, so on a phone the back swipe is the
+  // obvious way out of it. Opening adds a history entry for the preview, which
+  // makes Back close the preview instead of leaving the wizard and losing the
+  // event. Close goes through the same entry so none is left behind.
+  const pushedEntry = useRef(false);
+  useEffect(() => {
+    if (!pushedEntry.current && !window.history.state?.eventPreview) {
+      window.history.pushState({ ...window.history.state, eventPreview: true }, "");
+    }
+    pushedEntry.current = true;
+    window.addEventListener("popstate", onClose);
+    return () => window.removeEventListener("popstate", onClose);
+  }, [onClose]);
+  const close = () => window.history.back();
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overlay-in">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+    // Above the site nav (z-50), with an opaque bar: the nav's logo used to
+    // show through the preview's header.
+    <div className="fixed inset-0 z-[60] flex flex-col overlay-in">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
       <div className="relative flex flex-col w-full h-full overflow-hidden modal-in">
-        <div className="relative z-10 flex items-center justify-between px-5 py-3 bg-dark-darker/95 backdrop-blur border-b border-dark-lighter shrink-0">
+        <div className="relative z-10 flex items-center justify-between px-5 py-3 bg-dark-darker border-b border-dark-lighter shrink-0">
           <div className="flex items-center gap-3">
             <Eye className="w-4 h-4 text-primary" />
             <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Athlete view preview</span>
             <span className="font-headline text-[10px] uppercase tracking-widest text-light hidden sm:block">This is how your listing will appear to athletes</span>
           </div>
-          <button onClick={onClose}
+          <button onClick={close}
             className="flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest text-light hover:text-light transition-colors">
             <X className="w-4 h-4" /> Close preview
           </button>
@@ -365,8 +373,8 @@ export function EventFullPreview({ form, onClose }: { form: FormState; onClose: 
                     {form.registrationType === "external" ? <ExternalLink className="w-4 h-4" /> : <Ticket className="w-4 h-4" />}
                   </span>
                   <span className="w-full flex items-center justify-center gap-2 border border-dark-lighter text-light font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md cursor-default">
-                    <MapPin className="w-4 h-4" />
                     View on Maps
+                    <MapPin className="w-4 h-4" />
                   </span>
                 </div>
 
@@ -456,3 +464,8 @@ export function EventFullPreview({ form, onClose }: { form: FormState; onClose: 
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   MAIN WIZARD PAGE
+   Shared event create/edit wizard used by both the organiser portal
+   (/organiser/new-listing) and the admin portal (/admin/events/...).
+   ══════════════════════════════════════════════════════════════ */

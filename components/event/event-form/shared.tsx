@@ -18,24 +18,17 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { takesPayments } from "@/lib/event-approval";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
 import SuburbAutocomplete   from "@/components/ui/SuburbAutocomplete";
 import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
 import DatePicker           from "@/components/ui/DatePicker";
 import SelectMenu           from "@/components/ui/SelectMenu";
 import TimePicker           from "@/components/ui/TimePicker";
-import AddOnEditor, {
-  uploadAddOnImages,
-  publishAddOnsToProfile,
-  PublishToProfileError,
-} from "@/components/organiser/AddOnEditor";
-import {
-  type AddOnDraft,
-  draftsFromCatalogue,
-  draftsToPayload,
-  draftValidationError,
-} from "@/lib/add-on-drafts";
 
+/* ── Step definitions ───────────────────────────────────────── */
 
 export const STEPS = [
   { k: "basics",   n: "01", label: "The Basics",          sub: "Name & Discipline"      },
@@ -45,12 +38,53 @@ export const STEPS = [
   { k: "review",   n: "05", label: "Final Review",        sub: "Review & Publish"       },
 ] as const;
 
-export const STEP_ERRORS: Record<number, string> = {
-  0: "Event name, format, discipline, intensity level, participant cap and minimum age are required.",
-  1: "Date, start time, street address, city and state are required.",
-  2: "Registration platform, a name and price for every ticket category, and refund policy are required.",
-  3: "A cover image and full description are required.",
-};
+/**
+ * One required thing the organiser has not finished: the review-table row it
+ * belongs to, the step that fixes it, and what to tell them.
+ */
+export type Requirement = { row: string; step: number; message: string };
+
+/**
+ * Everything still standing between this form and publishing. The one source
+ * for both the step rail's error marks and the review table, so the two cannot
+ * disagree about what is missing.
+ */
+export function waveIsComplete(w: { label: string; price: string }): boolean {
+  const price = parseFloat(w.price);
+  return w.label.trim().length > 0 && Number.isFinite(price) && price >= 0;
+}
+
+export function missingRequirements(form: FormState): Requirement[] {
+  const missing: Requirement[] = [];
+  const need = (row: string, step: number, message: string) => missing.push({ row, step, message });
+
+  if (form.title.trim().length <= 2) need("Title", 0, "Add an event name of at least 3 characters");
+  if (!form.discipline) need("Discipline", 0, "Choose a discipline");
+  if (!form.format) need("Format", 0, "Choose a format");
+  if (!form.level) need("Intensity", 0, "Choose an intensity level");
+  if (form.cap === "" || form.minAge === "") need("Cap / Min age", 0, "Set a participant cap and a minimum age");
+  if (DISCIPLINE_CATS[form.discipline as Discipline] && form.categories.length === 0) {
+    need("Categories", 0, "Choose at least one category");
+  }
+
+  if (!form.date) need("Date", 1, "Choose the event date");
+  if (!form.startTime) need("Start / End", 1, "Set a start time");
+  else if (form.endTime && form.endTime <= form.startTime) need("Start / End", 1, "Cut-off time must be after the start time");
+  if (!(form.address.trim() && form.city.trim() && form.state)) need("Venue", 1, "Add the street address, city and state");
+
+  if (form.waves.length === 0 || !form.waves.every(waveIsComplete)) {
+    need("Tickets", 2, "Every ticket category needs a name and a price");
+  }
+  if (form.registrationType !== "startline" && !form.registrationUrl.trim()) {
+    need("Registration", 2, "Add your registration link");
+  }
+  if (!tiersAreValid(form.refundTiers)) need("Refund policy", 2, "Finish the refund policy");
+
+  if (!(form.coverImage || form.coverImageUrl)) need("Cover image", 3, "Upload a cover image");
+  if (stripHtml(form.description).length === 0) need("Description", 3, "Write the event description");
+
+  return missing;
+}
 
 export type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "other" | "";
 export type Format     = "individual" | "team" | "both" | "";
@@ -242,6 +276,5 @@ export const INTENSITY_LEVELS: { v: Intensity; l: string; d: string }[] = [
   { v: "high",     l: "High",     d: "Competitive & challenging" },
   { v: "extreme",  l: "Extreme",  d: "Elite / pro level"        },
 ];
-
 
 export const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&[^;\s]+;/g, " ").replace(/\s+/g, " ").trim();

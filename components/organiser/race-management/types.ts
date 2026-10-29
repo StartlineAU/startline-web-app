@@ -1,4 +1,3 @@
-import type { RegistrationAddOnView } from "@/components/organiser/AddOnsTab";
 import type { WaveDef } from "@/lib/wave-assignment";
 
 export interface Registration {
@@ -26,12 +25,16 @@ export interface Registration {
   resultPlacement: string | null;
   isPersonalBest: boolean;
   isTopResult: boolean;
-  /** Merchandise on this entry. `amount` above stays the entry alone. */
-  addOns?: RegistrationAddOnView[];
-  addOnAmount?: number;
 }
 
 export interface StartWave extends WaveDef {
   sortOrder: number;
   assigned: number;
 }
+
+export interface PageData {
+  event: { id: string; title: string; startWaves: StartWave[] };
+  registrations: Registration[];
+}
+
+
