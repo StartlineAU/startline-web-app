@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { geocodePlace } from "@/lib/geocode";
+import { rateLimitPaid } from "@/lib/rate-limit";
 import { haversineDistance } from "@/lib/distance";
 import { getEventCoords } from "@/lib/australia-coords";
 import { publicDiscoveryWhere } from "@/lib/event-lifecycle";
@@ -149,7 +150,16 @@ export async function GET(req: NextRequest) {
   }
 
   // Nothing by that name hosts an event: locate the query and offer the closest
-  // suburbs that do.
+  // suburbs that do. This is the route's only call to the paid geocoder, so the
+  // limit and shared billable budget go here rather than on every keystroke's
+  // cheap database lookup above.
+  const blocked = await rateLimitPaid(req, {
+    prefix: "event-suburb-geocode",
+    limit: 20,
+    windowSeconds: 60,
+  });
+  if (blocked) return blocked;
+
   const place = await geocodePlace(parsed.data.q);
   if (!place || place.latitude == null || place.longitude == null) {
     return NextResponse.json({ results: [], nearby: false });

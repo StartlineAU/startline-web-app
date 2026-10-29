@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import EventDetailView from "@/components/event/EventDetailView";
 import { getAllEvents, getPublicEventById } from "@/lib/events";
 import { getEventDetail } from "@/lib/event-detail";
+import { stripHtml } from "@/lib/sanitize-html";
 
 export const revalidate = 60;
 
@@ -28,7 +29,7 @@ export async function generateMetadata({
 
   const title = found.title;
   const description =
-    found.description?.replace(/<[^>]+>/g, "").slice(0, 160) ||
+    (found.description ? stripHtml(found.description).slice(0, 160) : "") ||
     `${found.title} — ${found.city}, ${found.state.toUpperCase()}`;
   const image = found.coverImageUrl || undefined;
   const url = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://startlineau.com"}/events/${found.slug ?? id}`;

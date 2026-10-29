@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, startTransition } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback, startTransition } from "react";
 import { fetchAuthSession, getCurrentUser, signOut } from "aws-amplify/auth";
 
 export type Role = "user" | "organiser" | "admin";
@@ -51,9 +51,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [memberships,  setMemberships]  = useState<OrgMembership[]>([]);
   const [status,       setStatus]       = useState<AuthStatus>("loading");
 
+  const userRef = useRef<AuthUser | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   const hydrate = useCallback(async () => {
     if (process.env.NODE_ENV === "development" && typeof document !== "undefined" && document.cookie.includes("__e2e_bypass")) {
-      setUser({ sub: "dev-bypass", email: "bypass@startline.test" });
+      // The cookie's value names the identity, so changing it is an account
+      // switch, which is what lets e2e cover one.
+      const identity = document.cookie.match(/(?:^|;\s*)__e2e_bypass=([^;]*)/)?.[1] ?? "";
+      const sub = `dev-bypass-${identity}`;
+      setUser(prev => (prev?.sub === sub ? prev : { sub, email: "bypass@startline.test" }));
       setStatus("authenticated");
       return;
     }
@@ -76,10 +85,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ? loginId
             : "");
 
-      setUser({
-        sub:   current.userId,
-        email,
-      });
+      // Same account: keep the object, so a re-check on focus re-renders nothing.
+      setUser(prev =>
+        prev?.sub === current.userId && prev.email === email
+          ? prev
+          : { sub: current.userId, email },
+      );
       setStatus("authenticated");
     } catch {
       setUser(null);
@@ -91,9 +102,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     startTransition(() => hydrate());
   }, [hydrate]);
 
-  // Fetch role when auth status changes
+  // Every tab shares one set of Cognito cookies, so signing in or out in one
+  // tab changes the account under all the others. Re-read it when a tab comes
+  // back into view, or it keeps showing the account it loaded with while every
+  // request it makes goes out as the new one.
   useEffect(() => {
-    if (status !== "authenticated") return;
+    const recheck = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (process.env.NODE_ENV === "development" && document.cookie.includes("__e2e_bypass")) {
+        startTransition(() => hydrate());
+        return;
+      }
+      try {
+        const session = await fetchAuthSession();
+        if (!session.tokens?.accessToken) {
+          startTransition(() => {
+            setUser(null);
+            setStatus("unauthenticated");
+          });
+          return;
+        }
+        const { userId } = await getCurrentUser();
+        if (userId !== userRef.current?.sub) startTransition(() => hydrate());
+      } catch {
+        // A failed check (offline, a refresh mid-flight) says nothing about
+        // which account this is, so it signs nobody out.
+      }
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    return () => {
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("focus", recheck);
+    };
+  }, [hydrate]);
+
+  // Role and memberships belong to the account, so refetch them whenever it
+  // changes, not only when status does: a switch from one account to another
+  // stays "authenticated" throughout and would keep the previous one's role,
+  // which is how an athlete ended up with the admin's menu.
+  const sub = user?.sub ?? null;
+  useEffect(() => {
+    startTransition(() => {
+      setRole(null);
+      setHasOrganiser(false);
+      setOrganiserCount(0);
+      setMemberships([]);
+    });
+    if (status !== "authenticated" || !sub) return;
     let cancelled = false;
     fetch("/api/user/role")
       .then(r => (r.ok ? r.json() : null))
@@ -109,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [status]);
+  }, [status, sub]);
 
   const logout = useCallback(async () => {
     await signOut();

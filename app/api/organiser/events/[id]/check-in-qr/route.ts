@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
-import { randomUUID } from "crypto";
-import QRCode from "qrcode";
+import { buildCheckInQr, checkInUrl, ensureCheckInCode } from "@/lib/check-in-qr";
 import prisma from "@/lib/prisma";
 import { idParams } from "@/lib/schemas";
 
@@ -26,14 +25,11 @@ export async function POST(
 
   // The check-in code is generated once and persisted so every tap shows the
   // same QR. crypto-random, never derived from the event id/title.
-  const checkInCode = event.checkInCode ?? randomUUID();
-  if (!event.checkInCode) {
-    await prisma.event.update({ where: { id }, data: { checkInCode } });
-  }
-
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://startlineau.com";
-  const url = `${baseUrl}/checkin/${id}/${checkInCode}`;
-  const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 512 });
+  const checkInCode = await ensureCheckInCode(event);
+  const url = checkInUrl(id, checkInCode);
+  // 1024px so the same image can be composited into the downloadable PNG
+  // without visibly upscaling it.
+  const qrDataUrl = await buildCheckInQr(url, 1024);
 
   return NextResponse.json({ url, qrDataUrl });
 }

@@ -97,7 +97,7 @@ export default function OrganiserFollowSection({
   return (
     <>
       <div className="flex items-end gap-4 sm:gap-5 ml-auto shrink-0">
-        <div className="flex items-end gap-4 sm:gap-5">
+        <div className="flex items-start gap-4 sm:gap-5">
           <div className="text-center">
             <div className="font-headline text-xl sm:text-2xl font-black tracking-tighter text-light leading-none">
               {formatCount(stats.registrations)}

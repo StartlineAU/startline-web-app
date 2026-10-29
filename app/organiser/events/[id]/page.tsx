@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
@@ -121,7 +122,7 @@ export default function EventStatusPage({
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState("");
 
-  useEffect(() => {
+  const loadEvent = useCallback(() => {
     fetch(`/api/organiser/events/${id}`)
       .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error ?? "Failed to load")))
       .then((d: EventDetail) => {
@@ -134,6 +135,9 @@ export default function EventStatusPage({
       .catch((e: string) => setError(e))
       .finally(() => setLoading(false));
   }, [id, router]);
+
+  useEffect(() => { loadEvent(); }, [loadEvent]);
+  useOnOrganiserEventsChanged(loadEvent);
 
   const submitForReview = async () => {
     if (!event) return;

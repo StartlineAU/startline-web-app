@@ -21,11 +21,10 @@ import { nextAvailableBib } from "@/lib/bib-assignment";
 import { assignAthletesToWaves, unassignedReason, type WaveDef } from "@/lib/wave-assignment";
 import { parseFinishToMinutes, formatFinishMinutes, calcAgeFromIsoDate } from "@/lib/registration-form";
 import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
-import { parseCsvTable } from "@/lib/registration-csv";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
-import AddOnsTab, { type RegistrationAddOnView } from "@/components/organiser/AddOnsTab";
+import ResultsImportDialog from "@/components/organiser/ResultsImportDialog";
 import {
   DEFAULT_EXPORT_COLUMN_KEYS,
   EXPORT_COLUMNS,
@@ -185,9 +184,6 @@ interface Registration {
   resultPlacement: string | null;
   isPersonalBest: boolean;
   isTopResult: boolean;
-  /** Merchandise on this entry. `amount` above stays the entry alone. */
-  addOns?: RegistrationAddOnView[];
-  addOnAmount?: number;
 }
 
 interface StartWave extends WaveDef {
@@ -196,7 +192,7 @@ interface StartWave extends WaveDef {
 }
 
 interface PageData {
-  event: { id: string; title: string; startWaves: StartWave[]; feeStructure?: string };
+  event: { id: string; title: string; startWaves: StartWave[] };
   registrations: Registration[];
 }
 
@@ -241,17 +237,15 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const [savingResult, setSavingResult] = useState(false);
   const [resultError, setResultError] = useState("");
 
-  const [csvOpen, setCsvOpen] = useState(false);
-  const [csvText, setCsvText] = useState("");
-  const [csvUploading, setCsvUploading] = useState(false);
-  const [csvMessage, setCsvMessage] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
 
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifySaving, setNotifySaving] = useState(false);
   const [notifyMsg, setNotifyMsg] = useState("");
 
   // Splits the page into before-race setup (waves, bibs) and after-race results.
-  const [activeTab, setActiveTab] = useState<"setup" | "results" | "addons" | "refunds">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">("setup");
 
   const load = useCallback((opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
@@ -467,58 +461,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     }
   };
 
-  const uploadCsv = async () => {
-    setCsvMessage("");
-    const { header, rows } = parseCsvTable(csvText);
-    if (header.length === 0 || rows.length === 0) {
-      setCsvMessage("Add a header row plus at least one result row.");
-      return;
-    }
-    const col = (name: string) => header.indexOf(name);
-    const emailCol = col("email");
-    if (emailCol === -1) {
-      setCsvMessage('CSV must include an "email" column.');
-      return;
-    }
-
-    const payload = rows.map((cells) => {
-      const boolVal = (i: number) => i !== -1 && /^(true|1|yes)$/i.test(cells[i] ?? "");
-      return {
-        athleteEmail: cells[emailCol],
-        // distance column ignored — division comes from registration.category
-        resultTime: col("time") !== -1 ? (cells[col("time")] || null) : undefined,
-        resultPlacement: col("placement") !== -1 ? (cells[col("placement")] || null) : undefined,
-        isPersonalBest: boolVal(col("ispersonalbest")),
-        isTopResult: boolVal(col("istopresult")),
-      };
-    });
-
-    setCsvUploading(true);
-    try {
-      const res = await fetch(`/api/organiser/events/${id}/results`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ results: payload }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setCsvMessage(json.error ?? "Upload failed.");
-        return;
-      }
-      setCsvMessage(
-        `Updated ${json.updated} result${json.updated === 1 ? "" : "s"}.` +
-        (json.unmatched?.length ? ` No athlete matched: ${json.unmatched.join(", ")}.` : "") +
-        (json.invalidTimes?.length
-          ? ` Skipped ${json.invalidTimes.length} row${json.invalidTimes.length === 1 ? "" : "s"} with an unreadable time: ` +
-            `${json.invalidTimes.map((t: { athlete: string; value: string }) => `${t.athlete} (${t.value})`).join(", ")}.`
-          : "")
-      );
-      load();
-    } finally {
-      setCsvUploading(false);
-    }
-  };
-
   const openManageWaves = () => {
     setAssignMsg("");
     // Deep copy so edits in the builder don't mutate the loaded data.
@@ -680,10 +622,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     .filter((r) => r.status === "REFUND_REQUESTED" || r.status === "REFUNDED")
     .sort((a, b) => Number(a.status !== "REFUND_REQUESTED") - Number(b.status !== "REFUND_REQUESTED"));
   const refundPending = registrations.filter((r) => r.status === "REFUND_REQUESTED").length;
-  const addOnRefundPending = registrations.reduce(
-    (sum, r) => sum + (r.addOns ?? []).filter((a) => a.status === "REFUND_REQUESTED").length,
-    0,
-  );
 
   const openNotify = () => { setNotifyMsg(""); setNotifyOpen(true); };
 
@@ -693,12 +631,10 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           {([
             { id: "setup", label: "Before race" },
             { id: "results", label: "After race" },
-            { id: "addons", label: "Add-ons" },
             { id: "refunds", label: "Refunds" },
           ] as const).map((t) => {
             const on = activeTab === t.id;
-            const badge =
-              t.id === "refunds" ? refundPending : t.id === "addons" ? addOnRefundPending : 0;
+            const badge = t.id === "refunds" ? refundPending : 0;
             return (
               <button
                 key={t.id}
@@ -773,15 +709,21 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
             )}
             {activeTab === "results" && (
               <Button
-                onClick={() => { setCsvMessage(""); setCsvText(""); setCsvOpen(true); }}
+                onClick={() => { setImportMessage(""); setImportOpen(true); }}
                 className="shadow-machined"
               >
-                <Upload className="w-4 h-4" /> Upload results CSV
+                <Upload className="w-4 h-4" /> Import results
               </Button>
             )}
             <ExportMenu eventId={id} />
           </div>
         </div>
+
+        {activeTab === "results" && importMessage && (
+          <p className="flex items-center gap-2 text-[13px] text-primary mb-4">
+            <CheckCircle2 className="w-4 h-4" /> {importMessage}
+          </p>
+        )}
 
         {activeTab === "setup" && assignMsg && !manageOpen && (
           <p className="text-[13px] text-muted-light mb-4">{assignMsg}</p>
@@ -865,15 +807,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
               />
             </CardContent>
           </Card>
-        )}
-
-        {activeTab === "addons" && (
-          <AddOnsTab
-            eventId={id}
-            registrations={registrations}
-            feeStructure={data?.event?.feeStructure === "organiser" ? "organiser" : "athlete"}
-            onRefetch={() => load({ silent: true })}
-          />
         )}
 
         {activeTab === "refunds" && (
@@ -1092,33 +1025,18 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* Results CSV */}
-      <Dialog open={csvOpen} onOpenChange={setCsvOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Upload results CSV</DialogTitle>
-            <DialogDescription>
-              Paste rows with a header:{" "}
-              <code className="text-muted-light">email,time,placement</code>.
-              Division comes from each athlete&apos;s registration category.
-            </DialogDescription>
-          </DialogHeader>
-          <textarea
-            value={csvText}
-            onChange={(e) => setCsvText(e.target.value)}
-            rows={8}
-            placeholder={"email,time,placement\nalex.turner@example.com,41:05,8th / 512"}
-            className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[13px] text-light font-mono placeholder:text-placeholder focus:border-primary focus:outline-none resize-y"
-          />
-          {csvMessage && <p className="text-[13px] text-muted-light">{csvMessage}</p>}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setCsvOpen(false)}>Close</Button>
-            <Button onClick={uploadCsv} disabled={csvUploading}>
-              {csvUploading ? "Uploading…" : "Upload"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {importOpen && (
+        <ResultsImportDialog
+          eventId={id}
+          registrations={registrations}
+          onClose={() => setImportOpen(false)}
+          onImported={(count) => {
+            setImportOpen(false);
+            setImportMessage(`Updated ${count} result${count === 1 ? "" : "s"}.`);
+            load({ silent: true });
+          }}
+        />
+      )}
 
       {/* Notify athletes of wave */}
       <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>

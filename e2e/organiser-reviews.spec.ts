@@ -4,7 +4,7 @@ test.describe("organiser reviews auth + layout", () => {
   test("signed-out write review opens sign-in; summary shows metrics", async ({ page }) => {
     const eventsRes = await page.request.get("/api/events");
     expect(eventsRes.ok()).toBeTruthy();
-    const events = await eventsRes.json();
+    const { events } = await eventsRes.json();
     const organiserId = events.find((e: { organiserId?: string }) => e.organiserId)?.organiserId;
     expect(organiserId).toBeTruthy();
 
@@ -23,7 +23,7 @@ test.describe("organiser reviews auth + layout", () => {
 
   test("review POST without reviewerName uses account name (auth required)", async ({ request }) => {
     const eventsRes = await request.get("/api/events");
-    const events = await eventsRes.json();
+    const { events } = await eventsRes.json();
     const organiserId = events[0]?.organiserId as string;
     expect(organiserId).toBeTruthy();
 

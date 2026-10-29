@@ -3,7 +3,7 @@
  * the browser.
  *
  * These must stay in step with the Cognito user pool policy in
- * `terraform/modules/environment/main.tf` (`password_policy`). If that policy
+ * `startline-infra/web-app/modules/environment/main.tf` (`password_policy`). If that policy
  * changes, change this list in the same PR: anything Cognito rejects but this
  * list allows surfaces to the user as a raw `InvalidPasswordException` instead
  * of a readable message, which is the problem issue #286 reported.

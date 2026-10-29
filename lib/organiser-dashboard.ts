@@ -122,6 +122,21 @@ export function computeCurrentStats(
   };
 }
 
+/**
+ * Y-axis ticks for the trend chart: whole numbers from 0 up to a round value at
+ * or above `max`, in steps of 1, 2 or 5 times a power of ten. Whole steps
+ * because the axis labels are rounded, and fractional ticks on a small range
+ * used to print as 0, 0, 1, 1, 1. An empty chart gets 0 to 4.
+ */
+export function trendAxisTicks(max: number): number[] {
+  const top = max > 0 ? max : 4;
+  const rough = top / 4;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(rough, 1))));
+  const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? 10 * magnitude;
+  const count = Math.ceil(top / step);
+  return Array.from({ length: count + 1 }, (_, i) => i * step);
+}
+
 export function formatAudFromCents(cents: number): string {
   const dollars = cents / 100;
   return new Intl.NumberFormat("en-AU", {

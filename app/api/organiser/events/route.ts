@@ -12,6 +12,7 @@ import { organiserEventPayloadSchema } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
+import { takesPayments } from "@/lib/event-approval";
 export async function GET() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -114,11 +115,11 @@ export async function POST(req: NextRequest) {
   // It used to reject the whole submission at the last step, after five steps
   // and an image upload, which read as losing the work. It now costs the event
   // its auto-approval instead: the listing saves, and an admin has to add the
-  // missing detail before it can go live.
+  // missing detail before it can go live. A free event takes no money, so it
+  // never needs one (lib/event-approval.ts).
   const registrationType = body.registrationType ?? "startline";
-  const needsAbn = registrationType === "startline";
   let abnOk = true;
-  if (needsAbn) {
+  if (takesPayments(registrationType, body.waves)) {
     const org = await prisma.organiser.findUnique({
       where: { id: organiserId },
       select: { abn: true },
@@ -126,9 +127,9 @@ export async function POST(req: NextRequest) {
     abnOk = hasAbn(org?.abn);
   }
 
-  // Verified organisers normally skip review. Not without an ABN: auto-approving
-  // would put a paid listing live with no ABN attached, which is the outcome the
-  // requirement exists to prevent, and the admin would never see it.
+  // Verified organisers normally skip review. Not a paid listing without an
+  // ABN: auto-approving would put it live with no ABN attached, which is the
+  // outcome the requirement exists to prevent, and the admin would never see it.
   const eventStatus = submit
     ? (verified && abnOk ? "APPROVED" : "PENDING")
     : "DRAFT";

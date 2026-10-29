@@ -1,5 +1,6 @@
 import { Section, Text, Link } from '@react-email/components'
 import { colors, fonts } from './tokens'
+import { LEGAL_CONTACT_EMAIL, LEGAL_ENTITY_ABN, LEGAL_ENTITY_NAME } from '../../lib/legal'
 
 const socialStyle: React.CSSProperties = {
   fontFamily: fonts.heading,
@@ -39,8 +40,8 @@ export function EmailFooter() {
 
       <Text style={{ margin: '0 0 6px', fontFamily: fonts.body, fontSize: '12px', color: colors.muted }}>
         Need help?{' '}
-        <Link href="mailto:support@startline.com.au" style={{ color: colors.muted }}>
-          support@startline.com.au
+        <Link href={`mailto:${LEGAL_CONTACT_EMAIL}`} style={{ color: colors.muted }}>
+          {LEGAL_CONTACT_EMAIL}
         </Link>
       </Text>
 
@@ -51,8 +52,7 @@ export function EmailFooter() {
       </Text>
 
       <Text style={{ margin: '0', fontFamily: fonts.body, fontSize: '11px', color: colors.faint, lineHeight: '1.7' }}>
-        © 2026 Startline Pty Ltd · ABN 12 345 678 901<br />
-        PO Box 1234, Sydney NSW 2000, Australia
+        {LEGAL_ENTITY_NAME} · ABN {LEGAL_ENTITY_ABN}
       </Text>
       <Text style={{ margin: '4px 0 0', fontFamily: fonts.body, fontSize: '10px', color: colors.faint }}>
         This is a transactional email. You cannot unsubscribe from account and event notifications.

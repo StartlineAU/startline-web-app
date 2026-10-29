@@ -1,15 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Issue #321: admins asked to be emailed, personally, whenever an organiser
 // lists an event that needs review, and to land on a preview of it.
+// Issue #337: recipients are resolved from the Cognito admins group, so an
+// admin who has never signed in to the admin portal is still reached.
 
 const mocks = vi.hoisted(() => ({
   event: { findUnique: vi.fn() },
-  admin: { findMany: vi.fn() },
+  adminRecipients: vi.fn(),
   sendEmails: vi.fn(),
 }));
 
-vi.mock("@/lib/prisma", () => ({ default: { event: mocks.event, admin: mocks.admin } }));
+vi.mock("@/lib/prisma", () => ({ default: { event: mocks.event } }));
+vi.mock("@/lib/admin-notification-recipients", () => ({
+  listAdminReviewRecipients: mocks.adminRecipients,
+}));
 vi.mock("@/lib/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/email")>()),
   sendEventSubmittedForReviewEmails: mocks.sendEmails,
@@ -17,7 +22,7 @@ vi.mock("@/lib/email", async (importOriginal) => ({
 
 import { buildEventSubmittedForReviewEmail } from "@/lib/email";
 import { approvalBlocker } from "@/lib/event-approval";
-import { adminReviewRecipients, notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
+import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
 
 const organiser = {
   orgName: "Hugo Publications",
@@ -39,35 +44,29 @@ const pendingEvent = {
   organiser,
 };
 
+const paidWaves = [{ label: "General", price: "45" }];
+const freeWaves = [{ label: "General", price: "0" }];
+
 describe("approvalBlocker", () => {
   it("never blocks an external listing", () => {
-    expect(approvalBlocker({ registrationType: "external", organiser: { abn: null, stripeOnboardingComplete: false } })).toBeNull();
+    expect(approvalBlocker({ registrationType: "external", waves: paidWaves, organiser: { abn: null, stripeOnboardingComplete: false } })).toBeNull();
   });
 
   it("names the ABN first, then Stripe", () => {
-    expect(approvalBlocker({ registrationType: "startline", organiser: { abn: null, stripeOnboardingComplete: false } }))
+    expect(approvalBlocker({ registrationType: "startline", waves: paidWaves, organiser: { abn: null, stripeOnboardingComplete: false } }))
       .toBe("No ABN on file");
-    expect(approvalBlocker({ registrationType: "startline", organiser: { abn: organiser.abn, stripeOnboardingComplete: false } }))
+    expect(approvalBlocker({ registrationType: "startline", waves: paidWaves, organiser: { abn: organiser.abn, stripeOnboardingComplete: false } }))
       .toBe("Stripe onboarding incomplete");
-    expect(approvalBlocker({ registrationType: "startline", organiser })).toBeNull();
-  });
-});
-
-describe("adminReviewRecipients", () => {
-  it("de-duplicates case-insensitively and drops blanks", () => {
-    expect(adminReviewRecipients(["Nathan@Startlineau.com", "nathan@startlineau.com ", "", null, undefined]))
-      .toEqual(["nathan@startlineau.com"]);
+    expect(approvalBlocker({ registrationType: "startline", waves: paidWaves, organiser })).toBeNull();
   });
 
-  // Staging holds the seeded @startline.test admins, which can never receive mail.
-  it("skips reserved, undeliverable domains and malformed addresses", () => {
-    expect(adminReviewRecipients([
-      "marcus.stirling@startline.test",
-      "someone@example",
-      "a@b.invalid",
-      "not-an-email",
-      "hugo@startlineau.com",
-    ])).toEqual(["hugo@startlineau.com"]);
+  it("never blocks a free event, which takes no money", () => {
+    expect(approvalBlocker({ registrationType: "startline", waves: freeWaves, organiser: { abn: null, stripeOnboardingComplete: false } })).toBeNull();
+  });
+
+  it("blocks once any ticket costs something", () => {
+    expect(approvalBlocker({ registrationType: "startline", waves: [...freeWaves, ...paidWaves], organiser: { abn: null, stripeOnboardingComplete: false } }))
+      .toBe("No ABN on file");
   });
 });
 
@@ -107,14 +106,17 @@ describe("notifyAdminsEventSubmitted", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sendEmails.mockResolvedValue(undefined);
-    mocks.admin.findMany.mockResolvedValue([
-      { email: "nathan@startlineau.com" },
-      { email: "hugo@startlineau.com" },
-      { email: "marcus.stirling@startline.test" },
+    mocks.adminRecipients.mockResolvedValue([
+      "nathan@startlineau.com",
+      "hugo@startlineau.com",
     ]);
   });
 
-  it("emails every deliverable admin with the event details", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("emails every deliverable member of the admins group", async () => {
     mocks.event.findUnique.mockResolvedValue(pendingEvent);
 
     const result = await notifyAdminsEventSubmitted("evt-1");
@@ -141,16 +143,17 @@ describe("notifyAdminsEventSubmitted", () => {
     expect(mocks.sendEmails).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ blocker: "No ABN on file" }));
   });
 
-  it("sends nothing for an event that is not pending", async () => {
+  it("sends nothing for an event that is not pending, without asking Cognito", async () => {
     mocks.event.findUnique.mockResolvedValue({ ...pendingEvent, status: "APPROVED" });
 
     expect(await notifyAdminsEventSubmitted("evt-1")).toEqual({ emailed: 0 });
+    expect(mocks.adminRecipients).not.toHaveBeenCalled();
     expect(mocks.sendEmails).not.toHaveBeenCalled();
   });
 
-  it("sends nothing when no admin can receive mail", async () => {
+  it("sends nothing when the admins group has no deliverable address", async () => {
     mocks.event.findUnique.mockResolvedValue(pendingEvent);
-    mocks.admin.findMany.mockResolvedValue([{ email: "marcus.stirling@startline.test" }]);
+    mocks.adminRecipients.mockResolvedValue([]);
 
     expect(await notifyAdminsEventSubmitted("evt-1")).toEqual({ emailed: 0 });
     expect(mocks.sendEmails).not.toHaveBeenCalled();

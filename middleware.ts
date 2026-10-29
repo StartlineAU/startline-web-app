@@ -42,6 +42,11 @@ const ADMIN_PROTECTED = [
 // them through or the only route into the product dead-ends (issue #302).
 const ORGANISER_SIGNUP_PATHS = ["/organiser-setup", "/api/organiser/setup"];
 
+// Readable on the apex domain even while it shows the waitlist: the legal
+// pages have to be public before launch, and the waitlist footer links to
+// them. They are served from app/waitlist/(legal), which drops the site header.
+const LEGAL_PATHS = ["/terms", "/privacy", "/cookies"];
+
 async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> {
   const lastAuthUser = req.cookies.get(
     `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
@@ -130,17 +135,32 @@ export async function middleware(req: NextRequest) {
         // Stripe posts to the apex domain, and the rewrite below would answer
         // with the waitlist page: a 200 Stripe reads as delivered while no
         // payment is ever confirmed and no onboarding ever completes. Safe to
-        // expose — the handler verifies the Stripe signature before anything.
+        // expose — both handlers verify the Stripe signature before anything.
+        // account-events is the Accounts v2 event destination (#379).
         || pathname === "/api/stripe/webhook"
+        || pathname === "/api/stripe/account-events"
         // The scheduled lifecycle worker calls the apex host. Without this the
         // waitlist rewrite answers 200 with HTML and nothing ever transitions.
         // The route validates a shared secret before touching the database.
         || pathname === "/api/internal/events/lifecycle"
         || ORGANISER_SIGNUP_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+        // Google and Apple hand back here from /organiser-setup, the one page
+        // that can sign people in while the apex is in waitlist mode, and the
+        // onboarding step a first provider sign-up still owes has to be reachable.
+        || pathname === "/auth/callback"
+        || pathname === "/auth/onboarding"
+        // Linking a provider to an already signed-in account has its own
+        // callback so it never becomes a sign-in as that provider's user.
+        || pathname === "/auth/link/callback"
+        // Settings reads and changes the account's sign-in methods from here.
+        || pathname.startsWith("/api/user/sign-in-methods")
         || pathname.startsWith("/_next")
         || pathname.startsWith("/images")
         || pathname.startsWith("/favicon")) {
       return NextResponse.next();
+    }
+    if (LEGAL_PATHS.includes(pathname)) {
+      return NextResponse.rewrite(new URL(`/waitlist${pathname}`, req.url));
     }
     return NextResponse.rewrite(new URL("/waitlist", req.url));
   }

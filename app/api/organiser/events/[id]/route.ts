@@ -10,6 +10,7 @@ import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { takesPayments } from "@/lib/event-approval";
 
 export async function GET(
   _req: NextRequest,
@@ -59,7 +60,7 @@ export async function PATCH(
     const existing = await prisma.event.findUnique({
       where:  { id },
       select: {
-        organiserId: true, status: true, title: true,
+        organiserId: true, status: true, title: true, registrationType: true, waves: true,
         eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
       },
     });
@@ -82,9 +83,11 @@ export async function PATCH(
     }
 
     // See the create route: a missing ABN costs the event its auto-approval
-    // rather than rejecting the edit and stranding the organiser's changes.
+    // rather than rejecting the edit and stranding the organiser's changes. An
+    // edit that leaves a field out keeps the saved value, so judge what the
+    // event will be once it is written.
     let abnOk = true;
-    if ((data.registrationType ?? "startline") === "startline") {
+    if (takesPayments(data.registrationType ?? existing.registrationType, data.waves ?? existing.waves)) {
       const org = await prisma.organiser.findUnique({
         where: { id: session.sub },
         select: { abn: true },

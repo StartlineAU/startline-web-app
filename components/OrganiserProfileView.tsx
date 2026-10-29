@@ -11,9 +11,6 @@ import OrganiserRating from "@/components/OrganiserRating";
 import OrganiserFollowSection from "@/components/OrganiserFollowSection";
 import OrganiserEditProfileButton from "@/components/OrganiserEditProfileButton";
 import OrganiserEventsMap from "@/components/OrganiserEventsMap";
-import MerchandiseShowcase from "@/components/MerchandiseShowcase";
-import MerchandiseManager from "@/components/organiser/MerchandiseManager";
-import type { PublicMerchandiseView } from "@/lib/merchandise";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
 
 export type OrganiserProfileData = {
@@ -33,7 +30,6 @@ type Props = {
   past: UserEvent[];
   reviews: PublicReview[];
   reviewEvents: ReviewEventOption[];
-  merchandise: PublicMerchandiseView[];
   stats: OrganiserPublicStats;
   rating: { average: number; count: number } | null;
   action: "follow" | "edit";
@@ -48,7 +44,8 @@ function formatCount(n: number) {
 
 function ProfileStats({ stats }: { stats: OrganiserPublicStats }) {
   return (
-    <div className="flex items-end gap-4 sm:gap-5">
+    // Top-aligned so the numbers share a line and a label that wraps hangs below.
+    <div className="flex items-start gap-4 sm:gap-5">
       <div className="text-center">
         <div className="font-headline text-xl sm:text-2xl font-black tracking-tighter text-light leading-none">
           {formatCount(stats.registrations)}
@@ -83,7 +80,6 @@ export default function OrganiserProfileView({
   past,
   reviews,
   reviewEvents,
-  merchandise,
   stats,
   rating,
   action,
@@ -199,21 +195,6 @@ export default function OrganiserProfileView({
             </div>
           </div>
         </div>
-
-        {/* ── Merchandise (#338) ── The organiser always sees the section so
-            they can add to it; athletes only see it once there is something. */}
-        {action === "edit" ? (
-          <div className="mt-10">
-            <MerchandiseManager initial={merchandise} />
-          </div>
-        ) : merchandise.length > 0 && (
-          <div className="mt-10">
-            <h2 className="font-headline text-xs font-medium uppercase tracking-widest text-primary mb-4">
-              Merchandise ({merchandise.length})
-            </h2>
-            <MerchandiseShowcase items={merchandise} />
-          </div>
-        )}
 
         {/* ── Previous events ── */}
         {past.length > 0 && (

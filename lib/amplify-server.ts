@@ -3,13 +3,25 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { OrganiserRole } from "@prisma/client";
 import prisma from "./prisma";
 import { pickActiveMembership } from "./active-organiser";
+import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
   sub:          string;
+  // Cognito username, which AdminGetUser and AdminLinkProviderForUser take.
+  // Usually the email for password users and a UUID for provider users, so it
+  // is not interchangeable with `sub`.
+  username?:    string;
   email:        string;
   groups:       string[];
   phoneNumber?: string;
   birthdate?:   string;
+  // From the id token. name is set by Google and Apple; emailTrusted is false
+  // only for a Google or Apple sign-in whose provider did not verify the email.
+  name?:         string;
+  emailTrusted?: boolean;
+  // The dev/E2E identity that produced this session, if any. Used by the
+  // settings screen to model provider-only and linked accounts without Cognito.
+  bypass?: string;
 };
 
 export type UserSession = {
@@ -73,9 +85,19 @@ export async function getServerSession(): Promise<ServerSession | null> {
         // Belongs to no organisation, for the "become an organiser" paths.
         // Every other identity here owns or manages one.
         "athlete":  { sub: "dev-bypass-harper-jones", email: "harper.jones@startline.test", groups: [] },
+        // Rows these identities point at are created and removed by the specs
+        // that use them, so tests never mutate the shared seed users.
+        "profile":  { sub: "dev-bypass-profile-test", email: "profile.test@startline.test", groups: [] },
+        "noabn":    { sub: "dev-bypass-noabn-test",   email: "noabn.organiser@startline.test", groups: [] },
+        // Login & security states for issue #389. The sign-in-methods route
+        // returns a fixed state for these; they only give the page a signed-in
+        // visitor without contacting Cognito.
+        "social":   { sub: "dev-bypass-social-test",  email: "social.test@startline.test", groups: [] },
+        "apple":    { sub: "dev-bypass-apple-test",   email: "apple.test@startline.test",  groups: [] },
+        "linked":   { sub: "dev-bypass-linked-test",  email: "linked.test@startline.test", groups: [] },
       };
       const identity = identities[bypass];
-      if (identity) return identity;
+      if (identity) return { ...identity, bypass };
     }
   }
 
@@ -97,6 +119,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
     const sub   = payload.sub as string;
+    const username = typeof payload.username === "string" ? payload.username : undefined;
     const phoneNumber = payload.phone_number as string | undefined;
     const birthdate   = payload.birthdate as string | undefined;
 
@@ -105,6 +128,8 @@ export async function getServerSession(): Promise<ServerSession | null> {
     // sub (a UUID), not an address. Fall back to LastAuthUser only if it is
     // itself an email (pools where the username is the email).
     let email = lastAuthUser.includes("@") ? lastAuthUser : "";
+    let name: string | undefined;
+    let emailTrusted = true;
     const idToken = (
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.idToken`)?.value ??
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.idToken`)?.value
@@ -115,12 +140,20 @@ export async function getServerSession(): Promise<ServerSession | null> {
         if (typeof idPayload.email === "string" && idPayload.email) {
           email = idPayload.email;
         }
+        if (typeof idPayload.name === "string" && idPayload.name.trim()) {
+          name = idPayload.name.trim();
+        }
+        // Only Google and Apple users carry `identities`. Password users are
+        // left alone: seeded accounts are not marked email_verified.
+        if (idPayload.identities && String(idPayload.email_verified) !== "true") {
+          emailTrusted = false;
+        }
       } catch {
         // Keep the fallback if the id token can't be verified.
       }
     }
 
-    return { sub, email, groups, phoneNumber, birthdate };
+    return { sub, username, email, groups, phoneNumber, birthdate, name, emailTrusted };
   } catch {
     return null;
   }
@@ -136,21 +169,19 @@ export async function getUserSession(): Promise<UserSession | null> {
       return { sub: existing.id, email: existing.email, name: existing.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
     }
 
-    if (cognitoSession.email) {
-      const user = await prisma.user.upsert({
-        where: { email: cognitoSession.email },
-        update: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
-        create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
-        select: { id: true, email: true, name: true },
-      });
-      return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
-    }
+    // Re-pointing an existing row at this sub hands that person's account to
+    // whoever holds the session, so it needs an email the provider vouched for.
+    if (cognitoSession.email && cognitoSession.emailTrusted === false) return null;
 
-    const user = await prisma.user.create({
-      data: { cognitoSub: cognitoSession.sub, email: cognitoSession.sub },
-      select: { id: true, email: true, name: true },
-    });
-    return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
+    const user = await resolveUserRow(cognitoSession.sub, cognitoSession.email, cognitoSession.name);
+    if (!user) return null;
+    return {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      phoneNumber: cognitoSession.phoneNumber,
+      birthdate: cognitoSession.birthdate,
+    };
   } catch {
     return null;
   }

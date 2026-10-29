@@ -3,17 +3,16 @@
 import { useState, useEffect, useCallback, useMemo, useRef, startTransition } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Plus, Minus, LogIn, Check, ChevronDown, ShoppingBag } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, Minus, LogIn, Check, ChevronDown } from "lucide-react";
 import SignInModal from "@/components/SignInModal";
 import ParticipantFormSection from "@/components/registration/ParticipantFormSection";
 import SharedEmergencyContactSection from "@/components/registration/SharedEmergencyContactSection";
-import GuestEmailVerificationStep from "@/components/registration/GuestEmailVerificationStep";
 import StepRail from "@/components/registration/StepRail";
 import OrderSummary from "@/components/registration/OrderSummary";
-import AddOnPicker, { type AddOnProduct } from "@/components/registration/AddOnPicker";
-import { addOnSummaryLabel, MAX_ADDON_QUANTITY } from "@/lib/add-ons";
-import ReviewPayStep, { type ReviewRow } from "./ReviewPayStep";
+import ReviewPayStep, { backBtnCls, type ReviewRow } from "./ReviewPayStep";
 import TurnstileWidget from "@/components/TurnstileWidget";
+import TicketHolderToggle, { type TicketHolder } from "@/components/registration/TicketHolderToggle";
+import SaveDetailsPrompt, { type ProfileUpdate } from "@/components/registration/SaveDetailsPrompt";
 import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
@@ -37,7 +36,6 @@ import {
   type RegistrationFormData,
   type EmergencyContact,
   type EmergencyContactErrors,
-  getEmailsRequiringVerification,
 } from "@/lib/registration-form";
 
 interface Wave {
@@ -79,6 +77,12 @@ interface ProfilePrefill {
   emergencyContactPhone: string;
 }
 
+// The saved details "Save to my profile" can fill in (email always exists).
+const PROFILE_FIELDS = [
+  "firstName", "lastName", "mobile", "dateOfBirth", "gender", "emergencyContactName", "emergencyContactPhone",
+] as const;
+type ProfileField = (typeof PROFILE_FIELDS)[number];
+
 interface WaveAvailability {
   label: string;
   qty: number | null;
@@ -88,53 +92,6 @@ interface Availability {
   cap: number | null;
   confirmed: number;
   waves: WaveAvailability[];
-  /** Optional extras on sale, with derived remaining stock. */
-  addOns?: AddOnProduct[];
-}
-
-/** participantIndex -> (variantId -> quantity). */
-type AddOnSelections = Record<number, Record<string, number>>;
-
-/**
- * Move each ticket's extras onto that ticket's new position, dropping the ones
- * whose ticket is gone and clamping what remains to the stock still on offer.
- *
- * Follows exactly the same mapping reconcileParticipants uses, which is what
- * keeps a size with the person who chose it. Pinning extras to their old index
- * instead would, on any change that reorders tickets, quietly hand one
- * participant's shirt to another - and a buyer who removes a ticket must not
- * keep paying for that participant's shirt either.
- */
-function reconcileAddOnSelections(
-  prev: AddOnSelections,
-  prevCount: number,
-  prevWaves: string[],
-  nextWaves: string[],
-  addOns: AddOnProduct[],
-): AddOnSelections {
-  const capByVariant = new Map<string, number>();
-  for (const addOn of addOns) {
-    for (const variant of addOn.variants) {
-      capByVariant.set(variant.id, Math.min(variant.remaining, MAX_ADDON_QUANTITY));
-    }
-  }
-
-  const next: AddOnSelections = {};
-  matchPreviousTickets(prevCount, prevWaves, nextWaves).forEach((from, to) => {
-    if (from == null) return;
-    const selection = prev[from];
-    if (!selection) return;
-
-    const kept: Record<string, number> = {};
-    for (const [variantId, quantity] of Object.entries(selection)) {
-      const cap = capByVariant.get(variantId);
-      if (cap == null || cap <= 0) continue;
-      const clamped = Math.min(quantity, cap);
-      if (clamped > 0) kept[variantId] = clamped;
-    }
-    if (Object.keys(kept).length > 0) next[to] = kept;
-  });
-  return next;
 }
 
 const PLATFORM_FEE_PCT = 0.0395;
@@ -196,14 +153,13 @@ function RegisterContent() {
   const searchParams = useSearchParams();
   const eventId = params.id as string;
   const preselectedWave = searchParams.get("wave") ?? "";
-  const { status, user } = useAuthContext();
+  const { status } = useAuthContext();
 
   const [event, setEvent] = useState<EventData | null>(null);
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [step, setStep] = useState<0 | 1 | 2>(0);
-  const [payPhase, setPayPhase] = useState<"verify" | "pay">("pay");
   const [error, setError] = useState("");
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -227,7 +183,6 @@ function RegisterContent() {
   const [ticketWaves, setTicketWaves] = useState<string[]>([]);
   const [participants, setParticipants] = useState<RegistrationFormData[]>(() => [createEmptyParticipant()]);
   const [openTicket, setOpenTicket] = useState(0);
-  const [addOnSelections, setAddOnSelections] = useState<AddOnSelections>({});
   const [useSharedContact, setUseSharedContact] = useState(true);
   const [sharedEmergencyContact, setSharedEmergencyContact] = useState<EmergencyContact>({ name: "", phone: "" });
   const [fieldErrors, setFieldErrors] = useState<ParticipantFormErrors>({});
@@ -240,13 +195,27 @@ function RegisterContent() {
   const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean } | null>(null);
 
   const prefilledRef = useRef(false);
+  // Signed-in only: the buyer's saved details, and which ticket (if any) is
+  // theirs. Every other ticket is for a guest and starts blank.
+  const [profile, setProfile] = useState<ProfilePrefill | null>(null);
+  const [selfIndex, setSelfIndex] = useState<number | null>(null);
+  // Set on confirmation when the buyer's own ticket holds details their
+  // profile lacks; the confirmation screen offers to save them.
+  const [profileOffer, setProfileOffer] = useState<ProfileUpdate | null>(null);
+
+  // A free RSVP is one ticket for the signed-in account, so the tier is chosen
+  // directly rather than through the quantity steppers.
+  const [freeRsvpWave, setFreeRsvpWave] = useState(preselectedWave);
+  // The server tells us which account email the RSVP used; use that on the
+  // confirmation screen even if the profile request is still in flight.
+  const rsvpEmailRef = useRef("");
 
   // ── Load event ──
   useEffect(() => {
-    fetch(`/api/events`)
-      .then((r) => r.json())
-      .then((events: EventData[]) => {
-        const found = events.find((e) => e.id === eventId);
+    fetch(`/api/events?ids=${encodeURIComponent(eventId)}`)
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((data: { events?: EventData[] }) => {
+        const found = data.events?.find((e) => e.id === eventId);
         if (found) setEvent(found);
         setLoading(false);
       })
@@ -312,9 +281,11 @@ function RegisterContent() {
             ? formatPhoneForDisplay(profile.emergencyContactPhone)
             : "",
         };
+        setProfile(prefill);
         setParticipants((prev) => {
           const first = prev[0];
           if (first.firstName || first.lastName || first.email) return prev;
+          setSelfIndex(0);
           const next = [...prev];
           next[0] = { ...first, ...prefill };
           return next;
@@ -364,91 +335,11 @@ function RegisterContent() {
     : 0;
   const subtotal = tierLines.reduce((sum, t) => sum + t.price * t.qty, 0);
 
-  // ── Extras ────────────────────────────────────────────────────────────────
-  // Computed in whole cents and divided only at render. The ticket figures above
-  // are floats for historical reasons; add-on money must not join them, because
-  // the server compares its own integer arithmetic against the charge.
-  // Only products with an option to choose. A product whose every variant has
-  // been retired comes back from the catalogue with none, and AddOnPicker
-  // renders nothing for it - so without this the ticket step would tease an
-  // extra by name that the details step never offers. A product whose options
-  // are merely sold out still has variants, and still shows, as it should.
-  const addOnCatalogue = useMemo(
-    () => (availability?.addOns ?? []).filter((addOn) => addOn.variants.length > 0),
-    [availability],
-  );
-  const addOnVariantIndex = useMemo(() => {
-    const map = new Map<string, { addOn: AddOnProduct; label: string }>();
-    for (const addOn of addOnCatalogue) {
-      for (const variant of addOn.variants) map.set(variant.id, { addOn, label: variant.label });
-    }
-    return map;
-  }, [addOnCatalogue]);
-
-  /** Flattened basket, one entry per (participant, variant), in ticket order. */
-  const addOnLines = useMemo(() => {
-    const lines: {
-      participantIndex: number;
-      variantId: string;
-      quantity: number;
-      label: string;
-      amountCents: number;
-    }[] = [];
-    const indexes = Object.keys(addOnSelections)
-      .map(Number)
-      .sort((a, b) => a - b);
-    for (const participantIndex of indexes) {
-      const selection = addOnSelections[participantIndex] ?? {};
-      for (const [variantId, quantity] of Object.entries(selection)) {
-        if (quantity <= 0) continue;
-        const hit = addOnVariantIndex.get(variantId);
-        if (!hit) continue;
-        lines.push({
-          participantIndex,
-          variantId,
-          quantity,
-          // Includes the ticket number, so two participants buying the same
-          // shirt cannot collide on OrderSummary's label-keyed rows.
-          label: addOnSummaryLabel({
-            participantIndex,
-            name: hit.addOn.name,
-            variantLabel: hit.label,
-            quantity,
-          }),
-          amountCents: hit.addOn.priceCents * quantity,
-        });
-      }
-    }
-    return lines;
-  }, [addOnSelections, addOnVariantIndex]);
-
-  const addOnSubtotalCents = addOnLines.reduce((sum, l) => sum + l.amountCents, 0);
-  // Rounded once per line, matching lib/add-on-pricing exactly. Percentage only:
-  // the fixed component covers per-registration cost an extra does not incur.
-  const addOnFeeCents = athletePaysFee
-    ? addOnLines.reduce((sum, l) => sum + Math.round(l.amountCents * PLATFORM_FEE_PCT), 0)
-    : 0;
-  const addOnTotal = (addOnSubtotalCents + addOnFeeCents) / 100;
-
-  const setAddOnQty = useCallback((participantIndex: number, variantId: string, quantity: number) => {
-    setAddOnSelections((prev) => {
-      const selection = { ...(prev[participantIndex] ?? {}) };
-      if (quantity <= 0) delete selection[variantId];
-      else selection[variantId] = quantity;
-      const next = { ...prev };
-      if (Object.keys(selection).length === 0) delete next[participantIndex];
-      else next[participantIndex] = selection;
-      return next;
-    });
-  }, []);
-
-  // What the entry alone costs. Kept apart from `total` because the refund
-  // policy applies to the entry and never to merchandise: add-on money is not
-  // written to Registration.amountCents, and entryPaidCents reads only those
-  // columns, so quoting a refund against a total that includes a t-shirt would
-  // promise money the refund path will never return.
+  // What the entry alone costs. The refund policy applies to the entry, never
+  // to anything else, and entryPaidCents reads only these figures.
   const ticketTotal = subtotal + feeTotal;
-  const total = ticketTotal + addOnTotal;
+  const total = ticketTotal;
+
   // A free order: tickets chosen, nothing to pay. It skips Stripe entirely and
   // is written by /api/registrations/free when the athlete confirms.
   const freeOrder = totalTickets > 0 && total === 0;
@@ -459,6 +350,33 @@ function RegisterContent() {
   // A free event has no policy to state — nothing is paid, so nothing comes back
   // — and both surfaces below take an empty list as "say nothing" (issue #304).
   const freeEvent = isFreeEvent(event?.waves);
+  // A fully free event on Startline is an RSVP: one seat for the signed-in
+  // account, no participant form and no card. A free tier on a mixed-price
+  // event keeps the standard flow because there are still paid tiers.
+  const freeRsvp = freeEvent && event?.registrationType === "startline";
+  const openFreeWaves = useMemo(() => (freeRsvp ? openWaves : []), [freeRsvp, openWaves]);
+  const freeRsvpWaveLabel = useMemo(() => {
+    if (freeRsvpWave && openFreeWaves.some((w) => w.label === freeRsvpWave)) return freeRsvpWave;
+    return openFreeWaves.length === 1 ? openFreeWaves[0].label : "";
+  }, [freeRsvpWave, openFreeWaves]);
+  // One free tier needs no picker, so the confirmation is the first step.
+  const freeRsvpDisplayStep = freeRsvp && openFreeWaves.length === 1 ? 1 : step;
+  const accountName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : "";
+  const accountEmail = profile?.email ?? "";
+  const freeRsvpReviewRows: ReviewRow[] = [
+    { label: "Ticket", value: freeRsvpWaveLabel || "Choose a tier" },
+    { label: "Name", value: accountName || "Your account" },
+    { label: "Email", value: accountEmail || "Loading your account…" },
+  ];
+  const summaryLines = freeRsvp
+    ? freeRsvpWaveLabel
+      ? [{ label: freeRsvpWaveLabel, value: "Free" }]
+      : []
+    : tierLines.map((t) => ({
+        label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
+        value: priceLabel(t.price * t.qty),
+      }));
+
   const refundTiers = parseTiers(event?.refundTiers);
   const refundLines = freeEvent ? [] : describeTiers(refundTiers);
   const daysToEvent = event ? daysUntil(event.eventDate, new Date().toISOString().slice(0, 10)) : 0;
@@ -466,11 +384,59 @@ function RegisterContent() {
   const refundHeadline = freeEvent
     ? ""
     : refundIfCancelledNow > 0
-      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(ticketTotal)} back on your entry.${addOnLines.length > 0 ? " Extras are not covered by this policy and are refunded separately." : ""} The amount drops as the event gets closer.`
+      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(ticketTotal)} back on your entry. The amount drops as the event gets closer.`
       : `This event's policy does not cover a refund at this date, so treat this entry as final.`;
 
   const isMulti = participants.length > 1;
   const sharedContactActive = isMulti && useSharedContact;
+
+  // Profile fields the buyer hasn't saved yet, which their own ticket can fill.
+  const missingProfileFields = useMemo(
+    () => (profile ? PROFILE_FIELDS.filter((f) => !profile[f]) : []),
+    [profile]
+  );
+
+  const setTicketHolder = (index: number, holder: TicketHolder) => {
+    if (holder === "self" && profile) {
+      setParticipants((prev) => prev.map((p, i) => (i === index ? { ...createEmptyParticipant(), ...profile } : p)));
+      setSelfIndex(index);
+    } else if (holder === "guest" && selfIndex === index) {
+      setParticipants((prev) => prev.map((p, i) => (i === index ? createEmptyParticipant() : p)));
+      setSelfIndex(null);
+    }
+    setFieldErrors((prev) => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
+  // What the buyer's own ticket could add to their profile so the next
+  // checkout prefills. Only fills gaps; never overwrites a saved value.
+  const buildProfileUpdate = (): ProfileUpdate | null => {
+    if (selfIndex == null || missingProfileFields.length === 0) return null;
+    const p = participants[selfIndex];
+    if (!p) return null;
+    const contact = sharedContactActive
+      ? { emergencyContactName: sharedEmergencyContact.name, emergencyContactPhone: sharedEmergencyContact.phone }
+      : { emergencyContactName: p.emergencyContactName, emergencyContactPhone: p.emergencyContactPhone };
+    const entered: Record<ProfileField, string> = {
+      firstName: p.firstName, lastName: p.lastName, mobile: p.mobile,
+      dateOfBirth: p.dateOfBirth, gender: p.gender, ...contact,
+    };
+    const body: ProfileUpdate = {};
+    for (const f of missingProfileFields) {
+      if (f === "firstName" || f === "lastName") continue;
+      if (entered[f].trim()) body[f] = entered[f].trim();
+    }
+    // Name is one field on the profile; only write it when none is saved.
+    if (profile && !profile.firstName && !profile.lastName) {
+      const name = `${p.firstName} ${p.lastName}`.trim();
+      if (name) body.name = name;
+    }
+    return Object.keys(body).length > 0 ? body : null;
+  };
 
   const setQty = (label: string, delta: number) => {
     setQuantities((prev) => {
@@ -488,6 +454,9 @@ function RegisterContent() {
     const w = availByWave[label];
     return w?.qty != null && w.qty - w.confirmed <= 0;
   };
+  const freeRsvpSoldOut =
+    !!freeRsvpWaveLabel && (eventSoldOut || waveSoldOut(freeRsvpWaveLabel));
+  const freeRsvpReady = !!freeRsvpWaveLabel && !freeRsvpSoldOut;
   const canIncrement = (label: string): boolean => {
     if (totalTickets >= MAX_REGISTRATION_PARTICIPANTS) return false;
     if (totalTickets >= eventRemaining) return false;
@@ -495,26 +464,6 @@ function RegisterContent() {
     const tierLeft = w?.qty != null ? Math.max(0, w.qty - w.confirmed) : Infinity;
     return (quantities[label] ?? 0) < tierLeft;
   };
-
-  const emailsToVerify = useMemo(
-    () =>
-      getEmailsRequiringVerification(
-        participants.map((p) => p.email),
-        status === "authenticated" ? user?.email : null
-      ),
-    [participants, status, user?.email]
-  );
-  const requiresEmailVerification = emailsToVerify.length > 0;
-
-  const detailsValid = useMemo(
-    () =>
-      validateParticipants(participants, {
-        groupRegistration: sharedContactActive,
-        sharedEmergencyContact: sharedContactActive ? sharedEmergencyContact : undefined,
-        includeWaiver: false,
-      }).firstMessage === null,
-    [participants, sharedContactActive, sharedEmergencyContact]
-  );
 
   const ticketComplete = useCallback(
     (index: number) =>
@@ -562,15 +511,9 @@ function RegisterContent() {
       waveLabel: ticketWaves[0],
       turnstileToken: turnstileToken ?? undefined,
       participants: participants.map((p, i) => ({ ...p, waveLabel: ticketWaves[i] })),
-      // Ids and quantities only. The server prices the basket.
-      addOns: addOnLines.map((l) => ({
-        participantIndex: l.participantIndex,
-        variantId: l.variantId,
-        quantity: l.quantity,
-      })),
       ...(sharedContactActive && { groupRegistration: true, emergencyContact: sharedEmergencyContact }),
     }),
-    [eventId, ticketWaves, participants, sharedContactActive, sharedEmergencyContact, turnstileToken, addOnLines]
+    [eventId, ticketWaves, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
   );
 
   // ── Checkout (create PaymentIntent) ──
@@ -623,6 +566,49 @@ function RegisterContent() {
     }
   }, [orderPayload]);
 
+  // ── Free RSVP (signed-in, account is the attendee) ──
+  // The request carries only the tier and the terms acceptance. The server
+  // reads the name and email from the session, so nothing here can change who
+  // the registration belongs to.
+  const submitFreeRsvp = useCallback(async (): Promise<string | null> => {
+    setError("");
+    if (!freeRsvpWaveLabel) {
+      setError("Choose a ticket first.");
+      return null;
+    }
+    try {
+      const res = await fetch("/api/registrations/free/rsvp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          waveLabel: freeRsvpWaveLabel,
+          acceptedTerms: true,
+          turnstileToken: turnstileToken ?? undefined,
+        }),
+      });
+      const data = (await res.json()) as {
+        registrationIds?: string[];
+        error?: string;
+        email?: string;
+      };
+      if (res.status === 401) {
+        setError("Please sign in again to RSVP.");
+        setIsSignInOpen(true);
+        return null;
+      }
+      if (!res.ok || !data.registrationIds?.length) {
+        setError(data.error ?? "Failed to complete RSVP.");
+        return null;
+      }
+      rsvpEmailRef.current = data.email ?? "";
+      return data.registrationIds[0];
+    } catch {
+      setError("Something went wrong. Please try again.");
+      return null;
+    }
+  }, [eventId, freeRsvpWaveLabel, turnstileToken]);
+
   // ── Step navigation ──
   const goToTicket = () => {
     setStep(0);
@@ -637,10 +623,13 @@ function RegisterContent() {
       if (!waveIsOpen(wave)) continue;
       for (let i = 0; i < (quantities[wave.label] ?? 0); i++) nextWaves.push(wave.label);
     }
+    const kept = matchPreviousTickets(participants.length, ticketWaves, nextWaves);
     setParticipants((prev) => reconcileParticipants(prev, ticketWaves, nextWaves));
-    setAddOnSelections((prev) =>
-      reconcileAddOnSelections(prev, participants.length, ticketWaves, nextWaves, addOnCatalogue),
-    );
+    // The buyer's own ticket follows its details; if it was dropped, none is theirs.
+    if (selfIndex != null) {
+      const moved = kept.indexOf(selfIndex);
+      setSelfIndex(moved >= 0 ? moved : null);
+    }
     setTicketWaves(nextWaves);
     setFieldErrors({});
     setEmergencyContactErrors({});
@@ -671,14 +660,9 @@ function RegisterContent() {
     setError("");
     setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
-    if (requiresEmailVerification) {
-      setPayPhase("verify");
-    } else {
-      setPayPhase("pay");
-      // A free order has no PaymentIntent to prepare — the review step renders
-      // straight away and the registration is written when they confirm.
-      if (!freeOrder) startCheckout();
-    }
+    // A free order has no PaymentIntent to prepare — the review step renders
+    // straight away and the registration is written when they confirm.
+    if (!freeOrder) startCheckout();
   };
   const goToNextTicket = (index: number) => {
     const errors = getRegistrationFormErrors(participants[index], {
@@ -694,26 +678,35 @@ function RegisterContent() {
     }
     setOpenTicket(index + 1);
   };
-  const onVerified = () => {
-    setPayPhase("pay");
-    if (!freeOrder) startCheckout();
-  };
-
   // `reference` is the PaymentIntent id on a paid order, the first registration
   // id on a free one. Either way it is only ever shown back to the athlete.
   const onConfirmed = (reference: string) => {
     const ref = "SL-" + reference.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
+    setProfileOffer(freeRsvp ? null : buildProfileUpdate());
     setConfirmed({
       ref,
-      email: participants[0].email,
-      tierSummary,
-      count: participants.length,
+      email: rsvpEmailRef.current || profile?.email || participants[0].email,
+      tierSummary: freeRsvp ? freeRsvpWaveLabel : tierSummary,
+      count: freeRsvp ? 1 : participants.length,
       // The server's own total where it gave one, so the receipt can never
       // disagree with what the card was charged.
-      amount: serverTotal != null ? priceLabel(serverTotal) : totalLabel,
-      free: freeOrder,
+      amount: freeRsvp ? "Free" : serverTotal != null ? priceLabel(serverTotal) : totalLabel,
+      free: freeRsvp || freeOrder,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ── Signed-in: whose ticket this is ──
+  const renderTicketHolder = (index: number) => {
+    if (status !== "authenticated" || !profile) return null;
+    const isSelf = selfIndex === index;
+    return (
+      <TicketHolderToggle
+        value={isSelf ? "self" : "guest"}
+        onChange={(holder) => setTicketHolder(index, holder)}
+        selfTakenBy={selfIndex != null && !isSelf ? selfIndex : null}
+      />
+    );
   };
 
   // ── Review rows ──
@@ -722,9 +715,6 @@ function RegisterContent() {
       label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
       value: priceLabel(t.price * t.qty),
     }));
-    for (const line of addOnLines) {
-      rows.push({ label: line.label, value: money(line.amountCents / 100) });
-    }
     if (participants.length === 1) {
       const p = participants[0];
       rows.push({ label: "Name", value: `${p.firstName} ${p.lastName}`.trim() });
@@ -746,7 +736,7 @@ function RegisterContent() {
       }
     }
     return rows;
-  }, [participants, tierLines, ticketWaves, sharedContactActive, sharedEmergencyContact, addOnLines]);
+  }, [participants, tierLines, ticketWaves, sharedContactActive, sharedEmergencyContact]);
 
   // ── Loading / not-found ──
   if (loading || status === "loading") {
@@ -805,6 +795,45 @@ function RegisterContent() {
     );
   }
 
+  // A free RSVP belongs to an account, so there is no guest path. Ask the
+  // visitor to sign in instead of showing a form whose details we would ignore.
+  if (freeRsvp && status !== "authenticated") {
+    return (
+      <div className="min-h-screen bg-dark-darker">
+        <div className="max-w-[520px] mx-auto px-5 pt-24 pb-24">
+          <Link
+            href={`/events/${eventId}`}
+            className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors mb-8"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+          </Link>
+          <div className="bg-dark border border-dark-lighter rounded-[14px] p-6 text-center">
+            <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2.5">
+              Free event
+            </div>
+            <h1 className="font-headline text-[clamp(28px,4vw,40px)] font-bold italic tracking-[-0.04em] text-light leading-[.95] mb-3">
+              Sign in to<br /><span className="text-primary">RSVP.</span>
+            </h1>
+            <p className="text-[13px] text-muted leading-relaxed mb-6">
+              This event is free. Sign in so your account is the entry — there are no extra details to fill in.
+            </p>
+            <button type="button" onClick={() => setIsSignInOpen(true)} className={continueBtnCls}>
+              <LogIn className="w-4 h-4" /> Sign in to RSVP
+            </button>
+          </div>
+        </div>
+        <SignInModal
+          isOpen={isSignInOpen}
+          onClose={() => setIsSignInOpen(false)}
+          onSuccess={() => {
+            setIsSignInOpen(false);
+            prefilledRef.current = false;
+          }}
+        />
+      </div>
+    );
+  }
+
   const dateLabel = formatEventDate(event.eventDate, event.startTime);
   const locationLabel = [event.venue, event.city].filter(Boolean).join(", ") + ` ${event.state.toUpperCase()}`;
 
@@ -845,9 +874,10 @@ function RegisterContent() {
           <div className="text-[12.5px] text-muted-dark mb-6 leading-relaxed">
             Confirmation sent to <strong className="text-muted">{confirmed.email}</strong>
           </div>
+          {profileOffer && <SaveDetailsPrompt update={profileOffer} />}
           <Link
             href={`/events/${eventId}`}
-            className="inline-flex items-center gap-2 h-11 px-5 rounded-xl border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:bg-dark-light transition-colors"
+            className={backBtnCls}
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to event
           </Link>
@@ -861,7 +891,7 @@ function RegisterContent() {
       <div className="max-w-[1240px] mx-auto px-5 sm:px-8 pt-24 pb-24">
         <Link
           href={`/events/${eventId}`}
-          className="inline-flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-[0.15em] text-muted hover:text-primary transition-colors mb-8"
+          className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors mb-8"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to event
         </Link>
@@ -871,14 +901,14 @@ function RegisterContent() {
           <div>
             <div className="mb-7">
               <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2.5">
-                Registration · {event.title}
+                {freeRsvp ? "RSVP" : "Registration"} · {event.title}
               </div>
               <h1 className="font-headline text-[clamp(28px,3.5vw,42px)] font-bold italic tracking-[-0.04em] text-light leading-[.92]">
-                Secure your<br /><span className="text-primary">spot.</span>
+                {freeRsvp ? <>Save your<br /><span className="text-primary">spot.</span></> : <>Secure your<br /><span className="text-primary">spot.</span></>}
               </h1>
             </div>
 
-            <StepRail current={step} />
+            <StepRail current={freeRsvp ? (freeRsvpDisplayStep as 0 | 1 | 2) : step} variant={freeRsvp ? "rsvp" : "registration"} />
 
             {showTurnstile && (
               <div className="mb-4">
@@ -892,8 +922,90 @@ function RegisterContent() {
               </div>
             )}
 
-            {/* ── STEP 0: Select tickets ── */}
-            {step === 0 && (
+            {/* ── STEP 0a: Choose a free tier ── */}
+            {freeRsvpDisplayStep === 0 && freeRsvp && (
+              <>
+                <div className="bg-dark border border-dark-lighter rounded-[14px] p-6">
+                  <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted mb-4">
+                    Choose your ticket
+                  </div>
+                  {eventSoldOut && (
+                    <div className="mb-4 bg-red-900/20 border border-red-500/25 rounded-lg px-4 py-3 font-headline text-[11px] font-bold uppercase tracking-[0.13em] text-red-300">
+                      This event is sold out.
+                    </div>
+                  )}
+                  <div className="space-y-2.5" role="radiogroup" aria-label="Ticket tier">
+                    {event.waves?.map((wave) => {
+                      const closed = !waveIsOpen(wave);
+                      const soldOut = !closed && waveSoldOut(wave.label);
+                      const disabled = closed || soldOut;
+                      const selected = freeRsvpWaveLabel === wave.label;
+                      return (
+                        <button
+                          key={wave.label}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          disabled={disabled}
+                          onClick={() => {
+                            setFreeRsvpWave(wave.label);
+                            setError("");
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-3.5 px-[18px] py-4 rounded-xl border-2 text-left transition-colors",
+                            disabled
+                              ? "border-dark-lighter bg-dark-light opacity-40"
+                              : selected
+                                ? "border-primary bg-primary/[0.07]"
+                                : "border-dark-lighter bg-dark-light hover:border-primary/50"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0",
+                              selected ? "border-primary bg-primary" : "border-dark-lighter"
+                            )}
+                          >
+                            {selected && <Check className="w-2.5 h-2.5 text-dark" strokeWidth={3} />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-headline text-[14.5px] font-bold text-light">{wave.label}</span>
+                            <span className="block font-headline text-[10px] uppercase tracking-[0.13em] mt-1 text-muted">
+                              {closed ? "Closed" : soldOut ? "Sold out" : "One place · your account"}
+                            </span>
+                          </span>
+                          <span className="font-headline text-[20px] font-bold italic text-primary">Free</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center mt-5">
+                  <Link href={`/events/${eventId}`} className={backBtnCls}>
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+                  </Link>
+                  <div className="flex items-center gap-3">
+                    <span className="font-headline text-[10px] uppercase tracking-[0.15em] text-muted-dark">1 / 2</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep(1);
+                        setError("");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      disabled={!freeRsvpWaveLabel || freeRsvpSoldOut}
+                      className={continueBtnCls}
+                    >
+                      Continue <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── STEP 0b: Select tickets (standard registration) ── */}
+            {step === 0 && !freeRsvp && (
               <>
                 <div className="bg-dark border border-dark-lighter rounded-[14px] p-6">
                   <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted mb-4">
@@ -986,30 +1098,12 @@ function RegisterContent() {
                   <p className="font-headline text-[10px] uppercase tracking-[0.13em] text-muted-dark mt-4">
                     Mix tiers as needed · up to {MAX_REGISTRATION_PARTICIPANTS} tickets per order
                   </p>
-
-                  {/* Extras are chosen per participant on the next step, where
-                      the participants actually exist. This just signals they are
-                      coming, so the buyer does not leave to look for them. */}
-                  {addOnCatalogue.length > 0 && (
-                    <div className="mt-4 flex items-start gap-3 px-4 py-3.5 rounded-[14px] border border-dashed border-dark-lighter">
-                      <ShoppingBag className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <div className="font-headline text-[12px] font-bold uppercase tracking-[0.13em] text-light">
-                          Extras available
-                        </div>
-                        <div className="text-[12.5px] text-muted mt-0.5">
-                          {addOnCatalogue.map((a) => a.name).join(", ")}. Add them to each ticket on
-                          the next step.
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex justify-between items-center mt-5">
                   <Link
                     href={`/events/${eventId}`}
-                    className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted hover:bg-dark-light hover:text-light transition-colors"
+                    className={backBtnCls}
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Back to event
                   </Link>
@@ -1023,8 +1117,32 @@ function RegisterContent() {
               </>
             )}
 
-            {/* ── STEP 1: Your details ── */}
-            {step === 1 && (
+            {/* ── STEP 1a: Confirm a free RSVP ── */}
+            {freeRsvpDisplayStep === 1 && freeRsvp && (
+              <ReviewPayStep
+                free
+                rsvp
+                ready={freeRsvpReady}
+                clientSecret=""
+                eventId={eventId}
+                reviewRows={freeRsvpReviewRows}
+                confirmLabel="I'm going"
+                refundLines={[]}
+                refundHeadline=""
+                onBack={openFreeWaves.length > 1 ? () => {
+                  setStep(0);
+                  setError("");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                } : undefined}
+                onConfirmed={onConfirmed}
+                onFreeSubmit={submitFreeRsvp}
+                onError={setError}
+                stepLabel="2 / 2"
+              />
+            )}
+
+            {/* ── STEP 1b: Your details (standard registration) ── */}
+            {step === 1 && !freeRsvp && (
               <>
                 {status !== "authenticated" && (
                   <button
@@ -1042,18 +1160,11 @@ function RegisterContent() {
                       <ParticipantFormSection
                         index={0}
                         title={ticketWaves[0]}
+                        intro={renderTicketHolder(0)}
                         participant={participants[0]}
                         errors={fieldErrors[0]}
                         onChange={(field, value) => updateParticipant(0, field, value)}
                       />
-                      {addOnCatalogue.length > 0 && (
-                        <AddOnPicker
-                          addOns={addOnCatalogue}
-                          selection={addOnSelections[0] ?? {}}
-                          onChange={(variantId, quantity) => setAddOnQty(0, variantId, quantity)}
-                          athletePaysFee={athletePaysFee}
-                        />
-                      )}
                     </>
                   ) : (
                     participants.map((participant, index) => {
@@ -1108,20 +1219,12 @@ function RegisterContent() {
                               <ParticipantFormSection
                                 frameless
                                 index={index}
+                                intro={renderTicketHolder(index)}
                                 participant={participant}
                                 errors={fieldErrors[index]}
                                 hideEmergencyContact={sharedContactActive}
                                 onChange={(field, value) => updateParticipant(index, field, value)}
                               />
-                              {addOnCatalogue.length > 0 && (
-                                <AddOnPicker
-                                  addOns={addOnCatalogue}
-                                  selection={addOnSelections[index] ?? {}}
-                                  onChange={(variantId, quantity) => setAddOnQty(index, variantId, quantity)}
-                                  athletePaysFee={athletePaysFee}
-                                  participantLabel={`Ticket ${index + 1}`}
-                                />
-                              )}
                               {index < participants.length - 1 && (
                                 <div className="flex justify-end mt-5">
                                   <button
@@ -1178,13 +1281,16 @@ function RegisterContent() {
                   <button
                     type="button"
                     onClick={goToTicket}
-                    className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted hover:bg-dark-light hover:text-light transition-colors"
+                    className={backBtnCls}
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Back
                   </button>
                   <div className="flex items-center gap-3">
                     <span className="font-headline text-[10px] uppercase tracking-[0.15em] text-muted-dark">2 / 3</span>
-                    <button type="button" onClick={goToReview} disabled={!detailsValid} className={continueBtnCls}>
+                    {/* Never disabled: goToReview marks every invalid field and
+                        scrolls to the first one. A greyed-out button gave no
+                        reason, e.g. an emergency phone matching the athlete's (#374). */}
+                    <button type="button" onClick={goToReview} className={continueBtnCls}>
                       Continue <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -1193,22 +1299,9 @@ function RegisterContent() {
             )}
 
             {/* ── STEP 2: Review & pay ── */}
-            {step === 2 && payPhase === "verify" && (
-              <GuestEmailVerificationStep
-                eventId={eventId}
-                eventTitle={event.title}
-                emails={emailsToVerify}
-                onBack={() => {
-                  setError("");
-                  setStep(1);
-                }}
-                onComplete={onVerified}
-              />
-            )}
-
             {/* A free order goes straight to review: there is no PaymentIntent
                 to wait on, and confirming writes the registration. */}
-            {step === 2 && payPhase === "pay" && freeOrder && (
+            {step === 2 && !freeRsvp && freeOrder && (
               <ReviewPayStep
                 free
                 clientSecret=""
@@ -1227,7 +1320,7 @@ function RegisterContent() {
               />
             )}
 
-            {step === 2 && payPhase === "pay" && !freeOrder && (
+            {step === 2 && !freeRsvp && !freeOrder && (
               !clientSecret ? (
                 error && !processing ? (
                   // Checkout could not start (e.g. the event sold out mid-session).
@@ -1239,7 +1332,7 @@ function RegisterContent() {
                       <button
                         type="button"
                         onClick={() => { setError(""); setStep(1); }}
-                        className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted border border-dark-lighter hover:text-light hover:border-primary transition-colors"
+                        className={backBtnCls}
                       >
                         <ArrowLeft className="w-3.5 h-3.5" /> Back to details
                       </button>
@@ -1285,21 +1378,18 @@ function RegisterContent() {
             dateLabel={dateLabel}
             locationLabel={locationLabel}
             coverImageUrl={event.coverImageUrl}
-            lines={[
-              ...tierLines.map((t) => ({
-                label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
-                value: priceLabel(t.price * t.qty),
-              })),
-              // Labels carry the ticket number, so two participants buying the
-              // same shirt stay distinct as React keys.
-              ...addOnLines.map((l) => ({ label: l.label, value: money(l.amountCents / 100) })),
-            ]}
+            lines={summaryLines}
             feeLine={
-              totalTickets > 0 && athletePaysFee && feeTotal + addOnFeeCents / 100 > 0
-                ? { label: "Service fee", value: money(feeTotal + addOnFeeCents / 100) }
+              !freeRsvp && totalTickets > 0 && athletePaysFee && feeTotal > 0
+                ? { label: "Service fee", value: money(feeTotal) }
                 : null
             }
-            totalLabel={totalTickets > 0 ? totalLabel : null}
+            totalLabel={
+              freeRsvp
+                ? freeRsvpWaveLabel ? "Free" : null
+                : totalTickets > 0 ? totalLabel : null
+            }
+            free={freeRsvp}
           />
         </div>
       </div>

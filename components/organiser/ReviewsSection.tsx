@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { X, CheckCircle, AlertCircle, Star, Flag, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,13 @@ import SignInModal from "@/components/SignInModal";
 import SelectMenu from "@/components/ui/SelectMenu";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import { useAuthContext } from "@/context/AuthContext";
-import { topRatedEventsFromReviews } from "@/lib/review-helpers";
+import {
+  REVIEW_REPORT_DETAILS_MAX,
+  REVIEW_REPORT_REASONS,
+  reviewEventKey,
+  topRatedEventsFromReviews,
+  type ReviewReportReason,
+} from "@/lib/review-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
@@ -101,15 +107,16 @@ function timeAgo(dateStr: string): string {
 
 // ─── Review card ──────────────────────────────────────────────────────────────
 
-function ReviewCard({ r, onEdit, organiserId }: {
+function ReviewCard({ r, onEdit, onReport, reported, own }: {
   r: Review;
+  /** Set only when the viewer may edit this card (their own review, edits allowed). */
   onEdit?: () => void;
-  organiserId: string;
+  onReport: () => void;
+  reported: boolean;
+  /** The viewer wrote this review: Edit is offered, Report never is. */
+  own: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [reporting, setReporting] = useState(false);
-  const [reported, setReported] = useState(false);
-  const [reportError, setReportError] = useState("");
   const isLong = r.body.length > 200;
   const body = expanded || !isLong ? r.body : r.body.slice(0, 200) + "…";
 
@@ -121,28 +128,8 @@ function ReviewCard({ r, onEdit, organiserId }: {
 
   const eventLabel = r.eventTitle?.trim();
 
-  const report = async () => {
-    if (!confirm("Report this review to the Startline team for review?")) return;
-    setReporting(true);
-    setReportError("");
-    try {
-      const res = await fetch(`/api/public/review/${r.id}/report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (res.status === 401) { setReportError("Sign in to report a review."); return; }
-      if (!res.ok) { setReportError((await res.json()).error ?? "Could not submit report."); return; }
-      setReported(true);
-    } catch {
-      setReportError("Could not submit report. Please try again.");
-    } finally {
-      setReporting(false);
-    }
-  };
-
   return (
-    <div className="bg-dark border border-dark-lighter rounded-xl p-5 space-y-4">
+    <div data-review-id={r.id} className="bg-dark border border-dark-lighter rounded-xl p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           <div className="w-9 h-9 rounded-full bg-dark-lighter border border-dark-lighter flex items-center justify-center font-headline text-[14px] font-black text-light shrink-0">
@@ -228,19 +215,17 @@ function ReviewCard({ r, onEdit, organiserId }: {
             <Pencil className="w-3 h-3" /> Edit
           </button>
         )}
-        {reported ? (
+        {own ? null : reported ? (
           <span className="text-[11px] font-headline font-bold uppercase tracking-widest text-primary">Reported</span>
         ) : (
           <button
             type="button"
-            onClick={report}
-            disabled={reporting}
-            className="inline-flex items-center gap-1.5 text-[11px] font-headline font-bold uppercase tracking-widest text-muted hover:text-red-400 transition-colors disabled:opacity-50"
+            onClick={onReport}
+            className="inline-flex items-center gap-1.5 text-[11px] font-headline font-bold uppercase tracking-widest text-muted hover:text-red-400 transition-colors"
           >
-            <Flag className="w-3 h-3" /> {reporting ? "Reporting…" : "Report"}
+            <Flag className="w-3 h-3" /> Report
           </button>
         )}
-        {reportError && <span className="text-[11px] text-red-400">{reportError}</span>}
       </div>
     </div>
   );
@@ -306,7 +291,7 @@ function WriteReviewModal({ organiserId, events, onClose, onSuccess, editReview 
       setDone(true);
       const newReview: Review = {
         id: data.id ?? editReview?.id ?? crypto.randomUUID(),
-        reviewerName: data.reviewerName ?? "Startline user",
+        reviewerName: data.reviewerName ?? editReview?.reviewerName ?? "Startline user",
         eventId: data.eventId ?? (eventId || null),
         eventTitle: data.eventTitle ?? events.find((e) => e.id === eventId)?.title ?? null,
         overallRating: overall,
@@ -315,7 +300,7 @@ function WriteReviewModal({ organiserId, events, onClose, onSuccess, editReview 
         experienceRating: exp || null,
         title,
         body,
-        isVerified: false,
+        isVerified: editReview?.isVerified ?? false,
         createdAt: editReview?.createdAt ?? new Date().toISOString(),
       };
       setTimeout(() => { onSuccess(newReview); onClose(); }, 1800);
@@ -465,6 +450,165 @@ function WriteReviewModal({ organiserId, events, onClose, onSuccess, editReview 
   );
 }
 
+// ─── Report review modal ──────────────────────────────────────────────────────
+
+function ReportReviewModal({ review, onClose, onReported }: {
+  review: Review;
+  onClose: () => void;
+  onReported: (reviewId: string) => void;
+}) {
+  const [reason, setReason] = useState<ReviewReportReason | "">("");
+  const [details, setDetails] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const submit = async () => {
+    if (!reason) { setError("Choose a reason for the report."); return; }
+    if (reason === "Other" && !details.trim()) { setError("Tell us what is wrong with this review."); return; }
+
+    setSaving(true); setError("");
+    try {
+      const res = await fetch(`/api/public/review/${review.id}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, details: details.trim() || undefined }),
+      });
+      // Already reported counts as done: the team has it either way.
+      if (res.ok || res.status === 409) {
+        setDone(true);
+        onReported(review.id);
+        return;
+      }
+      if (res.status === 401) { setError("Sign in to report a review."); return; }
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Could not submit the report.");
+    } catch {
+      setError("Could not submit the report. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-dark-darker/80 backdrop-blur-sm overlay-in" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="report-review-title"
+          className="pointer-events-auto w-full max-w-md bg-dark border border-dark-lighter rounded-2xl flex flex-col modal-in max-h-[90vh] overflow-y-auto"
+        >
+          <div className="flex items-center justify-between px-6 py-5 border-b border-dark-lighter">
+            <div className="min-w-0">
+              <h2 id="report-review-title" className="font-headline text-xl font-black italic tracking-tighter text-light">
+                Report review
+              </h2>
+              <p className="text-[12px] text-muted mt-0.5 truncate">&ldquo;{review.title}&rdquo; by {review.reviewerName}</p>
+            </div>
+            <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded hover:bg-dark-lighter text-muted hover:text-primary flex items-center justify-center transition-colors shrink-0">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {done ? (
+            <div className="px-6 py-10 text-center">
+              <CheckCircle className="w-12 h-12 text-primary mx-auto mb-3" />
+              <div className="font-headline text-xl font-black italic text-light mb-1">Report sent</div>
+              <div className="text-[13px] text-muted mb-6">The Startline team will look at this review and remove it if it breaks the rules.</div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-4 py-2.5 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <div className="px-6 py-6 space-y-5">
+              <fieldset>
+                <legend className="font-headline text-[11px] font-bold uppercase tracking-widest text-light mb-2">
+                  Why are you reporting this review? <span className="text-primary">*</span>
+                </legend>
+                <div className="space-y-2">
+                  {REVIEW_REPORT_REASONS.map((option) => (
+                    <label
+                      key={option}
+                      className={cn(
+                        "flex items-center gap-3 border rounded-md px-3 py-2.5 cursor-pointer transition-colors",
+                        reason === option ? "border-primary bg-primary/5" : "border-dark-lighter hover:border-primary/40",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="report-reason"
+                        value={option}
+                        checked={reason === option}
+                        onChange={() => { setReason(option); setError(""); }}
+                        className="accent-primary"
+                      />
+                      <span className="text-[13px] text-light">{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <div>
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <label htmlFor="report-details" className="font-headline text-[11px] font-bold uppercase tracking-widest text-light">
+                    Details {reason === "Other"
+                      ? <span className="text-primary">*</span>
+                      : <span className="text-muted-dark font-normal">(optional)</span>}
+                  </label>
+                  <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+                    {details.length}/{REVIEW_REPORT_DETAILS_MAX}
+                  </span>
+                </div>
+                <textarea
+                  id="report-details"
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value)}
+                  maxLength={REVIEW_REPORT_DETAILS_MAX}
+                  rows={3}
+                  placeholder="Anything that helps the team understand the problem."
+                  className="w-full bg-dark-darker border border-dark-lighter rounded-md px-3 py-2.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors resize-none"
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-start gap-2 text-red-400 text-[12px]" role="alert">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button onClick={onClose} className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-4 py-2.5 transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={submit}
+                  disabled={saving}
+                  className="flex-1 bg-machined shadow-machined text-dark font-headline text-[12px] font-bold uppercase tracking-widest px-5 py-2.5 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-50"
+                >
+                  {saving ? "Sending…" : "Send report"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Main reviews section ─────────────────────────────────────────────────────
 
 interface Props {
@@ -490,11 +634,18 @@ export default function ReviewsSection({
   const [signInOpen, setSignInOpen] = useState(false);
   const [editReview, setEditReview] = useState<Review | null>(null);
   const [ownReview, setOwnReview] = useState<Review | null>(null);
+  const [reportTarget, setReportTarget] = useState<Review | null>(null);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
+  const [eventFilter, setEventFilter] = useState("");
+  // What the signed-out visitor was doing when sign-in interrupted them.
+  const [afterSignIn, setAfterSignIn] = useState<{ kind: "write" } | { kind: "report"; review: Review }>({ kind: "write" });
 
   // Fetch the current user's own review so the "Write a review" CTA becomes
-  // "Edit" and their existing review shows an Edit button.
+  // "Edit", and so their own card never offers Report. Done in the organiser
+  // portal twin too, where editing is hidden: the owner still must not report
+  // their own review.
   useEffect(() => {
-    if (readOnly || status !== "authenticated") return;
+    if (status !== "authenticated") return;
     let cancelled = false;
     fetch(`/api/public/reviews/${organiserId}/mine`)
       .then((res) => (res.ok ? res.json() : { review: null }))
@@ -503,17 +654,34 @@ export default function ReviewsSection({
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [organiserId, status, readOnly]);
+  }, [organiserId, status]);
 
   function openWriteReview() {
     if (readOnly) return;
     if (status !== "authenticated") {
+      setAfterSignIn({ kind: "write" });
       setSignInOpen(true);
       return;
     }
     setEditReview(ownReview);
     setModalOpen(true);
   }
+
+  function openReport(r: Review) {
+    // Only a known signed-out visitor is sent to sign in. While the session is
+    // still loading the form opens, and the API's 401 shows inside it, so a
+    // signed-in person clicking early is never asked to sign in again.
+    if (status === "unauthenticated") {
+      setAfterSignIn({ kind: "report", review: r });
+      setSignInOpen(true);
+      return;
+    }
+    setReportTarget(r);
+  }
+
+  const handleReported = useCallback((id: string) => {
+    setReportedIds((prev) => new Set(prev).add(id));
+  }, []);
 
   const handleSuccess = useCallback((r: Review) => {
     setOwnReview(r);
@@ -543,6 +711,27 @@ export default function ReviewsSection({
   ].filter((m): m is { label: string; data: { value: number; count: number } } => m.data != null);
 
   const topEvents = topRatedEventsFromReviews(reviews, 3);
+
+  // Filter by event, grouped with the same key the rating summary uses: the id
+  // when known, else the title. Two events can share a title, so grouping on
+  // the title alone would mix their reviews together.
+  const eventFilterOptions = useMemo(() => {
+    const counts = new Map<string, { title: string; count: number }>();
+    for (const r of reviews) {
+      const key = reviewEventKey(r);
+      if (!key) continue;
+      const existing = counts.get(key);
+      if (existing) existing.count += 1;
+      else counts.set(key, { title: r.eventTitle?.trim() || "Event", count: 1 });
+    }
+    return [...counts.entries()]
+      .sort((a, b) => a[1].title.localeCompare(b[1].title))
+      .map(([value, { title, count }]) => ({ value, label: `${title} (${count})` }));
+  }, [reviews]);
+  const activeEventFilter = eventFilterOptions.some((o) => o.value === eventFilter) ? eventFilter : "";
+  const visibleReviews = activeEventFilter
+    ? reviews.filter((r) => reviewEventKey(r) === activeEventFilter)
+    : reviews;
 
   return (
     <div id="reviews">
@@ -589,7 +778,9 @@ export default function ReviewsSection({
           ))}
         </div>
       ) : reviews.length === 0 ? (
-        <div className="py-12 text-center border border-dashed border-dark-lighter rounded-xl">
+        // Filled like the page's other empty states: on a scaled viewport the
+        // dashed hairline alone fades on whichever edge lands between pixels.
+        <div className="py-12 text-center bg-dark border border-dashed border-dark-lighter rounded-xl">
           <div className="flex items-center justify-center gap-0.5 mb-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <Star key={i} className="w-6 h-6 text-dark-lighter" />
@@ -686,15 +877,39 @@ export default function ReviewsSection({
             </div>
           </div>
 
+          {eventFilterOptions.length > 1 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                {activeEventFilter
+                  ? `Showing ${visibleReviews.length} of ${reviews.length} reviews`
+                  : `Showing all ${reviews.length} reviews`}
+              </div>
+              <div className="w-full sm:w-72">
+                <SelectMenu
+                  size="sm"
+                  value={activeEventFilter}
+                  onChange={setEventFilter}
+                  ariaLabel="Filter reviews by event"
+                  options={[{ value: "", label: "All events" }, ...eventFilterOptions]}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
-            {reviews.map((r) => (
-              <ReviewCard
-                key={r.id}
-                r={r}
-                organiserId={organiserId}
-                onEdit={ownReview?.id === r.id ? () => { setEditReview(r); setModalOpen(true); } : undefined}
-              />
-            ))}
+            {visibleReviews.map((r) => {
+              const own = ownReview?.id === r.id;
+              return (
+                <ReviewCard
+                  key={r.id}
+                  r={r}
+                  own={own}
+                  onEdit={!readOnly && own ? () => { setEditReview(r); setModalOpen(true); } : undefined}
+                  onReport={() => openReport(r)}
+                  reported={reportedIds.has(r.id)}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -709,12 +924,24 @@ export default function ReviewsSection({
         />
       )}
 
+      {reportTarget && (
+        <ReportReviewModal
+          review={reportTarget}
+          onClose={() => setReportTarget(null)}
+          onReported={handleReported}
+        />
+      )}
+
       {!readOnly && (
         <SignInModal
           isOpen={signInOpen}
           onClose={() => setSignInOpen(false)}
           onSuccess={() => {
             setSignInOpen(false);
+            if (afterSignIn.kind === "report") {
+              setReportTarget(afterSignIn.review);
+              return;
+            }
             // Re-fetch own review after sign-in (it may not be loaded yet).
             fetch(`/api/public/reviews/${organiserId}/mine`)
               .then((res) => (res.ok ? res.json() : { review: null }))

@@ -7,7 +7,6 @@ import { getUpcomingEvents } from "@/lib/utils";
 import { getPublishedOrganiserReviews, averageOverallRating } from "@/lib/reviews";
 import { getOrganiserPublicStats } from "@/lib/organiser-follows";
 import OrganiserProfileView from "@/components/OrganiserProfileView";
-import { publicMerchandiseForOrganiser } from "@/lib/merchandise-catalogue";
 
 export default async function OrganiserPortalProfilePage() {
   const session = await getOrganiserSession();
@@ -23,7 +22,6 @@ export default async function OrganiserPortalProfilePage() {
   const avg = averageOverallRating(reviews);
   const rating = avg != null ? { average: avg, count: reviews.length } : null;
   const stats = await getOrganiserPublicStats(organiser.id);
-  const merchandise = await publicMerchandiseForOrganiser(organiser.id);
 
   return (
     <OrganiserProfileView
@@ -34,7 +32,6 @@ export default async function OrganiserPortalProfilePage() {
       reviewEvents={[...events]
         .sort((a, b) => b.date.localeCompare(a.date))
         .map((e) => ({ id: e.id, title: e.title, eventDate: e.date }))}
-      merchandise={merchandise}
       stats={stats}
       rating={rating}
       action="edit"

@@ -9,6 +9,28 @@ async function stubGeocode(page: Page, result: { latitude: number; longitude: nu
   });
 }
 
+/** Make the browser's location request fail with one GeolocationPositionError code. */
+async function stubGeolocationFailure(page: Page, code: 1 | 2 | 3) {
+  await page.addInitScript((errorCode) => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: (_success: PositionCallback, failure?: PositionErrorCallback) => {
+          failure?.({
+            code: errorCode,
+            message: "",
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3,
+          } as GeolocationPositionError);
+        },
+        watchPosition: () => 0,
+        clearWatch: () => {},
+      },
+    });
+  }, code);
+}
+
 async function searchWhere(page: Page, query: string) {
   await page.getByPlaceholder("State, city, or suburb").fill(query);
   await page.keyboard.press("Enter");
@@ -85,6 +107,35 @@ test.describe("distance-based search", () => {
     await expect(page.getByText(/closest event/i).first()).toBeVisible();
   });
 
+  // #352: a suburb with no events of its own must still produce the closest
+  // events, ordered by distance. St Kilda is the reported example.
+  test("a no-event suburb pressed into the where field sorts events by distance", async ({ page }) => {
+    const ST_KILDA = { latitude: -37.8679, longitude: 144.9811 };
+    await stubGeocode(page, ST_KILDA);
+    await page.route("**/api/events/suburbs**", (route) =>
+      route.fulfill({ json: { nearby: false, results: [] } }),
+    );
+    await page.goto("/events?view=list");
+    await expect(page.getByPlaceholder("State, city, or suburb")).toBeVisible();
+
+    await searchWhere(page, "St Kilda");
+
+    await expect(page.getByText(/closest events to St Kilda/i).first()).toBeVisible({ timeout: 10000 });
+    await expect
+      .poll(async () => {
+        // The map tab keeps a hidden copy of the card list mounted, so only the
+        // visible list is in distance order.
+        const texts = await page
+          .locator('[data-testid="event-distance"]')
+          .filter({ visible: true })
+          .allTextContents();
+        const km = texts.map((text) => Number.parseFloat(text.replace(/km.*/i, "")));
+        if (km.length < 2 || km.some((value) => Number.isNaN(value))) return false;
+        return km.every((value, index) => index === 0 || km[index - 1] <= value);
+      }, { timeout: 10000 })
+      .toBe(true);
+  });
+
   test("typing in the where field suggests suburbs that host events", async ({ page }) => {
     await page.route("**/api/events/suburbs**", (route) =>
       route.fulfill({
@@ -148,5 +199,44 @@ test.describe("distance-based search", () => {
 
     // GPS resolves to the device position — distance badges appear.
     await expect(page.locator('[data-testid="event-distance"]').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  // #352: a failed locate from the home page used to blank the Where field with
+  // no explanation. The home button hands off to the listing, so testing the
+  // handoff also covers the auto-search path that page uses.
+  const locationFailures = [
+    { code: 1 as const, message: /location access was denied/i },
+    { code: 2 as const, message: /location is unavailable/i },
+    { code: 3 as const, message: /took too long/i },
+  ];
+
+  for (const failure of locationFailures) {
+    test(`home locate explains geolocation error ${failure.code}`, async ({ page }) => {
+      await stubGeolocationFailure(page, failure.code);
+      await page.goto("/");
+
+      await page
+        .getByRole("button", { name: "Use my current location" })
+        .filter({ visible: true })
+        .first()
+        .click();
+
+      await expect(page).toHaveURL(/\/events\?.*where=Current/);
+      const alert = page.getByTestId("location-error");
+      await expect(alert).toBeVisible();
+      await expect(alert).toContainText(failure.message);
+      // The request failed, but the search text is not silently erased.
+      await expect(page.getByPlaceholder("State, city, or suburb").first()).toHaveValue("Current location");
+    });
+  }
+
+  test("editing the where field clears a location error", async ({ page }) => {
+    await stubGeolocationFailure(page, 1);
+    await page.goto("/events?where=Current+location");
+
+    await expect(page.getByTestId("location-error")).toBeVisible();
+    await page.getByPlaceholder("State, city, or suburb").first().fill("Melbourne");
+
+    await expect(page.getByTestId("location-error")).toHaveCount(0);
   });
 });

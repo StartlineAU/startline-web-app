@@ -14,6 +14,7 @@ import DashboardTrendChart, {
 } from "@/components/organiser/DashboardTrendChart";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { formatAudFromCents } from "@/lib/organiser-dashboard";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
@@ -125,6 +126,9 @@ function MetricStrip({
   );
 }
 
+const ACTION_BUTTON_CLS =
+  "whitespace-nowrap text-[11px] px-3 py-3 sm:text-sm sm:px-6 sm:py-4";
+
 function formatCount(n: number): string {
   return n.toLocaleString("en-AU");
 }
@@ -163,6 +167,12 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, trendEventId, trendRangeDays]);
 
+  useOnOrganiserEventsChanged(() => {
+    load(trendEventId, trendRangeDays).then((payload) => {
+      if (payload) setData(payload);
+    });
+  });
+
   const events = data?.events ?? [];
 
   const recent = [...events]
@@ -196,15 +206,17 @@ export default function DashboardPage() {
           {/* Metrics + actions */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-10">
             <MetricStrip eyebrow="All time" items={allTimeItems} />
-            <div className="flex items-center gap-2 self-start sm:self-end shrink-0">
-              <Button asChild size="lg" variant="outline">
+            {/* On a phone the pair shares the row equally, sized down so each
+                label stays on one line; from sm up they are the usual lg buttons. */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:self-end shrink-0">
+              <Button asChild size="lg" variant="outline" className={ACTION_BUTTON_CLS}>
                 <Link href="/organiser/new-listing">
-                  <Plus className="w-4 h-4" /> Add listing
+                  <Plus className="w-4 h-4 shrink-0" /> Add listing
                 </Link>
               </Button>
-              <Button asChild size="lg">
+              <Button asChild size="lg" className={ACTION_BUTTON_CLS}>
                 <Link href="/organiser/listings">
-                  <CalendarDays className="w-4 h-4" /> View my events
+                  <CalendarDays className="w-4 h-4 shrink-0" /> View my events
                 </Link>
               </Button>
             </div>
@@ -228,9 +240,9 @@ export default function DashboardPage() {
               </h2>
               <Link
                 href="/organiser/listings"
-                className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary flex items-center gap-1 transition-colors"
+                className="group inline-flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary font-headline text-[11px] font-bold uppercase tracking-widest hover:bg-primary/20 transition-colors"
               >
-                See all <ArrowRight className="w-3 h-3" />
+                See all <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 

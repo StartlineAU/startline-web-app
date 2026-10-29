@@ -165,6 +165,52 @@ test.describe("events page", () => {
     await expect(tagline).toHaveCount(1);
   });
 
+  test("load more appends the next page from the same source as the list", async ({ page }) => {
+    const seedRes = await page.request.get("/api/events?limit=1");
+    expect(seedRes.ok()).toBeTruthy();
+    const { events: [base] } = await seedRes.json();
+    test.skip(!base, "no seeded events available");
+
+    const synthetic = Array.from({ length: 21 }, (_, i) => ({
+      ...base,
+      id: `pagination-${i}`,
+      slug: null,
+      title: `Pagination Event ${i + 1}`,
+    }));
+
+    await page.route("**/api/events?*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== "/api/events") return route.continue();
+
+      const pageNumber = Number(url.searchParams.get("page") ?? "1");
+      const limit = Number(url.searchParams.get("limit") ?? "20");
+      const start = (pageNumber - 1) * limit;
+      const events = synthetic.slice(start, start + limit);
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          events,
+          total: synthetic.length,
+          page: pageNumber,
+          pageSize: limit,
+          hasMore: start + events.length < synthetic.length,
+          suggestions: [],
+          otherEvents: [],
+        }),
+      });
+    });
+
+    await page.goto("/events?view=list");
+    const cards = page.getByTestId("event-card").filter({ visible: true });
+    await expect(cards).toHaveCount(20, { timeout: 15000 });
+
+    await page.getByTestId("load-more-events").filter({ visible: true }).click();
+    await expect(cards).toHaveCount(21);
+    await expect(page.getByTestId("load-more-events")).toHaveCount(0);
+  });
+
   test("omits the other-events row when every event is already listed", async ({ page }) => {
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");

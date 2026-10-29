@@ -55,6 +55,50 @@ test.describe("availability API", () => {
   });
 });
 
+test.describe("events listing API", () => {
+  test("returns a bounded page with pagination metadata", async ({ request }) => {
+    const res = await request.get("/api/events?limit=5");
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(Array.isArray(body.events)).toBe(true);
+    expect(body.events.length).toBeLessThanOrEqual(5);
+    expect(body.page).toBe(1);
+    expect(body.pageSize).toBe(5);
+    expect(body.total).toBeGreaterThanOrEqual(body.events.length);
+    expect(body.hasMore).toBe(body.total > body.events.length);
+  });
+
+  test("caps an oversized page request at 50 events", async ({ request }) => {
+    const res = await request.get("/api/events?limit=999");
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body.pageSize).toBe(50);
+    expect(body.events.length).toBeLessThanOrEqual(50);
+  });
+
+  test("applies filters before paginating", async ({ request }) => {
+    const res = await request.get("/api/events?type=running&limit=5");
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body.events.length).toBeLessThanOrEqual(5);
+    expect(body.events.every((e: { discipline: string }) => e.discipline.toLowerCase() === "running")).toBe(true);
+  });
+
+  test("returns specific events by id without the catalogue", async ({ request }) => {
+    const res = await request.get("/api/events?ids=seed-event-001");
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].id).toBe("seed-event-001");
+    expect(body.total).toBe(1);
+    expect(body.hasMore).toBe(false);
+  });
+});
+
 test.describe("stripe webhook", () => {
   // Stripe webhook secret differs in CI — test locally only
   const stripeWebhookTest = process.env.CI ? test.skip : test;
