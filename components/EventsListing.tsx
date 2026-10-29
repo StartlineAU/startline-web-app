@@ -17,6 +17,7 @@ import { eventDistance, formatDistance } from "@/lib/distance";
 import { selectionLabel } from "@/lib/divisions";
 import { getEventCoords } from "@/lib/australia-coords";
 import { locationErrorMessage } from "@/lib/geolocation";
+import type { PlaceChoice } from "@/lib/geocode";
 import { nextMapSelection } from "@/lib/map-events";
 import { useAuthContext } from "@/context/AuthContext";
 import EventMap from "@/components/EventMap";
@@ -189,6 +190,9 @@ function EventsListingInner() {
   const [searchOrigin,  setSearchOrigin]  = useState<{ lat: number; lng: number } | null>(null);
   const [isGeocoding,   setIsGeocoding]   = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  // A name such as "St Kilda" exists in more than one state. Hold the choices
+  // until the visitor picks one instead of searching the first match (#352).
+  const [whereChoices,  setWhereChoices]  = useState<PlaceChoice[] | null>(null);
   const [typeFilters,   setTypeFilters]   = useState<EventType[]>(searchParams.get("type") ? [searchParams.get("type") as EventType] : []);
   const [stateFilters,  setStateFilters]  = useState<AustralianState[]>([]);
   const [formatFilters, setFormatFilters] = useState<CompetitionFormat[]>([]);
@@ -247,12 +251,19 @@ function EventsListingInner() {
   const handleWhereSearch = useCallback(async (raw?: string) => {
     const q = (raw ?? whereQuery).trim();
     setLocationError(null);
+    setWhereChoices(null);
     if (!q) { setSearchOrigin(null); return; }
     if (q.toLowerCase() === "current location") { locateMe(); return; }
     setIsGeocoding(true);
     try {
-      const res = await fetch(`/api/places/geocode?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/places/resolve?q=${encodeURIComponent(q)}`);
       const data = await res.json();
+      const choices: PlaceChoice[] = data?.choices ?? [];
+      if (choices.length > 0) {
+        setWhereChoices(choices);
+        setSearchOrigin(null);
+        return;
+      }
       const result = data?.result;
       if (result && typeof result.latitude === "number" && typeof result.longitude === "number") {
         setSearchOrigin({ lat: result.latitude, lng: result.longitude });
@@ -267,15 +278,23 @@ function EventsListingInner() {
     }
   }, [whereQuery, locateMe]);
 
+  const chooseWhere = useCallback((choice: PlaceChoice) => {
+    setWhereQuery(choice.label);
+    setWhereChoices(null);
+    void handleWhereSearch(choice.label);
+  }, [handleWhereSearch]);
+
   const handleWhereChange = useCallback((text: string) => {
     setWhereQuery(text);
     setLocationError(null);
+    setWhereChoices(null);
   }, []);
 
   const clearWhere = useCallback(() => {
     setWhereQuery("");
     setSearchOrigin(null);
     setLocationError(null);
+    setWhereChoices(null);
   }, []);
 
   // Auto-search an initial ?where= param (e.g. from HeroSearch) once.
@@ -424,12 +443,15 @@ function EventsListingInner() {
   // The server ranks a geocoded search closest-first across the whole result
   // set. Distance is stamped here only so the cards can show it.
   const displayEvents = useMemo(() => {
+    // While the visitor is choosing between states, showing text-matched
+    // results would look like the search had already run (#352).
+    if (whereChoices) return [];
     if (!searchOrigin) return events;
     return events.map((event) => {
       const distance = eventDistance(searchOrigin, event);
       return { ...event, distance: distance === null ? undefined : formatDistance(distance) };
     });
-  }, [events, searchOrigin]);
+  }, [events, searchOrigin, whereChoices]);
 
   // Typing again abandons the picked category: the text is no longer its label.
   const handleWhatChange = useCallback((text: string) => {
@@ -637,7 +659,7 @@ function EventsListingInner() {
               onChange={handleWhereChange}
               filter={selection}
               onSelect={(label) => handleWhereSearch(label)}
-              onEnter={() => handleWhereSearch()}
+              onEnter={(q) => handleWhereSearch(q)}
               placeholder="State, city, or suburb"
               className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:ring-0 focus:outline-none"
             />
@@ -676,7 +698,7 @@ function EventsListingInner() {
                 onChange={handleWhereChange}
                 filter={selection}
                 onSelect={(label) => handleWhereSearch(label)}
-                onEnter={() => handleWhereSearch()}
+                onEnter={(q) => handleWhereSearch(q)}
                 placeholder="City or state"
                 className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:outline-none"
               />
@@ -945,7 +967,9 @@ function EventsListingInner() {
   const resultsHeader = (
     <div className="px-3 lg:px-6 pt-4 pb-1 flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
       <h2 className="font-headline text-base lg:text-xl font-black italic tracking-tighter text-light">
-        {searchOrigin ? (
+        {whereChoices ? (
+          <>Choose a location to continue</>
+        ) : searchOrigin ? (
           <>
             <span className="text-primary">{total}</span> closest event{total !== 1 ? "s" : ""} to{" "}
             <span className="text-light">{whereQuery || "your location"}</span>
@@ -1038,7 +1062,17 @@ function EventsListingInner() {
     </div>
   );
 
-  const emptyState = noResults("lg");
+  const whereChoicePending = (size: "lg" | "sm") => (
+    <div data-testid="where-choice-pending" className={size === "lg" ? "p-10 text-center" : "px-4 py-8 text-center"}>
+      <p className="font-headline text-[13px] text-muted">
+        Choose the state above, then the closest events will appear.
+      </p>
+    </div>
+  );
+
+  const emptyState = whereChoices
+    ? whereChoicePending("lg")
+    : eventsLoading ? loadingState : noResults("lg");
 
   const loadingState = (
     <div className="flex items-center justify-center gap-2 py-10 font-headline text-xs uppercase tracking-widest text-muted">
@@ -1092,7 +1126,7 @@ function EventsListingInner() {
     <div className={view === "list" ? "flex flex-1 min-h-0" : "hidden"}>
       <div className="w-[372px] flex-shrink-0 border-r border-dark-lighter overflow-y-auto px-4 py-4">
         {displayEvents.length === 0 ? (
-          eventsLoading ? loadingState : noResults("sm")
+          whereChoices ? whereChoicePending("sm") : eventsLoading ? loadingState : noResults("sm")
         ) : (
           <>
             <div className={CARD_LIST}>
@@ -1142,7 +1176,7 @@ function EventsListingInner() {
           map left neither usable. The List tab is the list. */}
       <div ref={listRef} className="hidden lg:flex flex-col lg:w-[372px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-dark-lighter bg-dark-darker overflow-y-auto lg:max-h-none px-4 py-3 lg:py-4">
         {displayEvents.length === 0 ? (
-          eventsLoading ? loadingState : noResults("sm")
+          whereChoices ? whereChoicePending("sm") : eventsLoading ? loadingState : noResults("sm")
         ) : (
           <>
             <div className={CARD_LIST}>
@@ -1179,6 +1213,28 @@ function EventsListingInner() {
           <p className="rounded-md border border-red-500/30 bg-red-900/20 px-4 py-2.5 font-headline text-[12px] leading-relaxed text-red-400">
             {locationError}
           </p>
+        </div>
+      )}
+      {whereChoices && (
+        <div role="group" aria-label="Choose a location" data-testid="where-choices"
+          className="px-3 lg:px-6 pt-3">
+          <div className="rounded-xl border border-primary/30 bg-dark px-4 py-3">
+            <p className="font-headline text-[11px] font-black uppercase tracking-widest text-primary">
+              Several places match “{whereQuery.trim()}” · choose one
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {whereChoices.map((choice) => (
+                <button key={choice.label} type="button"
+                  onClick={() => chooseWhere(choice)}
+                  className="rounded-lg border border-dark-lighter bg-dark-darker px-3 py-2 text-left font-headline text-[12px] text-light transition-colors hover:border-primary/50 hover:text-primary">
+                  <span className="block">{choice.label}</span>
+                  <span className="block text-[10px] uppercase tracking-widest text-muted">
+                    {choice.stateName || choice.stateCode.toUpperCase()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
       {resultsHeader}

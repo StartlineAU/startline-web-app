@@ -2,10 +2,33 @@ import { test, expect, type Page } from "@playwright/test";
 
 const SYDNEY = { latitude: -33.8688, longitude: 151.2093 };
 
-async function stubGeocode(page: Page, result: { latitude: number; longitude: number } | null, delay = 0) {
-  await page.route("**/api/places/geocode**", async (route) => {
+async function stubResolve(page: Page, result: { latitude: number; longitude: number } | null, delay = 0) {
+  await page.route("**/api/places/resolve**", async (route) => {
     if (delay) await new Promise((r) => setTimeout(r, delay));
-    await route.fulfill({ json: { result } });
+    await route.fulfill({ json: { result, choices: [] } });
+  });
+}
+
+async function stubResolveChoices(page: Page, choices: Array<{ label: string; city: string; stateCode: string; stateName: string }>) {
+  await page.route("**/api/places/resolve**", async (route) => {
+    const query = new URL(route.request().url()).searchParams.get("q") ?? "";
+    const explicit = choices.find((choice) => query === choice.label);
+    if (explicit) {
+      await route.fulfill({
+        json: {
+          result: {
+            label: explicit.label,
+            city: explicit.city,
+            stateCode: explicit.stateCode,
+            latitude: -37.8679,
+            longitude: 144.9811,
+          },
+          choices: [],
+        },
+      });
+      return;
+    }
+    await route.fulfill({ json: { result: null, choices } });
   });
 }
 
@@ -38,7 +61,7 @@ async function searchWhere(page: Page, query: string) {
 
 test.describe("distance-based search", () => {
   test("geocoding a valid suburb sorts events closest-first and shows distance badges", async ({ page }) => {
-    await stubGeocode(page, SYDNEY);
+    await stubResolve(page, SYDNEY);
     await page.goto("/events?view=list");
     await expect(page.getByPlaceholder("State, city, or suburb")).toBeVisible();
 
@@ -58,7 +81,7 @@ test.describe("distance-based search", () => {
   });
 
   test("loading state shows a spinner while geocoding", async ({ page }) => {
-    await stubGeocode(page, SYDNEY, 1500);
+    await stubResolve(page, SYDNEY, 1500);
     await page.goto("/events?view=list");
     await expect(page.getByPlaceholder("State, city, or suburb")).toBeVisible();
 
@@ -69,7 +92,7 @@ test.describe("distance-based search", () => {
   });
 
   test("falls back to substring matching when geocoding fails", async ({ page }) => {
-    await stubGeocode(page, null);
+    await stubResolve(page, null);
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");
 
@@ -81,7 +104,7 @@ test.describe("distance-based search", () => {
   });
 
   test("unknown suburb without geocode results shows no events and empty state", async ({ page }) => {
-    await stubGeocode(page, null);
+    await stubResolve(page, null);
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");
 
@@ -95,7 +118,7 @@ test.describe("distance-based search", () => {
 
   test("a suburb far from all events still shows the closest events", async ({ page }) => {
     const PERTH = { latitude: -31.9522, longitude: 115.8589 };
-    await stubGeocode(page, PERTH);
+    await stubResolve(page, PERTH);
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");
 
@@ -107,18 +130,18 @@ test.describe("distance-based search", () => {
     await expect(page.getByText(/closest event/i).first()).toBeVisible();
   });
 
-  // #352: a suburb with no events of its own must still produce the closest
-  // events, ordered by distance. St Kilda is the reported example.
-  test("a no-event suburb pressed into the where field sorts events by distance", async ({ page }) => {
+  // #352: a suburb with no events of its own still produces the closest events,
+  // ordered by distance, once the visitor has chosen the right state.
+  test("a no-event suburb with an explicit state sorts events by distance", async ({ page }) => {
     const ST_KILDA = { latitude: -37.8679, longitude: 144.9811 };
-    await stubGeocode(page, ST_KILDA);
+    await stubResolve(page, ST_KILDA);
     await page.route("**/api/events/suburbs**", (route) =>
       route.fulfill({ json: { nearby: false, results: [] } }),
     );
     await page.goto("/events?view=list");
     await expect(page.getByPlaceholder("State, city, or suburb")).toBeVisible();
 
-    await searchWhere(page, "St Kilda");
+    await searchWhere(page, "St Kilda, VIC");
 
     await expect(page.getByText(/closest events to St Kilda/i).first()).toBeVisible({ timeout: 10000 });
     await expect
@@ -134,6 +157,61 @@ test.describe("distance-based search", () => {
         return km.every((value, index) => index === 0 || km[index - 1] <= value);
       }, { timeout: 10000 })
       .toBe(true);
+  });
+
+  // #352: "St Kilda" exists in QLD, SA and Victoria. Picking the first result
+  // sent Melbourne searches to Queensland.
+  test("an ambiguous suburb asks for a state before running the search", async ({ page }) => {
+    const choices = [
+      { label: "St Kilda, QLD 4671, Australia", city: "St Kilda", stateCode: "qld", stateName: "Queensland" },
+      { label: "St Kilda, SA 5110, Australia", city: "St Kilda", stateCode: "sa", stateName: "South Australia" },
+      { label: "St Kilda, Melbourne, VIC 3182, Australia", city: "Melbourne", stateCode: "vic", stateName: "Victoria" },
+    ];
+    await stubResolveChoices(page, choices);
+    // Keep the parent's Enter path deterministic: the typeahead has not loaded
+    // by the time Enter is pressed, so the listing itself must ask for a choice.
+    await page.route("**/api/events/suburbs**", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fulfill({ json: { nearby: false, results: [], choices } });
+    });
+    await page.goto("/events?view=list");
+    await expect(page.getByPlaceholder("State, city, or suburb")).toBeVisible();
+
+    await page.getByPlaceholder("State, city, or suburb").fill("St Kilda");
+    await page.keyboard.press("Enter");
+
+    await expect(page.getByTestId("where-choices")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="event-distance"]')).toHaveCount(0);
+    await page.getByRole("button", { name: /St Kilda, Melbourne, VIC 3182/ }).click();
+
+    await expect(page.getByText(/closest events to St Kilda/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="event-distance"]').first()).toBeVisible();
+  });
+
+  test("typing an ambiguous suburb offers state choices in the where dropdown", async ({ page }) => {
+    const choices = [
+      { label: "St Kilda, QLD 4671, Australia", city: "St Kilda", stateCode: "qld", stateName: "Queensland" },
+      { label: "St Kilda, SA 5110, Australia", city: "St Kilda", stateCode: "sa", stateName: "South Australia" },
+      { label: "St Kilda, Melbourne, VIC 3182, Australia", city: "Melbourne", stateCode: "vic", stateName: "Victoria" },
+    ];
+    await stubResolveChoices(page, choices);
+    await page.route("**/api/events/suburbs**", (route) =>
+      route.fulfill({ json: { nearby: false, results: [], choices } }),
+    );
+    await page.goto("/events?view=list");
+    await expect(page.getByPlaceholder("State, city, or suburb")).toBeVisible();
+
+    await page.getByPlaceholder("State, city, or suburb").fill("St Kilda");
+    const vic = page.getByTestId("place-choice").filter({ hasText: "Melbourne, VIC 3182" });
+    await expect(vic).toBeVisible({ timeout: 10000 });
+
+    // Enter with the choice list open must not silently pick one.
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("where-choices")).toHaveCount(0);
+    await expect(page.locator('[data-testid="event-distance"]')).toHaveCount(0);
+
+    await vic.click();
+    await expect(page.getByText(/closest events to St Kilda/i).first()).toBeVisible({ timeout: 10000 });
   });
 
   test("typing in the where field suggests suburbs that host events", async ({ page }) => {
@@ -175,7 +253,7 @@ test.describe("distance-based search", () => {
   });
 
   test("clearing the where input resets to normal listing", async ({ page }) => {
-    await stubGeocode(page, SYDNEY);
+    await stubResolve(page, SYDNEY);
     await page.goto("/events?view=list");
     await page.waitForLoadState("networkidle");
 
@@ -189,7 +267,7 @@ test.describe("distance-based search", () => {
   });
 
   test("use my location button triggers device geolocation", async ({ page }) => {
-    await stubGeocode(page, SYDNEY);
+    await stubResolve(page, SYDNEY);
     await page.context().grantPermissions(["geolocation"]);
     await page.context().setGeolocation({ latitude: SYDNEY.latitude, longitude: SYDNEY.longitude });
     await page.goto("/events?view=list");
