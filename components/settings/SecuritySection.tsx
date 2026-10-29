@@ -12,6 +12,7 @@ import {
   ErrorNote, SectionShell, SuccessNote, cardCls, inputCls, labelCls, outlineBtnCls,
 } from "@/components/settings/primitives";
 import { DeleteAccountCard, EmailCard, SessionsCard } from "@/components/settings/AccountCards";
+import SignInMethodsCard from "@/components/settings/SignInMethodsCard";
 
 const btnCls = outlineBtnCls;
 
@@ -281,10 +282,11 @@ function PasswordCard() {
 
 export default function SecuritySection() {
   return (
-    <SectionShell title="Login & security" description="Your email, your password and the second step you use to sign in.">
+    <SectionShell title="Login & security" description="Your email, your password, the accounts you sign in with and the second step you use to sign in.">
       <div className="space-y-5">
         <EmailCard />
         <PasswordCard />
+        <SignInMethodsCard />
         <AuthenticatorCard />
         <SessionsCard />
         <DeleteAccountCard />
