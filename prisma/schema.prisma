@@ -128,7 +128,7 @@ enum OrganiserStatus {
 // ─── Event listings ───────────────────────────────────────────────────────────
 model Event {
   id          String      @id @default(uuid())
-  organiser   Organiser   @relation(fields: [organiserId], references: [id])
+  organiser   Organiser   @relation(fields: [organiserId], references: [id], onDelete: Cascade)
   organiserId String
   status      EventStatus @default(DRAFT)
 

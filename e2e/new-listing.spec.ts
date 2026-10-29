@@ -388,8 +388,7 @@ test.describe("new listing wizard: leaving for Payments without an ABN", () => {
   });
 
   test.afterAll(async () => {
-    // Event.organiser has no cascade, so the events go before the organiser.
-    await prisma.event.deleteMany({ where: { organiserId } });
+    // The organiser's events cascade with it.
     await prisma.organiser.deleteMany({ where: { email: EMAIL } });
     await prisma.user.deleteMany({ where: { email: EMAIL } });
     await prisma.$disconnect();
