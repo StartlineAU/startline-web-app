@@ -23,6 +23,9 @@ interface SignInModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  // Which tab the modal opens on. "signup" lets a SIGN UP button in the navbar
+  // land straight on the create-account form instead of the sign-in one.
+  initialView?: "signin" | "signup";
 }
 
 function totpUri(details: unknown): string | null {
@@ -33,7 +36,7 @@ function totpUri(details: unknown): string | null {
   return uri && typeof uri.toString === "function" ? uri.toString() : null;
 }
 
-export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalProps) {
+export default function SignInModal({ isOpen, onClose, onSuccess, initialView = "signin" }: SignInModalProps) {
   // The modal also opens on the organiser portal, where /contact does not exist.
   const portalHost  = usePortalHost();
   const contactHref = customerHref("/contact", portalHost);
@@ -86,11 +89,14 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   }, [isOpen, onClose]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      // Opening always starts on the requested tab, so closing on the signup
+      // form and reopening with SIGN IN does not show the signup form again.
+      setView(initialView);
     } else {
       document.body.style.overflow = "";
-      /* eslint-disable react-hooks/set-state-in-effect */
       setView("signin");
       setEmail(""); setFirstName(""); setLastName("");
       setDobDay(""); setDobMonth(""); setDobYear("");
@@ -102,10 +108,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setResetCode(""); setNewPassword(""); setNewPwConfirm("");
       setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
       setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
-      /* eslint-enable react-hooks/set-state-in-effect */
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
     return () => { document.body.style.overflow = ""; };
-  }, [isOpen]);
+  }, [isOpen, initialView]);
 
   // Username validation — format + profanity checked client-side.
   const usernameStatus_ = useMemo(() => {

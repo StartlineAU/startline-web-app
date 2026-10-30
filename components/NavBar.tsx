@@ -25,6 +25,8 @@ export default function NavBar() {
 
   const [isMenuOpen,   setIsMenuOpen]   = useState(false);
   const [isSignInOpen, setIsSignInOpen] = useState(false);
+  // Which tab the auth modal opens on. SIGN IN and SIGN UP share one modal.
+  const [authView,     setAuthView]     = useState<"signin" | "signup">("signin");
   const [isUserOpen,   setIsUserOpen]   = useState(false);
   const [profileName,  setProfileName]  = useState<string | null>(null);
   const [profilePic,   setProfilePic]   = useState<string | null>(null);
@@ -44,7 +46,10 @@ export default function NavBar() {
     if (status === "authenticated") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("signin") !== "true") return;
-    startTransition(() => setIsSignInOpen(true));
+    startTransition(() => {
+      setAuthView("signin");
+      setIsSignInOpen(true);
+    });
     router.replace(pathname ?? "/", { scroll: false });
   }, [status, pathname, router]);
 
@@ -96,6 +101,11 @@ export default function NavBar() {
   const handleSignOut = async () => {
     await logout();
     router.push("/");
+  };
+
+  const openAuth = (view: "signin" | "signup") => {
+    setAuthView(view);
+    setIsSignInOpen(true);
   };
 
   const switchOrganiser = async (organiserId: string) => {
@@ -152,12 +162,20 @@ export default function NavBar() {
           {/* ── Right side ── */}
           <div className="flex items-center gap-2 shrink-0">
 
-            {/* Desktop: unauthenticated */}
+            {/* Desktop: unauthenticated. SIGN UP is the primary action, so it
+                takes the lime face and the machined shadow; SIGN IN stays a
+                hairline outline next to it. */}
             {status !== "authenticated" && (
-              <button onClick={() => setIsSignInOpen(true)} disabled={status === "loading"}
-                className="hidden md:inline-flex items-center justify-center h-11 px-3 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest text-white border border-white/30 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-default">
-                SIGN IN
-              </button>
+              <>
+                <button onClick={() => openAuth("signin")} disabled={status === "loading"}
+                  className="hidden md:inline-flex items-center justify-center h-11 px-3 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest text-white border border-white/30 hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:cursor-default">
+                  SIGN IN
+                </button>
+                <button onClick={() => openAuth("signup")} disabled={status === "loading"}
+                  className="hidden md:inline-flex items-center justify-center h-11 px-4 rounded-lg bg-machined shadow-machined text-dark font-headline text-[12px] font-bold uppercase tracking-widest hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-30 disabled:cursor-default">
+                  SIGN UP
+                </button>
+              </>
             )}
 
             {/* Desktop: authenticated user menu */}
@@ -242,9 +260,13 @@ export default function NavBar() {
                   />
                 </>
               ) : (
-                <div className="border-t border-white/10 mt-1.5 pt-3 pb-2">
-                  <button onClick={() => { setIsMenuOpen(false); setIsSignInOpen(true); }} disabled={status === "loading"}
-                    className="w-full h-10 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest text-white border border-white/30 hover:border-primary hover:text-primary transition-colors disabled:opacity-30">
+                <div className="border-t border-white/10 mt-1.5 pt-3 pb-2 space-y-2">
+                  <button onClick={() => { setIsMenuOpen(false); openAuth("signup"); }} disabled={status === "loading"}
+                    className="w-full h-11 rounded-lg bg-machined shadow-machined text-dark font-headline text-[12px] font-bold uppercase tracking-widest hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-30">
+                    SIGN UP
+                  </button>
+                  <button onClick={() => { setIsMenuOpen(false); openAuth("signin"); }} disabled={status === "loading"}
+                    className="w-full h-11 rounded-lg font-headline text-[12px] font-bold uppercase tracking-widest text-white border border-white/30 hover:border-primary hover:text-primary transition-colors disabled:opacity-30">
                     SIGN IN
                   </button>
                 </div>
@@ -254,7 +276,7 @@ export default function NavBar() {
         )}
       </nav>
 
-      <SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} />
+      <SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} initialView={authView} />
     </>
   );
 }
