@@ -49,6 +49,59 @@ test.describe("auth modal — sign in", () => {
   });
 });
 
+test.describe("navbar sign up button", () => {
+  test("signed-out visitors see both SIGN IN and SIGN UP", async ({ page }) => {
+    await goToHomepage(page);
+    await expect(page.getByRole("button", { name: "SIGN IN", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "SIGN UP", exact: true })).toBeVisible();
+  });
+
+  test("SIGN UP opens the modal on the create-account form", async ({ page }) => {
+    await goToHomepage(page);
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+
+    await expect(page.getByPlaceholder("Create a password")).toBeVisible();
+    await expect(page.locator("#signup-email")).toBeVisible();
+    await expect(page.locator("#signin-email")).toHaveCount(0);
+  });
+
+  test("SIGN IN still opens the sign-in form after using SIGN UP", async ({ page }) => {
+    await goToHomepage(page);
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+
+    await page.getByRole("button", { name: "SIGN IN", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+    await expect(page.locator("#signin-email")).toBeVisible();
+    await expect(page.locator("#signup-email")).toHaveCount(0);
+  });
+
+  test("mobile menu offers both SIGN UP and SIGN IN", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goToHomepage(page);
+    await page.getByRole("button", { name: "Toggle menu" }).click();
+
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+    await expect(page.getByPlaceholder("Create a password")).toBeVisible();
+  });
+
+  test("signed-in visitors get no SIGN UP button", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await goToHomepage(page);
+
+    await expect(page.getByTestId("user-menu")).toBeVisible();
+    await expect(page.getByRole("button", { name: "SIGN UP", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "SIGN IN", exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe("auth modal — sign up", () => {
   test("rejects mismatched passwords before hitting the network", async ({ page }) => {
     await openSignInModal(page);
