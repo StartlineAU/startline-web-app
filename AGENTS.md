@@ -181,6 +181,48 @@ Cognito cookies are scoped to `.startlineau.com` in `components/AmplifyProvider.
 so a single sign-in covers all three portals. Host-only cookies left the
 organiser portal permanently signed out in production.
 
+### Public site visibility (waitlist)
+
+`PUBLIC_SITE_MODE` decides what `startlineau.com` shows the public, and only that
+host. Staging, PR previews and local dev serve the real site whatever it says.
+Unset or unrecognised means `waitlist`, so a missing value on the production app
+secret cannot open the site by accident.
+
+| Value | `startlineau.com` and `www.` |
+|---|---|
+| `waitlist` (default) | Anonymous visitors get `/waitlist`; `/terms`, `/privacy`, `/cookies` get their `app/waitlist/(legal)` copies |
+| `live` | The real site, with the usual organiser/admin portal protection |
+
+The gate is in `middleware.ts`; the allowlist of paths that stay reachable while
+waitlisted (waitlist API, Stripe webhooks, the lifecycle worker, the organiser
+sign-up door, provider callbacks, check-in, assets) is `lib/site-mode.ts`. Adding
+to it widens what the public can reach without signing in, so each entry needs a
+reason.
+
+**Reviewing a production deploy before launch.** Sign in to the production admin
+portal (`admin.startlineau.com/admin/login`) and open `startlineau.com` in the
+same browser. Middleware verifies the Cognito access token and lets requests
+through only for members of the `admins` group; the response is marked
+`private, no-store` so a shared cache cannot serve the staff view to anyone else.
+An ordinary athlete session, a stale token or a tampered one gets the waitlist.
+The shared `.startlineau.com` cookie is what carries the session across.
+
+**Launching.** Set `PUBLIC_SITE_MODE=live` on `startline/prod/app` and rebuild the
+`prod` branch — no code change. It is listed under `env` in `next.config.ts`, so
+Next inlines it at build time (middleware's Edge runtime cannot be trusted to see
+an arbitrary runtime `process.env` read). The preBuild writes `.env.production`
+from the app secret before `next build`, so the deploy's value is the one that is
+baked in: changing it needs a rebuild, not a restart. It is not `NEXT_PUBLIC_*`
+and nothing in the client reads it. Adding it to the prod app secret is a
+Terraform change in `startline-infra`: add the key to `runtime_secrets` in
+`startline-web-app/modules/environment/main.tf`, or keep it out of the generated
+half and set it on the app secret directly, as with the third-party credentials.
+
+`PUBLIC_SITE_MODE` is not a deployment switch. Environments stay separate:
+`main` deploys to the staging Amplify branch with staging configuration, `prod`
+deploys to production. To put tested `main` code on production, PR `main` into
+`prod`; do not point the production environment at `main`.
+
 ## Auth (Cognito)
 
 JWT verification in `middleware.ts` via `jose`. Tokens in Cognito-managed cookies. Only Cognito group: `admins`. Authorisation at DB level (Prisma).

@@ -13,6 +13,20 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
 
+  // Middleware runs on the Edge runtime, where an arbitrary `process.env` read is
+  // not guaranteed to see the server's environment — the production build leaves
+  // `process.env.PUBLIC_SITE_MODE` as a runtime lookup. Listing it here makes
+  // Next inline the value at build time, so the waitlist gate behaves the same in
+  // dev, `next start` and Amplify. The Amplify preBuild writes `.env.production`
+  // from the app secret before `next build`, so a deploy's value is the one that
+  // gets inlined; changing it needs a rebuild, not just a restart.
+  //
+  // Not a secret: it is either "waitlist" or "live". Defaulting here to the
+  // closed value means a build with the variable missing cannot open the site.
+  env: {
+    PUBLIC_SITE_MODE: process.env.PUBLIC_SITE_MODE ?? "waitlist",
+  },
+
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
