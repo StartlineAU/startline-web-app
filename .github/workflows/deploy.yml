@@ -45,12 +45,18 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
+            // The deployments API rejects a description over 16,383 characters.
+            // A promotion merge commit carries every merged commit message, so
+            // sending it whole failed the deploy before Amplify was even asked
+            // to build (#453). The subject line is what the deployment list
+            // shows anyway.
+            const subject = (context.payload.head_commit?.message || '').split('\n')[0];
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: context.sha,
               environment: process.env.ENV,
-              description: context.payload.head_commit?.message || '',
+              description: subject.slice(0, 140),
               auto_merge: false,
               required_contexts: [],
             })
