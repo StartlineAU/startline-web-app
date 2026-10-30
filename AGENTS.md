@@ -207,16 +207,18 @@ through only for members of the `admins` group; the response is marked
 An ordinary athlete session, a stale token or a tampered one gets the waitlist.
 The shared `.startlineau.com` cookie is what carries the session across.
 
-**Launching.** Set `PUBLIC_SITE_MODE=live` on `startline/prod/app` and rebuild the
-`prod` branch — no code change. It is listed under `env` in `next.config.ts`, so
-Next inlines it at build time (middleware's Edge runtime cannot be trusted to see
-an arbitrary runtime `process.env` read). The preBuild writes `.env.production`
-from the app secret before `next build`, so the deploy's value is the one that is
-baked in: changing it needs a rebuild, not a restart. It is not `NEXT_PUBLIC_*`
-and nothing in the client reads it. Adding it to the prod app secret is a
-Terraform change in `startline-infra`: add the key to `runtime_secrets` in
-`startline-web-app/modules/environment/main.tf`, or keep it out of the generated
-half and set it on the app secret directly, as with the third-party credentials.
+**Launching.** `PUBLIC_SITE_MODE` is owned by the infra stack, not set by hand:
+it is `generated_app_config` in `startline-infra`, per environment, under
+`local.environments` in `startline-web-app/main.tf` (`prod` starts on `waitlist`,
+`staging` on `live`). Flip prod to `live`, apply, then rebuild the `prod` branch.
+An apply alone is not enough — the value is inlined at build time.
+
+It is listed under `env` in `next.config.ts`, so Next inlines it at build time
+(middleware's Edge runtime cannot be trusted to see an arbitrary runtime
+`process.env` read). The preBuild writes `.env.production` from the app secret
+before `next build`, so the deploy's value is the one that is baked in. It is not
+`NEXT_PUBLIC_*` and nothing in the client reads it. Setting the key by hand on
+`startline/prod/app` is reverted on the next apply: Terraform owns that key.
 
 `PUBLIC_SITE_MODE` is not a deployment switch. Environments stay separate:
 `main` deploys to the staging Amplify branch with staging configuration, `prod`
