@@ -1,27 +1,31 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useApiResource } from "@/hooks/useApiResource";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Plus, Trash2, MapPin, RefreshCw, Search,
-  MoreHorizontal, Pencil, LayoutDashboard,
+  MoreHorizontal, Pencil, LayoutDashboard, Copy,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 const STATUS_ORDER: Record<EventStatus, number> = {
-  APPROVED: 0,
-  PENDING:  1,
-  REJECTED: 2,
-  DRAFT:    3,
-  ARCHIVED: 4,
+  IN_PROGRESS: 0,
+  APPROVED: 1,
+  PENDING:  2,
+  REJECTED: 3,
+  DRAFT:    4,
+  ARCHIVED: 5,
 };
 
 interface EventRow {
@@ -47,6 +51,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: strin
   DRAFT:    { bg: "bg-amber-400/10", text: "text-amber-300", label: "Draft"     },
   PENDING:  { bg: "bg-blue-400/10",  text: "text-blue-300",  label: "Pending"   },
   APPROVED: { bg: "bg-primary/10",   text: "text-primary",   label: "Published" },
+  IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
   ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Archived"  },
 };
@@ -58,6 +63,7 @@ type Filter    = EventStatus | "all";
 const FILTERS: { k: Filter; l: string }[] = [
   { k: "all",      l: "All"       },
   { k: "APPROVED", l: "Published" },
+  { k: "IN_PROGRESS", l: "In progress" },
   { k: "PENDING",  l: "Pending"   },
   { k: "DRAFT",    l: "Drafts"    },
   { k: "REJECTED", l: "Rejected"  },
@@ -69,6 +75,7 @@ const SORT_LABELS: Record<SortField, string> = { status: "Status", date: "Date",
 // ── Actions dropdown ────────────────────────────────────────────────────────
 function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const ref             = useRef<HTMLDivElement>(null);
   const router          = useRouter();
 
@@ -80,6 +87,22 @@ function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => voi
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const handleDuplicate = async (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    if (duplicating) return;
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/organiser/events/${event.id}/duplicate`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.id) throw new Error(data?.error || "Duplicate failed");
+      setOpen(false);
+      router.push(`/organiser/new-listing?id=${data.id}&from=${encodeURIComponent("/organiser/listings")}`);
+    } catch (err) {
+      console.error(err);
+      setDuplicating(false);
+    }
+  };
 
   return (
     <div ref={ref} className="relative">
@@ -100,10 +123,17 @@ function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => voi
             <LayoutDashboard className="w-4 h-4" /> View dashboard
           </button>
           <button
-            onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/new-listing?id=${event.id}`); }}
+            onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent("/organiser/listings")}`); }}
             className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/5 transition-colors font-headline font-bold uppercase tracking-widest"
           >
             <Pencil className="w-4 h-4" /> Edit event
+          </button>
+          <button
+            onClick={handleDuplicate}
+            disabled={duplicating}
+            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/5 transition-colors font-headline font-bold uppercase tracking-widest disabled:opacity-50"
+          >
+            <Copy className="w-4 h-4" /> {duplicating ? "Duplicating…" : "Duplicate listing"}
           </button>
           <div className="my-1 border-t border-dark-lighter" />
           <button
@@ -138,21 +168,28 @@ function SortButton({
 // ── Main page ───────────────────────────────────────────────────────────────
 export default function ListingsPage() {
   const router = useRouter();
-  const [events,     setEvents]     = useState<EventRow[] | null>(null);
-  const loading = events === null;
   const [filter,     setFilter]     = useState<Filter>("all");
   const [confirmDel, setConfirmDel] = useState<EventRow | null>(null);
   const [deleting,   setDeleting]   = useState(false);
   const [sortField,  setSortField]  = useState<SortField>("status");
   const [sortDir,    setSortDir]    = useState<SortDir>("asc");
 
-  const fetchEvents = useCallback(() => {
-    fetch("/api/organiser/events")
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { setEvents(Array.isArray(data) ? data : []); });
+  const fetchEvents = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/organiser/events", { signal });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data as EventRow[] : [];
   }, []);
 
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  const {
+    data: events,
+    loading,
+    reload: reloadEvents,
+    setData: setEvents,
+  } = useApiResource<EventRow[]>(fetchEvents);
+
+  const loadEvents = useCallback(() => { void reloadEvents(); }, [reloadEvents]);
+  useOnOrganiserEventsChanged(loadEvents);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -200,7 +237,7 @@ export default function ListingsPage() {
   };
 
   const handleRowClick = (e: EventRow) => {
-    if (e.status === "APPROVED") {
+    if (e.status === "APPROVED" || e.status === "IN_PROGRESS") {
       router.push(`/organiser/events/${e.id}/dashboard`);
     } else {
       router.push(`/organiser/events/${e.id}`);
@@ -246,7 +283,7 @@ export default function ListingsPage() {
                 {l} <span className="opacity-60 ml-1">({counts[k] ?? 0})</span>
               </Button>
             ))}
-            <Button size="icon" variant="outline" onClick={fetchEvents} title="Refresh" className="shrink-0">
+            <Button size="icon" variant="outline" onClick={() => void reloadEvents()} title="Refresh" className="shrink-0">
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </div>
@@ -287,12 +324,7 @@ export default function ListingsPage() {
               <div className="col-span-1 text-right">Actions</div>
             </div>
 
-            {loading && (
-              <div className="p-12 text-center">
-                <div className="w-6 h-6 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-muted-dark uppercase tracking-widest">Loading…</div>
-              </div>
-            )}
+            {loading && <TableSkeleton rows={5} cols={4} className="p-6" />}
 
             {!loading && filtered.map((e, i) => {
               const s     = STATUS_STYLE[e.status];
@@ -332,12 +364,12 @@ export default function ListingsPage() {
                     </div>
                   </div>
 
-                  {/* ── Desktop table row (≥ sm) ── */}
+                  {/* ── Desktop table row (≥ sm) — inset rail (no layout shift vs hover:border-l) ── */}
                   <div
-                    className={`hidden sm:grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer transition-all
-                      ${e.status === "APPROVED"
-                        ? "hover:bg-primary/5 hover:border-l-2 hover:border-l-primary"
-                        : "hover:bg-white/5 hover:border-l-2 hover:border-l-dark-lighter"}`}
+                    className={`hidden sm:grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer transition-colors
+                      ${e.status === "APPROVED" || e.status === "IN_PROGRESS"
+                        ? "hover:bg-primary/5 hover:shadow-[inset_2px_0_0_0_#B3E153]"
+                        : "hover:bg-white/5 hover:shadow-[inset_2px_0_0_0_#353535]"}`}
                     onClick={() => handleRowClick(e)}
                   >
                     <div className="col-span-5 flex items-center gap-4 min-w-0">
@@ -354,7 +386,7 @@ export default function ListingsPage() {
                       </div>
                     </div>
                     <div className="col-span-2 text-center">
-                      <div className="font-headline text-sm font-bold text-white/70">{formatEventDate(e.eventDate, e.startTime)}</div>
+                      <div className="font-headline text-sm font-bold text-muted">{formatEventDate(e.eventDate, e.startTime)}</div>
                     </div>
                     <div className="col-span-2 flex justify-center">
                       <Badge className={`${s.bg} ${s.text} border-0`}>{s.label}</Badge>

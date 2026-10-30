@@ -91,7 +91,7 @@ function VerifyEmailForm() {
     setResending(true);
     try {
       await resendSignUpCode({ username: email });
-      setSuccess("A new code has been sent. Check your inbox and spam folder — look for an email from Amazon Cognito or no-reply@verificationemail.com.");
+      setSuccess("A new code has been sent.");
     } catch (err: unknown) {
       const errName = (err as { name?: string })?.name ?? "";
       const msg = err instanceof Error ? err.message : "";
@@ -148,10 +148,9 @@ function VerifyEmailForm() {
               {email ? <strong className="text-light">{email}</strong> : "your email"}.
               Enter it below to activate your account.
             </p>
-            <p className="text-muted text-[12px] leading-relaxed mb-8 text-center">
-              This code is sent by AWS Cognito (not Resend). Check spam/junk, and allow a minute or two for delivery.
+            <p className="text-muted text-[13px] leading-relaxed mb-6 text-center mt-1">
+              Can&apos;t see it? Check your spam or junk folder.
             </p>
-
             {error && (
               <div className="mb-5 px-4 py-3 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]">
                 {error}
@@ -169,7 +168,7 @@ function VerifyEmailForm() {
                   <label htmlFor="verify-email-input" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">Email address</label>
                   <input id="verify-email-input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+                    className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
                 </div>
               )}
 
@@ -180,7 +179,7 @@ function VerifyEmailForm() {
                   type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} required
                   value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="000000"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors font-headline font-black"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors font-headline font-black"
                 />
               </div>
 

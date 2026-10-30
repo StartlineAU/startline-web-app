@@ -1,16 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, AlertCircle, CreditCard, ArrowRight, ExternalLink, ShieldCheck, RefreshCw, UserCog } from "lucide-react";
+import { CheckCircle, AlertCircle, CreditCard, ArrowRight, ExternalLink, RefreshCw, UserCog, Clock } from "lucide-react";
 import Link from "next/link";
+import {
+  Skeleton, PageHeaderSkeleton, PageShellSkeleton,
+} from "@/components/ui/skeleton";
+import DatePicker from "@/components/ui/DatePicker";
+import { isNative, openExternal } from "@/lib/capacitor";
+import { useApiResource } from "@/hooks/useApiResource";
+import { maxDateOfBirthForMinAge } from "@/lib/registration-form";
 
 export const dynamic = "force-dynamic";
 
 const inputCls =
-  "w-full bg-dark-light border border-dark-lighter rounded-xl px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
+  "w-full bg-dark-light border border-dark-lighter rounded-xl px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
+
+const EARLIEST_DATE_OF_BIRTH = `${new Date().getFullYear() - 100}-01-01`;
+
+/** What GET /api/organiser/stripe/status says about an account mid-onboarding. */
+interface StripeStatus {
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  actionRequired: boolean;
+}
 
 interface Profile {
   orgName: string | null;
@@ -20,7 +36,6 @@ interface Profile {
   legalName: string | null;
   abn: string | null;
   dob: string | null;
-  insuranceDeclared: boolean;
   stripeAccountId: string | null;
   stripeOnboardingComplete: boolean;
 }
@@ -30,55 +45,90 @@ function maskAccountId(id: string) {
   return id.slice(0, 8) + "•".repeat(id.length - 8);
 }
 
+async function goToStripe(url: string) {
+  if (isNative()) {
+    await openExternal(url);
+  } else {
+    window.location.href = url;
+  }
+}
+
 function PaymentsContent() {
   const searchParams = useSearchParams();
   const refreshed    = searchParams.get("refresh") === "1";
 
   const [profile,    setProfile]    = useState<Profile | null>(null);
-  const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [error,      setError]      = useState("");
+  const [actionError, setActionError] = useState("");
+  const initialized = useRef(false);
 
   const [legalName,         setLegalName]         = useState("");
   const [abn,               setAbn]               = useState("");
   const [dob,               setDob]               = useState("");
-  const [insuranceDeclared, setInsuranceDeclared] = useState(false);
+  const [stripeStatus,      setStripeStatus]      = useState<StripeStatus | null>(null);
+  const [checking,          setChecking]          = useState(false);
+
+  // The stored flag only flips when Stripe tells us, so an account that is
+  // mid-onboarding is asked about directly. That is what separates "you still
+  // owe Stripe something" from "Stripe is reviewing what you sent" (#387).
+  const checkStripe = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch("/api/organiser/stripe/status");
+      if (res.ok) setStripeStatus(await res.json() as StripeStatus);
+    } catch {
+      // Leave the last known state; the page falls back to the stored flag.
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const fetchProfile = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch("/api/organiser/profile", { signal });
+    if (!response.ok) return null;
+    const data = await response.json() as Profile;
+    let status: StripeStatus | null = null;
+    if (data.stripeAccountId && !data.stripeOnboardingComplete) {
+      const statusResponse = await fetch("/api/organiser/stripe/status", { signal }).catch(() => null);
+      status = statusResponse?.ok ? await statusResponse.json() as StripeStatus : null;
+    }
+    return { data, status };
+  }, []);
+
+  const {
+    data: loaded,
+    loading,
+    error: loadError,
+  } = useApiResource<{ data: Profile; status: StripeStatus | null } | null>(fetchProfile);
+  const error = loadError ?? actionError;
 
   useEffect(() => {
-    fetch("/api/organiser/profile")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data: Profile | null) => {
-        if (!data) return;
-        setProfile(data);
-        setLegalName(data.legalName ?? "");
-        setAbn(data.abn ?? "");
-        setDob(data.dob ?? "");
-        setInsuranceDeclared(data.insuranceDeclared ?? false);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    if (!loaded || initialized.current) return;
+    initialized.current = true;
+    setProfile(loaded.data);
+    setLegalName(loaded.data.legalName ?? "");
+    setAbn(loaded.data.abn ?? "");
+    setDob(loaded.data.dob ?? "");
+    setStripeStatus(loaded.status);
+  }, [loaded]);
 
   const profileIncomplete =
     !profile?.orgName || !profile?.contactName || !profile?.contactEmail || !profile?.phone;
 
   const saveAndConnect = async () => {
-    setError("");
+    setActionError("");
 
     if (profileIncomplete) {
-      setError("Please complete your organiser profile before connecting Stripe.");
+      setActionError("Please complete your organiser profile before connecting Stripe.");
       return;
     }
     if (!legalName.trim()) {
-      setError("Legal name is required before connecting your Stripe account.");
+      setActionError("Legal name is required before connecting your Stripe account.");
       return;
     }
     if (!abn.trim()) {
-      setError("ABN or ACN is required before connecting your Stripe account (required for ATO reporting under ToS §3.2).");
-      return;
-    }
-    if (!insuranceDeclared) {
-      setError("You must declare that you hold current public liability insurance ($10M minimum) before connecting.");
+      setActionError("ABN or ACN is required before connecting your Stripe account (required for ATO reporting under ToS §3.2).");
       return;
     }
 
@@ -95,13 +145,12 @@ function PaymentsContent() {
           legalName,
           abn,
           dob: dob || undefined,
-          insuranceDeclared,
         }),
       });
 
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError((d as { error?: string }).error ?? "Failed to save profile.");
+        setActionError((d as { error?: string }).error ?? "Failed to save profile.");
         return;
       }
     } finally {
@@ -113,10 +162,10 @@ function PaymentsContent() {
       const res  = await fetch("/api/organiser/stripe/connect", { method: "POST" });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        setError(data.error ?? "Failed to generate Stripe onboarding link. Please try again.");
+        setActionError(data.error ?? "Failed to generate Stripe onboarding link. Please try again.");
         return;
       }
-      window.location.href = data.url;
+      await goToStripe(data.url);
     } finally {
       setConnecting(false);
     }
@@ -128,10 +177,10 @@ function PaymentsContent() {
       const res  = await fetch("/api/organiser/stripe/connect", { method: "POST" });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        setError(data.error ?? "Failed to generate Stripe link.");
+        setActionError(data.error ?? "Failed to generate Stripe link.");
         return;
       }
-      window.location.href = data.url;
+      await goToStripe(data.url);
     } finally {
       setConnecting(false);
     }
@@ -139,18 +188,22 @@ function PaymentsContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-darker">
-        <main className="pt-14">
-          <div className="max-w-[760px] mx-auto px-6 py-16 text-center">
-            <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto" />
-          </div>
-        </main>
-      </div>
+      <PageShellSkeleton maxWidth="max-w-[760px]" className="pt-14 px-6">
+        <PageHeaderSkeleton actions={0} />
+        <Skeleton className="h-40 w-full rounded-2xl mb-4" />
+        <Skeleton className="h-56 w-full rounded-2xl" />
+      </PageShellSkeleton>
     );
   }
 
-  const isConnected = profile?.stripeOnboardingComplete === true;
-  const inProgress  = !!profile?.stripeAccountId && !isConnected;
+  const isConnected =
+    profile?.stripeOnboardingComplete === true ||
+    (stripeStatus?.chargesEnabled === true && stripeStatus.payoutsEnabled === true);
+  const started    = !!profile?.stripeAccountId && !isConnected;
+  // Without a status reply, assume there is something left to do: the button
+  // back into Stripe is the safe default.
+  const reviewing  = started && stripeStatus?.actionRequired === false;
+  const inProgress = started && !reviewing;
 
   return (
       <div className="min-h-screen bg-dark-darker">
@@ -250,6 +303,36 @@ function PaymentsContent() {
             </Card>
           )}
 
+          {/* ── State 3: Submitted, Stripe is verifying ── */}
+          {reviewing && (
+            <Card className="mb-6 border-dark-lighter">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
+                    <Clock className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-primary mb-1">
+                      Stripe is reviewing your details
+                    </div>
+                    <div className="text-[13px] text-muted mb-4">
+                      You have sent Stripe everything it asked for. It is now verifying your identity, which usually takes a few minutes and can take up to two business days. There is nothing more to do here. Payments switch on as soon as Stripe finishes.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={checkStripe}
+                      disabled={checking}
+                      className="inline-flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${checking ? "animate-spin" : ""}`} />
+                      {checking ? "Checking…" : "Check again"}
+                    </button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Profile-incomplete warning */}
           {profileIncomplete && (
             <div className="mb-6 flex items-start gap-3 bg-amber-400/10 border border-amber-400/20 rounded-xl px-5 py-4">
@@ -314,62 +397,35 @@ function PaymentsContent() {
                 </div>
 
                 <div>
-                  <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted-light block mb-2">
+                  <label htmlFor="organiser-dob" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted-light block mb-2">
                     Date of birth
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
+                    id="organiser-dob"
                     value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    className={inputCls}
+                    onChange={setDob}
+                    placeholder="Select date of birth"
+                    disablePast={false}
+                    minDate={EARLIEST_DATE_OF_BIRTH}
+                    maxDate={maxDateOfBirthForMinAge(18)}
+                    yearPicker
                   />
                   <p className="text-[11px] text-muted-dark mt-1.5">Used for identity verification with Stripe and ATO SERR reporting. Not required if you only list external-link events.</p>
                 </div>
               </div>
 
-              {/* Insurance declaration */}
-              <div className="mt-6 bg-white/[0.03] border border-dark-lighter rounded-xl p-5">
-                <div className="flex items-start gap-4">
-                  <ShieldCheck className="w-5 h-5 text-muted mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <div className="font-headline text-[13px] font-bold uppercase tracking-widest text-muted-light mb-2">
-                      Public liability insurance declaration
-                    </div>
-                    <p className="text-[13px] text-muted leading-relaxed mb-4">
-                      Before listing events on Startline, you must hold and maintain current public liability insurance with a minimum coverage of <strong className="text-muted-light">$10 million per occurrence</strong>, underwritten by an APRA-registered insurer, covering the full duration of each event. Startline does not collect or verify insurance certificates — this is a self-declaration on your honour (ToS §5.3).
-                    </p>
-                    <label className="flex items-start gap-3 cursor-pointer group">
-                      <div className="relative flex-shrink-0 mt-0.5">
-                        <input
-                          type="checkbox"
-                          checked={insuranceDeclared}
-                          onChange={(e) => setInsuranceDeclared(e.target.checked)}
-                          className="sr-only"
-                        />
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${insuranceDeclared ? "bg-primary border-primary" : "bg-dark-light border-dark-lighter group-hover:border-muted"}`}>
-                          {insuranceDeclared && (
-                            <svg className="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-[13px] text-muted leading-relaxed">
-                        I declare that I currently hold public liability insurance meeting Startline&apos;s minimum requirements, and I will maintain this coverage for the full duration of every event I list.
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
               {/* Connect / update button */}
-              {!isConnected && (
+              {!isConnected && !reviewing && (
                 <div className="mt-8 pt-6 border-t border-dark-lighter">
                   <h2 className="font-headline text-xl font-black italic tracking-tighter text-white mb-1">
                     Step 2 — Connect Stripe
                   </h2>
                   <p className="text-[13px] text-muted mb-5">
-                    You&apos;ll be taken to Stripe&apos;s secure, hosted onboarding. Stripe will collect your date of birth (for identity verification) and bank account details for payouts. Startline never sees or stores this information.
+                    You&apos;ll be taken to Stripe&apos;s secure, hosted onboarding. Stripe will confirm
+                    whether this is an individual or company account, then collect the details that match,
+                    your date of birth (for identity verification) and bank account details for payouts.
+                    Stripe handles the verification and holds your bank details; Startline keeps only a
+                    reference to your Stripe account.
                   </p>
                   <button
                     onClick={saveAndConnect}

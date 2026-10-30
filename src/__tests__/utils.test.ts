@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from "vitest";
-import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, truncateTitle, filterEvents, sortEventsByDate, sortEvents, getUpcomingEvents, getTotalUpcomingEvents } from "@/lib/utils";
+import { cn, formatEventDate, formatShortDate, formatTime, formatCompetitionFormat, truncateTitle, filterEvents, sortEventsByDate, sortEvents, getUpcomingEvents, getPastEvents, getTotalUpcomingEvents } from "@/lib/utils";
 import { addDays, format } from "date-fns";
 import type { UserEvent, FilterState } from "@/types";
 
@@ -117,6 +117,25 @@ describe("filterEvents", () => {
     expect(result[0].type).toBe("crossfit");
   });
 
+  it("matches the search query against organiser-entered divisions", () => {
+    // Picking "Half Marathon" from the search dropdown narrows through this
+    // path, since divisions are per-event free text rather than a filter.
+    const events = [
+      { ...baseEvents[0], title: "Bay Run", categories: ["5K", "Half Marathon"] } as UserEvent,
+      { ...baseEvents[2], title: "City Dash", categories: ["5K"] } as UserEvent,
+    ];
+
+    const result = filterEvents(events, { ...emptyFilters, searchQuery: "half marathon" });
+    expect(result.map((e) => e.title)).toEqual(["Bay Run"]);
+  });
+
+  it("still matches events that have no divisions recorded", () => {
+    const events = [{ ...baseEvents[0], title: "Bay Run", categories: undefined } as UserEvent];
+
+    expect(filterEvents(events, { ...emptyFilters, searchQuery: "bay" })).toHaveLength(1);
+    expect(filterEvents(events, { ...emptyFilters, searchQuery: "10K" })).toHaveLength(0);
+  });
+
   it("filters by state", () => {
     const result = filterEvents(baseEvents, { ...emptyFilters, states: ["vic"] });
     expect(result).toHaveLength(1);
@@ -139,6 +158,32 @@ describe("filterEvents", () => {
     const result = filterEvents(baseEvents, { ...emptyFilters, priceRange: [100, 200] });
     expect(result).toHaveLength(1);
     expect(result[0].fromPrice).toBe(150);
+  });
+
+  it("excludes events beyond maxDistance", () => {
+    // Origin = Sydney; Melbourne event ~713km away, Sydney event ~0km away.
+    const result = filterEvents(baseEvents, {
+      ...emptyFilters,
+      originLat: -33.8688,
+      originLng: 151.2093,
+      maxDistance: 10,
+    });
+    expect(result.some((e) => e.city === "Melbourne")).toBe(false);
+  });
+
+  it("includes events within maxDistance", () => {
+    const result = filterEvents(baseEvents, {
+      ...emptyFilters,
+      originLat: -33.8688,
+      originLng: 151.2093,
+      maxDistance: 100,
+    });
+    expect(result.some((e) => e.city === "Sydney")).toBe(true);
+  });
+
+  it("is a no-op when no origin is set", () => {
+    const result = filterEvents(baseEvents, { ...emptyFilters, maxDistance: 10 });
+    expect(result.length).toBeGreaterThan(0);
   });
 });
 
@@ -184,11 +229,26 @@ describe("getUpcomingEvents", () => {
   });
 });
 
+describe("getPastEvents", () => {
+  it("returns past events most recent first", () => {
+    const today = new Date();
+    const events: UserEvent[] = [
+      { date: format(addDays(today, -90), "yyyy-MM-dd"), id: "old" } as UserEvent,
+      { date: format(addDays(today, -10), "yyyy-MM-dd"), id: "recent" } as UserEvent,
+      { date: format(addDays(today, 30), "yyyy-MM-dd"), id: "future" } as UserEvent,
+    ];
+    const result = getPastEvents(events, 10);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("recent");
+    expect(result[1].id).toBe("old");
+  });
+});
+
 describe("getTotalUpcomingEvents", () => {
   it("counts only future events", () => {
     const today = new Date();
     const events: UserEvent[] = [
-      { date: format(addDays(today, 7), "yyyy-MM-dd") } as UserEvent,
+      { date: format(addDays(today, 30), "yyyy-MM-dd") } as UserEvent,
       { date: format(addDays(today, -365), "yyyy-MM-dd") } as UserEvent,
     ];
     expect(getTotalUpcomingEvents(events)).toBe(1);

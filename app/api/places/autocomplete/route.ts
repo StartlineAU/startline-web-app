@@ -1,12 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GeoPlacesClient, AutocompleteCommand } from "@aws-sdk/client-geo-places";
+import { z } from "zod";
+import { getServerSession } from "@/lib/amplify-server";
+import { rateLimitPaid } from "@/lib/rate-limit";
 
 const client = new GeoPlacesClient({ region: "ap-southeast-2" });
 
+const autocompleteQuery = z.object({ q: z.string().trim().min(2).max(200).catch("") });
+
 export async function GET(req: NextRequest) {
-  const q = req.nextUrl.searchParams.get("q")?.trim();
-  if (!q || q.length < 2)
+  // Only the organiser/admin event wizard uses address autocomplete. The
+  // public event search has its own event-backed suburb endpoint, so an
+  // anonymous caller has no reason to reach a billed service here.
+  const session = await getServerSession();
+  if (!session) {
+    return NextResponse.json({ error: "Sign in to search for an address." }, { status: 401 });
+  }
+
+  const { q } = autocompleteQuery.parse(Object.fromEntries(req.nextUrl.searchParams));
+  if (!q)
     return NextResponse.json({ results: [] });
+
+  const blocked = await rateLimitPaid(req, {
+    prefix: "places-autocomplete",
+    limit: 90,
+    windowSeconds: 60,
+    identifier: session.sub,
+  });
+  if (blocked) return blocked;
 
   const cmd = new AutocompleteCommand({
     QueryText: q,
@@ -23,7 +44,9 @@ export async function GET(req: NextRequest) {
       placeType: item.PlaceType,
     }));
     return NextResponse.json({ results });
-  } catch {
+  } catch (err) {
+    // Still an empty list for the caller, but no longer a silent one (#311).
+    console.error("[places/autocomplete] AWS Location Service lookup failed:", err);
     return NextResponse.json({ results: [] });
   }
 }

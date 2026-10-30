@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
+import { useState, useCallback } from "react";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,8 @@ interface AuditLog {
 const ACTION_COLORS: Record<string, string> = {
   APPROVE_EVENT:       "bg-primary/10 text-primary",
   REJECT_EVENT:        "bg-red-400/10 text-red-400",
+  CREATE_EVENT:        "bg-primary/10 text-primary",
+  EDIT_EVENT:          "bg-blue-400/10 text-blue-300",
   DELETE_EVENT:        "bg-red-400/10 text-red-400",
   PIN_EVENT:           "bg-blue-400/10 text-blue-300",
   UNPIN_EVENT:         "bg-white/[0.05] text-muted",
@@ -31,6 +35,7 @@ const ACTION_COLORS: Record<string, string> = {
   ACTIVATE_ORGANISER:  "bg-primary/10 text-primary",
   BAN_USER:            "bg-red-400/10 text-red-400",
   UNBAN_USER:          "bg-primary/10 text-primary",
+  EDIT_USER:           "bg-blue-400/10 text-blue-300",
   REFUND_REGISTRATION: "bg-amber-400/10 text-amber-300",
 };
 
@@ -54,44 +59,44 @@ function metaSummary(meta: Record<string, unknown> | null): string {
   if (typeof meta.athleteName === "string") parts.push(meta.athleteName);
   if (typeof meta.amountCents === "number") parts.push(`$${((meta.amountCents as number) / 100).toFixed(2)}`);
   if (typeof meta.newStatus   === "string") parts.push(`→ ${meta.newStatus}`);
+  if (Array.isArray(meta.fields) && meta.fields.length) parts.push(`${meta.fields.join(", ")} changed`);
   return parts.join(" · ");
 }
 
 const ALL_ACTIONS = [
-  "APPROVE_EVENT", "REJECT_EVENT", "DELETE_EVENT", "PIN_EVENT", "UNPIN_EVENT",
+  "APPROVE_EVENT", "REJECT_EVENT", "CREATE_EVENT", "EDIT_EVENT", "DELETE_EVENT", "PIN_EVENT", "UNPIN_EVENT",
   "BULK_APPROVE", "BULK_REJECT", "BULK_DELETE",
   "VERIFY_ORGANISER", "UNVERIFY_ORGANISER", "SUSPEND_ORGANISER", "ACTIVATE_ORGANISER",
-  "BAN_USER", "UNBAN_USER",
+  "BAN_USER", "UNBAN_USER", "EDIT_USER",
   "REFUND_REGISTRATION",
 ];
 
 export default function AdminAuditPage() {
-  const [logs,       setLogs]       = useState<AuditLog[] | null>(null);
-  const loading = logs === null;
   const [filter,     setFilter]     = useState("");
-  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
-  const fetchLogs = useCallback(async (action: string, p: number) => {
+  const fetchLogs = useCallback(async (signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (filter) params.set("action", filter);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: "50" });
-      if (action) params.set("action", action);
-      const res  = await fetch(`/api/admin/audit?${params}`);
+      const res = await fetch(`/api/admin/audit?${params}`, { signal });
       const data = await res.json() as { logs: AuditLog[]; total: number; totalPages: number };
-      if (res.ok) {
-        setLogs(data.logs);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setLogs([]);
-      }
-    } catch {
-      setLogs([]);
+      if (!res.ok) return { logs: [], total: 0, totalPages: 1 };
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { logs: [], total: 0, totalPages: 1 };
     }
-  }, []);
+  }, [filter, page]);
 
-  useEffect(() => { startTransition(() => fetchLogs(filter, page)); }, [filter, page, fetchLogs]);
+  const { data, loading, reload: reloadLogs } = useApiResource<{
+    logs: AuditLog[];
+    total: number;
+    totalPages: number;
+  }>(fetchLogs, { key: `${filter}:${page}` });
+  const logs = data?.logs ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const handleFilterChange = (action: string) => {
     setFilter(action);
@@ -113,7 +118,7 @@ export default function AdminAuditPage() {
               </h1>
             </div>
             <button
-              onClick={() => fetchLogs(filter, page)}
+              onClick={() => void reloadLogs()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -147,12 +152,7 @@ export default function AdminAuditPage() {
           </div>
 
           <Card className="overflow-hidden">
-            {loading && (
-              <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
-              </div>
-            )}
+            {loading && <TableSkeleton rows={6} cols={4} className="p-6" />}
 
             {!loading && logs.length === 0 && (
               <div className="p-12 text-center">

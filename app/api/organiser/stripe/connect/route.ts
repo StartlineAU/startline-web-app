@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getOrganiserSession } from "@/lib/amplify-server";
+import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { organiserUrl } from "@/lib/portal-domains";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
@@ -44,8 +44,9 @@ const ONBOARDING_URLS = {
 };
 
 export async function POST() {
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
 
   // Checked up front rather than left to getStripe() to throw, so a deployment
   // without the key says so instead of looking like a Stripe outage.

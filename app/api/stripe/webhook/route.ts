@@ -2,57 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { sendRegistrationConfirmationEmail } from "@/lib/email";
+import { parseParticipantsFromMetadata } from "@/lib/stripe-webhook";
+import { calculateTotalWithFee } from "@/lib/platform-fee";
 import {
-  expandCompactParticipant,
-  athleteNameFromParticipant,
-  type CompactParticipant,
-} from "@/lib/registration-form";
-import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
-
-const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+  announceRegistrations,
+  ensureParticipantUsers,
+  insertConfirmedRegistrations,
+  type PricedEntry,
+} from "@/lib/registration-confirm";
+import { athleteNameFromParticipant, type CompactParticipant } from "@/lib/registration-form";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET is not configured.");
   return secret;
-}
-
-function parseParticipantsFromMetadata(meta: Stripe.Metadata): CompactParticipant[] {
-  const participantCount = parseInt(meta.participantCount ?? "0", 10);
-  if (participantCount > 0) {
-    const participants: CompactParticipant[] = [];
-    for (let i = 0; i < participantCount; i++) {
-      const raw = meta[`participant${i}`];
-      if (!raw) continue;
-      participants.push(JSON.parse(raw) as CompactParticipant);
-    }
-    if (participants.length > 0) return participants;
-  }
-
-  if (meta.firstName || meta.userName) {
-    return [{
-      fn: meta.firstName ?? meta.userName?.split(" ")[0] ?? "",
-      ln: meta.lastName ?? meta.userName?.split(" ").slice(1).join(" ") ?? "",
-      dob: meta.dateOfBirth ?? "",
-      em: (meta.userEmail ?? "").toLowerCase(),
-      mob: meta.mobile ?? "",
-      ecn: meta.emergencyContactName ?? "",
-      ecp: meta.emergencyContactPhone ?? "",
-    }];
-  }
-
-  return [];
-}
-
-/** Per-tier pricing map written by checkout: { [waveLabel]: { p: priceCents, f: feeCents } }. */
-function parseWavePricing(meta: Stripe.Metadata): Record<string, { p: number; f: number }> {
-  if (!meta.wavePricing) return {};
-  try {
-    return JSON.parse(meta.wavePricing) as Record<string, { p: number; f: number }>;
-  } catch {
-    return {};
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -87,20 +50,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function ensureGuestUser(email: string, name: string): Promise<string> {
-  let cognitoSub: string | null = null;
-  try {
-    cognitoSub = await ensureAthleteCognitoUser(email);
-  } catch (err) {
-    console.error(`Cognito creation failed for ${email}:`, err);
-  }
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: { ...(cognitoSub && { cognitoSub }), name: name || undefined },
-    create: { email, name: name || undefined, ...(cognitoSub ? { cognitoSub } : {}) },
-  });
-  return user.id;
-}
 
 async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
   const meta = paymentIntent.metadata;
@@ -119,6 +68,36 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const participants = parseParticipantsFromMetadata(meta);
 
+  // Re-derive everything from the DB — metadata on a PaymentIntent is
+  // client-influenced (the publishable key can create intents with arbitrary
+  // metadata), so it must never be trusted for pricing or identity.
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true, title: true, status: true, feeStructure: true, registrationType: true,
+      waves: true, cap: true, eventDate: true, startTime: true,
+      startsAtUtc: true, endsAtUtc: true,
+      venue: true, city: true, state: true,
+      organiserId: true,
+    },
+  });
+
+  // Reject intents that don't match a real, approved, self-hosted event.
+  if (!event || event.organiserId !== organiserId) {
+    console.error("PaymentIntent references an unknown/mismatched event:", paymentIntent.id);
+    return;
+  }
+  // A payment started before the event began can settle while the event is in
+  // progress. New registrations are already blocked at the start by checkout;
+  // this exception is only for money that was legitimately taken beforehand.
+  if (
+    (event.status !== "APPROVED" && event.status !== "IN_PROGRESS") ||
+    event.registrationType !== "startline"
+  ) {
+    console.error("PaymentIntent references a non-bookable event:", paymentIntent.id);
+    return;
+  }
+
   if (participants.length === 0) {
     console.error("No participant data on PaymentIntent:", paymentIntent.id);
     await prisma.registration.create({
@@ -127,9 +106,9 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
         organiserId,
         athleteName: meta.userName ?? "Unknown",
         athleteEmail: meta.userEmail ?? "",
-        amountCents: parseInt(meta.ticketPriceCents ?? "0", 10),
-        platformFeeCents: parseInt(meta.platformFeeCents ?? "0", 10),
-        feeStructure: meta.feeStructure ?? "athlete",
+        amountCents: 0,
+        platformFeeCents: 0,
+        feeStructure: event.feeStructure,
         status: "CANCELLED",
         stripePaymentIntentId: paymentIntent.id,
       },
@@ -137,111 +116,85 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  const ticketPriceCents = parseInt(meta.ticketPriceCents ?? "0", 10);
-  const platformFeePerTicket = parseInt(
-    meta.platformFeeCentsPerTicket ?? meta.platformFeeCents ?? "0",
-    10
-  );
-
-  // Mixed-tier orders: each participant carries its own wave label, priced via
-  // the wavePricing map. Legacy intents fall back to the order-level fields.
-  const wavePricing = parseWavePricing(meta);
+  // Price every ticket from the DB wave definitions — never from metadata. A
+  // free tier is priced at zero rather than rejected, so a mixed cart (a free
+  // tier alongside a paid one) confirms with the right amount on each entry.
+  const waves = Array.isArray(event.waves)
+    ? event.waves as { label: string; price: string; qty?: number }[]
+    : [];
   const waveOf = (participant: CompactParticipant) => participant.wav || meta.waveLabel || null;
-  const priceOf = (participant: CompactParticipant) => {
-    const wav = waveOf(participant);
-    return (wav && wavePricing[wav]?.p) || ticketPriceCents;
-  };
-  const feeOf = (participant: CompactParticipant) => {
-    const wav = waveOf(participant);
-    return (wav && wavePricing[wav]?.f) || platformFeePerTicket;
+  const priceEntry = (participant: CompactParticipant): PricedEntry | null => {
+    const label = waveOf(participant);
+    const wave = label ? waves.find((w) => w.label === label) : undefined;
+    if (!wave) return null;
+    const priceCents = Math.round(parseFloat(wave.price || "0") * 100);
+    if (!Number.isFinite(priceCents) || priceCents < 0) return null;
+    const { platformFeeCents } = calculateTotalWithFee(priceCents, event.feeStructure);
+    return { participant, waveLabel: label, priceCents, platformFeeCents };
   };
 
-  // For guest participants (no userId in metadata), create Cognito accounts + Prisma Users
-  const existingUserId = meta.userId || "";
-  const userIdByEmail: Record<string, string> = {};
-  if (!existingUserId) {
-    for (const participant of participants) {
-      const email = participant.em?.toLowerCase().trim();
-      if (!email) continue;
-      const name = athleteNameFromParticipant(participant);
-      const uid = await ensureGuestUser(email, name);
-      if (uid) userIdByEmail[email] = uid;
-    }
-  }
+  const priced = participants.map(priceEntry);
 
-  await prisma.registration.createMany({
-    data: participants.map((participant) => {
-      const expanded = expandCompactParticipant(participant);
-      const email = participant.em?.toLowerCase().trim() || "";
-      const uid = existingUserId || userIdByEmail[email] || "";
-      return {
+  const recordCancelled = () =>
+    prisma.registration.createMany({
+      data: participants.map((participant) => ({
         eventId,
         organiserId,
-        userId: uid || null,
         athleteName: athleteNameFromParticipant(participant),
         athleteEmail: participant.em,
-        firstName: expanded.firstName,
-        lastName: expanded.lastName,
-        dateOfBirth: expanded.dateOfBirth,
-        gender: expanded.gender || null,
-        mobile: expanded.mobile,
-        emergencyContactName: expanded.emergencyContactName,
-        emergencyContactPhone: expanded.emergencyContactPhone,
-        medicalNotes: expanded.medicalNotes || null,
-        waiverAccepted: true,
-        waveLabel: waveOf(participant),
-        amountCents: priceOf(participant),
-        platformFeeCents: feeOf(participant),
-        feeStructure: meta.feeStructure ?? "athlete",
-        status: "CONFIRMED" as const,
+        amountCents: 0,
+        platformFeeCents: 0,
+        feeStructure: event.feeStructure,
+        status: "CANCELLED" as const,
         stripePaymentIntentId: paymentIntent.id,
-      };
-    }),
-  });
+      })),
+    });
 
-  const dbEvent = await prisma.event.findUnique({
-    where: { id: eventId },
-    select: { title: true, eventDate: true, startTime: true, venue: true, city: true, state: true },
-  });
+  // The charged amount must match what the DB pricing implies. Stripe reports
+  // amount_received in the minor currency unit, same as our cents.
+  //
+  // This comparison is the most dangerous line in the product: a mismatch writes
+  // CANCELLED registrations with amountCents 0 and returns, keeping the athlete's
+  // money with no refund.
+  const expectedTotalCents = priced.reduce((sum, entry) => {
+    if (!entry) return sum;
+    return sum + (event.feeStructure === "athlete"
+      ? entry.priceCents + entry.platformFeeCents
+      : entry.priceCents);
+  }, 0);
 
-  const participantNames = participants.map((p) => athleteNameFromParticipant(p));
-  const notificationBody = participants.length === 1
-    ? `${participantNames[0]} registered for ${dbEvent?.title ?? "your event"}`
-    : `${participants.length} participants registered for ${dbEvent?.title ?? "your event"}: ${participantNames.join(", ")}`;
-
-  await prisma.notification.create({
-    data: {
-      organiserId,
-      eventId,
-      type: "NEW_REGISTRATION",
-      title: participants.length === 1 ? "New registration" : "New group registration",
-      body: notificationBody,
-    },
-  }).catch((err: unknown) => console.error("Failed to create notification:", err));
-
-  if (dbEvent) {
-    // When the athlete absorbs the platform fee, the amount charged is
-    // price + fee — the email total must reflect that, not just the ticket
-    // price. When the organiser absorbs it, the athlete pays the ticket price
-    // only and the service fee shown to them is $0.
-    const athletePaysFee = (meta.feeStructure ?? "athlete") === "athlete";
-    for (const participant of participants) {
-      if (!participant.em) continue;
-      const ticketCents = priceOf(participant);
-      const feeCents = athletePaysFee ? feeOf(participant) : 0;
-      sendRegistrationConfirmationEmail(participant.em, {
-        eventName:        dbEvent.title,
-        eventDate:        dbEvent.eventDate,
-        startTime:        dbEvent.startTime,
-        category:         waveOf(participant) || meta.category || "General",
-        location:         `${dbEvent.venue}, ${dbEvent.city} ${dbEvent.state}`,
-        registrationFee:  formatCents(ticketCents),
-        serviceFee:       formatCents(feeCents),
-        total:            formatCents(ticketCents + feeCents),
-        userEmail:        participant.em,
-      }).catch((err) => console.error("Failed to send registration confirmation email:", err));
-    }
+  if (paymentIntent.amount_received !== expectedTotalCents || priced.some((entry) => !entry)) {
+    console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id, {
+      expectedTotalCents,
+      amountReceived: paymentIntent.amount_received,
+    });
+    await recordCancelled();
+    return;
   }
+
+  const entries = priced as PricedEntry[];
+
+  // For guest participants (no userId in metadata), create Cognito accounts +
+  // Prisma Users up front so the confirmations below can link them.
+  const buyerUserId = meta.userId || "";
+  const userIdByEmail = buyerUserId ? {} : await ensureParticipantUsers(entries);
+
+  const outcome = await insertConfirmedRegistrations({
+    event,
+    organiserId,
+    entries,
+    buyerUserId,
+    userIdByEmail,
+    stripePaymentIntentId: paymentIntent.id,
+  });
+
+  if (!outcome.ok) {
+    console.error("Confirmation refused:", paymentIntent.id, outcome.error);
+    await recordCancelled();
+    return;
+  }
+
+  await announceRegistrations(event, organiserId, entries);
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

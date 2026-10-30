@@ -1,34 +1,58 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #b3e153;
+  --color-primary-light: #c2ec77;
+  --color-primary-dark: #a4d62f;
+
+  --color-dark: #1f1f1f;
+  --color-darker: #141414;
+  --color-dark-light: #2a2a2a;
+  /* Also the default outline colour for inputs, cards and dividers. The old
+     #353535 was all but invisible against the dark backgrounds (issue #304). */
+  --color-dark-lighter: #4d4d4d;
+
+  --color-light: #f5f7fa;
+  --color-light-dark: #e8ebf0;
+
+  /* Secondary text. These were mid-greys (#8a8f98 / #6e737b) that failed to
+     read on the dark ground, so they now sit just below --color-light: still a
+     step down in emphasis, but white enough to read (issue #304). */
+  --color-muted: #e6e9ee;
+  --color-muted-light: #f0f2f5;
+  --color-muted-dark: #bcc1ca;
+
+  /* Placeholder text only. The muted greys above were lifted close to white
+     for contrast (issue #304), which left placeholders reading as a filled in
+     value. This sits low enough to say "nothing typed here yet" and still
+     clears 4.5:1 on the --color-dark-light field background (issue #309). */
+  --color-placeholder: #8f949e;
+
+  --font-sans: var(--font-chakra-petch), var(--font-inter), system-ui, sans-serif;
+  --font-headline: var(--font-chakra-petch), sans-serif;
+
+  --shadow-machined: 2px 2px 0 #b3e153;
+}
+
+/* Placeholders are grey everywhere, including fields that set no colour class
+   of their own. Anything wanting a different shade still overrides it. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-placeholder);
+}
 
 /* Hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 :root {
-  /* Dark mode primary - matching logo green (#B3E153) */
-  --color-primary: 179 225 83;
-  --color-primary-light: 194 236 119;
-  --color-primary-dark: 164 214 47;
-
-  /* Dark theme tokens */
-  --color-dark: 31 31 31;
-  --color-darker: 20 20 20;
-  --color-dark-light: 42 42 42;
-  --color-dark-lighter: 53 53 53;
-  --color-light: 245 247 250;
-  --color-light-dark: 232 235 240;
-  --color-muted: 138 143 152;
-  --color-muted-light: 160 165 174;
-  --color-muted-dark: 110 115 123;
   color-scheme: dark;
-}
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+  /* Notch / home-indicator insets (Capacitor: viewport-fit=cover) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 
 html,
@@ -37,11 +61,13 @@ body {
   /* `clip` prevents horizontal overflow without creating a scroll container —
      `hidden` here silently disables every position:sticky descendant. */
   overflow-x: clip;
+  /* Disable WebView bounce/pull-to-refresh on native */
+  overscroll-behavior-y: none;
 }
 
 body {
-  color: rgb(var(--color-light));
-  background: rgb(var(--color-darker));
+  color: var(--color-light);
+  background: var(--color-darker);
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -52,16 +78,42 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgb(var(--color-dark));
+  background: var(--color-dark);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--color-muted));
+  background: var(--color-muted);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--color-primary));
+  background: var(--color-primary);
+}
+
+/* Slim scrollbar for compact scroll panels (notification lists, dropdowns)
+   where the 8px global bar eats the padding. Unlayered on purpose: the rules
+   above are unlayered too, and a layered rule always loses to an unlayered one
+   regardless of specificity. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.scroll-slim::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
 }
 
 /* Smooth scrolling */
@@ -71,8 +123,18 @@ html {
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid rgb(var(--color-primary));
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* Search fields draw focus on the surrounding bar instead of an inner outline,
+   which boxed the text mid-typing. This has to stay unlayered: Tailwind's
+   utilities live in @layer utilities, and unlayered rules win over layered ones
+   regardless of specificity, so a `focus:outline-none` class cannot override
+   the rule above. The bar's own focus-within border keeps the field visible to
+   keyboard users. */
+.search-field:focus-visible {
+  outline: none;
 }
 
 /* Hide browser native password reveal — conflicts with custom Eye icon */
@@ -85,8 +147,8 @@ input[type="password"]::-ms-clear {
 .image-placeholder {
   background: linear-gradient(
     135deg,
-    rgb(var(--color-dark-light)) 0%,
-    rgb(var(--color-dark)) 100%
+    var(--color-dark-light) 0%,
+    var(--color-dark) 100%
   );
   display: flex;
   align-items: center;
@@ -96,7 +158,7 @@ input[type="password"]::-ms-clear {
 /* Custom checkbox/radio styling */
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: rgb(var(--color-primary));
+  accent-color: var(--color-primary);
 }
 
 /*
@@ -119,7 +181,9 @@ input[type="radio"] {
   }
 }
 
-/* Minimum 44px touch targets for all interactive elements on mobile */
+/* Minimum 44px touch targets for all interactive elements on mobile.
+   Add .chip-sm to opt out where a fixed-size control (icon button, map pin,
+   inline chip) would otherwise be stretched into an oval. */
 @media (max-width: 1023px) {
   button:not(.chip-sm),
   [role="button"],
@@ -128,43 +192,54 @@ input[type="radio"] {
   }
 }
 
+/* Pages that fill the viewport below the fixed 56px nav instead of scrolling
+   (the events list/map split). The organiser portal renders a second 36px nav
+   row, so those pages have to subtract it or they run past the fold. */
+.app-shell {
+  height: calc(100dvh - 56px);
+}
+
+body:has([data-organiser-bar]) .app-shell {
+  height: calc(100dvh - 92px);
+}
+
 /* Animation utilities */
 @layer utilities {
   /* Theme token utility overrides */
   .bg-dark {
-    background-color: rgb(var(--color-dark));
+    background-color: var(--color-dark);
   }
 
   .bg-dark-darker {
-    background-color: rgb(var(--color-darker));
+    background-color: var(--color-darker);
   }
 
   .bg-dark-light {
-    background-color: rgb(var(--color-dark-light));
+    background-color: var(--color-dark-light);
   }
 
   .border-dark-light {
-    border-color: rgb(var(--color-dark-light));
+    border-color: var(--color-dark-light);
   }
 
   .border-dark-lighter {
-    border-color: rgb(var(--color-dark-lighter));
+    border-color: var(--color-dark-lighter);
   }
 
   .text-light {
-    color: rgb(var(--color-light));
+    color: var(--color-light);
   }
 
   .text-dark {
-    color: rgb(var(--color-dark));
+    color: var(--color-dark);
   }
 
   .text-muted {
-    color: rgb(var(--color-muted));
+    color: var(--color-muted);
   }
 
   .text-muted-dark {
-    color: rgb(var(--color-muted-dark));
+    color: var(--color-muted-dark);
   }
 
   .animate-fade-in {
@@ -174,6 +249,40 @@ input[type="radio"] {
   .animate-slide-up {
     animation: slideUp 0.3s ease-out;
   }
+
+  /* Notch / home-indicator insets for fixed chrome */
+  .pt-safe { padding-top: var(--sat); }
+  .pb-safe { padding-bottom: var(--sab); }
+  .pl-safe { padding-left: var(--sal); }
+  .pr-safe { padding-right: var(--sar); }
+  .px-safe { padding-left: var(--sal); padding-right: var(--sar); }
+
+  /* Fixed-bar page offsets that include the top safe-area inset */
+  .pt-safe-14 { padding-top: calc(3.5rem + var(--sat)); }
+  .pt-safe-16 { padding-top: calc(4rem + var(--sat)); }
+
+  /* Bottom-inset padding for fixed bottom bars (home indicator). Additive
+     with the element's existing py-* (0.75rem base here). */
+  .safe-area-bottom { padding-bottom: calc(0.75rem + var(--sab)); }
+
+  /* Full-height dynamic viewport (mobile browser/WebView chrome) */
+  .h-dvh { height: 100dvh; }
+  .min-h-dvh { min-height: 100dvh; }
+}
+
+/* 100vh is taller than the visible area when mobile browser chrome
+   collapses or the WebView keyboard opens — dvh tracks the visible viewport. */
+.min-h-screen { min-height: 100dvh; }
+
+/* Fixed top bars are h-14 and extend under the notch (viewport-fit=cover);
+   every page offsets content with pt-14. Fold the inset into the offset so
+   content clears the taller bar on notched devices. (Desktop: inset = 0.) */
+.pt-14 { padding-top: calc(3.5rem + var(--sat)); }
+
+/* Let Mapbox own touch gestures inside its canvas so the WebView
+   doesn't steal pinch-zoom / drags from the map. */
+.mapboxgl-canvas {
+  touch-action: none;
 }
 
 @keyframes fadeIn {
@@ -208,42 +317,42 @@ input[type="radio"] {
 
 /* Selection color */
 ::selection {
-  background-color: rgb(var(--color-primary));
-  color: rgb(var(--color-dark));
+  background-color: var(--color-primary);
+  color: var(--color-dark);
 }
 
 /* Stitchai / HUD utilities */
 .bg-machined {
   background-image: linear-gradient(
     135deg,
-    rgb(var(--color-primary-light)) 0%,
-    rgb(var(--color-primary)) 100%
+    var(--color-primary-light) 0%,
+    var(--color-primary) 100%
   );
 }
 
 .machined-button-shadow {
-  box-shadow: 2px 2px 0px 0px rgb(var(--color-primary));
+  box-shadow: 2px 2px 0px 0px var(--color-primary);
 }
 
 /* HUD corner brackets */
 .hud-corner-tl {
-  border-left: 1px solid rgb(var(--color-primary) / 0.4);
-  border-top: 1px solid rgb(var(--color-primary) / 0.4);
+  border-left: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .hud-corner-tr {
-  border-right: 1px solid rgb(var(--color-primary) / 0.4);
-  border-top: 1px solid rgb(var(--color-primary) / 0.4);
+  border-right: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .hud-corner-bl {
-  border-left: 1px solid rgb(var(--color-primary) / 0.4);
-  border-bottom: 1px solid rgb(var(--color-primary) / 0.4);
+  border-left: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 .hud-corner-br {
-  border-right: 1px solid rgb(var(--color-primary) / 0.4);
-  border-bottom: 1px solid rgb(var(--color-primary) / 0.4);
+  border-right: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 @keyframes pulse-dot {
@@ -284,11 +393,11 @@ input[type="radio"] {
     repeating-linear-gradient(-20deg,
       rgba(179,225,83,.03) 0 2px,
       transparent 2px 24px),
-    linear-gradient(180deg, rgb(var(--color-darker)) 0%, rgb(var(--color-dark)) 100%);
+    linear-gradient(180deg, var(--color-darker) 0%, var(--color-dark) 100%);
 }
 
 .step-line {
-  background-image: linear-gradient(90deg, rgb(var(--color-dark-lighter)) 50%, transparent 0);
+  background-image: linear-gradient(90deg, var(--color-dark-lighter) 50%, transparent 0);
   background-size: 8px 1px;
   background-repeat: repeat-x;
   background-position: 0 50%;
@@ -301,18 +410,18 @@ input[type="radio"] {
   top: 8px;
   bottom: 8px;
   width: 3px;
-  background: rgb(var(--color-primary));
+  background: var(--color-primary);
 }
 
 .chip {
-  border: 1px solid rgb(var(--color-dark-lighter));
-  color: rgb(var(--color-muted-light));
+  border: 1px solid var(--color-dark-lighter);
+  color: var(--color-muted-light);
 }
 
 .chip-active {
-  border-color: rgb(var(--color-primary));
-  color: rgb(var(--color-primary));
-  background: rgb(var(--color-primary) / 0.08);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 @keyframes fadeSlide {
@@ -363,8 +472,8 @@ input[type="radio"] {
 /* ── Google Maps Places Autocomplete ────────────────────── */
 .pac-container {
   margin-top: 4px;
-  background: rgb(var(--color-dark));
-  border: 1px solid rgb(var(--color-dark-lighter));
+  background: var(--color-dark);
+  border: 1px solid var(--color-dark-lighter);
   border-radius: 10px;
   box-shadow: 0 8px 32px 0 rgba(0,0,0,0.5);
   font-family: 'Chakra Petch', sans-serif;
@@ -378,34 +487,34 @@ input[type="radio"] {
   padding: 10px 12px;
   font-size: 15px;
   font-family: 'Chakra Petch', sans-serif;
-  color: rgb(var(--color-muted));
+  color: var(--color-muted);
   cursor: pointer;
   line-height: 1.4;
   background: transparent;
 }
 .pac-item:hover,
 .pac-item-selected {
-  background: rgb(var(--color-dark-light));
-  color: rgb(var(--color-light));
+  background: var(--color-dark-light);
+  color: var(--color-light);
 }
 .pac-item-query {
   font-size: 15px;
   font-family: 'Chakra Petch', sans-serif;
   font-weight: 600;
-  color: rgb(var(--color-light));
+  color: var(--color-light);
   padding-right: 4px;
 }
 .pac-item:hover .pac-item-query,
 .pac-item-selected .pac-item-query {
-  color: rgb(var(--color-primary));
+  color: var(--color-primary);
 }
-.pac-matched { font-weight: 700; color: rgb(var(--color-primary)); }
+.pac-matched { font-weight: 700; color: var(--color-primary); }
 .pac-icon { display: none; }
 
 /* ------ Waitlist Page ------ */
 
 .waitlist-stage {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -459,17 +568,17 @@ input[type="radio"] {
 .waitlist-input {
   width: 100%;
   height: 52px;
-  background: rgb(var(--color-dark-light));
-  border: 1px solid rgb(var(--color-dark-lighter));
+  background: var(--color-dark-light);
+  border: 1px solid var(--color-dark-lighter);
   border-radius: 12px;
   padding: 0 18px;
-  color: rgb(var(--color-light));
+  color: var(--color-light);
   font-family: var(--font-inter), system-ui, sans-serif;
   font-size: 15px;
   transition: border-color 0.15s;
 }
-.waitlist-input::placeholder { color: rgb(var(--color-muted-dark)); }
-.waitlist-input:focus { outline: none; border-color: rgb(var(--color-primary)); }
+.waitlist-input::placeholder { color: var(--color-placeholder); }
+.waitlist-input:focus { outline: none; border-color: var(--color-primary); }
 
 .waitlist-btn {
   height: 52px;
@@ -501,7 +610,7 @@ input[type="radio"] {
 
 .waitlist-hint {
   font-size: 11.5px;
-  color: rgb(var(--color-muted-dark));
+  color: var(--color-muted-dark);
   margin-top: 16px;
 }
 
@@ -519,12 +628,12 @@ input[type="radio"] {
   font-weight: 700;
   font-style: italic;
   font-size: 19px;
-  color: rgb(var(--color-primary));
+  color: var(--color-primary);
   letter-spacing: -0.01em;
 }
 .waitlist-success-sub {
   font-size: 13.5px;
-  color: rgb(var(--color-muted));
+  color: var(--color-muted);
   margin-top: 6px;
 }
 

@@ -4,7 +4,7 @@ import { useRef } from "react";
 import Image from "next/image";
 import { MapPin, ChevronLeft, ChevronRight, Bookmark, BookmarkCheck } from "lucide-react";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 export interface CarouselEvent {
   id: string;
@@ -21,6 +21,7 @@ export interface CarouselEvent {
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
   APPROVED: { bg: "bg-primary/20",  text: "text-primary",  dot: "bg-primary",   label: "LIVE"     },
+  IN_PROGRESS: { bg: "bg-amber-300/20", text: "text-amber-300", dot: "bg-amber-300", label: "IN PROGRESS" },
   PENDING:  { bg: "bg-blue-900/30", text: "text-blue-400", dot: "bg-blue-400",  label: "PENDING"  },
   DRAFT:    { bg: "bg-dark-lighter",text: "text-muted",    dot: "bg-muted",     label: "DRAFT"    },
   REJECTED: { bg: "bg-red-900/30",  text: "text-red-400",  dot: "bg-red-400",   label: "REJECTED" },
@@ -72,8 +73,8 @@ export default function EventCarousel({ events, pinnedIds, isOrganiser, onPin }:
   return (
     <div className="relative group/carousel">
       {/* Fade gradients */}
-      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-dark-darker to-transparent z-10" />
-      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-dark-darker to-transparent z-10" />
+      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-darker to-transparent z-10" />
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-darker to-transparent z-10" />
 
       {/* Nav arrows — visible on hover */}
       {sorted.length > 3 && (
@@ -104,7 +105,7 @@ export default function EventCarousel({ events, pinnedIds, isOrganiser, onPin }:
           const s      = STATUS_STYLE[e.status];
           const date   = formatDate(e.eventDate);
           const price  = getMinPrice(e.waves);
-          const pinnable = isOrganiser && (e.status === "APPROVED" || e.status === "PENDING");
+          const pinnable = isOrganiser && (e.status === "APPROVED" || e.status === "IN_PROGRESS" || e.status === "PENDING");
 
           return (
             <div
@@ -123,7 +124,7 @@ export default function EventCarousel({ events, pinnedIds, isOrganiser, onPin }:
                 {/* Status */}
                 <div className="absolute top-2.5 left-2.5">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-headline text-[9px] font-bold uppercase tracking-widest backdrop-blur-sm ${s.bg} ${s.text}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${e.status === "APPROVED" ? "animate-pulse-dot" : ""}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${e.status === "APPROVED" || e.status === "IN_PROGRESS" ? "animate-pulse-dot" : ""}`} />
                     {s.label}
                   </span>
                 </div>

@@ -161,7 +161,7 @@ function VerifyEmailFormInner({ config, onVerified }: Props) {
                   <label htmlFor={`${config.inputIdPrefix}-email-input`} className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">Email address</label>
                   <input id={`${config.inputIdPrefix}-email-input`} type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder={config.emailPlaceholder}
-                    className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors" />
+                    className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors" />
                 </div>
               )}
 
@@ -172,7 +172,7 @@ function VerifyEmailFormInner({ config, onVerified }: Props) {
                   type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} required
                   value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="000000"
-                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors font-headline font-black"
+                  className="w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[22px] text-light tracking-[0.5em] text-center placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors font-headline font-black"
                 />
               </div>
 

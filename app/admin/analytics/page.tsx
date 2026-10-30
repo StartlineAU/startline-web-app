@@ -10,7 +10,7 @@ import {
 export const dynamic = "force-dynamic";
 
 interface AnalyticsData {
-  events: { draft: number; pending: number; approved: number; rejected: number; archived: number };
+  events: { draft: number; pending: number; approved: number; inProgress: number; rejected: number; archived: number };
   registrations: { total: number; revenueAud: number; platformFeeAud: number };
   topEvents: { id: string; title: string; city: string; state: string; eventDate: string; registrationCount: number }[];
   organisers: { active: number; suspended: number };
@@ -60,7 +60,7 @@ async function getAnalytics(): Promise<AnalyticsData | null> {
       prisma.registration.aggregate({ where: { status: "CONFIRMED" }, _sum: { amountCents: true } }),
       prisma.registration.aggregate({ where: { status: "CONFIRMED" }, _sum: { platformFeeCents: true } }),
       prisma.event.findMany({
-        where: { status: "APPROVED" },
+        where: { status: { in: ["APPROVED", "IN_PROGRESS"] } },
         orderBy: { registrations: { _count: "desc" } },
         take: 5,
         select: { id: true, title: true, city: true, state: true, eventDate: true, _count: { select: { registrations: true } } },
@@ -83,6 +83,7 @@ async function getAnalytics(): Promise<AnalyticsData | null> {
         draft:    statusMap["DRAFT"]    ?? 0,
         pending:  statusMap["PENDING"]  ?? 0,
         approved: statusMap["APPROVED"] ?? 0,
+        inProgress: statusMap["IN_PROGRESS"] ?? 0,
         rejected: statusMap["REJECTED"] ?? 0,
         archived: statusMap["ARCHIVED"] ?? 0,
       },
@@ -125,7 +126,7 @@ export default async function AdminAnalyticsPage() {
     );
   }
 
-  const totalEvents = data.events.approved + data.events.pending + data.events.rejected + data.events.archived + data.events.draft;
+  const totalEvents = data.events.approved + data.events.inProgress + data.events.pending + data.events.rejected + data.events.archived + data.events.draft;
   const maxRegMonth = Math.max(...data.registrationsByMonth.map((r) => r.count), 1);
   const maxTopEvent = Math.max(...data.topEvents.map((e) => e.registrationCount), 1);
   const avgRevenue  = data.registrations.total > 0
@@ -229,7 +230,8 @@ export default async function AdminAnalyticsPage() {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: "Approved", value: data.events.approved, icon: <CheckCircle className="w-4 h-4 text-primary" />,    color: "bg-primary"    },
+                    { label: "Upcoming", value: data.events.approved, icon: <CheckCircle className="w-4 h-4 text-primary" />,    color: "bg-primary"    },
+                    { label: "In progress", value: data.events.inProgress, icon: <CalendarDays className="w-4 h-4 text-amber-300" />, color: "bg-amber-300" },
                     { label: "Pending",  value: data.events.pending,  icon: <Clock className="w-4 h-4 text-blue-400" />,         color: "bg-blue-400"   },
                     { label: "Archived", value: data.events.archived, icon: <Archive className="w-4 h-4 text-muted-dark" />,     color: "bg-dark-lighter" },
                     { label: "Rejected", value: data.events.rejected, icon: <XCircle className="w-4 h-4 text-red-400" />,       color: "bg-red-400"    },

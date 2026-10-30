@@ -1,5 +1,7 @@
-﻿import type { Metadata } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import { Inter, Chakra_Petch } from "next/font/google";
+import NativeLinkHandler from "@/components/NativeLinkHandler";
+import RouteHistoryTracker from "@/components/RouteHistoryTracker";
 import "./globals.css";
 
 const inter = Inter({
@@ -10,10 +12,20 @@ const inter = Inter({
 const chakraPetch = Chakra_Petch({
   subsets:  ["latin"],
   weight:   ["400", "500", "600", "700"],
+  // Headings use `italic` (hero h1, card/dialog titles). Without this the
+  // browser synthesises the slant and Chakra Petch loses its squared-off
+  // letterforms.
+  style:    ["normal", "italic"],
   variable: "--font-chakra-petch",
 });
 
 const SITE_URL = "https://www.startlineau.com";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -87,11 +99,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // The next/font variables must sit on <html>, not <body>. Tailwind v4
+  // compiles the @theme block to :root, so --font-sans and --font-headline are
+  // declared there; a custom property substitutes its var() references where it
+  // is declared, so with the font variables on <body> those references resolve
+  // against :root, find nothing, and leave both tokens guaranteed-invalid.
+  // Every element then falls back to the system stack.
   return (
-    <html lang="en">
-      <body
-        className={`${inter.variable} ${chakraPetch.variable} bg-dark-darker text-light font-sans antialiased`}
-      >
+    <html lang="en" className={`${inter.variable} ${chakraPetch.variable}`}>
+      <body className="bg-dark-darker text-light font-sans antialiased">
+        <NativeLinkHandler />
+        <RouteHistoryTracker />
         {children}
       </body>
     </html>

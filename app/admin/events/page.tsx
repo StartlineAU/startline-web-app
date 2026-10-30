@@ -1,18 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, startTransition } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import {
   MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp,
-  Pin, PinOff, Trash2, CheckSquare, Square,
+  Pin, PinOff, Trash2, CheckSquare, Square, Plus, Pencil, AlertTriangle, Eye,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import RejectPanel from "@/components/admin/RejectPanel";
+import { approvalBlocker } from "@/lib/event-approval";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
-type EventStatus = "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 interface AdminEventRow {
   id: string;
@@ -28,12 +33,22 @@ interface AdminEventRow {
   coverImageUrl: string | null;
   rejectionReason: string | null;
   reviewedAt: string | null;
-  organiser: { id: string; orgName: string | null; contactName: string | null; email: string };
+  registrationType: string | null;
+  waves: unknown;
+  organiser: {
+    id: string;
+    orgName: string | null;
+    contactName: string | null;
+    email: string;
+    abn: string | null;
+    stripeOnboardingComplete: boolean;
+  };
 }
 
 const TABS: { status: EventStatus; label: string }[] = [
   { status: "PENDING",  label: "Pending"  },
   { status: "APPROVED", label: "Approved" },
+  { status: "IN_PROGRESS", label: "In progress" },
   { status: "REJECTED", label: "Rejected" },
   { status: "ARCHIVED", label: "Archived" },
 ];
@@ -41,6 +56,7 @@ const TABS: { status: EventStatus; label: string }[] = [
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
   PENDING:  { bg: "bg-blue-400/10",  text: "text-blue-300",  dot: "bg-blue-400",   label: "Pending"  },
   APPROVED: { bg: "bg-primary/10",   text: "text-primary",   dot: "bg-primary",    label: "Approved" },
+  IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", dot: "bg-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-400",   dot: "bg-red-400",    label: "Rejected" },
   ARCHIVED: { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark", label: "Archived" },
 };
@@ -65,48 +81,6 @@ function formatSubmitted(iso: string) {
   }
 }
 
-interface RejectPanelProps {
-  onConfirm: (reason: string) => void;
-  onCancel: () => void;
-  loading: boolean;
-}
-
-function RejectPanel({ onConfirm, onCancel, loading }: RejectPanelProps) {
-  const [reason, setReason] = useState("");
-  return (
-    <div className="mt-3 p-4 bg-red-500/[0.08] border border-red-500/20 rounded-lg">
-      <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-red-400 block mb-2">
-        Rejection reason <span className="text-red-400">*</span>
-      </label>
-      <textarea
-        className="w-full text-[14px] text-light bg-dark border border-red-500/30 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-red-400 placeholder:text-muted-dark"
-        rows={3}
-        placeholder="Explain why the event is being rejected…"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
-      <div className="flex items-center gap-2 mt-2 justify-end">
-        <button
-          onClick={onCancel}
-          disabled={loading}
-          className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light px-3 py-1.5 rounded transition-colors disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => reason.trim() && onConfirm(reason.trim())}
-          disabled={loading || !reason.trim()}
-          className="font-headline text-[12px] font-bold uppercase tracking-widest bg-red-600 text-white px-4 py-1.5 rounded hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-        >
-          {loading
-            ? <><span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> Rejecting…</>
-            : <><X className="w-3 h-3" /> Reject</>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function EventRow({
   event,
   selected,
@@ -124,6 +98,7 @@ function EventRow({
 }) {
   const [approving,    setApproving]    = useState(false);
   const [approveError, setApproveError] = useState("");
+  const blocker = approvalBlocker(event);
   const [rejectOpen,   setRejectOpen]   = useState(false);
   const [rejecting,    setRejecting]    = useState(false);
   const [pinning,      setPinning]      = useState(false);
@@ -133,6 +108,7 @@ function EventRow({
 
   const organiserName =
     event.organiser.orgName || event.organiser.contactName || event.organiser.email;
+  const previewHref = `/admin/events/${event.id}`;
 
   const handleApprove = async () => {
     setApproving(true);
@@ -211,19 +187,27 @@ function EventRow({
             : <Square className="w-4 h-4" />}
         </button>
 
-        {/* Cover thumbnail */}
-        <div className="relative w-14 h-14 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden">
+        {/* Cover thumbnail: opens the athlete-eye preview, like the title */}
+        <Link
+          href={previewHref}
+          tabIndex={-1}
+          aria-hidden
+          className="relative w-14 h-14 rounded-lg bg-dark-light flex items-center justify-center shrink-0 overflow-hidden hover:ring-1 hover:ring-primary/60 transition-shadow"
+        >
           {event.coverImageUrl
             ? <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover" sizes="56px" />
             : <div className="font-mono text-[9px] text-muted-dark uppercase">{event.discipline.slice(0, 4)}</div>}
-        </div>
+        </Link>
 
         {/* Details */}
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-start gap-x-3 gap-y-1 mb-1">
-            <span className="font-headline text-[15px] font-black italic tracking-tighter text-light truncate">
+            <Link
+              href={previewHref}
+              className="font-headline text-[15px] font-black italic tracking-tighter text-light truncate hover:text-primary transition-colors"
+            >
               {event.title}
-            </span>
+            </Link>
             <Badge className={`gap-1.5 ${s.bg} ${s.text} border-0 shrink-0`}>
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
               {s.label}
@@ -265,7 +249,8 @@ function EventRow({
             <>
               <button
                 onClick={handleApprove}
-                disabled={approving || rejecting}
+                disabled={approving || rejecting || blocker !== null}
+                title={blocker ? `Cannot approve: ${blocker}.` : undefined}
                 className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {approving
@@ -283,7 +268,7 @@ function EventRow({
             </>
           )}
 
-          {event.status === "APPROVED" && (
+          {(event.status === "APPROVED" || event.status === "IN_PROGRESS") && (
             <button
               onClick={handlePin}
               disabled={pinning}
@@ -300,6 +285,22 @@ function EventRow({
                   : <><Pin className="w-3.5 h-3.5" /> Pin</>}
             </button>
           )}
+
+          {/* Preview: the listing as athletes will see it (issue #321) */}
+          <Link
+            href={previewHref}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-dark-lighter text-muted px-3 py-2 rounded-md hover:border-primary/40 hover:text-light transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" /> Preview
+          </Link>
+
+          {/* Edit */}
+          <Link
+            href={`/admin/events/${event.id}/edit`}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-dark-lighter text-muted px-3 py-2 rounded-md hover:border-primary/40 hover:text-light transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit
+          </Link>
 
           {/* Delete */}
           <button
@@ -335,6 +336,20 @@ function EventRow({
           </button>
         </div>
       </div>
+
+      {/* Organiser profile incomplete — the reason approve is unavailable */}
+      {event.status === "PENDING" && blocker && (
+        <div className="px-5 pb-4 pl-12">
+          <div className="flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-lg px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="text-[13px] text-amber-200">
+              <span className="font-bold">Organiser profile incomplete: {blocker}.</span>{" "}
+              This event cannot be approved until{" "}
+              {event.organiser.orgName || event.organiser.email} completes their profile.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Approve error */}
       {approveError && (
@@ -404,11 +419,13 @@ function BulkActionBar({
   const [rejectOpen,    setRejectOpen]    = useState(false);
   const [bulkReason,    setBulkReason]    = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [skipped,       setSkipped]       = useState<{ id: string; title: string; reason: string }[]>([]);
 
   const ids = Array.from(selectedIds);
 
   const run = async (action: string, reason?: string) => {
     setLoading(true);
+    setSkipped([]);
     try {
       const res = await fetch("/api/admin/events/bulk", {
         method:  "POST",
@@ -416,8 +433,16 @@ function BulkActionBar({
         body:    JSON.stringify({ ids, action, reason }),
       });
       if (res.ok) {
-        onBulkDone(ids, action);
-        onClearSelection();
+        const data = await res.json().catch(() => ({})) as {
+          blocked?: { id: string; title: string; reason: string }[];
+        };
+        const blocked = data.blocked ?? [];
+        // Only clear what actually changed. Reporting every id as done would
+        // drop events off the queue that are still sitting in PENDING.
+        const blockedIds = new Set(blocked.map((e) => e.id));
+        onBulkDone(ids.filter((id) => !blockedIds.has(id)), action);
+        setSkipped(blocked);
+        if (blocked.length === 0) onClearSelection();
         setRejectOpen(false);
         setConfirmDelete(false);
         setBulkReason("");
@@ -432,6 +457,18 @@ function BulkActionBar({
       <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted">
         {ids.length} selected
       </span>
+
+      {skipped.length > 0 && (
+        <div className="w-full flex items-start gap-2 bg-amber-400/[0.08] border border-amber-400/20 rounded-lg px-3 py-2 order-last">
+          <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+          <div className="text-[13px] text-amber-200">
+            <span className="font-bold">
+              {skipped.length} event{skipped.length === 1 ? "" : "s"} not approved.
+            </span>{" "}
+            {skipped.map((e) => `${e.title} (${e.reason})`).join("; ")}
+          </div>
+        </div>
+      )}
 
       {activeTab === "PENDING" && !rejectOpen && !confirmDelete && (
         <>
@@ -459,7 +496,7 @@ function BulkActionBar({
             placeholder="Rejection reason (required)…"
             value={bulkReason}
             onChange={(e) => setBulkReason(e.target.value)}
-            className="flex-1 max-w-sm text-[13px] bg-dark-light border border-dark-lighter rounded-md px-3 py-1.5 text-light placeholder:text-muted-dark focus:outline-none focus:border-primary"
+            className="flex-1 max-w-sm text-[13px] bg-dark-light border border-dark-lighter rounded-md px-3 py-1.5 text-light placeholder:text-placeholder focus:outline-none focus:border-primary"
           />
           <button
             onClick={() => bulkReason.trim() && run("reject", bulkReason.trim())}
@@ -518,34 +555,36 @@ function AdminEventsContent() {
   const statusParam  = (searchParams.get("status") ?? "PENDING").toUpperCase() as EventStatus;
   const activeTab    = TABS.find((t) => t.status === statusParam)?.status ?? "PENDING";
 
-  const [events,      setEvents]      = useState<AdminEventRow[] | null>(null);
-  const loading = events === null;
-  const [total,       setTotal]       = useState(0);
   const [page,        setPage]        = useState(1);
-  const [totalPages,  setTotalPages]  = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const fetchEvents = useCallback(async (status: EventStatus, p = 1) => {
+  const fetchEvents = useCallback(async (signal: AbortSignal) => {
     try {
-      const res  = await fetch(`/api/admin/events?status=${status}&page=${p}&limit=50`);
+      const res = await fetch(`/api/admin/events?status=${activeTab}&page=${page}&limit=50`, { signal });
       const data = await res.json() as { events: AdminEventRow[]; total: number; totalPages: number };
-      if (res.ok && Array.isArray(data.events)) {
-        setEvents(data.events);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setEvents([]);
-        setTotal(0);
-        setTotalPages(1);
+      if (!res.ok || !Array.isArray(data.events)) {
+        return { events: [], total: 0, totalPages: 1 };
       }
-    } catch {
-      setEvents([]);
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { events: [], total: 0, totalPages: 1 };
     }
-  }, []);
+  }, [activeTab, page]);
 
-  useEffect(() => {
-    startTransition(() => fetchEvents(activeTab, 1));
-  }, [activeTab, fetchEvents]);
+  const {
+    data,
+    loading,
+    reload: reloadEvents,
+    setData: setEventPage,
+  } = useApiResource<{
+    events: AdminEventRow[];
+    total: number;
+    totalPages: number;
+  }>(fetchEvents, { key: `${activeTab}:${page}` });
+  const events = data?.events ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const switchTab = (status: EventStatus) => {
     setSelectedIds(new Set());
@@ -569,21 +608,27 @@ function AdminEventsContent() {
   };
 
   const handleReviewed = (id: string) => {
-    setEvents((prev) => (prev ?? []).filter((e) => e.id !== id));
+    setEventPage((prev) => prev ? { ...prev, events: prev.events.filter((e) => e.id !== id) } : prev);
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
   };
 
   const handleDeleted = (id: string) => {
-    setEvents((prev) => (prev ?? []).filter((e) => e.id !== id));
+    setEventPage((prev) => prev ? { ...prev, events: prev.events.filter((e) => e.id !== id) } : prev);
     setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
   };
 
   const handlePinToggled = (id: string, isPinned: boolean) => {
-    setEvents((prev) => (prev ?? []).map((e) => e.id === id ? { ...e, isPinned } : e));
+    setEventPage((prev) => prev ? {
+      ...prev,
+      events: prev.events.map((e) => e.id === id ? { ...e, isPinned } : e),
+    } : prev);
   };
 
   const handleBulkDone = (ids: string[]) => {
-    setEvents((prev) => (prev ?? []).filter((e) => !ids.includes(e.id)));
+    setEventPage((prev) => prev ? {
+      ...prev,
+      events: prev.events.filter((e) => !ids.includes(e.id)),
+    } : prev);
   };
 
   const allSelected = events != null && events.length > 0 && selectedIds.size === events.length;
@@ -613,12 +658,20 @@ function AdminEventsContent() {
                 Events.
               </h1>
             </div>
-            <button
-              onClick={() => fetchEvents(activeTab, page)}
-              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
-            </button>
+            <div className="flex items-center gap-3 self-start sm:self-end">
+              <Link
+                href="/admin/events/create"
+                className="flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest bg-machined shadow-machined text-dark px-4 py-2.5 rounded-md hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create event
+              </Link>
+              <button
+                onClick={() => void reloadEvents()}
+                className="flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}
@@ -659,12 +712,7 @@ function AdminEventsContent() {
               </div>
             )}
 
-            {loading && (
-              <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
-              </div>
-            )}
+            {loading && <TableSkeleton rows={6} cols={5} className="p-6" />}
 
             {!loading && events.length === 0 && (
               <div className="p-12 text-center">
@@ -698,7 +746,7 @@ function AdminEventsContent() {
               {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { const p = page - 1; setPage(p); fetchEvents(activeTab, p); }}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
                     className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
@@ -706,7 +754,7 @@ function AdminEventsContent() {
                   </button>
                   <span>Page {page} of {totalPages}</span>
                   <button
-                    onClick={() => { const p = page + 1; setPage(p); fetchEvents(activeTab, p); }}
+                    onClick={() => setPage((p) => p + 1)}
                     disabled={page >= totalPages}
                     className="px-3 py-1 rounded border border-dark-lighter text-muted hover:border-primary/50 hover:text-light disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >

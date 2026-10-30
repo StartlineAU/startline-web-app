@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, startTransition } from "react";
-import { Search, RefreshCw, Ban, CheckCircle2, Building2, UserX } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Search, RefreshCw, Ban, CheckCircle2, Building2, UserX, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import EditUserDialog from "@/components/admin/EditUserDialog";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +19,7 @@ interface UserRow {
   city: string | null;
   state: string | null;
   createdAt: string;
-  organiser: { id: string; orgName: string | null; status: string } | null;
+  memberships: { organiser: { id: string; orgName: string | null; status: string } }[];
   _count: { registrations: number };
 }
 
@@ -33,9 +36,11 @@ function formatDate(iso: string) {
 function UserRowItem({
   user,
   onBanToggled,
+  onEdit,
 }: {
   user: UserRow;
   onBanToggled: (id: string, isBanned: boolean) => void;
+  onEdit: (id: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -75,14 +80,14 @@ function UserRowItem({
               </span>
             )}
 
-            {user.organiser && (
-              <span className={`inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest
-                ${user.organiser.status === "SUSPENDED" ? "text-red-400" : "text-primary"}`}>
+            {user.memberships?.map(({ organiser }) => (
+              <span key={organiser.id} className={`inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest
+                ${organiser.status === "SUSPENDED" ? "text-red-400" : "text-primary"}`}>
                 <Building2 className="w-3.5 h-3.5" />
-                {user.organiser.orgName ?? "Organiser"}
-                {user.organiser.status === "SUSPENDED" && " (suspended)"}
+                {organiser.orgName ?? "Organiser"}
+                {organiser.status === "SUSPENDED" && " (suspended)"}
               </span>
-            )}
+            ))}
           </div>
 
           <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mb-1">
@@ -102,7 +107,13 @@ function UserRowItem({
           </div>
         </div>
 
-        <div className="shrink-0 ml-auto pl-2">
+        <div className="shrink-0 ml-auto pl-2 flex items-center gap-1.5">
+          <button
+            onClick={() => onEdit(user.id)}
+            className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-dark-lighter text-muted px-3 py-2 rounded-md hover:border-primary/40 hover:text-light transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit
+          </button>
           <button
             onClick={handleToggleBan}
             disabled={loading}
@@ -125,33 +136,37 @@ function UserRowItem({
 }
 
 export default function AdminUsersPage() {
-  const [users,      setUsers]      = useState<UserRow[] | null>(null);
-  const loading = users === null;
   const [search,     setSearch]     = useState("");
   const [query,      setQuery]      = useState("");
-  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(async (q: string, p: number) => {
+  const fetchUsers = useCallback(async (signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (query) params.set("search", query);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: "50" });
-      if (q) params.set("search", q);
-      const res  = await fetch(`/api/admin/users?${params}`);
+      const res = await fetch(`/api/admin/users?${params}`, { signal });
       const data = await res.json() as { users: UserRow[]; total: number; totalPages: number };
-      if (res.ok) {
-        setUsers(data.users);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setUsers([]);
-      }
-    } catch {
-      setUsers([]);
+      if (!res.ok) return { users: [], total: 0, totalPages: 1 };
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { users: [], total: 0, totalPages: 1 };
     }
-  }, []);
+  }, [query, page]);
 
-  useEffect(() => { startTransition(() => fetchUsers(query, page)); }, [query, page, fetchUsers]);
+  const {
+    data,
+    loading,
+    reload: reloadUsers,
+    setData: setUserPage,
+  } = useApiResource<{ users: UserRow[]; total: number; totalPages: number }>(
+    fetchUsers,
+    { key: `${query}:${page}` },
+  );
+  const users = data?.users ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,7 +175,10 @@ export default function AdminUsersPage() {
   };
 
   const handleBanToggled = (id: string, isBanned: boolean) => {
-    setUsers((prev) => (prev ?? []).map((u) => u.id === id ? { ...u, isBanned } : u));
+    setUserPage((prev) => prev ? {
+      ...prev,
+      users: prev.users.map((u) => u.id === id ? { ...u, isBanned } : u),
+    } : prev);
   };
 
   return (
@@ -180,7 +198,7 @@ export default function AdminUsersPage() {
               </h1>
             </div>
             <button
-              onClick={() => fetchUsers(query, page)}
+              onClick={() => void reloadUsers()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -196,7 +214,7 @@ export default function AdminUsersPage() {
                 placeholder="Search by name, email, or username…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-muted-dark focus:outline-none focus:border-primary transition-colors"
+                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-placeholder focus:outline-none focus:border-primary transition-colors"
               />
             </div>
             <button
@@ -217,12 +235,7 @@ export default function AdminUsersPage() {
           </form>
 
           <Card className="overflow-hidden">
-            {loading && (
-              <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
-              </div>
-            )}
+            {loading && <TableSkeleton rows={6} cols={4} className="p-6" />}
 
             {!loading && users.length === 0 && (
               <div className="p-12 text-center">
@@ -237,7 +250,7 @@ export default function AdminUsersPage() {
             )}
 
             {!loading && users.map((u) => (
-              <UserRowItem key={u.id} user={u} onBanToggled={handleBanToggled} />
+              <UserRowItem key={u.id} user={u} onBanToggled={handleBanToggled} onEdit={setEditingUserId} />
             ))}
           </Card>
 
@@ -267,6 +280,13 @@ export default function AdminUsersPage() {
           )}
         </div>
       </main>
+
+      <EditUserDialog
+        userId={editingUserId}
+        open={editingUserId !== null}
+        onClose={() => setEditingUserId(null)}
+        onSaved={() => void reloadUsers()}
+      />
     </div>
   );
 }

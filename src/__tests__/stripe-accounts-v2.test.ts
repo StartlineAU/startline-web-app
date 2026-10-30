@@ -8,7 +8,7 @@ import { actionRequiredFromAccount, connectStatusFromAccount, individualPrefill,
 // status route and by the v2 event destination.
 
 const mocks = vi.hoisted(() => ({
-  getOrganiserSession: vi.fn(),
+  requireOrganiser: vi.fn(),
   organiser: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   retrieveAccount: vi.fn(),
   updateAccount: vi.fn(),
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   configured: { value: true },
 }));
 
-vi.mock("@/lib/amplify-server", () => ({ getOrganiserSession: mocks.getOrganiserSession }));
+vi.mock("@/lib/organiser-api-auth", () => ({ requireOrganiser: mocks.requireOrganiser }));
 vi.mock("@/lib/prisma", () => ({ default: { organiser: mocks.organiser } }));
 vi.mock("@/lib/stripe", () => ({
   isStripeConfigured: () => mocks.configured.value,
@@ -186,7 +186,7 @@ describe("GET /api/organiser/stripe/status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.getOrganiserSession.mockResolvedValue({ sub: "org-1" });
+    mocks.requireOrganiser.mockResolvedValue({ session: { sub: "org-1" } });
   });
 
   async function get() {

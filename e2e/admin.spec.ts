@@ -4,17 +4,7 @@ import { adminLogin } from "./helpers";
 
 test.describe("admin login", () => {
   test("dev bypass login redirects to dashboard", async ({ page }) => {
-    await page.goto("/admin/login");
-    await page.waitForLoadState("networkidle");
-
-    await expect(page.locator("h1")).toContainText("Admin");
-    await expect(page.locator("h1")).toContainText("sign in");
-
-    await page.getByPlaceholder(/admin@startlineau/i).fill("admin@startline.test");
-    await page.locator('input[type="password"]').first().fill("Password123!");
-    await page.getByRole("button", { name: /sign in/i }).click();
-
-    await page.waitForURL("**/admin/dashboard**", { timeout: 30000 });
+    await adminLogin(page);
     await expect(page.locator("h1")).toContainText("Overview");
   });
 
@@ -30,12 +20,14 @@ test.describe("admin login", () => {
 
 test.describe("admin dashboard", () => {
   test("dashboard visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.waitForLoadState("networkidle");
     await argosScreenshot(page, "admin-dashboard");
   });
 
   test("dashboard shows stats cards after login", async ({ page }) => {
+
     await adminLogin(page);
 
     await expect(page.getByText("Pending review")).toBeVisible();
@@ -47,6 +39,7 @@ test.describe("admin dashboard", () => {
   });
 
   test("dashboard has quick action links", async ({ page }) => {
+
     await adminLogin(page);
 
     await expect(page.getByText("Review pending events")).toBeVisible();
@@ -56,6 +49,7 @@ test.describe("admin dashboard", () => {
   });
 
   test("review queue CTA links to pending events", async ({ page }) => {
+
     await adminLogin(page);
     await page.waitForLoadState("networkidle");
 
@@ -68,6 +62,7 @@ test.describe("admin dashboard", () => {
   });
 
   test("pending stats card links to pending events page", async ({ page }) => {
+
     await adminLogin(page);
     await page.waitForLoadState("networkidle");
 
@@ -82,6 +77,7 @@ test.describe("admin dashboard", () => {
 
 test.describe("admin events page", () => {
   test("admin events page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -90,6 +86,7 @@ test.describe("admin events page", () => {
   });
 
   test("events page renders with tabs", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events");
     await page.waitForLoadState("networkidle");
@@ -101,6 +98,7 @@ test.describe("admin events page", () => {
   });
 
   test("admin approved events visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=APPROVED");
     await page.waitForLoadState("networkidle");
@@ -109,6 +107,7 @@ test.describe("admin events page", () => {
   });
 
   test("admin rejected events visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=REJECTED");
     await page.waitForLoadState("networkidle");
@@ -116,6 +115,7 @@ test.describe("admin events page", () => {
   });
 
   test("pending tab shows pending events after seed", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -127,6 +127,7 @@ test.describe("admin events page", () => {
   });
 
   test("rejected tab shows rejected events with reason", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=REJECTED");
     await page.waitForLoadState("networkidle");
@@ -136,6 +137,7 @@ test.describe("admin events page", () => {
   });
 
   test("pagination controls appear when count label is visible", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -145,6 +147,7 @@ test.describe("admin events page", () => {
   });
 
   test("can switch between tabs", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -162,6 +165,7 @@ test.describe("admin events page", () => {
 
 test.describe("admin event approval flow", () => {
   test("approve button is visible on pending events", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -172,6 +176,7 @@ test.describe("admin event approval flow", () => {
   });
 
   test("reject button shows rejection form", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -183,6 +188,7 @@ test.describe("admin event approval flow", () => {
   });
 
   test("can approve a pending event and it disappears from list", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/events?status=PENDING");
     await page.waitForLoadState("networkidle");
@@ -202,6 +208,7 @@ test.describe("admin event approval flow", () => {
 
 test.describe("admin organisers page", () => {
   test("organisers page lists accounts", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/organisers");
     await page.waitForLoadState("networkidle");
@@ -210,6 +217,7 @@ test.describe("admin organisers page", () => {
   });
 
   test("organisers page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/organisers");
     await page.waitForLoadState("networkidle");
@@ -219,6 +227,7 @@ test.describe("admin organisers page", () => {
 
 test.describe("admin registrations page", () => {
   test("registrations page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/registrations");
     await page.waitForLoadState("networkidle");
@@ -228,15 +237,19 @@ test.describe("admin registrations page", () => {
 
 test.describe("admin reviews page", () => {
   test("reviews page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/reviews");
     await page.waitForLoadState("networkidle");
+    // Wait for the client-side reviews fetch to settle (skeleton → rows/empty).
+    await expect(page.getByRole("status", { name: "Loading" })).toHaveCount(0, { timeout: 15000 });
     await argosScreenshot(page, "admin-reviews");
   });
 });
 
 test.describe("admin users page", () => {
   test("users page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/users");
     await page.waitForLoadState("networkidle");
@@ -246,6 +259,7 @@ test.describe("admin users page", () => {
 
 test.describe("admin analytics page", () => {
   test("analytics page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/analytics");
     await page.waitForLoadState("networkidle");
@@ -255,9 +269,57 @@ test.describe("admin analytics page", () => {
 
 test.describe("admin audit log page", () => {
   test("audit log page visual snapshot", async ({ page }) => {
+
     await adminLogin(page);
     await page.goto("/admin/audit");
     await page.waitForLoadState("networkidle");
     await argosScreenshot(page, "admin-audit");
+  });
+});
+
+// Issue #321: the queue alone was not enough to judge a listing, and the public
+// page 404s until approval, so admins could not see an event as athletes would.
+test.describe("admin event preview", () => {
+  test("preview opens from the pending queue and shows the athlete view", async ({ page }) => {
+    await adminLogin(page);
+    await page.goto("/admin/events?status=PENDING");
+    await page.waitForLoadState("networkidle");
+
+    const row = page.locator("div.border-b", { hasText: "Hybrid Hustle Series" }).first();
+    await row.getByRole("link", { name: "Preview" }).click();
+    await page.waitForURL("**/admin/events/seed-event-002", { timeout: 30000 });
+
+    const bar = page.getByTestId("admin-event-review-bar");
+    await expect(bar).toBeVisible({ timeout: 15000 });
+    await expect(bar.getByText("Athlete preview")).toBeVisible();
+    await expect(bar.getByText("Pending", { exact: true })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Approve" })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Reject" })).toBeVisible();
+
+    // The same screen athletes get: title in the banner and the overview section.
+    await expect(page.getByRole("heading", { level: 1, name: /Hybrid Hustle Series/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Event Overview" })).toBeVisible();
+    // The athlete back link would leave the admin portal.
+    await expect(page.getByRole("link", { name: "Back to Events" })).toHaveCount(0);
+  });
+
+  test("event title in the queue links to the preview", async ({ page }) => {
+    await adminLogin(page);
+    await page.goto("/admin/events?status=PENDING");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByRole("link", { name: /Hybrid Hustle Series/ }).first())
+      .toHaveAttribute("href", "/admin/events/seed-event-002");
+  });
+
+  test("the pending event is still not public", async ({ page }) => {
+    const res = await page.goto("/events/seed-event-002");
+    expect(res?.status()).toBe(404);
+  });
+
+  test("unknown event id shows not found", async ({ page }) => {
+    await adminLogin(page);
+    const res = await page.goto("/admin/events/does-not-exist");
+    expect(res?.status()).toBe(404);
   });
 });

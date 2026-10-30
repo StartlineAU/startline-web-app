@@ -11,6 +11,7 @@
 # testing
 /coverage
 /test-results/
+/pw-results.json
 /playwright-report/
 
 # next.js
@@ -58,17 +59,13 @@ next-env.d.ts
 # local Cognito emulator
 /.cognito/
 
-# terraform
-terraform/.terraform/
-terraform/terraform.tfvars
-terraform/tfplan
-terraform/modules/environment/lambda/email-sender.zip
-
 # dev server logs
 .dev-server.log
 .dev-server-err.log
+.dev-run.log
 .playwright-cli/
 
 # opencode internal state
 .opencode/
 skills-lock.json
+screenshots/

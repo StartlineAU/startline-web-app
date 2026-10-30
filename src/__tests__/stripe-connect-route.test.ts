@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // cases that message used to hide.
 
 const mocks = vi.hoisted(() => ({
-  getOrganiserSession: vi.fn(),
+  requireOrganiser: vi.fn(),
   organiser: { findUnique: vi.fn(), update: vi.fn() },
   createAccount: vi.fn(),
   retrieveAccount: vi.fn(),
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   configured: { value: true },
 }));
 
-vi.mock("@/lib/amplify-server", () => ({ getOrganiserSession: mocks.getOrganiserSession }));
+vi.mock("@/lib/organiser-api-auth", () => ({ requireOrganiser: mocks.requireOrganiser }));
 vi.mock("@/lib/prisma", () => ({ default: { organiser: mocks.organiser } }));
 vi.mock("@/lib/stripe", () => ({
   isStripeConfigured: () => mocks.configured.value,
@@ -51,7 +51,7 @@ describe("POST /api/organiser/stripe/connect", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.configured.value = true;
-    mocks.getOrganiserSession.mockResolvedValue({ sub: ORGANISER });
+    mocks.requireOrganiser.mockResolvedValue({ session: { sub: ORGANISER } });
     mocks.organiser.update.mockResolvedValue({});
     mocks.createAccount.mockResolvedValue({ id: "acct_new" });
     mocks.createAccountLink.mockResolvedValue({ url: "https://connect.stripe.com/setup/e/acct_new" });

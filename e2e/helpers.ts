@@ -1,4 +1,5 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { existsSync, readFileSync } from "fs";
 
 export async function goToHomepage(page: Page): Promise<void> {
   await page.goto("/");
@@ -22,57 +23,155 @@ export async function selectStateFilter(page: Page, state: string): Promise<void
   }
 }
 
-export async function organiserLogin(page: Page, email = "test.organiser@startlineau.com"): Promise<void> {
-  // Sign-in is now a modal on the main site — not on /organiser
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await page.goto("/");
-      await page.waitForLoadState("networkidle");
-      // Already signed in? Go straight to dashboard
-      const signInBtn = page.getByRole("button", { name: /sign in/i });
-      if (!(await signInBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
-        await page.goto("/organiser/dashboard");
-        await page.waitForURL("**/organiser/dashboard**", { timeout: 15000 });
-        return;
-      }
-      await signInBtn.waitFor({ state: "visible", timeout: 8000 });
-      break;
-    } catch {
-      if (attempt === 2) throw new Error("Homepage failed to load after 3 attempts");
-      await page.waitForTimeout(3000);
-    }
-  }
-
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: /continue/i }).click();
-  await page.locator('input[type="password"]').first().waitFor({ state: "visible", timeout: 15000 });
-  await page.locator('input[type="password"]').first().fill("Password123!");
-  await page.getByRole("button", { name: /^Sign in$/ }).click();
-
-  // Wait for modal to close, then navigate to organiser dashboard
-  await page.waitForTimeout(2000);
+export async function organiserLogin(page: Page, _email = "sarah.mitchell@startline.test"): Promise<void> {
+  await page.context().addCookies([
+    { name: "__e2e_bypass", value: "organiser", domain: "localhost", path: "/", sameSite: "Lax" },
+  ]);
   await page.goto("/organiser/dashboard");
-  await page.waitForURL("**/organiser/dashboard**", { timeout: 30000 });
+  await page.waitForURL("**/organiser/dashboard**", { timeout: 15000 });
 }
 
-export async function adminLogin(page: Page, email = "admin@startlineau.com"): Promise<void> {
-  // Navigate to login page - may need retries for Turbopack cold start
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await page.goto("/admin/login");
-      await page.waitForLoadState("networkidle");
-      await page.waitForSelector('button:has-text("Sign in")', { state: "visible", timeout: 8000 });
-      break;
-    } catch {
-      if (attempt === 2) throw new Error("Login page failed to load after 3 attempts");
-      await page.waitForTimeout(3000);
+export async function organiserMemberLogin(page: Page): Promise<void> {
+  await page.context().addCookies([
+    { name: "__e2e_bypass", value: "member", domain: "localhost", path: "/", sameSite: "Lax" },
+  ]);
+  await page.goto("/organiser/dashboard");
+  await page.waitForURL("**/organiser/dashboard**", { timeout: 15000 });
+}
+
+/**
+ * Open the settings dialog from an already-loaded organiser page.
+ *
+ * "Edit Profile" is server-rendered: a click that lands before React hydrates
+ * focuses the button but never fires onClick, so no dialog appears. The modal
+ * itself also waits for AuthContext to resolve, which happens in an effect
+ * after hydration. On CI the dev server is compiling routes while this runs, so
+ * the wait is long — retry the open until the dialog is actually up rather than
+ * hoping the first click won.
+ *
+ * Callers should mark their test `test.slow()`: this can consume most of the
+ * default budget and the test has real work left to do after it returns.
+ */
+export async function openOrganiserSettings(page: Page) {
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(async () => {
+    if (!(await settings.isVisible())) {
+      await page.getByRole("button", { name: "Edit Profile" }).click();
     }
+    await expect(settings).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 40000 });
+  return settings;
+}
+
+// Avery Quinn — MANAGER of both Apex Endurance Events and Coastal Fitness
+// Collective (no OWNER role). The only seeded user whose active organiser is
+// decided purely by the startline_active_org cookie (issue #231).
+export async function multiOrganiserLogin(page: Page): Promise<void> {
+  await page.context().addCookies([
+    { name: "__e2e_bypass", value: "avery", domain: "localhost", path: "/", sameSite: "Lax" },
+  ]);
+  await page.goto("/organiser/dashboard");
+  await page.waitForURL("**/organiser/dashboard**", { timeout: 15000 });
+}
+
+export async function adminLogin(page: Page, _email = "marcus.stirling@startline.test"): Promise<void> {
+  await page.context().addCookies([
+    { name: "__e2e_bypass", value: "admin", domain: "localhost", path: "/", sameSite: "Lax" },
+  ]);
+  await page.goto("/admin/dashboard");
+  await page.waitForURL("**/admin/dashboard**", { timeout: 15000 });
+}
+
+// Resets a seeded registration on seed-event-001 back to a known state so
+// tests that mutate shared seed rows stay idempotent across runs/retries.
+// Uses the organiser API so the bypass cookie covers auth.
+export async function resetRegistration(
+  page: Page,
+  athleteName: string,
+  patch: Record<string, string | null>,
+): Promise<void> {
+  const res = await page.request.get("/api/organiser/events/seed-event-001/registrations");
+  expect(res.ok()).toBeTruthy();
+  const { registrations } = await res.json();
+  const reg = registrations.find((r: { name: string }) => r.name === athleteName);
+  expect(reg, `expected a seeded registration for ${athleteName}`).toBeTruthy();
+  const patchRes = await page.request.patch("/api/organiser/events/seed-event-001/registrations", {
+    data: { registrations: [{ registrationId: reg.id, ...patch }] },
+  });
+  expect(patchRes.ok()).toBeTruthy();
+}
+
+/**
+ * Pick a time from the shared TimePicker popover.
+ *
+ * The wizard used a native `input[type="time"]` that tests drove with .fill().
+ * It is now a custom popover (the OS panel ignored the design system), so there
+ * is no input to fill: open the trigger, choose from three listboxes, confirm.
+ *
+ * `name` is the trigger's accessible name, e.g. "Start time".
+ */
+export async function pickTime(
+  page: Page,
+  name: string,
+  time: { hour: string; minute: string; period: "AM" | "PM" },
+): Promise<void> {
+  // Close anything already open. The date picker stays open in "pick end date"
+  // mode after a start date is chosen, and its calendar overlays this field, so
+  // the click would never land. Popover triggers toggle, so clicking the open
+  // one shuts it.
+  for (const open of await page
+    .locator('button[aria-haspopup="dialog"][aria-expanded="true"]')
+    .all()) {
+    await open.click();
   }
 
-  await page.getByPlaceholder(/admin@startlineau/i).fill(email);
-  await page.locator('input[type="password"]').first().fill("Password123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  const trigger = page.getByRole("button", { name, exact: true });
+  const panel = page.getByRole("dialog", { name: /choose a time/i });
 
-  await page.waitForURL("**/admin/dashboard**", { timeout: 30000 });
+  await trigger.click();
+  await expect(panel).toBeVisible();
+
+  await panel.getByRole("listbox", { name: "Hour" })
+    .getByRole("option", { name: time.hour, exact: true }).click();
+  await panel.getByRole("listbox", { name: "Minute" })
+    .getByRole("option", { name: time.minute, exact: true }).click();
+  await panel.getByRole("listbox", { name: "AM or PM" })
+    .getByRole("option", { name: time.period, exact: true }).click();
+
+  await panel.getByRole("button", { name: /^done$/i }).click();
+  await expect(panel).toBeHidden();
+}
+
+/**
+ * The organiser dashboard has landed. It used to be asserted with an <h1>
+ * greeting that the header tidy-up removed, so anchor on the metric strip and
+ * the primary action instead - both are load-bearing UI, not decoration.
+ */
+export async function expectOrganiserDashboard(page: Page): Promise<void> {
+  await expect(page).toHaveURL(/\/organiser\/dashboard/);
+  await expect(page.getByText("All time", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /add listing/i })).toBeVisible();
+}
+
+/**
+ * Point Prisma at the same database the dev server uses, for specs that set up
+ * or clean up rows directly.
+ *
+ * Reads DATABASE_URL from .env.local, then .env: a worktree keeps its own in
+ * .env.local, while a plain checkout has only .env. Quotes are stripped, since
+ * dotenv allows them and a connection string carrying them fails to parse.
+ * Only this one variable is read — loading a whole env file would leak
+ * NEXT_PUBLIC_* values (e.g. a real Cognito pool id) into the shared worker
+ * env and make auth.spec's hasCognito guard run its real-Cognito tests.
+ */
+export function ensureDatabaseUrl(): void {
+  if (process.env.DATABASE_URL) return;
+  for (const file of [".env.local", ".env"]) {
+    if (!existsSync(file)) continue;
+    const value = readFileSync(file, "utf8").match(/^DATABASE_URL=(.+)$/m)?.[1]?.trim();
+    if (value) {
+      process.env.DATABASE_URL = value.replace(/^["']|["']$/g, "");
+      return;
+    }
+  }
 }

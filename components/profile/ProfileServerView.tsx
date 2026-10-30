@@ -1,0 +1,119 @@
+import prisma from "@/lib/prisma";
+import { getOrganiserRatings } from "@/lib/reviews";
+import ProfilePageClient from "@/components/profile/ProfilePageClient";
+
+export const PROFILE_USER_SELECT = {
+  id: true,
+  username: true,
+  email: true,
+  name: true,
+  bio: true,
+  profilePicUrl: true,
+  isPublic: true,
+  city: true,
+  state: true,
+  mobile: true,
+  dateOfBirth: true,
+  gender: true,
+  emergencyContactName: true,
+  emergencyContactPhone: true,
+  createdAt: true,
+  memberships: {
+    select: {
+      organiser: { select: { id: true, orgName: true, logoUrl: true, verified: true } },
+    },
+    take: 1,
+    orderBy: { createdAt: "asc" },
+  },
+} as const;
+
+export type ProfileUser = {
+  id: string;
+  username: string | null;
+  email: string;
+  name: string | null;
+  bio: string | null;
+  profilePicUrl: string | null;
+  isPublic: boolean;
+  city: string | null;
+  state: string | null;
+  mobile: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  createdAt: Date;
+  memberships: { organiser: { id: string; orgName: string | null; logoUrl: string | null; verified: boolean } }[];
+};
+
+/**
+ * Renders a user's profile (history + optional owner edit affordances).
+ * Shared by /profile (owner by id, no username required) and
+ * /profile/[username] (public profile). The caller resolves the user and any
+ * privacy gating; this component only fetches race history + ratings.
+ */
+export default async function ProfileServerView({
+  user,
+  isOwner,
+}: {
+  user: ProfileUser;
+  isOwner: boolean;
+}) {
+  const registrations = await prisma.registration.findMany({
+    where: { userId: user.id, status: "CONFIRMED" },
+    orderBy: { event: { eventDate: "asc" } },
+    select: {
+      id: true,
+      resultTime: true,
+      resultPlacement: true,
+      event: {
+        select: {
+          id: true,
+          title: true,
+          discipline: true,
+          eventDate: true,
+          city: true,
+          state: true,
+          coverImageUrl: true,
+          organiser: { select: { id: true, orgName: true, logoUrl: true } },
+        },
+      },
+    },
+  });
+
+  const ratings = await getOrganiserRatings(
+    registrations.map((r) => r.event.organiser.id),
+  );
+
+  // A profile without a handle is only ever rendered to its owner (/profile),
+  // so falling back to the private name or email prefix exposes nothing.
+  const displayName =
+    user.username || user.name?.trim() || user.email.split("@")[0] || "Athlete";
+
+  const profile = {
+    username: user.username ?? "",
+    displayName,
+    bio: user.bio,
+    profilePicUrl: user.profilePicUrl,
+    history: {
+      completed: registrations.length,
+      registrations: registrations.map((r) => ({
+        ...r,
+        event: {
+          ...r.event,
+          organiser: {
+            ...r.event.organiser,
+            rating: ratings.get(r.event.organiser.id) ?? null,
+          },
+        },
+      })),
+    },
+  };
+
+  return (
+    <ProfilePageClient
+      profile={profile}
+      isOwner={isOwner}
+    />
+  );
+}
