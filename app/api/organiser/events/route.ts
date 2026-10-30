@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getOrganiserSession } from "@/lib/amplify-server";
-import { archivePastEvents } from "@/lib/archive-events";
+import { getServerSession } from "@/lib/amplify-server";
+import { requireOrganiser } from "@/lib/organiser-api-auth";
+import { getEventCoords } from "@/lib/australia-coords";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { syncEventSchedules } from "@/lib/event-scheduler";
+import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
+import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
+import { organiserEventPayloadSchema } from "@/lib/schemas";
+import { rateLimit } from "@/lib/rate-limit";
+import { withUniqueSlug } from "@/lib/slugs";
+import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
+import { takesPayments } from "@/lib/event-approval";
 export async function GET() {
-  await archivePastEvents();
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
 
   try {
     const events = await prisma.event.findMany({
@@ -14,13 +25,24 @@ export async function GET() {
       select: {
         id: true, title: true, discipline: true, city: true, state: true,
         eventDate: true, startTime: true, status: true, createdAt: true,
+        startsAtUtc: true, endsAtUtc: true,
         waves: true, registrationType: true, feeStructure: true, registrationUrl: true, cap: true, isPinned: true,
         coverImageUrl: true,
         _count: { select: { registrations: true } },
       },
     });
+    const now = new Date();
     return NextResponse.json(
-      events.map(({ _count, ...rest }: { _count: { registrations: number } }) => ({ ...rest, registrationCount: _count.registrations }))
+      events.map((event) => {
+        const { _count, ...rest } = event;
+        return {
+          ...rest,
+          // Derive the display state too, so an event is not shown as upcoming
+          // between its start time and the worker's next tick.
+          status: effectiveEventStatus({ status: rest.status, startsAtUtc: rest.startsAtUtc, endsAtUtc: rest.endsAtUtc }, now),
+          registrationCount: _count.registrations,
+        };
+      })
     );
   } catch {
     return NextResponse.json([]);
@@ -28,14 +50,55 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
 
-  const body = await req.json();
-  const { submit } = body;
+  const blocked = await rateLimit(req, {
+    prefix: "event-create",
+    limit: 50,
+    windowSeconds: 3600,
+    identifier: session.sub,
+  });
+  if (blocked) return blocked;
+
+  const parsed = organiserEventPayloadSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 },
+    );
+  }
+  const body = parsed.data;
+  const { submit, organiserId: requestedOrganiserId } = body;
+
+  // Multi-org scoping: the organiser portal sends the active organiserId (the
+  // same one the listing pages resolve) so create/list always agree. Verify
+  // membership when it differs from the resolved active organiser, then use it
+  // for the ABN gate and APPROVED/PENDING decision too.
+  let organiserId = session.sub;
+  let verified    = session.verified;
+  if (requestedOrganiserId && requestedOrganiserId !== session.sub) {
+    const cognitoSession = await getServerSession();
+    if (!cognitoSession) {
+      return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+    }
+    const membership = await prisma.organiserMember.findFirst({
+      where: {
+        organiserId: requestedOrganiserId,
+        user: { cognitoSub: cognitoSession.sub },
+      },
+      select: { organiser: { select: { id: true, verified: true } } },
+    });
+    if (!membership) {
+      return NextResponse.json({ error: "Not a member of that organiser." }, { status: 403 });
+    }
+    organiserId = membership.organiser.id;
+    verified    = membership.organiser.verified;
+  }
 
   if (submit) {
-    const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"];
+    const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
     for (const field of required) {
       if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
     }
@@ -48,18 +111,51 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // A missing ABN no longer blocks the organiser from finishing their event.
+  // It used to reject the whole submission at the last step, after five steps
+  // and an image upload, which read as losing the work. It now costs the event
+  // its auto-approval instead: the listing saves, and an admin has to add the
+  // missing detail before it can go live. A free event takes no money, so it
+  // never needs one (lib/event-approval.ts).
+  const registrationType = body.registrationType ?? "startline";
+  let abnOk = true;
+  if (takesPayments(registrationType, body.waves)) {
+    const org = await prisma.organiser.findUnique({
+      where: { id: organiserId },
+      select: { abn: true },
+    });
+    abnOk = hasAbn(org?.abn);
+  }
+
+  // Verified organisers normally skip review. Not a paid listing without an
+  // ABN: auto-approving would put it live with no ABN attached, which is the
+  // outcome the requirement exists to prevent, and the admin would never see it.
   const eventStatus = submit
-    ? (session.verified ? "APPROVED" : "PENDING")
+    ? (verified && abnOk ? "APPROVED" : "PENDING")
     : "DRAFT";
 
+  // Persist the status the event should have right now, not just the status
+  // the review queue implies. Publishing an event whose start has already
+  // passed must not briefly make it look bookable.
+  const times = eventTimeData({
+    eventDate: body.eventDate ?? "",
+    endDate: body.endDate ?? null,
+    startTime: body.startTime ?? "",
+    endTime: body.endTime ?? null,
+    state: body.state ?? "",
+  });
+  const lifecycleStatus = effectiveEventStatus({ status: eventStatus, ...times });
+
   try {
-    const event = await prisma.event.create({
+    const event = await withUniqueSlug(body.title ?? "", (slug) =>
+      prisma.event.create({
       data: {
-        organiserId:      session.sub,
-        status:           eventStatus,
-        title:            body.title,
+        organiserId,
+        status:           lifecycleStatus,
+        ...times,
+        slug,
+        title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
-        tagline:          body.tagline           ?? null,
         description:      body.description       ?? null,
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
@@ -69,6 +165,8 @@ export async function POST(req: NextRequest) {
         address:          body.address           ?? null,
         city:             body.city              ?? "",
         state:            body.state             ?? "",
+        latitude:         body.latitude          ?? (body.city && body.state ? getEventCoords(body.city, body.state)[0] : null),
+        longitude:        body.longitude         ?? (body.city && body.state ? getEventCoords(body.city, body.state)[1] : null),
         format:           body.format            ?? "",
         level:            body.level             ?? "",
         categories:       body.categories        ?? [],
@@ -78,17 +176,55 @@ export async function POST(req: NextRequest) {
         inclusions:       body.inclusions        ?? null,
         extras:           body.extras            ?? null,
         activations:      body.activations       ?? null,
+        refundTiers:      body.refundTiers       ?? [],
         refundPolicy:     body.refundPolicy      ?? null,
-        registrationType: body.registrationType  ?? "startline",
+        registrationType,
         feeStructure:     body.feeStructure      ?? "athlete",
         registrationUrl:  body.registrationUrl   ?? null,
         accessibilityInfo: body.accessibilityInfo ?? null,
         coverImageUrl:    body.coverImageUrl      ?? null,
+        informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
         photos:           Array.isArray(body.photos) ? body.photos : [],
       },
-    });
+      }),
+    );
 
-    return NextResponse.json({ id: event.id, status: event.status });
+    if (eventStatus === "APPROVED") {
+      // Awaited, not fired and forgotten: Amplify's compute freezes the
+      // container once the response is returned, so a floating promise is
+      // dropped at random. A notify failure still must not fail the publish.
+      await prisma.organiser
+        .findUnique({ where: { id: event.organiserId }, select: { orgName: true } })
+        .then((org) =>
+          notifyOrganiserFollowers({
+            organiserId: event.organiserId,
+            eventId: event.id,
+            eventTitle: event.title,
+            organiserName: org?.orgName,
+            eventDate: event.eventDate || null,
+            city: event.city || null,
+          }),
+        )
+        .catch((err) => console.error("Follower notify failed:", err));
+    }
+
+    await syncEventSchedules(event).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
+
+    if (event.status === "PENDING") {
+      // Awaited for the same reason as the follower notify above.
+      await notifyAdminsEventSubmitted(event.id)
+        .catch((err) => console.error("Admin review notify failed:", err));
+    }
+
+    // The organiser finds out here, once the work is saved, rather than being
+    // turned away at the last step with nothing kept.
+    return NextResponse.json({
+      id:     event.id,
+      status: event.status,
+      ...(submit && !abnOk ? { abnRequired: true, notice: ABN_REQUIRED_MESSAGE } : {}),
+    });
   } catch (err) {
     console.error("Event create error:", err);
     return NextResponse.json({ error: "Failed to save event." }, { status: 500 });

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { idParams } from "@/lib/schemas";
+import { registrationOpenAt } from "@/lib/event-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +15,21 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Not available." }, { status: 404 });
+  }
+  const { id } = parsedParams.data;
 
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, cap: true, waves: true, status: true, registrationType: true },
+    select: {
+      id: true, cap: true, waves: true, status: true, registrationType: true,
+      startsAtUtc: true, endsAtUtc: true,
+    },
   });
 
-  if (!event || event.status !== "APPROVED" || event.registrationType !== "startline") {
+  if (!event || !registrationOpenAt(event) || event.registrationType !== "startline") {
     return NextResponse.json({ error: "Not available." }, { status: 404 });
   }
 

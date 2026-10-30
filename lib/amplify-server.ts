@@ -1,13 +1,27 @@
 import { cookies } from "next/headers";
 import { jwtVerify, createRemoteJWKSet } from "jose";
+import type { OrganiserRole } from "@prisma/client";
 import prisma from "./prisma";
+import { pickActiveMembership } from "./active-organiser";
+import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
   sub:          string;
+  // Cognito username, which AdminGetUser and AdminLinkProviderForUser take.
+  // Usually the email for password users and a UUID for provider users, so it
+  // is not interchangeable with `sub`.
+  username?:    string;
   email:        string;
   groups:       string[];
   phoneNumber?: string;
   birthdate?:   string;
+  // From the id token. name is set by Google and Apple; emailTrusted is false
+  // only for a Google or Apple sign-in whose provider did not verify the email.
+  name?:         string;
+  emailTrusted?: boolean;
+  // The dev/E2E identity that produced this session, if any. Used by the
+  // settings screen to model provider-only and linked accounts without Cognito.
+  bypass?: string;
 };
 
 export type UserSession = {
@@ -23,6 +37,13 @@ export type OrganiserSession = {
   email:    string;
   status:   string;
   verified: boolean;
+  role:     OrganiserRole;
+};
+
+export type OrganiserMembership = {
+  organiserId:   string;
+  organiserName: string | null;
+  role:          OrganiserRole;
 };
 
 export type AdminSession = {
@@ -50,14 +71,34 @@ async function verifyToken(token: string) {
 }
 
 export async function getServerSession(): Promise<ServerSession | null> {
-  const isBypass = process.env.NODE_ENV === "development" ||
-    process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
-  if (isBypass) {
-    return {
-      sub: "dev-bypass-organiser",
-      email: "organiser@startline.test",
-      groups: ["admins"],
-    };
+  if (process.env.NODE_ENV === "development") {
+    const cookieStore = await cookies().catch(() => null);
+    const bypass = cookieStore?.get("__e2e_bypass")?.value;
+    if (bypass) {
+      const identities: Record<string, ServerSession> = {
+        "1":        { sub: "dev-bypass-organiser", email: "sarah.mitchell@startline.test",  groups: ["admins"] },
+        "organiser": { sub: "dev-bypass-organiser", email: "sarah.mitchell@startline.test",  groups: [] },
+        "member":   { sub: "dev-bypass-member",    email: "tom.whitfield@startline.test",   groups: [] },
+        "admin":    { sub: "dev-bypass-admin",     email: "marcus.stirling@startline.test", groups: ["admins"] },
+        "user":     { sub: "dev-bypass-user",      email: "jade.nguyen@startline.test",      groups: [] },
+        "avery":    { sub: "dev-bypass-avery-quinn", email: "avery.quinn@startline.test",    groups: [] },
+        // Belongs to no organisation, for the "become an organiser" paths.
+        // Every other identity here owns or manages one.
+        "athlete":  { sub: "dev-bypass-harper-jones", email: "harper.jones@startline.test", groups: [] },
+        // Rows these identities point at are created and removed by the specs
+        // that use them, so tests never mutate the shared seed users.
+        "profile":  { sub: "dev-bypass-profile-test", email: "profile.test@startline.test", groups: [] },
+        "noabn":    { sub: "dev-bypass-noabn-test",   email: "noabn.organiser@startline.test", groups: [] },
+        // Login & security states for issue #389. The sign-in-methods route
+        // returns a fixed state for these; they only give the page a signed-in
+        // visitor without contacting Cognito.
+        "social":   { sub: "dev-bypass-social-test",  email: "social.test@startline.test", groups: [] },
+        "apple":    { sub: "dev-bypass-apple-test",   email: "apple.test@startline.test",  groups: [] },
+        "linked":   { sub: "dev-bypass-linked-test",  email: "linked.test@startline.test", groups: [] },
+      };
+      const identity = identities[bypass];
+      if (identity) return { ...identity, bypass };
+    }
   }
 
   try {
@@ -78,6 +119,7 @@ export async function getServerSession(): Promise<ServerSession | null> {
 
     const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
     const sub   = payload.sub as string;
+    const username = typeof payload.username === "string" ? payload.username : undefined;
     const phoneNumber = payload.phone_number as string | undefined;
     const birthdate   = payload.birthdate as string | undefined;
 
@@ -86,6 +128,8 @@ export async function getServerSession(): Promise<ServerSession | null> {
     // sub (a UUID), not an address. Fall back to LastAuthUser only if it is
     // itself an email (pools where the username is the email).
     let email = lastAuthUser.includes("@") ? lastAuthUser : "";
+    let name: string | undefined;
+    let emailTrusted = true;
     const idToken = (
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.idToken`)?.value ??
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.idToken`)?.value
@@ -96,12 +140,20 @@ export async function getServerSession(): Promise<ServerSession | null> {
         if (typeof idPayload.email === "string" && idPayload.email) {
           email = idPayload.email;
         }
+        if (typeof idPayload.name === "string" && idPayload.name.trim()) {
+          name = idPayload.name.trim();
+        }
+        // Only Google and Apple users carry `identities`. Password users are
+        // left alone: seeded accounts are not marked email_verified.
+        if (idPayload.identities && String(idPayload.email_verified) !== "true") {
+          emailTrusted = false;
+        }
       } catch {
         // Keep the fallback if the id token can't be verified.
       }
     }
 
-    return { sub, email, groups, phoneNumber, birthdate };
+    return { sub, username, email, groups, phoneNumber, birthdate, name, emailTrusted };
   } catch {
     return null;
   }
@@ -117,43 +169,129 @@ export async function getUserSession(): Promise<UserSession | null> {
       return { sub: existing.id, email: existing.email, name: existing.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
     }
 
-    if (cognitoSession.email) {
-      const user = await prisma.user.upsert({
-        where: { email: cognitoSession.email },
-        update: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
-        create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email },
-        select: { id: true, email: true, name: true },
-      });
-      return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
-    }
+    // Re-pointing an existing row at this sub hands that person's account to
+    // whoever holds the session, so it needs an email the provider vouched for.
+    if (cognitoSession.email && cognitoSession.emailTrusted === false) return null;
 
-    const user = await prisma.user.create({
-      data: { cognitoSub: cognitoSession.sub, email: cognitoSession.sub },
-      select: { id: true, email: true, name: true },
-    });
-    return { sub: user.id, email: user.email, name: user.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
+    const user = await resolveUserRow(cognitoSession.sub, cognitoSession.email, cognitoSession.name);
+    if (!user) return null;
+    return {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      phoneNumber: cognitoSession.phoneNumber,
+      birthdate: cognitoSession.birthdate,
+    };
   } catch {
     return null;
   }
 }
 
-export async function getOrganiserSession(): Promise<OrganiserSession | null> {
+const ACTIVE_ORG_COOKIE = "startline_active_org";
+
+// Resolves the user's memberships to an active Organiser. If the user manages
+// multiple organisers, the `startline_active_org` cookie (set by the org
+// switcher) picks the active one; otherwise the OWNER membership wins.
+// `cognitoSession` lets a caller that has already verified the tokens (e.g.
+// `requireOrganiser`, which needs to tell "signed out" from "not an organiser")
+// pass them in rather than paying for a second JWT verification per request.
+export async function getOrganiserSession(
+  cognitoSession?: ServerSession | null,
+): Promise<OrganiserSession | null> {
+  try {
+    return await resolveOrganiserSession(cognitoSession);
+  } catch {
+    return null;
+  }
+}
+
+// Same resolution, but a database failure propagates instead of collapsing into
+// the same `null` as "this account manages no organiser". `requireOrganiser`
+// needs the two apart: swallowing them together told every organiser their
+// account wasn't linked to an organiser profile whenever the database was
+// briefly unreachable, which reads exactly like the data loss in issue #302.
+export async function resolveOrganiserSession(
+  cognitoSession?: ServerSession | null,
+): Promise<OrganiserSession | null> {
+  cognitoSession ??= await getServerSession();
+  if (!cognitoSession) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { cognitoSub: cognitoSession.sub },
+    include: {
+      memberships: {
+        include: {
+          organiser: {
+            select: { id: true, email: true, status: true, verified: true },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+  if (!user || user.memberships.length === 0) return null;
+
+  const activeId = (await cookies()).get(ACTIVE_ORG_COOKIE)?.value;
+  const picked = pickActiveMembership(
+    user.memberships.map((m) => ({ organiserId: m.organiser.id, role: m.role })),
+    activeId,
+  );
+  const membership =
+    user.memberships.find((m) => m.organiser.id === picked?.organiserId) ??
+    user.memberships[0];
+
+  const organiser = membership.organiser;
+  return {
+    sub:      organiser.id,
+    email:    organiser.email,
+    status:   String(organiser.status),
+    verified: organiser.verified,
+    role:     membership.role,
+  };
+}
+
+export async function getOrganiserMemberships(): Promise<OrganiserMembership[] | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
 
   try {
     const user = await prisma.user.findUnique({
       where: { cognitoSub: cognitoSession.sub },
+      select: {
+        memberships: {
+          select: {
+            role:       true,
+            organiser:  { select: { id: true, orgName: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
     });
     if (!user) return null;
 
-    const organiser = await prisma.organiser.findUnique({
-      where:  { userId: user.id },
-      select: { id: true, email: true, status: true, verified: true },
-    });
-    if (!organiser) return null;
+    return user.memberships.map((m) => ({
+      organiserId:   m.organiser.id,
+      organiserName: m.organiser.orgName,
+      role:          m.role,
+    }));
+  } catch {
+    return null;
+  }
+}
 
-    return { sub: organiser.id, email: organiser.email, status: String(organiser.status), verified: organiser.verified };
+export async function getOrganiserRole(organiserId: string): Promise<OrganiserRole | null> {
+  const cognitoSession = await getServerSession();
+  if (!cognitoSession) return null;
+
+  try {
+    const membership = await prisma.organiserMember.findFirst({
+      where: {
+        organiserId,
+        user: { cognitoSub: cognitoSession.sub },
+      },
+      select: { role: true },
+    });
+    return membership?.role ?? null;
   } catch {
     return null;
   }
@@ -165,13 +303,22 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   if (!cognitoSession.groups.includes("admins")) return null;
 
   try {
-    const admin = await prisma.admin.upsert({
+    // Resolve by email first (unique): a dev/bypass identity can share the
+    // seeded admin's email but carry a different cognitoSub, so upserting by
+    // sub alone would try to create a duplicate email row and fail.
+    const admin = await prisma.admin.findUnique({
+      where:  { email: cognitoSession.email ?? "" },
+      select: { id: true, email: true, name: true },
+    });
+    if (admin) return { sub: admin.id, email: admin.email, name: admin.name };
+
+    const created = await prisma.admin.upsert({
       where:  { cognitoSub: cognitoSession.sub },
       update: cognitoSession.email ? { email: cognitoSession.email } : {},
       create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email || cognitoSession.sub },
       select: { id: true, email: true, name: true },
     });
-    return { sub: admin.id, email: admin.email, name: admin.name };
+    return { sub: created.id, email: created.email, name: created.name };
   } catch {
     return null;
   }

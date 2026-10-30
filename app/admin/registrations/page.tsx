@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, startTransition } from "react";
+import { useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, RefreshCw, RotateCcw, DollarSign } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { TableSkeleton } from "@/components/ui/skeleton";
+import { useApiResource } from "@/hooks/useApiResource";
 
 export const dynamic = "force-dynamic";
 
-type RegStatus = "CONFIRMED" | "CANCELLED" | "REFUNDED";
+type RegStatus = "CONFIRMED" | "CANCELLED" | "REFUNDED" | "REFUND_REQUESTED";
 
 interface Registration {
   id: string;
@@ -16,6 +18,9 @@ interface Registration {
   category: string | null;
   waveLabel: string | null;
   amountCents: number;
+  refundAmountCents: number | null;
+  refundPercent: number | null;
+  refundOutsidePolicy: boolean;
   platformFeeCents: number;
   feeStructure: string;
   status: RegStatus;
@@ -26,16 +31,18 @@ interface Registration {
 }
 
 const STATUS_TABS: { status: RegStatus | "ALL"; label: string }[] = [
-  { status: "ALL",       label: "All"       },
-  { status: "CONFIRMED", label: "Confirmed" },
-  { status: "REFUNDED",  label: "Refunded"  },
-  { status: "CANCELLED", label: "Cancelled" },
+  { status: "ALL",              label: "All"              },
+  { status: "CONFIRMED",        label: "Confirmed"        },
+  { status: "REFUND_REQUESTED", label: "Refund requested" },
+  { status: "REFUNDED",         label: "Refunded"         },
+  { status: "CANCELLED",        label: "Cancelled"        },
 ];
 
 const STATUS_STYLE: Record<RegStatus, { bg: string; text: string; dot: string }> = {
-  CONFIRMED: { bg: "bg-primary/10",   text: "text-primary",   dot: "bg-primary"   },
-  CANCELLED: { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark" },
-  REFUNDED:  { bg: "bg-amber-400/10", text: "text-amber-300", dot: "bg-amber-400"  },
+  CONFIRMED:         { bg: "bg-primary/10",   text: "text-primary",   dot: "bg-primary"   },
+  CANCELLED:         { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark" },
+  REFUND_REQUESTED:  { bg: "bg-blue-400/10",  text: "text-blue-300",  dot: "bg-blue-400"  },
+  REFUNDED:          { bg: "bg-amber-400/10", text: "text-amber-300", dot: "bg-amber-400"  },
 };
 
 function formatDate(iso: string) {
@@ -104,6 +111,15 @@ function RegistrationRow({
                 +{formatAud(reg.platformFeeCents)} fee
               </span>
             )}
+            {/* What the event's policy owes on this entry, frozen when the athlete asked,
+                so the admin is not working it out by hand before hitting Refund. */}
+            {reg.status === "REFUND_REQUESTED" && (
+              <span className="font-headline text-[11px] uppercase tracking-widest text-amber-300">
+                {reg.refundOutsidePolicy
+                  ? "Outside policy"
+                  : `Refund due ${formatAud(reg.refundAmountCents ?? 0)}${reg.refundPercent != null ? ` (${reg.refundPercent}%)` : ""}`}
+              </span>
+            )}
           </div>
 
           <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mb-1">
@@ -129,7 +145,10 @@ function RegistrationRow({
           )}
         </div>
 
-        {reg.status === "CONFIRMED" && (
+        {/* Refund-requested entries need the action most: the athlete has already
+            asked. The API has always accepted both, but the button only rendered on
+            CONFIRMED, so requests had nowhere to be actioned from. */}
+        {(reg.status === "CONFIRMED" || reg.status === "REFUND_REQUESTED") && (
           <div className="shrink-0 ml-auto pl-2 flex items-center gap-2">
             {confirming && (
               <span className="font-headline text-[11px] text-amber-300 uppercase tracking-widest">
@@ -170,36 +189,44 @@ function RegistrationsContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId") ?? undefined;
 
-  const [regs,       setRegs]       = useState<Registration[] | null>(null);
-  const loading = regs === null;
   const [search,     setSearch]     = useState("");
   const [query,      setQuery]      = useState("");
   const [activeTab,  setActiveTab]  = useState<RegStatus | "ALL">("ALL");
-  const [total,      setTotal]      = useState(0);
   const [page,       setPage]       = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
-  const fetchRegs = useCallback(async (status: RegStatus | "ALL", q: string, p: number) => {
+  const fetchRegs = useCallback(async (signal: AbortSignal) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (activeTab !== "ALL") params.set("status", activeTab);
+    if (query) params.set("search", query);
+    if (eventId) params.set("eventId", eventId);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: "50" });
-      if (status !== "ALL") params.set("status", status);
-      if (q) params.set("search", q);
-      if (eventId) params.set("eventId", eventId);
-      const res  = await fetch(`/api/admin/registrations?${params}`);
-      const data = await res.json() as { registrations: Registration[]; total: number; totalPages: number };
-      if (res.ok) {
-        setRegs(data.registrations);
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-      } else {
-        setRegs([]);
-      }
-    } catch {
-      setRegs([]);
+      const res = await fetch(`/api/admin/registrations?${params}`, { signal });
+      const data = await res.json() as {
+        registrations: Registration[];
+        total: number;
+        totalPages: number;
+      };
+      if (!res.ok) return { registrations: [], total: 0, totalPages: 1 };
+      return data;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return { registrations: [], total: 0, totalPages: 1 };
     }
-  }, [eventId]);
+  }, [activeTab, query, page, eventId]);
 
-  useEffect(() => { startTransition(() => fetchRegs(activeTab, query, page)); }, [activeTab, query, page, fetchRegs]);
+  const {
+    data,
+    loading,
+    reload: reloadRegs,
+    setData: setRegistrationPage,
+  } = useApiResource<{
+    registrations: Registration[];
+    total: number;
+    totalPages: number;
+  }>(fetchRegs, { key: `${activeTab}:${query}:${page}:${eventId ?? ""}` });
+  const regs = data?.registrations ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,7 +235,10 @@ function RegistrationsContent() {
   };
 
   const handleRefunded = (id: string) => {
-    setRegs((prev) => (prev ?? []).map((r) => r.id === id ? { ...r, status: "REFUNDED" } : r));
+    setRegistrationPage((prev) => prev ? {
+      ...prev,
+      registrations: prev.registrations.map((r) => r.id === id ? { ...r, status: "REFUNDED" } : r),
+    } : prev);
   };
 
   return (
@@ -231,7 +261,7 @@ function RegistrationsContent() {
               )}
             </div>
             <button
-              onClick={() => fetchRegs(activeTab, query, page)}
+              onClick={() => void reloadRegs()}
               className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -247,7 +277,7 @@ function RegistrationsContent() {
                 placeholder="Search by athlete name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-muted-dark focus:outline-none focus:border-primary transition-colors"
+                className="w-full pl-9 pr-4 py-2.5 text-[14px] bg-dark-light border border-dark-lighter rounded-lg text-light placeholder:text-placeholder focus:outline-none focus:border-primary transition-colors"
               />
             </div>
             <button
@@ -285,12 +315,7 @@ function RegistrationsContent() {
           </div>
 
           <Card className="overflow-hidden">
-            {loading && (
-              <div className="p-12 text-center">
-                <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto mb-3" />
-                <div className="font-headline text-sm text-muted uppercase tracking-widest">Loading…</div>
-              </div>
-            )}
+            {loading && <TableSkeleton rows={6} cols={5} className="p-6" />}
 
             {!loading && regs.length === 0 && (
               <div className="p-12 text-center">

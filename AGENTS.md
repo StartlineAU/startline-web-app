@@ -6,189 +6,576 @@ Next.js 15 (App Router) fitness event discovery platform. Three portals:
 |---|---|---|
 | `(user)/` | startlineau.com | Public event browsing |
 | `organiser/` | organiser.startlineau.com | Event management |
-| `admin/` | organiser.startlineau.com | Approvals, org management |
+| `admin/` | admin.startlineau.com | Approvals, org management |
 
 ## Development
 
 - **Package manager:** pnpm 11.11.0
 - **Dev:** `pnpm dev` (Turbopack). **Build:** `pnpm build` (standalone `next.config.ts`). `@/*` → root.
-- **Docker:** PostgreSQL 15 on :5432 + Mailpit (SMTP :1025, UI :8026). Start: `docker compose up -d`.
-- **Worktree?** Check via `git worktree list`. If yes, Docker infra runs on main checkout — just `pnpm dev`, no `docker compose up`.
-- App runs in Docker as `app` service (port 3000). Prisma Studio as `prisma-studio` service (port 5555).
+- **Docker:** PostgreSQL 15 on :5432 + Mailpit (SMTP :1025, UI :8026). Start: `docker compose up -d` on main checkout only.
+- **Worktree?** `git worktree list`. If worktree, Docker infra runs on main checkout — just `pnpm dev`, never `docker compose up`.
+- **Per-worktree DB:** run `./scripts/dev-db.sh` on first use of a new worktree (creates an isolated `startline_<branch>` DB, applies migrations, points `.env.local` at it). Then **always run `pnpm prisma:seed`** — skip only if you specifically need an empty DB.
+- **Env vars:** Loaded from `.env.local` (gitignored). See `.env.example` and `StartlineAU/startline-infra` for setup steps.
+
+## Environment variables
+
+Secrets in AWS Secrets Manager. `.env.local` at repo root (gitignored).
+
+| Secret | Contents |
+|---|---|
+| `startline/automation` | Trusted CI/Terraform credentials: provider tokens (Cloudflare, Neon, Amplify, DigitalOcean) and the Cognito social sign-in secrets Terraform configures. Not app runtime config |
+| `startline/prod/app` | Prod runtime config: Cognito, Stripe live keys, Postgres, S3/CDN, Resend, ABR |
+| `startline/staging/app` | Staging runtime config: non-prod Cognito, Stripe test keys, Postgres, S3/CDN, Resend, ABR |
+| `startline/docs` | Outline documentation server only |
+
+**Which workflow may read what.** PR checks read no secret at all: anything a PR
+workflow can read, unmerged PR code can read, and Secrets Manager grants a whole
+JSON secret rather than single fields. `startline/automation` and the app secrets
+belong to workflows on protected branches (`deploy.yml`, `terraform-apply.yml`).
+The one PR-time credential, the Gitleaks license, is a repository secret.
+
+**Setup:** `cp main-checkout/.env.local .env.local` in each worktree. Override `DATABASE_URL` to local Docker (`postgresql://postgres:postgres@localhost:5432/startline?schema=public`). Deployed environments run Postgres on **Neon** (two projects, `startline-prod` + `startline-staging`, Sydney), managed by Terraform (`startline-infra/startline-web-app/neon.tf`, provider `kislerdm/neon`). The Neon connection strings are the `DATABASE_URL` branch variables; `neon_api_key`/`neon_org_id` live in `startline/automation`. Org plan is Free — 6 h PITR only.
+
+### Runtime vs build-time variables
+
+The running server reads its environment from `.env.production`. preBuild
+writes that file from the `startline/<env>/app` secret, and because
+`next.config.ts` sets `output: "standalone"`, `pnpm build` copies it into
+`.next/standalone`, which is inside the artefact Amplify ships.
+
+An Amplify **branch** environment variable is visible to the build and not to
+the route handlers. `STRIPE_SECRET_KEY` sat on the staging branch, listed in
+the console, and was still undefined at runtime (#363).
+
+So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
+`TURNSTILE_SECRET_KEY`, `ABR_GUID`,
+`DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
+secrets in both places from one list, `runtime_secrets` in
+`startline-infra/startline-web-app/modules/environment/main.tf`; add a new one there.
+
+Terraform owns only the *generated* half of the app secret (Cognito ids, Neon
+URL, bucket, CDN, site URL, `GUEST_EMAIL_VERIFICATION_SECRET`,
+`TURNSTILE_SECRET_KEY`) plus the whole branch variable map. The third-party
+credentials are owned by the app secret itself: Terraform reads the secret and
+merges the generated keys over the top, so `startline/automation` is no longer
+their source. A prod apply fails its precondition rather than silently clearing
+a missing key.
+
+**Rotating a runtime credential:** set it on the app secret that owns it —
+`startline/prod/app` or `startline/staging/app` — and rebuild that branch. No
+Terraform change and no apply needed. The keys an environment owns are
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`,
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM` and
+`ABR_GUID`. Anything the app needs that Terraform generates still goes through
+`startline-infra/startline-web-app/modules/environment/main.tf`.
+
+A branch variable or app secret set by hand in the Amplify console is still
+deleted on the next apply: Terraform owns the branch variable map.
+
+To check an environment without credentials, POST an empty body to
+`/api/stripe/webhook`: `400` means the server has `STRIPE_SECRET_KEY`, `500`
+means it does not.
+
+## Stripe Connect (Accounts v2)
+
+Organiser accounts are created with Accounts v2 (`POST /v2/core/accounts`),
+not v1 `stripe.accounts.create` (#379). Stripe turns v1 off by default on new
+platforms, so the "Accounts v1 support" API policy is no longer needed. All of
+it lives in `lib/stripe-connect.ts`:
+
+| Concern | v2 shape |
+|---|---|
+| Account | `dashboard: "express"`, AU individual, `fees_collector`/`losses_collector` `application`, `merchant.card_payments` + `recipient.stripe_balance.stripe_transfers` |
+| Onboarding link | `v2.core.accountLinks`, `configurations: ["merchant", "recipient"]` |
+| Manual payouts | v2 accounts have no payout schedule; `/v1/balance_settings` with `Stripe-Account` sets `manual`. The connect route does it on every call |
+| Onboarded | `charges_enabled`/`payouts_enabled` are gone. `connectStatusFromAccount`: card payments, transfers and payouts capabilities all `active` |
+
+Accounts created on v1 stay on v1 with no migration. The v2 API reads and
+links them, and the v1 endpoints the rest of the app uses (destination charges,
+`reverse_transfer` refunds, `payouts.create`) take either kind of id.
+
+**v2 account events do not reach `/api/stripe/webhook`.** They are thin events
+delivered by a separate Stripe *event destination* to
+`/api/stripe/account-events`, signed with its own secret
+(`STRIPE_ACCOUNT_EVENTS_SECRET`). The v1 `account.updated` handler stays for v1
+accounts. Per Stripe mode, once:
+
+1. `STRIPE_SECRET_KEY=sk_... pnpm stripe:account-events https://<host>`
+   creates the destination and prints its signing secret (the Dashboard can reveal it again later).
+2. Store it on the environment's own app secret as
+   `STRIPE_ACCOUNT_EVENTS_SECRET` (`startline/prod/app` for live,
+   `startline/staging/app` for test), then rebuild that branch.
+
+Locally, `pnpm stripe:listen:accounts` forwards the same events. Without the
+secret the route answers 503 and onboarding only completes when the organiser
+returns from Stripe to `/organiser/payments/return`. The secret is not in the
+prod precondition list yet, so a missing one does not fail an apply.
+
+## Uploads
+
+**File bytes must never pass through a route handler on a deployed
+environment.** Amplify runs on `platform = "WEB_COMPUTE"`, which is Lambda
+backed, and a multipart request body is base64-encoded into the invocation
+payload. The 6 MB payload ceiling therefore lands just under **4.5 MB of actual
+file**, well below the 10 MB `lib/upload-limits.ts` allows. Anything in between
+is rejected by the platform before the handler runs, and the reply is a **413
+with a zero-length body**, so the client cannot even read a reason off it.
+
+`pnpm upload:probe [base-url]` measures this against a deployed environment
+(staging by default). It needs no credentials: an unauthenticated POST that
+reaches the handler answers `401` with JSON, so the status says which layer
+replied. Measured on staging:
+
+```
+ 4.30 MB -> 401  reached our handler
+ 4.50 MB -> 413  killed by the platform, empty body
+```
+
+The probe also checks that `/api/upload/presign` exists, which is the real
+regression test. **A 404 there means the environment is proxying uploads again
+and anything over ~4.5 MB will fail.** It exits non-zero on either failure, so
+it can gate a deploy.
+
+The browser uploads straight to S3 instead:
+
+| Step | Endpoint | Does |
+|---|---|---|
+| 1 | `POST /api/upload/presign` | Authenticates, checks type/MIME/size, signs a POST scoped to `uploads/{sub}/{type}/{uuid}.{ext}` |
+| 2 | `POST` to the S3 URL | Browser sends the bytes. No size ceiling |
+| 3 | `POST /api/upload/complete` | Ranged GET of the first 16 bytes, magic-byte check, deletes the object if it fails |
+
+Each upload type carries its own MIME allowlist and size cap in
+`lib/upload-limits.ts`, and both upload routes read them, so adding a type is
+enough to enforce it everywhere. Every image type takes JPEG, PNG or WebP —
+**no GIF anywhere** — and a file picker's `accept` must come from `TYPE_MIMES`
+rather than `image/*`, or the dialog offers files the routes then refuse.
+
+`lib/upload-client.ts` (`uploadFile`) drives all three and is the only thing
+UI should call. `/api/upload` still exists and still reads bytes itself, but
+only serves local dev and the Docker image, where there is no bucket — presign
+answers `{mode:"proxy"}` and the client falls back to it.
+
+Two things break this silently if forgotten:
+
+- **CSP.** `connect-src` in `next.config.ts` must list the S3 origin. Without
+  it the browser blocks the upload and nothing reaches the server logs.
+- **Bucket CORS.** `bucket_cors_allowed_origins` in
+  `startline-infra/web-app/main.tf` must cover the portal origins. Prod lists the
+  three domains; staging is `*`.
+
+Step 3 is not optional. Direct-to-S3 means the server never sees the bytes in
+flight, so it is the only remaining check that a file matching an image
+Content-Type is actually an image.
+
+## Portals and hostnames
+
+Production splits the three portals across `startlineau.com`,
+`organiser.startlineau.com` and `admin.startlineau.com`. Every other deployment
+(Amplify branch domain, PR previews, local dev) serves all three from one host.
+Cross-portal links must go through `lib/portal-domains.ts` so they stay relative
+on single-host deployments and absolute in production; hardcoding either shape
+breaks one of the two (issue #302).
+
+Cognito cookies are scoped to `.startlineau.com` in `components/AmplifyProvider.tsx`
+so a single sign-in covers all three portals. Host-only cookies left the
+organiser portal permanently signed out in production.
+
+### Public site visibility (waitlist)
+
+`PUBLIC_SITE_MODE` decides what `startlineau.com` shows the public, and only that
+host. Staging, PR previews and local dev serve the real site whatever it says.
+Unset or unrecognised means `waitlist`, so a missing value on the production app
+secret cannot open the site by accident.
+
+| Value | `startlineau.com` and `www.` |
+|---|---|
+| `waitlist` (default) | Anonymous visitors get `/waitlist`; `/terms`, `/privacy`, `/cookies` get their `app/waitlist/(legal)` copies |
+| `live` | The real site, with the usual organiser/admin portal protection |
+
+The gate is in `middleware.ts`; the allowlist of paths that stay reachable while
+waitlisted (waitlist API, Stripe webhooks, the lifecycle worker, the organiser
+sign-up door, provider callbacks, check-in, assets) is `lib/site-mode.ts`. Adding
+to it widens what the public can reach without signing in, so each entry needs a
+reason.
+
+**Reviewing a production deploy before launch.** Sign in to the production admin
+portal (`admin.startlineau.com/admin/login`) and open `startlineau.com` in the
+same browser. Middleware verifies the Cognito access token and lets requests
+through only for members of the `admins` group; the response is marked
+`private, no-store` so a shared cache cannot serve the staff view to anyone else.
+An ordinary athlete session, a stale token or a tampered one gets the waitlist.
+The shared `.startlineau.com` cookie is what carries the session across.
+
+**Launching.** `PUBLIC_SITE_MODE` is owned by the infra stack, not set by hand:
+it is `generated_app_config` in `startline-infra`, per environment, under
+`local.environments` in `startline-web-app/main.tf` (`prod` starts on `waitlist`,
+`staging` on `live`). Flip prod to `live`, apply, then rebuild the `prod` branch.
+An apply alone is not enough — the value is inlined at build time.
+
+It is listed under `env` in `next.config.ts`, so Next inlines it at build time
+(middleware's Edge runtime cannot be trusted to see an arbitrary runtime
+`process.env` read). The preBuild writes `.env.production` from the app secret
+before `next build`, so the deploy's value is the one that is baked in. It is not
+`NEXT_PUBLIC_*` and nothing in the client reads it. Setting the key by hand on
+`startline/prod/app` is reverted on the next apply: Terraform owns that key.
+
+`PUBLIC_SITE_MODE` is not a deployment switch. Environments stay separate:
+`main` deploys to the staging Amplify branch with staging configuration, `prod`
+deploys to production. To put tested `main` code on production, PR `main` into
+`prod`; do not point the production environment at `main`.
 
 ## Auth (Cognito)
 
 JWT verification in `middleware.ts` via `jose`. Tokens in Cognito-managed cookies. Only Cognito group: `admins`. Authorisation at DB level (Prisma).
 
-Production Cognito pool (managed via Terraform). Users created by `prisma/seed.ts` via `AdminCreateUser` + `AdminSetUserPassword` per seed user, plus `AdminAddUserToGroup` for admin only.
-
 ### Account model
 
-Every user has a **User** record (created on first login). Users can optionally create an **Organiser** profile (1:1). Organiser records can be verified (auto-publish events) or unverified (admin approval needed). See `lib/amplify-server.ts` for session helpers.
+Every user has a **User** record (created on first login). Users can create an **Organiser** profile (1:1). Organiser records can be verified (auto-publish events) or unverified (admin approval needed). See `lib/amplify-server.ts` for session helpers (`ServerSession`, `UserSession`, `OrganiserSession`, `AdminSession`).
+
+Admin alerts (new event to review, review reported) go to every deliverable
+address in the Cognito `admins` group at send time, through
+`lib/admin-notification-recipients.ts`. Group membership is the source of truth,
+so a new admin is reached before their first admin-portal sign-in. The `Admin`
+row is still created on that first visit and kept for audit and review
+attribution; do not use it to choose notification recipients.
+
+Organiser notifications belong to the organisation, not to a person. Event
+approved/rejected emails go to the list built by
+`lib/organiser-notification-recipients.ts`: the account email, the onboarding
+contact email and every OWNER, plus MANAGERs while `Organiser.notifyManagers`
+is on. The same flag decides whether a MANAGER sees the in-app feed. Only an
+OWNER can change it (`PATCH /api/organiser/profile`).
+
+Each kind of notification also has its own switch on the organisation
+(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`), owner
+only as well. Off means no feed entry and no email: anything that sends one must
+check `wantsNotification` from `lib/organiser-notification-preferences.ts`.
 
 All seed users share password `Password123!`.
 
 | Email | Notes |
 |---|---|
-| `admin@startline.test` | Admin (`admins` group) |
-| `organiser@startline.test` | User + Organiser (Apex Endurance Events, verified) |
-| `user@startline.test` | User only |
+| `marcus.stirling@startline.test` | Admin (`admins` group), MFA enabled in seed |
+| `sarah.mitchell@startline.test` | User + Organiser (Apex Endurance Events, verified) |
+| `jade.nguyen@startline.test` | User + Organiser (Coastal Fitness Collective) |
+| `harper.jones@startline.test` | User only — the seed's one account with no organisation |
 
 Old Cognito users from previous seeds not auto-removed — delete manually or via Terraform reset.
 
 `middleware.ts` routes by hostname in production. Dev mode (`NODE_ENV=development`) skips all domain checks — everything at `localhost:3000`. Protects path lists: `ORGANISER_PROTECTED`, `ADMIN_PROTECTED`.
 
-PostgreSQL 15 via Docker on port **5432**. Prisma ORM, singleton client in `lib/prisma.ts`. Schema targets `rhel-openssl-3.0.x` for Lambda/RHEL.
+### Getting into the organiser portal
 
-Mailpit on SMTP **1025**, web UI **8026** for local email testing.
+"Organiser Login" (`/organiser`) and "Become an organiser" (`/organiser-setup`)
+are two doors to one journey. Neither asks the visitor which they are; both
+resolve it server-side from what they already have (#338):
 
-## Design
-
-
-Connect Express for organiser payouts. Payments via `api/organiser/stripe/`. Money in integer cents. Platform fee (`lib/platform-fee.ts`): 3.95% + $1.45; `feeStructure` determines who absorbs it.
-
-## Environment variables
-
-All secrets in AWS Secrets Manager, loaded by `.envrc` + direnv. **No `.env` file.**
-
-| Secret | Contents |
+| Visitor | `/organiser` | `/organiser-setup` |
 |---|---|---|
-| `startline/ci-bootstrap` | CI/CD bootstrap (amplify PAT, cloudflare token, resend key, DO token, gitleaks license) |
-| `startline/prod/app` | Prod env vars (Cognito IDs, Stripe live keys, S3 creds, etc.) |
-| `startline/staging/app` | Staging env vars (non-prod Cognito, RDS, S3) — created by Terraform |
+| Owns or belongs to an organisation | `/organiser/dashboard` | `/organiser/dashboard` |
+| Signed in, no organisation | `/organiser-setup` | the setup form |
+| Signed out | the landing page | sign-in prompt, then the form |
 
-`.envrc` at repo root fetches from SM and exports to shell. Hardcoded local constants (Docker Postgres URL, Mailpit SMTP).
+`getOrganiserSession()` is what "has an organisation" means, so a MANAGER on
+someone else's organisation counts and is never offered a second one. Keep both
+gates server-side: `AuthContext` only learns about memberships after a fetch, so
+a client-side check flashes the wrong page first. The athlete header dropdown
+lists each organisation the visitor belongs to. It does not offer to set one
+up: that door is the footer and the organiser landing page.
 
-**Dev setup:** `brew install direnv`, hook into shell, `direnv allow` in worktree. Or whitelist at `~/.config/direnv/direnv.toml`:
-```toml
-[whitelist]
-prefix = ["/Users/Lachlan/"]
-```
+### Google and Apple sign-in
 
-**Key rotation:** Update the SM secret, trigger an Amplify rebuild. No code changes, no TF runs.
+Both go through Cognito's hosted endpoint, never straight to the provider:
+the browser goes to `NEXT_PUBLIC_COGNITO_DOMAIN`, the provider returns to
+Cognito's `/oauth2/idpresponse`, and Cognito returns to `/auth/callback` on the
+host that started it. Amplify's OAuth listener (imported in
+`components/AmplifyProvider.tsx`) swaps the code for tokens there.
 
-**CI:** Composite action at `.github/actions/load-env/` — assumes OIDC role, fetches bootstrap + app secrets, exports as env vars. Used by all workflows.
+| Piece | Where |
+|---|---|
+| Domain, providers, callback URLs, pre sign-up trigger | `startline-infra`, `startline-web-app/modules/environment` |
+| Keys | `startline/ci-bootstrap`: `google_client_id_<env>`, `google_client_secret_<env>`, `apple_client_id_<env>`, `apple_team_id`, `apple_key_id`, `apple_private_key` |
+| Buttons, return path, error copy | `components/SocialSignInButtons.tsx`, `lib/social-sign-in.ts` |
+| Callback | `app/(user)/auth/callback/` |
+| Manage linked accounts | `components/settings/SignInMethodsCard.tsx`, `app/api/user/sign-in-methods/`, `app/(user)/auth/link/callback/` |
 
-## Git worktrees
+- **The Cognito hosts are `auth.startlineau.com` (prod) and
+  `sl-staging.auth.ap-southeast-2.amazoncognito.com` (staging).** Each one's
+  `/oauth2/idpresponse` is registered by hand in Google Cloud and in the
+  matching Apple Services ID (`com.startlineau.auth`,
+  `com.startlineau.auth.staging`). Change a host and both consoles must change
+  too. Prod is on its own domain so Google can brand-verify the consent screen
+  as Startline; `auth` is a DNS-only CNAME in Cloudflare and must stay unproxied.
+- **Callback origins are a fixed list** (`oauth_origins` in the infra root
+  module): the three prod hosts minus admin, the staging branch domain and
+  `http://localhost:3000`. PR previews get no social sign-in, since Cognito
+  takes no wildcards.
+- **One person, one Cognito user.** The pre sign-up trigger links a Google or
+  Apple sign-in to the existing user with the same verified email. Cognito
+  fails that first linked attempt with "Already found an entry for username";
+  the callback retries once and it goes through. Accounts with an authenticator
+  app or in `admins` are refused, because provider sign-in skips Cognito's TOTP
+  check. A password sign-up for an email that only has a Google or Apple user
+  is refused too.
+- **Managing links.** Settings → Login & security lists the Google and Apple
+  identities on the account and can connect or disconnect either. Linking has
+  its own callback, `/auth/link/callback`, because the provider authorization
+  must not become a sign-in as the provider's own Cognito user. The browser
+  holds the state and PKCE verifier in httpOnly cookies; the server exchanges
+  the code, deletes the throwaway external profile Cognito created, then calls
+  `AdminLinkProviderForUser`. An identity already attached to another local
+  account is refused rather than merged.
+- **Set a password before disconnecting.** A provider-only account can add a
+  password to the existing Cognito profile, but cannot disconnect a provider
+  until that password exists. TOTP does not count, since provider sign-in skips
+  it. The password keeps the same Cognito subject, so the app account and its
+  data stay put. The password route is `/api/user/password`.
+- **Provider-managed email.** An in-app email change is only offered once every
+  Google/Apple identity is disconnected; until then the provider owns the
+  address and can write it back on the next sign-in.
+- **TOTP is password-only.** The authenticator app is a Cognito challenge on the
+  password flow. A linked Google/Apple sign-in may bypass it, so the settings
+  copy says so and setup needs a password. The pre sign-up trigger still refuses
+  to add a new provider to an account with TOTP enabled.
+- **Infra must allow the link flow.** Both environments' `callback_urls` need
+  `${origin}/auth/link/callback`, and the Amplify role needs
+  `cognito-idp:AdminLinkProviderForUser` and
+  `cognito-idp:AdminDisableProviderForUser`. `AdministratorAccess-Amplify` does
+  not include either action.
+- `NEXT_PUBLIC_SOCIAL_SIGN_IN` lists the providers whose keys exist, and the
+  buttons render only for those. Without `NEXT_PUBLIC_COGNITO_DOMAIN` there are
+  none, which is local dev unless `.env.local` sets it.
+- `connect-src` must keep `https://*.auth.ap-southeast-2.amazoncognito.com`,
+  or the browser blocks the token exchange and the callback hangs.
 
-All worktrees under `~/.herdr/worktrees/startline/`. Docker infra (PostgreSQL, Mailpit) runs on the main checkout — worktrees connect to it. **Never run `docker compose up` in a worktree.** Just `pnpm dev`.
+### MFA
 
-## Terraform + Amplify CI/CD
+- **TOTP authenticator app** via Cognito (OPTIONAL, software token MFA). Admin seed user has MFA preference enabled. Set up, turned off and password changes go through `app/api/user/mfa/route.ts`; turning it off must tell Cognito, not only flip `User.mfaEnabled`.
+- **No passkeys.** They are out of scope for the MVP: sign-in is password (`USER_SRP_AUTH`) plus the optional authenticator app, or Google / Apple (below).
+- **Sign out everywhere** in Login & security revokes every session for the account (`signOut({ global: true })`), not just this browser's.
+- The setup QR code is drawn in the browser with `qrcode`. Never put the TOTP secret in a URL sent to another service.
 
-Infra in `terraform/`:
+### Account menu
 
-Terraform uses a unified state. `main` is the sole source of truth — only pushed to `main` triggers Terraform apply.
+`components/AccountMenu.tsx` is the one account menu, rendered by both
+`NavBar` and `OrganiserNavBar` as the desktop avatar dropdown and inside the
+phone menu. Rows and order are fixed: Home, Athlete profile, the visitor's
+organisations, Settings, Sign Out. Change it there, never in a navbar.
 
-| Workflow | Trigger | Scope |
+### Settings menu
+
+One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted in both the athlete and organiser layouts and opened with `useSettings().open(section?)`. It sits directly above Sign Out in every account dropdown.
+
+| Group | Sections | Shown to |
 |---|---|---|
-| `terraform-plan.yml` | PR to `main` | Plan both environments |
-| `terraform-apply.yml` | Push to `main` | Apply both environments |
+| My account | `profile`, `details`, `alerts`, `security` | Everyone signed in |
+| Organisation | `organisation`, `members`, `notifications`, `payments` | Owners and managers, for the active organisation |
+| Privacy | `cookies` | Everyone signed in. Site-wide, so it belongs to neither group above |
 
-`ci.yml` runs lint, typecheck, build, test, e2e on PRs (non-blocking, informational). App deploys via Amplify on push to `main` (staging) or `prod` (production) via the `deploy.yml` workflow.
-
-### Environments
-
-Two environments managed by Terraform (`main.tf` → `local.environments`). PR previews enabled on both branches:
-
-| Environment | Branch | Build behavior |
-|---|---|---|
-| `prod` | `prod` | Migrate, no seed |
-| `staging` | `main` | Migrate + seed |
-| PR to `main` | preview | Staging resources, auth bypass |
-| PR to `prod` | preview | Prod resources, auth bypass |
-
-The `ENV` env var is set per Amplify branch (`prod` → `prod`, `main` → `staging`). PR previews inherit the target branch's `ENV` value. The build spec uses `$ENV` to select the Secrets Manager secret (`startline/$ENV/app`).
+- `?settings=<section>` on any page opens the menu on that section. `/settings/security` redirects to it.
+- "Edit Profile" on the athlete and organiser profile pages opens the matching section. There is no separate edit-profile modal.
+- Organisation images save on their own through `PATCH /api/organiser/profile`. The text fields save only on Save (`PUT`).
+- Login & security also holds changing the sign-in email (`/api/user/email`,
+  a code to the new address first) and deleting the account (`/api/user/account`).
+  Email changes are refused while a Google/Apple identity is linked; disconnect
+  it first so the provider cannot overwrite the new address.
+- Deleting an account keeps the person's entries, detached, because they are
+  the organiser's records. It is refused while they are the only owner of an
+  organisation; they transfer ownership or delete it. An organisation can only
+  be deleted while it has never taken an entry (`lib/account-deletion.ts`).
+- Athletes can turn off "new event from an organiser you follow"
+  (`User.notifyFollowedOrganiserEvents`). Entry emails are always sent.
+- Section fetches must ignore a reply that arrives after cleanup: in development the effect runs twice, and the late reply overwrites what was typed or toggled.
 
 ## Design system
 
-Authoritative reference at **`design/design.md`**. Consult for any UI work.
+**`design/design.md`** is authoritative.
 
 Non-negotiables:
-- **Dark only.** `color-scheme: dark`. No light surfaces.
-- **One accent.** Signal green `#B3E153` (`--color-primary`) only brand hue. Blue/amber/red = status semantics.
-- **Chakra Petch for structure, Inter for prose.** Structural chrome = uppercase + wide tracking; body = sentence case Inter.
+- **Dark only.** `color-scheme: dark`. Signal green `#B3E153` (`--color-primary`) only brand hue.
+- **Chakra Petch for structure, Inter for prose.** Structural chrome = uppercase + wide tracking.
 - **No emoji. Lucide line icons only.**
-- **Text on `#B3E153` is always `#141414` (dark ink)** — never white.
-- **"Machined" shadow** (`box-shadow: 2px 2px 0 #B3E153`) on single primary CTA per view only.
-- **Status labels:** `APPROVED` renders as "Published" to organisers. Use shared status object.
+- **Text on `#B3E153` is always `#141414` (dark ink).**
+- **"Machined" shadow** `box-shadow: 2px 2px 0 #B3E153` on single primary CTA per view.
+- **Status labels:** `APPROVED` renders as "Published" to organisers.
 
-## shadcn/ui
-
-Dark theme only. CSS vars in `app/globals.css`. Primary green `#B3E153`. Use `npx shadcn@latest add <component>` to add. Use `cn()` from `lib/utils.ts` for class merging.
-
-## Next.js
-
-Next.js 15 with Turbopack. `@/*` maps to project root. CSP in `next.config.ts`.
+shadcn/ui components via `npx shadcn@latest add <component>`. Use `cn()` from `lib/utils.ts`.
 
 ## Testing
 
-```bash
-pnpm lint         # ESLint (next lint)
-pnpm test         # Vitest unit tests
-pnpm test:watch   # Vitest watch mode
-pnpm test:e2e     # Playwright (requires Docker PostgreSQL running)
+```
+pnpm lint              # ESLint — 0 errors, 0 warnings
+pnpm test              # Vitest unit tests (77 tests, 8 files)
+pnpm test:watch        # Vitest watch mode
+pnpm test:e2e          # Playwright (needs Docker PostgreSQL + dev server)
 ```
 
-- Unit tests in `src/__tests__/`, e2e in `e2e/`.
-- Vitest: `globals: true`, `DATABASE_URL` defaults to port 5432.
-- Playwright: Chromium, auto-starts `pnpm dev -p 3000`.
+- Unit tests: `src/__tests__/`. E2E: `e2e/`.
 - **Every new feature MUST include E2E tests.**
+- Playwright config: auto-starts dev server, `reuseExistingServer: true`, 1 retry, Chromium only.
 
-## Playwright CLI (for AI browser automation)
+### E2E auth bypass
 
-Prefer `playwright-cli` over MCP for browser automation.
+Admin and organiser E2E tests use a `__e2e_bypass` cookie instead of real Cognito login. The cookie is set by `adminLogin()` and `organiserLogin()` helpers in `e2e/helpers.ts`. This avoids TOTP challenges and Cognito dependency.
 
-```bash
-npm install -g @playwright/cli@latest
-playwright-cli install --skills
-playwright-cli open [url]
-playwright-cli snapshot
-playwright-cli click <ref>
-```
+| Test file | Auth method | Needs Cognito? |
+|---|---|---|
+| `admin.spec.ts` | Cookie bypass | No |
+| `organiser.spec.ts` | Cookie bypass | No |
+| `auth.spec.ts` (signup) | Real Cognito (`hasCognito` guard) | Yes |
+| `auth.spec.ts` (modal UI) | None | No |
+| `mfa.spec.ts`, `checkout.spec.ts`, etc. | None | No |
 
-Use `-s=<name>` for isolated sessions (e.g., `-s=customer`, `-s=organiser`). Pass `--headed` for visible browser.
+The bypass works in middleware, `getServerSession()`, and `AuthContext` via `document.cookie.includes("__e2e_bypass=1")`. No env var needed.
 
-## GitHub
+The cookie's **value** picks the identity, from the table in `lib/amplify-server.ts`:
 
-Use `gh` CLI — the MCP `server-github` fails for this private org repo.
+| Value | Who | Organisations |
+|---|---|---|
+| `organiser` | Sarah Mitchell | Owns Apex Endurance Events |
+| `member` | Tom Whitfield | Manages Apex Endurance Events |
+| `avery` | Avery Quinn | Manages two |
+| `user` | Jade Nguyen | Owns Coastal Fitness Collective |
+| `admin` | Marcus Stirling | None, in the `admins` group |
+| `athlete` | Harper Jones | **None** |
 
-**`main` and `prod` are protected.** Never push directly — always use a PR.
+Only `athlete` has no organisation, so it is the one for "become an organiser"
+paths: every other identity is now redirected to its portal instead of being
+offered the setup form. A spec that creates an organisation for it must delete
+it again (see `organiser.spec.ts`), or the next run is redirected too.
+
+Specs that read or clean up the database directly call `ensureDatabaseUrl()`
+from `e2e/helpers.ts` first. `DATABASE_URL` lives in `.env.local` in a worktree
+and in `.env` in a plain checkout, and dotenv allows it to be quoted, so
+reading one file without stripping quotes leaves Prisma with no password.
+
+Avoid `waitForLoadState("networkidle")` on organiser portal pages: the navbar
+polls for notifications every 30 seconds, so the network never goes idle and
+the wait burns the whole test timeout. Wait for an element instead.
+
+**Run E2E without Cognito:** `npx playwright test` — 93+ tests pass, 2 auth signup tests skip.
 
 ### Pre-commit gate
 
-Before staging/committing — run ALL CI checks locally:
 ```bash
-npx prisma generate          # required before typecheck
-pnpm lint        # 0 errors, 0 warnings
+npx prisma generate            # required before typecheck
+pnpm lint        # 0 errors
 pnpm typecheck   # 0 errors
-pnpm test        # all tests pass
-pnpm test:e2e    # all pass (needs Docker PostgreSQL running)
+pnpm test        # all pass
+pnpm test:e2e    # all pass (needs Docker PostgreSQL)
 ```
 
-### PR conventions
+## GitHub
 
-Scan open GitHub issues, link related. Use `Closes #N`, `Fixes #N`, `Related to #N`. Follow `.github/PULL_REQUEST_TEMPLATE.md`. CI runs lint/test/e2e (informational, does not block).
+Use `gh` CLI — **not** GitHub MCP (fails for this private org repo).
 
-### Issue conventions
+**`main` and `prod` are protected.** Always PR, never push directly.
 
-Use labels, native issue type (Bug/Feature/Task), Priority/Effort via GraphQL (field IDs in code section below). Use milestone, project, cross-reference related issues.
+PR conventions: scan open issues, link with `Closes #N`. Follow `.github/PULL_REQUEST_TEMPLATE.md`. CI runs are informational, non-blocking.
 
-Configured in `opencode.json`: stripe, resend, aws, cloudflare. Skills listed below.
+Security reports follow `SECURITY.md`: GitHub private vulnerability reporting
+(already enabled on the repo) or `admin@startlineau.com`. Never open a public
+issue or PR for one. The policy's supported-versions table tracks the deploy
+model, so update it if staging or prod stops being the only supported targets.
+
+### Commit authorship
+
+**Every commit must be authored by a person, not by an agent or automation.**
+Commit with the identity already configured in this repo (`git config user.name`
+/ `user.email`) and never invent one.
+
+- No `git -c user.name=… -c user.email=…`, no `GIT_AUTHOR_*`/`GIT_COMMITTER_*`,
+  no commits as `opencode`, `agent`, or a bot address. Agents: this applies to
+  you, and it applies to merge commits too.
+- Check before pushing, not after:
+  `git log --format='%h %an <%ae>' origin/main..HEAD` must list only real
+  authors.
+- A wrong author is one local `--amend` if it has not been pushed. Once pushed
+  it needs a force-push that invalidates every review and CI run on the PR, so
+  only rewrite a pushed branch when its author says so. Then rewrite with
+  `git filter-branch -f --env-filter '…' origin/main..HEAD` (match the wrong
+  `GIT_AUTHOR_NAME`/`GIT_COMMITTER_NAME` and export the right ones) and push
+  with `--force-with-lease`.
+
+### Issue fields (Priority / Effort)
+
+Issues use GitHub's Task-type custom fields (`Priority`, `Effort`). They are
+**not** labels and are **not** in `gh issue list/view --json` output (REST).
+Read them via GraphQL `issueFieldValues`:
+
+```bash
+gh api graphql -f query='query { repository(owner:"StartlineAU", name:"startline-web-app") { issues(states:OPEN, first:100){ nodes { number title milestone { title } issueFieldValues(first:20){ nodes { ... on IssueFieldSingleSelectValue { value field { ... on IssueFieldSingleSelect { name } } } } } } } } }'
+```
+
+`issueFieldValues` is a union of `IssueFieldSingleSelectValue` (has `name`/`value`/
+`field`), `IssueFieldTextValue`, `IssueFieldNumberValue`, `IssueFieldDateValue`,
+`IssueFieldMultiSelectValue` (all expose `value` + `field`). `field` is another
+union exposing `name` (e.g. `Priority`, `Effort`).
+
+**When creating a new issue, set `Priority` + `Effort` immediately** (they don't
+default). They're single-select fields; set via `setIssueFieldValue` with the
+field's `singleSelectOptionId`. Field/option IDs:
+
+```
+Priority:  IFSS_kgDOAnp8Qg   Urgent=IFSSO_kgDOBFZBjQ High=IFSSO_kgDOBFZBjg Medium=IFSSO_kgDOBFZBjw Low=IFSSO_kgDOBFZBkA
+Effort:    IFSS_kgDOAnp8RQ   High=IFSSO_kgDOBFZBkQ Medium=IFSSO_kgDOBFZBkg Low=IFSSO_kgDOBFZBkw
+```
+
+```bash
+gh api graphql -f query='mutation { setIssueFieldValue(input: { issueId: "ISSUE_NODE_ID", issueFields: [ { fieldId: "IFSS_kgDOAnp8Qg", singleSelectOptionId: "IFSSO_kgDOBFZBjg" }, { fieldId: "IFSS_kgDOAnp8RQ", singleSelectOptionId: "IFSSO_kgDOBFZBkg" } ] }) { issue { number } } }'
+```
+
+Get `issueId` (node ID) and re-verify all issues via the read query above.
+
+## Terraform + CI/CD
+
+Infra lives in `StartlineAU/startline-infra`, stack at `web-app/`. Same unified
+state as before (S3 key `startline/terraform.tfstate`), so applying from the new
+repo does not recreate anything.
+
+| Workflow | Repo | Trigger | Scope |
+|---|---|---|---|
+| `terraform-plan.yml` | `startline-infra` | PR touching `web-app/**` | Plan + Infracost |
+| `terraform-apply.yml` | `startline-infra` | Manual, or `main` once `TF_AUTO_APPLY=true` | Apply the saved plan |
+| `deploy.yml` | this repo | Push to `main`/`prod` | Amplify build + deploy |
+
+Terraform apply is manual until the first apply has been reviewed. Auto-apply
+on `main` resumes by setting the `TF_AUTO_APPLY` repo variable to `true` in
+`startline-infra`.
+
+Environments:
+
+| Env | Branch | Build |
+|---|---|---|
+| `prod` | `prod` | Migrate, no seed |
+| `staging` | `main` | Migrate, no seed |
+
+Neither environment seeds on deploy. `prisma db seed` truncates every table
+and resets the shared Cognito seed passwords, so it is gated behind the
+`SEED_DATABASE` branch variable (set it to `"true"` in the Amplify console
+for a deliberate reseed, then set it back). The seed itself also refuses any
+non-local `DATABASE_URL` unless `ALLOW_REMOTE_SEED=true`. A failed migration
+now fails the build rather than falling back to `migrate reset --force`,
+which used to drop the database.
+
+`SEED_DATABASE` is Terraform-managed and pinned to `"false"`, so a console
+flip lasts only until the next `terraform apply` resets it. Do the reseed and
+flip it back in the same sitting.
+
+`ci.yml` runs lint/typecheck/build/test/e2e on PRs (non-blocking). Deploys via `deploy.yml` to Amplify.
 
 ## README accuracy
 
-`README.md` has several known inaccuracies. Do not treat it as authoritative — cross-reference with this file and the actual codebase:
+`README.md` has known inaccuracies. Cross-reference with AGENTS.md and codebase:
+- **License:** README says MIT, actual is All Rights Reserved.
+- **`.envrc`:** README says it exists at root — it's gitignored, devs use direnv + local config.
+- **Scripts:** README table missing `typecheck`, `prisma:generate`, `test:watch`, `stripe:*`, `start`, `test:registration`.
+- **Site state:** README describes live platform; site is in waitlist mode.
+- **Admin domain:** README implies shared domain; admin is now `admin.startlineau.com`.
 
-- **License:** README says MIT, actual `LICENSE` file is All Rights Reserved.
-- **Secret name:** README says `startline/nonprod/app`, actual name is `startline/staging/app`.
-- **`.envrc`:** README says it exists at root fetching SM secrets — it does not exist in the repo (gitignored). Devs load env vars another way (direnv + local config).
-- **Scripts table:** Missing `typecheck`, `prisma:generate`, `test:watch`, `stripe:*`, `start`, `test:registration`, `staging:db:start`.
-- **`prisma:migrate`:** README says "Apply Prisma migrations" — the script actually runs `prisma migrate dev` (dev-only, creates migrations), not `prisma migrate deploy`.
-- **Site state:** README describes a live event browsing platform; the site is currently in waitlist mode.
-- **Admin domain:** Implies three separate domains; admin actually shares `organiser.startlineau.com` as a path prefix.
+## Documentation
 
-## Idempotency
-
-- Prisma client singleton in `lib/prisma.ts`.
-- Stripe payment intents: `stripePaymentIntentId` unique on `Registration`.
-- Resend email sends: use idempotency keys.
+Recurring documentation lives at the root of the `StartlineAU/startline-docs`
+repo (start at `quickstart.md` there), not in this repo. PRs that change
+behaviour documented there should update it in the same sitting.

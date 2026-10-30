@@ -1,14 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { getOrganiserSession } from "@/lib/amplify-server";
+import { getEventCoords } from "@/lib/australia-coords";
+import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
+import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
+import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { withUniqueSlug } from "@/lib/slugs";
+import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { takesPayments } from "@/lib/event-approval";
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
 
-  const { id } = await params;
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
 
   try {
     const event = await prisma.event.findUnique({ where: { id } });
@@ -25,17 +39,30 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
 
-  const { id } = await params;
-  const body = await req.json();
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
+  const parsedBody = eventPayloadSchema.safeParse(await req.json());
+  if (!parsedBody.success) {
+    return NextResponse.json(
+      { error: parsedBody.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 },
+    );
+  }
+  const body = parsedBody.data;
   const { submit, ...data } = body;
 
   try {
     const existing = await prisma.event.findUnique({
       where:  { id },
-      select: { organiserId: true, status: true },
+      select: {
+        organiserId: true, status: true, title: true, registrationType: true, waves: true,
+        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
+      },
     });
 
     if (!existing)
@@ -46,7 +73,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Only draft events can be updated this way." }, { status: 409 });
 
     if (submit) {
-      const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"];
+      const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
       for (const field of required) {
         if (!data[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
       }
@@ -55,21 +82,55 @@ export async function PATCH(
       }
     }
 
-    const updated = await prisma.event.update({
+    // See the create route: a missing ABN costs the event its auto-approval
+    // rather than rejecting the edit and stranding the organiser's changes. An
+    // edit that leaves a field out keeps the saved value, so judge what the
+    // event will be once it is written.
+    let abnOk = true;
+    if (takesPayments(data.registrationType ?? existing.registrationType, data.waves ?? existing.waves)) {
+      const org = await prisma.organiser.findUnique({
+        where: { id: session.sub },
+        select: { abn: true },
+      });
+      abnOk = hasAbn(org?.abn);
+    }
+
+    const nextStatus = submit
+      ? (session.verified && abnOk ? "APPROVED" : "PENDING")
+      : "DRAFT";
+
+    const times = eventTimeData({
+      eventDate: data.eventDate ?? existing.eventDate,
+      endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+      startTime: data.startTime ?? existing.startTime,
+      endTime: data.endTime !== undefined ? data.endTime : existing.endTime,
+      state: data.state ?? existing.state,
+    });
+    const lifecycleStatus = effectiveEventStatus({ status: nextStatus, ...times });
+
+    // Only a rename reassigns the slug; every other edit leaves it alone so links
+    // already in the wild keep resolving, and skips the lookup entirely.
+    const renamed = data.title !== undefined && data.title !== existing.title;
+
+    const runUpdate = (slug: string | undefined) =>
+      prisma.event.update({
       where: { id },
       data: {
+        slug,
+        ...times,
         title:             data.title             ?? undefined,
         discipline:        data.discipline        ?? undefined,
-        tagline:           data.tagline           ?? undefined,
         description:       data.description       ?? undefined,
         eventDate:         data.eventDate         ?? undefined,
-        endDate:           data.endDate           ?? null,
+        endDate:           data.endDate !== undefined ? data.endDate : undefined,
         startTime:         data.startTime         ?? undefined,
         endTime:           data.endTime           ?? undefined,
         venue:             data.venue             ?? undefined,
         address:           data.address           ?? undefined,
         city:              data.city              ?? undefined,
         state:             data.state             ?? undefined,
+        latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
+        longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),
         format:            data.format            ?? undefined,
         level:             data.level             ?? undefined,
         categories:        data.categories        ?? undefined,
@@ -79,18 +140,58 @@ export async function PATCH(
         inclusions:        data.inclusions        ?? undefined,
         extras:            data.extras            ?? undefined,
         activations:       data.activations       ?? undefined,
+        refundTiers:       data.refundTiers       ?? undefined,
         refundPolicy:      data.refundPolicy      ?? undefined,
         registrationType:  data.registrationType  ?? undefined,
         feeStructure:      data.feeStructure      ?? undefined,
         registrationUrl:   data.registrationUrl   ?? undefined,
         accessibilityInfo: data.accessibilityInfo ?? undefined,
         coverImageUrl:     data.coverImageUrl     ?? undefined,
+        informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
         photos:            Array.isArray(data.photos) ? data.photos : undefined,
-        status:            submit ? "PENDING" : "DRAFT",
+        status:            lifecycleStatus,
       },
-    });
+      });
 
-    return NextResponse.json({ id: updated.id, status: updated.status });
+    const updated = renamed
+      ? await withUniqueSlug(data.title!, runUpdate, { excludeId: id })
+      : await runUpdate(undefined);
+
+    await syncEventSchedules(updated).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
+
+    // Existing was DRAFT (enforced above); notify when submit goes straight to live.
+    if (nextStatus === "APPROVED") {
+      // Awaited, not fired and forgotten: Amplify's compute freezes the
+      // container once the response is returned, so a floating promise is
+      // dropped at random. A notify failure still must not fail the publish.
+      await prisma.organiser
+        .findUnique({ where: { id: updated.organiserId }, select: { orgName: true } })
+        .then((org) =>
+          notifyOrganiserFollowers({
+            organiserId: updated.organiserId,
+            eventId: updated.id,
+            eventTitle: updated.title,
+            organiserName: org?.orgName,
+            eventDate: updated.eventDate || null,
+            city: updated.city || null,
+          }),
+        )
+        .catch((err) => console.error("Follower notify failed:", err));
+    }
+
+    // Existing was DRAFT, so this is the moment the listing joins the queue.
+    if (updated.status === "PENDING") {
+      await notifyAdminsEventSubmitted(updated.id)
+        .catch((err) => console.error("Admin review notify failed:", err));
+    }
+
+    return NextResponse.json({
+      id:     updated.id,
+      status: updated.status,
+      ...(submit && !abnOk ? { abnRequired: true, notice: ABN_REQUIRED_MESSAGE } : {}),
+    });
   } catch (err) {
     console.error("Event update error:", err);
     return NextResponse.json({ error: "Failed to update event." }, { status: 500 });
@@ -101,10 +202,14 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
+  if (session.role !== "OWNER") return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
-  const { id } = await params;
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
 
   try {
     const existing = await prisma.event.findUnique({
@@ -116,6 +221,9 @@ export async function DELETE(
     if (existing.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     await prisma.event.delete({ where: { id } });
+    await cancelEventSchedules(id).catch((err) =>
+      console.error("Event schedule cleanup failed:", err),
+    );
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Event delete error:", err);

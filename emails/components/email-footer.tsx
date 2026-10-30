@@ -35,6 +35,10 @@ export function EmailFooter() {
       </Text>
 
       <Text style={{ margin: '0 0 6px', fontFamily: fonts.body, fontSize: '12px', color: colors.muted }}>
+        Didn&apos;t get this email? Check your spam or junk folder.
+      </Text>
+
+      <Text style={{ margin: '0 0 6px', fontFamily: fonts.body, fontSize: '12px', color: colors.muted }}>
         Need help?{' '}
         <Link href={`mailto:${LEGAL_CONTACT_EMAIL}`} style={{ color: colors.muted }}>
           {LEGAL_CONTACT_EMAIL}

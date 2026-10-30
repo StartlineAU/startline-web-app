@@ -7,6 +7,10 @@ import { ArrowLeft, Check, ChevronDown, CreditCard } from "lucide-react";
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
+/** The step footer's way back: an outlined pill, the same as the rest of the platform's back links. */
+export const backBtnCls =
+  "inline-flex items-center gap-2 h-11 px-5 rounded-full border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:text-primary transition-colors";
+
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
 function getStripe() {
   if (!stripePromise && stripePublishableKey) stripePromise = loadStripe(stripePublishableKey);
@@ -19,16 +23,57 @@ export interface ReviewRow {
 }
 
 interface ReviewPayStepProps {
+  /** Empty on a free order, which has no PaymentIntent behind it. */
   clientSecret: string;
   eventId: string;
+  /**
+   * A free order: nothing is charged, so no card is collected and confirming
+   * writes the registration straight away via onFreeSubmit.
+   */
+  free: boolean;
+  /**
+   * A signed-in free RSVP. The account is the attendee, so there is no payment
+   * section and the copy talks about the RSVP rather than a ticket order.
+   */
+  rsvp?: boolean;
   reviewRows: ReviewRow[];
-  confirmAmountLabel: string;
-  onBack: () => void;
-  onConfirmed: (paymentIntentId: string) => void;
+  /** Whole button text, e.g. "Confirm & pay $54.45" or "Confirm registration". */
+  confirmLabel: string;
+  /** This event's actual refund policy, so terms are concrete rather than boilerplate. */
+  refundLines: string[];
+  /** What cancelling right now would return, e.g. "Cancel today and you get A$134.55 back." */
+  refundHeadline: string;
+  /** Present only when there is a previous step to return to. */
+  onBack?: () => void;
+  onConfirmed: (reference: string) => void;
+  /** Commits a free registration. Resolves to the reference, or null on failure. */
+  onFreeSubmit?: () => Promise<string | null>;
   onError: (msg: string) => void;
+  /** Free RSVP only: whether the order can be confirmed. Defaults to true. */
+  ready?: boolean;
+  /** Free RSVP only: the step counter, e.g. "2 / 2". */
+  stepLabel?: string;
 }
 
 export default function ReviewPayStep(props: ReviewPayStepProps) {
+  // A free order never touches Stripe, so it renders outside Elements and does
+  // not care whether Stripe is configured at all.
+  if (props.free) {
+    return (
+      <ReviewForm
+        {...props}
+        ready={props.ready !== false}
+        submit={async () => {
+          if (!props.onFreeSubmit) return false;
+          const reference = await props.onFreeSubmit();
+          if (!reference) return false;
+          props.onConfirmed(reference);
+          return true;
+        }}
+      />
+    );
+  }
+
   const stripe = getStripe();
 
   if (!stripe || !props.clientSecret) {
@@ -58,64 +103,86 @@ export default function ReviewPayStep(props: ReviewPayStepProps) {
 
   return (
     <Elements stripe={stripe} options={options}>
-      <ReviewPayForm {...props} />
+      <StripeReviewForm {...props} />
     </Elements>
   );
 }
 
-function ReviewPayForm({
-  clientSecret,
-  eventId,
-  reviewRows,
-  confirmAmountLabel,
-  onBack,
-  onConfirmed,
-  onError,
-}: ReviewPayStepProps) {
+function StripeReviewForm(props: ReviewPayStepProps) {
   const stripe = useStripe();
   const elements = useElements();
-  const [terms, setTerms] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
-  const handleConfirm = async () => {
-    if (!stripe || !elements || !terms) return;
-    setSubmitting(true);
-    onError("");
+  const submit = async (): Promise<boolean> => {
+    if (!stripe || !elements) return false;
 
     const { error: submitError } = await elements.submit();
     if (submitError) {
-      onError(submitError.message ?? "Payment failed.");
-      setSubmitting(false);
-      return;
+      props.onError(submitError.message ?? "Payment failed.");
+      return false;
     }
 
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
-      clientSecret,
+      clientSecret: props.clientSecret,
       confirmParams: {
-        return_url: `${window.location.origin}/events/${eventId}/register/confirmation`,
+        return_url: `${window.location.origin}/events/${props.eventId}/register/confirmation`,
       },
       redirect: "if_required",
     });
 
     if (error) {
-      onError(error.message ?? "Payment failed.");
-      setSubmitting(false);
-      return;
+      props.onError(error.message ?? "Payment failed.");
+      return false;
     }
     if (paymentIntent && (paymentIntent.status === "succeeded" || paymentIntent.status === "processing")) {
-      onConfirmed(paymentIntent.id);
-      return;
+      props.onConfirmed(paymentIntent.id);
+      return true;
     }
-    setSubmitting(false);
+    return false;
+  };
+
+  return <ReviewForm {...props} ready={!!stripe} submit={submit} />;
+}
+
+/**
+ * The review card itself. Shared by both paths: the only difference is whether
+ * a card is collected, and what confirming does.
+ */
+function ReviewForm({
+  free,
+  rsvp,
+  ready,
+  submit,
+  reviewRows,
+  confirmLabel,
+  refundLines,
+  refundHeadline,
+  onBack,
+  onError,
+  stepLabel = "3 / 3",
+}: ReviewPayStepProps & { ready: boolean; submit: () => Promise<boolean> }) {
+  const [terms, setTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    if (!ready || !terms || submitting) return;
+    setSubmitting(true);
+    onError("");
+    // A truthy result means the confirmation screen is taking over, so the
+    // button stays in its submitting state rather than flicking back.
+    const done = await submit();
+    if (!done) setSubmitting(false);
   };
 
   return (
     <>
-      <div className="bg-dark border border-dark-lighter rounded-[14px] p-6">
+      <div
+        data-testid={rsvp ? "rsvp-review" : "registration-review"}
+        className="bg-dark border border-dark-lighter rounded-[14px] p-6"
+      >
         <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted mb-4">
-          Review your registration
+          {rsvp ? "Review your RSVP" : "Review your registration"}
         </div>
 
         <div className="mb-5">
@@ -130,13 +197,31 @@ function ReviewPayForm({
           ))}
         </div>
 
-        {/* Payment */}
-        <div className="bg-dark-light border border-dark-lighter rounded-[12px] p-5 mb-5">
-          <div className="font-headline text-[10px] font-bold uppercase tracking-[0.2em] text-muted mb-4">
-            Payment
+        {/* Payment. A free event collects no card and says so, so the step does
+            not look broken where the card field would be. An RSVP has no
+            payment section at all: the athlete never leaves the account flow. */}
+        {!rsvp && (
+          <div className="bg-dark-light border border-dark-lighter rounded-[12px] p-5 mb-5">
+            <div className="font-headline text-[10px] font-bold uppercase tracking-[0.2em] text-muted mb-4">
+              {free ? "Payment not required" : "Payment"}
+            </div>
+            {free ? (
+              <p className="text-[12.5px] text-muted leading-relaxed">
+                This event is free. There is nothing to pay, so no card details are needed.
+              </p>
+            ) : (
+              <PaymentElement />
+            )}
           </div>
-          <PaymentElement />
-        </div>
+        )}
+
+        {/* What cancelling would return, stated before they pay rather than buried in
+            terms. Empty on a free event, which has no refund policy to state. */}
+        {refundHeadline && (
+          <div className="rounded-[12px] border border-dark-lighter bg-dark px-4 py-3 mb-4">
+            <p className="text-[12.5px] text-light leading-relaxed">{refundHeadline}</p>
+          </div>
+        )}
 
         {/* Terms */}
         <div className="flex items-start gap-3">
@@ -144,6 +229,8 @@ function ReviewPayForm({
             type="button"
             role="checkbox"
             aria-checked={terms}
+            aria-label="I agree to the Startline Terms of Service and this event's entry terms and waiver"
+            aria-describedby="registration-terms-copy"
             onClick={() => setTerms((t) => !t)}
             className="shrink-0 mt-0.5"
           >
@@ -155,60 +242,81 @@ function ReviewPayForm({
               {terms && <Check className="w-3 h-3 text-dark" strokeWidth={3} />}
             </span>
           </button>
-          <div className="text-[12.5px] text-muted leading-relaxed">
-            <button type="button" onClick={() => setTerms((t) => !t)} className="text-left">
-              I agree to the event{" "}
-            </button>
+          {/* Keep the sentence as text around the live links and the disclosure
+              control. Making each fragment its own button collapsed the spaces
+              at the inline-block edges, which is what joined the words. */}
+          <div id="registration-terms-copy" className="text-[12.5px] text-muted leading-relaxed">
+            I agree to the Startline{" "}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              Terms of Service
+            </a>{" "}
+            and this event&apos;s{" "}
             <button
               type="button"
               onClick={() => setShowTerms((s) => !s)}
               aria-expanded={showTerms}
               className="text-primary hover:underline"
             >
-              terms &amp; conditions
+              entry terms &amp; waiver
             </button>
-            <button type="button" onClick={() => setTerms((t) => !t)} className="text-left">
-              {" "}and confirm the above information is correct.
-            </button>
+            , and confirm the details above are correct.
           </div>
         </div>
 
         {showTerms && (
           <div className="mt-3 rounded-lg border border-dark-lighter bg-dark-light overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-              <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Terms &amp; Conditions</span>
-              <button type="button" onClick={() => setShowTerms(false)} aria-label="Close terms">
+              <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Entry terms &amp; waiver</span>
+              <button type="button" onClick={() => setShowTerms(false)} aria-label="Close entry terms">
                 <ChevronDown className="w-4 h-4 text-muted rotate-180" />
               </button>
             </div>
             <div className="px-4 py-3 max-h-40 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-              <p>Event terms and conditions are set by the organiser. By registering you agree to participate in accordance with the organiser&apos;s rules and the Startline platform guidelines.</p>
-              <p>Entries are subject to the organiser&apos;s refund and transfer policy. Ensure the details you have provided are accurate before paying.</p>
+              <p>The organiser runs this event and sets its rules. By entering, you accept the event waiver and agree to take part in line with those rules and the event staff&apos;s instructions on the day.</p>
+              <p>
+                Your details, including any medical and emergency contact information, go to the organiser so it can run the event safely. See our{" "}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>.
+              </p>
+              {refundLines.length > 0 && (
+                <div>
+                  <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary mb-1">Refund policy</p>
+                  {refundLines.map((line, i) => <p key={i}>{line}</p>)}
+                </div>
+              )}
+              {!free && <p>If the organiser cancels the event, you get a full refund, booking fee included.</p>}
+              <p>Please check your details before you {free ? "register" : "pay"}.</p>
             </div>
           </div>
         )}
       </div>
 
       <div className="flex justify-between items-center mt-5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 h-11 px-4 rounded-xl font-headline text-[12px] font-bold uppercase tracking-[0.12em] text-muted hover:bg-dark-light hover:text-light transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back
-        </button>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className={backBtnCls}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          </button>
+        ) : (
+          <span />
+        )}
         <div className="flex items-center gap-3">
-          <span className="font-headline text-[10px] uppercase tracking-[0.15em] text-muted-dark">3 / 3</span>
+          <span className="font-headline text-[10px] uppercase tracking-[0.15em] text-muted-dark">{stepLabel}</span>
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!terms || !stripe || submitting}
+            disabled={!terms || !ready || submitting}
             className="inline-flex items-center gap-2 h-11 px-[22px] rounded-xl bg-machined text-dark font-headline text-[12px] font-bold uppercase tracking-[0.13em] shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-all disabled:opacity-40 disabled:pointer-events-none"
           >
             {submitting ? (
-              <><span className="w-4 h-4 border-2 border-dark/40 border-t-dark rounded-full animate-spin" /> Processing…</>
+              <><span className="w-4 h-4 border-2 border-dark/40 border-t-dark rounded-full animate-spin" /> {free ? "Registering…" : "Processing…"}</>
             ) : (
-              <><CreditCard className="w-3.5 h-3.5" /> Confirm &amp; pay {confirmAmountLabel}</>
+              <>
+                {free ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : <CreditCard className="w-3.5 h-3.5" />}
+                {confirmLabel}
+              </>
             )}
           </button>
         </div>

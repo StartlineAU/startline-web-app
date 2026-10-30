@@ -4,20 +4,51 @@ import { useState, useMemo, useEffect, useRef, useCallback, useLayoutEffect, Sus
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-import { Search, MapPin, Clock, Users, X, LayoutGrid, ChevronDown, Check } from "lucide-react";
+import { Search, MapPin, X, LayoutGrid, ChevronDown, Check, ArrowUpDown, Locate, Loader2, SlidersHorizontal } from "lucide-react";
 import type { UserEvent, FilterState, EventType, AustralianState, CompetitionFormat, ExperienceLevel, SortOption } from "@/types";
 import {
   EVENT_TYPE_LABELS, STATE_LABELS, STATE_OPTIONS, EVENT_TYPE_OPTIONS,
   FORMAT_OPTIONS, DATE_RANGE_OPTIONS, LEVEL_OPTIONS, SORT_OPTIONS,
   PRICE_RANGE_MIN, PRICE_RANGE_MAX,
 } from "@/types";
-import { filterEvents, sortEvents, formatShortDate, formatTime, formatCompetitionFormat } from "@/lib/utils";
 import { toUserEvents } from "@/lib/user-events";
+import type { PublicEvent } from "@/lib/event-types";
+import { eventDistance, formatDistance } from "@/lib/distance";
+import { selectionLabel } from "@/lib/divisions";
 import { getEventCoords } from "@/lib/australia-coords";
+import { locationErrorMessage } from "@/lib/geolocation";
+import type { PlaceChoice } from "@/lib/geocode";
+import { nextMapSelection } from "@/lib/map-events";
 import { useAuthContext } from "@/context/AuthContext";
 import EventMap from "@/components/EventMap";
 import type { EventMapHandle } from "@/components/EventMap";
+import EventCard from "@/components/EventCard";
+import EventDetailView from "@/components/event/EventDetailView";
+import type { EventDetailData } from "@/lib/event-detail";
+import EventLocationAutocomplete from "@/components/ui/EventLocationAutocomplete";
+import EventAutocomplete from "@/components/ui/EventAutocomplete";
+
+/** Cards in the "Other events you may like" row are ranked by the API. */
+type EventListResponse = {
+  events: PublicEvent[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  suggestions: PublicEvent[];
+  otherEvents: PublicEvent[];
+};
+
+/**
+ * Every list of event cards on this page: one column, one card width. Results,
+ * "Other events you may like" and the empty-search suggestions all used to
+ * pick their own column count, so the same card came out at two or three
+ * different sizes depending on where it was (#338).
+ */
+const CARD_LIST = "grid grid-cols-1 gap-4";
+
+/** The card width inside the 372px desktop column, used on every layout. */
+const CARD_COLUMN_WIDTH = "w-full max-w-[340px]";
 
 const DISCIPLINE_OPTIONS = EVENT_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
 const STATE_CHIP_OPTIONS  = STATE_OPTIONS.map((o) => ({ value: o.value, label: o.shortLabel }));
@@ -37,10 +68,20 @@ function toggleInArray<T>(arr: T[], value: T, setArr: (v: T[]) => void) {
   setArr(arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]);
 }
 
+/** One labelled group inside the mobile filter sheet. */
+function SheetSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="font-headline text-[10px] font-bold uppercase tracking-[0.2em] text-muted mb-3">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 function FilterTrigger({
-  label, active, isOpen, onToggle, panelClassName, align = "left", children,
+  label, active, isOpen, onToggle, panelClassName, align = "left", children, icon,
 }: {
-  label: string; active: boolean; isOpen: boolean; onToggle: () => void; panelClassName?: string; align?: "left" | "right"; children: React.ReactNode;
+  label: string; active: boolean; isOpen: boolean; onToggle: () => void; panelClassName?: string; align?: "left" | "right"; children: React.ReactNode; icon?: React.ReactNode;
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null);
@@ -65,6 +106,7 @@ function FilterTrigger({
       <button ref={buttonRef} onClick={onToggle}
         className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full font-headline text-xs font-bold uppercase tracking-widest border transition-colors whitespace-nowrap ${active || isOpen ? "border-primary/35 bg-primary/[0.08] text-primary" : "border-transparent text-muted hover:text-light"}`}
       >
+        {icon}
         {label}
         <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`} />
       </button>
@@ -80,109 +122,77 @@ function FilterTrigger({
   );
 }
 
-function EventCard({ event, selected, onSelect }: { event: UserEvent; selected: boolean; onSelect: () => void }) {
-  const [day, month] = formatShortDate(event.date).split(" ");
-  const img = event.image;
-  const typeLabel = EVENT_TYPE_LABELS[event.type];
-  return (
-    <div
-      onClick={onSelect}
-      className={`cursor-pointer h-full bg-dark border rounded-2xl transition-all duration-300 transform-gpu ${selected ? "border-primary ring-2 ring-primary bg-primary/5" : "border-dark-lighter hover:border-primary/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/50"}`}
-    >
-      <div className="relative w-full aspect-video overflow-hidden rounded-t-2xl">
-        <Image
-          src={img}
-          alt={event.title}
-          fill
-          className="pointer-events-none object-cover brightness-[0.55] transition-all duration-700"
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-dark/60 via-transparent to-transparent" />
-        <div className="absolute top-3 right-3 bg-dark-light/90 backdrop-blur-sm rounded-lg px-3 py-2 text-center leading-tight">
-          <span className="block font-headline text-[9px] font-bold uppercase tracking-widest text-muted">{month}</span>
-          <span className="block font-headline text-xl font-black text-light leading-none mt-0.5">{day}</span>
-        </div>
-      </div>
-
-      <div className="p-4">
-        <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">
-          {typeLabel}
-        </span>
-        <h3 className="font-headline text-lg sm:text-xl font-black italic tracking-tighter text-light leading-tight mb-3 line-clamp-2">
-          {event.title}
-        </h3>
-
-        <div className="space-y-1.5 mb-3">
-          <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
-            <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
-            <span className="truncate">{event.city}, {STATE_LABELS[event.state]}</span>
-          </div>
-          <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
-            <Clock className="w-3 h-3 text-primary flex-shrink-0" />
-            <span>{formatTime(event.time)}</span>
-          </div>
-          <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
-            <Users className="w-3 h-3 text-primary flex-shrink-0" />
-            <span>{formatCompetitionFormat(event.format)}</span>
-          </div>
-        </div>
-
-        {event.description && (
-          <p className="font-headline text-xs text-muted leading-relaxed line-clamp-2 mb-3">
-            {event.description}
-          </p>
-        )}
-
-        <div className="flex items-center justify-between gap-2">
-          {event.fromPrice !== null && (
-            <span className="font-headline text-sm font-bold text-primary">From ${event.fromPrice}</span>
-          )}
-          <Link
-            href={`/events/${event.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="ml-auto inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
-          >
-            View Details →
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function EventsListingInner() {
   const { status } = useAuthContext();
-  const [allEvents, setAllEvents] = useState<UserEvent[]>([]);
+  const [events, setEvents] = useState<UserEvent[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextPage, setNextPage] = useState(2);
+  const [suggestions, setSuggestions] = useState<UserEvent[]>([]);
+  const [otherEvents, setOtherEvents] = useState<UserEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [initialCenter, setInitialCenter] = useState<{ lng: number; lat: number; zoom: number } | undefined>(undefined);
   const mapRef = useRef<EventMapHandle>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const subNavRef = useRef<HTMLDivElement>(null);
+  const requestVersion = useRef(0);
 
+  // Default map to the user's area: device GPS first, then profile city/state,
+  // then fall back to the Australia-wide view. Runs once on mount.
   useEffect(() => {
-    fetch("/api/events")
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setAllEvents(toUserEvents(data)); })
-      .catch(() => {});
-  }, []);
+    let cancelled = false;
 
-  // Fetch user location for map centering
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    fetch("/api/user/profile")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.city && data?.state) {
-          const [lat, lng] = getEventCoords(data.city, data.state);
-          setInitialCenter({ lng, lat, zoom: 5 });
-        }
-      })
-      .catch(() => {});
+    function tryProfileFallback() {
+      if (status !== "authenticated") return;
+      fetch("/api/user/profile")
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled && data?.city && data?.state) {
+            const [lat, lng] = getEventCoords(data.city, data.state);
+            setInitialCenter({ lng, lat, zoom: 8 });
+          }
+        })
+        .catch(() => {});
+    }
+
+    if (!navigator.geolocation) {
+      tryProfileFallback();
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (!cancelled) setInitialCenter({ lng: pos.coords.longitude, lat: pos.coords.latitude, zoom: 10 });
+      },
+      () => tryProfileFallback(),
+      { timeout: 5000, maximumAge: 300_000 },
+    );
+
+    return () => { cancelled = true; };
   }, [status]);
 
   const searchParams = useSearchParams();
-  const [whatQuery,     setWhatQuery]     = useState(searchParams.get("what")  ?? "");
+  // A category or division arriving as ?type=/?division=, or picked from the
+  // dropdown. Kept apart from whatQuery because the field shows a readable
+  // label ("Running - 10km") while the filtering uses the raw values.
+  const initialType = searchParams.get("type");
+  const initialDivision = searchParams.get("division");
+  const [selection, setSelection] = useState<{ discipline: string; division: string | null } | null>(
+    initialType ? { discipline: initialType, division: initialDivision } : null);
+  const [whatQuery,     setWhatQuery]     = useState(
+    searchParams.get("what")
+    ?? (initialType
+      ? selectionLabel(EVENT_TYPE_LABELS[initialType as EventType] ?? initialType, initialDivision)
+      : ""));
   const [whereQuery,    setWhereQuery]    = useState(searchParams.get("where") ?? "");
+  const [searchOrigin,  setSearchOrigin]  = useState<{ lat: number; lng: number } | null>(null);
+  const [isGeocoding,   setIsGeocoding]   = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  // A name such as "St Kilda" exists in more than one state. Hold the choices
+  // until the visitor picks one instead of searching the first match (#352).
+  const [whereChoices,  setWhereChoices]  = useState<PlaceChoice[] | null>(null);
   const [typeFilters,   setTypeFilters]   = useState<EventType[]>(searchParams.get("type") ? [searchParams.get("type") as EventType] : []);
   const [stateFilters,  setStateFilters]  = useState<AustralianState[]>([]);
   const [formatFilters, setFormatFilters] = useState<CompetitionFormat[]>([]);
@@ -192,10 +202,115 @@ function EventsListingInner() {
   const [sortBy,        setSortBy]        = useState<SortOption>("date");
   const [openDropdown,  setOpenDropdown]  = useState<string | null>(null);
   const [mobileSearch,  setMobileSearch]  = useState(false);
+  const [filterSheet,   setFilterSheet]   = useState(false);
+  // List is the default tab: the events tab opens on cards, and the map is
+  // somewhere you go via the toggle (issue #309). ?view=map still opens on it.
   const [view, setView] = useState<"list" | "map">(searchParams.get("view") === "map" ? "map" : "list");
   // Latches true the first time the Map tab is viewed, so EventMap mounts
   // once and then just toggles visibility (avoids re-init/re-fetch on every tab switch).
   const [mapEverViewed, setMapEverViewed] = useState(view === "map");
+
+  // The tab is mirrored into the URL so that stepping back from an event page
+  // returns to the tab the visitor left, not always the list (issue #340).
+  // replaceState rather than a push: switching tabs is not a page to go back to.
+  const changeView = useCallback((next: "list" | "map") => {
+    setView(next);
+    if (next === "map") setMapEverViewed(true);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "map") params.set("view", "map");
+    else params.delete("view");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  }, []);
+
+  const locateMe = useCallback(() => {
+    setLocationError(null);
+    if (!("geolocation" in navigator)) {
+      setLocationError(locationErrorMessage());
+      return;
+    }
+    setIsGeocoding(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setSearchOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setWhereQuery("Current location");
+        setLocationError(null);
+        setIsGeocoding(false);
+      },
+      (error) => {
+        // Keep what the visitor already had: a denied or timed-out request
+        // should not erase a typed suburb or the results already on screen
+        // (#352). The message says what happened and what to do next.
+        setLocationError(locationErrorMessage(error.code));
+        setIsGeocoding(false);
+      },
+      { timeout: 10000 }
+    );
+  }, []);
+
+  const handleWhereSearch = useCallback(async (raw?: string) => {
+    const q = (raw ?? whereQuery).trim();
+    setLocationError(null);
+    setWhereChoices(null);
+    if (!q) { setSearchOrigin(null); return; }
+    if (q.toLowerCase() === "current location") { locateMe(); return; }
+    setIsGeocoding(true);
+    try {
+      const res = await fetch(`/api/places/resolve?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      const choices: PlaceChoice[] = data?.choices ?? [];
+      if (choices.length > 0) {
+        setWhereChoices(choices);
+        setSearchOrigin(null);
+        return;
+      }
+      const result = data?.result;
+      if (result && typeof result.latitude === "number" && typeof result.longitude === "number") {
+        setSearchOrigin({ lat: result.latitude, lng: result.longitude });
+      } else {
+        // Geocode failed — fall back to substring matching.
+        setSearchOrigin(null);
+      }
+    } catch {
+      setSearchOrigin(null);
+    } finally {
+      setIsGeocoding(false);
+    }
+  }, [whereQuery, locateMe]);
+
+  const chooseWhere = useCallback((choice: PlaceChoice) => {
+    setWhereQuery(choice.label);
+    setWhereChoices(null);
+    void handleWhereSearch(choice.label);
+  }, [handleWhereSearch]);
+
+  const handleWhereChange = useCallback((text: string) => {
+    setWhereQuery(text);
+    setLocationError(null);
+    setWhereChoices(null);
+  }, []);
+
+  const clearWhere = useCallback(() => {
+    setWhereQuery("");
+    setSearchOrigin(null);
+    setLocationError(null);
+    setWhereChoices(null);
+  }, []);
+
+  // Auto-search an initial ?where= param (e.g. from HeroSearch) once.
+  //
+  // No "already ran" ref: in development React runs effects twice, and the
+  // first run's cleanup clears the timer. A ref set on that first run made the
+  // second run return early, so a handoff from the home page never searched at
+  // all. The cleanup alone keeps this to one call.
+  useEffect(() => {
+    const initial = searchParams.get("where");
+    if (!initial) return;
+    // Defer so the geocode fetch (and its setState) runs after this effect settles.
+    const t = setTimeout(() => handleWhereSearch(initial), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Close an open filter dropdown on outside click / Escape.
   useEffect(() => {
@@ -224,21 +339,142 @@ function EventsListingInner() {
     levels:      levelFilters,
     priceRange,
     dateRange:   dateFilter,
-    searchQuery: whatQuery,
-  }), [typeFilters, stateFilters, formatFilters, levelFilters, priceRange, dateFilter, whatQuery]);
+    // With a category picked, the discipline filter does the work and the
+    // division (if any) is the keyword; the field's label is not a search term.
+    searchQuery: selection ? (selection.division ?? "") : whatQuery,
+    originLat:   searchOrigin?.lat,
+    originLng:   searchOrigin?.lng,
+  }), [typeFilters, stateFilters, formatFilters, levelFilters, priceRange, dateFilter, whatQuery, selection, searchOrigin]);
 
-  const displayEvents = useMemo(() => {
-    let results = filterEvents(allEvents, filterState);
-    results = sortEvents(results, sortBy);
-    if (whereQuery.trim()) {
-      const q = whereQuery.toLowerCase();
-      results = results.filter((e) => e.city.toLowerCase().includes(q) || e.state.toLowerCase().includes(q) || e.location.toLowerCase().includes(q));
+  /**
+   * Everything the listing's filters mean, as one request. The server applies
+   * these before pagination, so a match on a later page is never missed.
+   */
+  const buildRequestParams = useCallback((page: number) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", "20");
+    params.set("sort", sortBy);
+
+    if (filterState.searchQuery) params.set("q", filterState.searchQuery);
+    if (whereQuery.trim()) params.set("where", whereQuery.trim());
+    if (filterState.dateRange !== "all") params.set("dateRange", filterState.dateRange);
+    if (filterState.priceRange) {
+      params.set("minPrice", String(filterState.priceRange[0]));
+      params.set("maxPrice", String(filterState.priceRange[1]));
     }
-    return results;
-  }, [allEvents, filterState, whereQuery, sortBy]);
+    filterState.types.forEach((value) => params.append("type", value));
+    filterState.states.forEach((value) => params.append("state", value));
+    filterState.formats.forEach((value) => params.append("format", value));
+    filterState.levels.forEach((value) => params.append("level", value));
+    if (searchOrigin) {
+      params.set("originLat", String(searchOrigin.lat));
+      params.set("originLng", String(searchOrigin.lng));
+    }
+    return params;
+  }, [filterState, whereQuery, sortBy, searchOrigin]);
+
+  useEffect(() => {
+    const version = ++requestVersion.current;
+    const controller = new AbortController();
+
+    // Debounce text fields so a keystroke does not send a request per character.
+    const timer = setTimeout(() => {
+      setEventsLoading(true);
+      setLoadingMore(false);
+      fetch(`/api/events?${buildRequestParams(1)}`, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() as Promise<EventListResponse> : Promise.reject(new Error(String(res.status)))))
+        .then((data) => {
+          if (version !== requestVersion.current) return;
+          setEvents(toUserEvents(data.events ?? []));
+          setTotal(data.total);
+          setHasMore(data.hasMore);
+          setNextPage(2);
+          setSuggestions(toUserEvents(data.suggestions ?? []));
+          setOtherEvents(toUserEvents(data.otherEvents ?? []));
+        })
+        .catch((error) => {
+          if (error?.name === "AbortError" || version !== requestVersion.current) return;
+          setEvents([]);
+          setTotal(0);
+          setHasMore(false);
+          setSuggestions([]);
+          setOtherEvents([]);
+        })
+        .finally(() => {
+          if (version === requestVersion.current) setEventsLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [buildRequestParams]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    const version = requestVersion.current;
+    setLoadingMore(true);
+
+    try {
+      const res = await fetch(`/api/events?${buildRequestParams(nextPage)}`);
+      if (!res.ok) return;
+      const data = await res.json() as EventListResponse;
+      if (version !== requestVersion.current) return;
+
+      const next = toUserEvents(data.events ?? []);
+      setEvents((previous) => {
+        const seen = new Set(previous.map((event) => event.id));
+        return [...previous, ...next.filter((event) => !seen.has(event.id))];
+      });
+      setTotal(data.total);
+      setHasMore(data.hasMore);
+      setNextPage((data.page ?? nextPage) + 1);
+      setSuggestions(toUserEvents(data.suggestions ?? []));
+      setOtherEvents(toUserEvents(data.otherEvents ?? []));
+    } catch {
+      // Keep the loaded page and let the visitor retry.
+    } finally {
+      if (version === requestVersion.current) setLoadingMore(false);
+    }
+  }, [buildRequestParams, hasMore, loadingMore, nextPage]);
+
+  // The server ranks a geocoded search closest-first across the whole result
+  // set. Distance is stamped here only so the cards can show it.
+  const displayEvents = useMemo(() => {
+    // While the visitor is choosing between states, showing text-matched
+    // results would look like the search had already run (#352).
+    if (whereChoices) return [];
+    if (!searchOrigin) return events;
+    return events.map((event) => {
+      const distance = eventDistance(searchOrigin, event);
+      return { ...event, distance: distance === null ? undefined : formatDistance(distance) };
+    });
+  }, [events, searchOrigin, whereChoices]);
+
+  // Typing again abandons the picked category: the text is no longer its label.
+  const handleWhatChange = useCallback((text: string) => {
+    setWhatQuery(text);
+    setSelection(null);
+  }, [setSelection]);
+
+  // Picking a category or division from the dropdown filters in place rather
+  // than navigating, so the listing does not reload underneath the user. The
+  // field shows the readable label while the filtering uses the raw values.
+  //
+  // Unlike the hero there is no Find Events Now button to wait for, so the
+  // filter applies straight away — the listing has always updated live.
+  const applySelection = useCallback(
+    (sel: { discipline: string; division: string | null; label: string }) => {
+      setSelection({ discipline: sel.discipline, division: sel.division });
+      setWhatQuery(sel.label);
+      setTypeFilters([sel.discipline as EventType]);
+      setMobileSearch(false);
+    }, [setSelection]);
 
   function clearFilters() {
-    setWhatQuery(""); setWhereQuery("");
+    setWhatQuery(""); setSelection(null); clearWhere();
     setTypeFilters([]); setStateFilters([]); setFormatFilters([]); setLevelFilters([]);
     setPriceRange(null); setDateFilter("all");
   }
@@ -273,9 +509,23 @@ function EventsListingInner() {
     return chips;
   }, [typeFilters, stateFilters, formatFilters, levelFilters, dateFilter, priceRange]);
 
+  // The sheet covers the viewport, so freeze the page behind it and let
+  // Escape close it like any other overlay.
+  useEffect(() => {
+    if (!filterSheet) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFilterSheet(false); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [filterSheet]);
+
   const handleSelect = useCallback((id: string) => {
     setSelectedId((prev) => {
-      const next = prev === id ? null : id;
+      const next = nextMapSelection(prev, id);
       if (next) {
         mapRef.current?.flyTo(next);
         mapRef.current?.stopSpin();
@@ -284,45 +534,141 @@ function EventsListingInner() {
     });
   }, []);
 
+  /* ── Detail pane beside the list (desktop only) ──────────────────────────
+     Cards on the left, the selected event's information screen on the right.
+     Phones keep the plain card list, so the fetch below is gated on a desktop
+     viewport rather than firing for a pane nobody can see (issue #309). */
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const splitView = view === "list" && isDesktop;
+
+  // Something is always selected in the split view, so the pane is never blank.
+  // Derived rather than stored, so a filter change that drops the selected
+  // event falls straight back to the first result with no extra render.
+  const activeId = splitView && displayEvents.length > 0
+    ? (selectedId && displayEvents.some((e) => e.id === selectedId) ? selectedId : displayEvents[0].id)
+    : selectedId;
+
+  const [detail, setDetail] = useState<EventDetailData | null>(null);
+  const [detailError, setDetailError] = useState(false);
+  // Events already looked at this session render instantly on re-selection.
+  const detailCache = useRef(new Map<string, EventDetailData>());
+
+  useEffect(() => {
+    if (!splitView || !activeId) return;
+
+    let cancelled = false;
+    const cached = detailCache.current.get(activeId);
+    const load = cached
+      ? Promise.resolve(cached)
+      : fetch(`/api/events/${activeId}/detail`)
+          .then((r) => (r.ok ? r.json() as Promise<EventDetailData> : Promise.reject(new Error(String(r.status)))))
+          .then((data) => { detailCache.current.set(data.event.id, data); return data; });
+
+    load
+      .then((data) => { if (!cancelled) { setDetail(data); setDetailError(false); } })
+      .catch(() => { if (!cancelled) { setDetail(null); setDetailError(true); } });
+
+    return () => { cancelled = true; };
+  }, [splitView, activeId]);
+
+  /**
+   * Selecting from the list column. Unlike the map's card list this never
+   * toggles off: the detail pane beside it always has an event to show.
+   * Still flies the map when it happens to be mounted, so the selection
+   * carries over to the Map tab.
+   */
+  const handleListSelect = useCallback((id: string) => {
+    setSelectedId(id);
+    mapRef.current?.flyTo(id);
+    mapRef.current?.stopSpin();
+  }, []);
+
+  /* Phones get one button naming where it goes ("Map" while you are on the
+     list, "List" while you are on the map). The two-part desktop toggle plus
+     sort plus filters does not fit a phone row, and the half that used to get
+     pushed off the edge was the toggle itself (issue #309). */
+  const mobileViewToggle = (
+    <button
+      onClick={() => changeView(view === "list" ? "map" : "list")}
+      data-testid={view === "list" ? "view-mode-map" : "view-mode-list"}
+      className="flex-shrink-0 flex items-center gap-1.5 h-11 px-3.5 rounded-xl bg-dark border border-dark-lighter text-light font-headline text-xs font-bold uppercase tracking-widest transition-colors hover:border-primary hover:text-primary"
+    >
+      {view === "list"
+        ? <><MapPin className="w-3.5 h-3.5" /> Map</>
+        : <><LayoutGrid className="w-3.5 h-3.5" /> List</>}
+    </button>
+  );
+
   const viewToggle = (
     <div className="flex items-center gap-0.5 bg-dark rounded-xl border border-dark-lighter p-0.5 flex-shrink-0">
-      <button onClick={() => setView("list")}
-        className={`flex items-center gap-1.5 px-3 h-8 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "list" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
-      >
-        <LayoutGrid className="w-3.5 h-3.5" /> List
-      </button>
-      <button onClick={() => { setView("map"); setMapEverViewed(true); }}
-        className={`flex items-center gap-1.5 px-3 h-8 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "map" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
+      <button onClick={() => changeView("map")} data-testid="view-mode-map"
+        className={`flex items-center gap-1.5 px-2.5 lg:px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "map" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
       >
         <MapPin className="w-3.5 h-3.5" /> Map
+      </button>
+      <button onClick={() => changeView("list")} data-testid="view-mode-list"
+        className={`flex items-center gap-1.5 px-2.5 lg:px-3 h-11 lg:h-9 rounded-lg font-headline text-xs font-bold uppercase tracking-widest transition-colors duration-150 ${view === "list" ? "bg-white/10 text-light" : "text-muted hover:text-light"}`}
+      >
+        <LayoutGrid className="w-3.5 h-3.5" /> List
       </button>
     </div>
   );
 
   const desktopHeader = (
     <div className="hidden lg:block px-4 pt-4 pb-2 border-b border-dark-lighter bg-dark-darker flex-shrink-0">
-      <div className="flex items-stretch gap-2">
-        <div className="flex flex-1 items-stretch bg-dark rounded-xl overflow-hidden border border-dark-lighter">
-          <div className="flex-1 px-3.5 py-2.5 border-r border-dark-lighter min-w-0">
-            <label className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-0.5">Event</label>
-            <div className="flex items-center gap-1.5">
-              <input type="text" placeholder="Event name, type or keyword" value={whatQuery}
-                onChange={(e) => setWhatQuery(e.target.value)}
-                className="w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none" />
-              {whatQuery && <button onClick={() => setWhatQuery("")} className="text-muted hover:text-light flex-shrink-0"><X className="w-3.5 h-3.5" /></button>}
-            </div>
+      {/* Matches the homepage hero bar: pill rounding, an inset divider rather
+          than a full-height border, and a grey outline. Map/List moved to the
+          filter row below, so the bar spans the full width. */}
+      <div className="flex flex-1 items-stretch gap-2">
+        {/* Two rounded bubbles. Each field owns a fully closed outline, so a
+            focused field's green ring curves right round and meets itself
+            rather than running open into the divider.
+
+            Icons are siblings of the label+input stack, not children of the
+            input row, so they centre against the full height of the field
+            instead of sitting on the input's baseline. Labels wrap the text
+            stack so the field label is part of the clickable area. */}
+        <div className="flex-1 px-5 py-2.5 min-w-0 flex items-center gap-1.5 bg-dark border border-dark-lighter rounded-3xl focus-within:border-primary transition-colors">
+          <div className="flex-1 min-w-0">
+            <span className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-0.5">Event</span>
+            <EventAutocomplete
+              value={whatQuery}
+              onChange={handleWhatChange}
+              onSelectCategory={applySelection}
+              where={whereQuery}
+              placeholder="Event name, type or keyword"
+              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:ring-0 focus:outline-none"
+            />
           </div>
-          <div className="flex-1 px-3.5 py-2.5 min-w-0">
-            <label className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-0.5">Where</label>
-            <div className="flex items-center gap-1.5">
-              <input type="text" placeholder="State, city, or suburb" value={whereQuery}
-                onChange={(e) => setWhereQuery(e.target.value)}
-                className="w-full bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:ring-0 focus:outline-none" />
-              {whereQuery && <button onClick={() => setWhereQuery("")} className="text-muted hover:text-light flex-shrink-0"><X className="w-3.5 h-3.5" /></button>}
-            </div>
-          </div>
+          {whatQuery && <button type="button" onClick={() => { setWhatQuery(""); setSelection(null); }} aria-label="Clear event search" className="text-muted hover:text-light flex-shrink-0"><X className="w-3.5 h-3.5" /></button>}
         </div>
-        {viewToggle}
+
+        <div className="flex-1 px-5 py-2.5 min-w-0 flex items-center gap-1.5 bg-dark border border-dark-lighter rounded-3xl focus-within:border-primary transition-colors">
+          <div className="flex-1 min-w-0">
+            <span className="font-headline text-[10px] font-black uppercase tracking-widest text-primary block mb-0.5">Where</span>
+            <EventLocationAutocomplete
+              value={whereQuery}
+              onChange={handleWhereChange}
+              filter={selection}
+              onSelect={(label) => handleWhereSearch(label)}
+              onEnter={(q) => handleWhereSearch(q)}
+              placeholder="State, city, or suburb"
+              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:ring-0 focus:outline-none"
+            />
+          </div>
+          {isGeocoding
+            ? <Loader2 data-testid="geocoding-spinner" className="w-3.5 h-3.5 text-muted animate-spin flex-shrink-0" />
+            : <button type="button" onClick={locateMe} aria-label="Use my current location" title="Use my current location" className="text-muted hover:text-primary flex-shrink-0"><Locate className="w-3.5 h-3.5" /></button>}
+          {whereQuery && <button type="button" onClick={clearWhere} aria-label="Clear where" className="text-muted hover:text-light flex-shrink-0"><X className="w-3.5 h-3.5" /></button>}
+        </div>
       </div>
     </div>
   );
@@ -331,32 +677,46 @@ function EventsListingInner() {
     <div className="lg:hidden px-4 pt-3 pb-2 border-b border-dark-lighter flex-shrink-0">
       {mobileSearch ? (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 bg-dark rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-2 bg-dark rounded-2xl px-4 py-2.5 border border-dark-lighter focus-within:border-primary transition-colors">
             <Search className="w-4 h-4 text-muted flex-shrink-0" />
-            <input autoFocus type="text" placeholder="Event name, type or keyword" value={whatQuery}
-              onChange={(e) => setWhatQuery(e.target.value)}
-              className="flex-1 bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:outline-none" />
-            {whatQuery && <button onClick={() => setWhatQuery("")} className="text-muted"><X className="w-4 h-4" /></button>}
+            <EventAutocomplete
+              value={whatQuery}
+              onChange={handleWhatChange}
+              onSelectCategory={applySelection}
+              where={whereQuery}
+              autoFocus
+              placeholder="Event name, type or keyword"
+              className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:outline-none"
+            />
+            {whatQuery && <button onClick={() => { setWhatQuery(""); setSelection(null); }} aria-label="Clear event search" className="text-muted flex-shrink-0"><X className="w-4 h-4" /></button>}
           </div>
-          <div className="flex items-center gap-2 bg-dark rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-2 bg-dark rounded-2xl px-4 py-2.5 border border-dark-lighter focus-within:border-primary transition-colors">
             <MapPin className="w-4 h-4 text-muted flex-shrink-0" />
-            <input type="text" placeholder="City or state" value={whereQuery}
-              onChange={(e) => setWhereQuery(e.target.value)}
-              className="flex-1 bg-transparent text-light font-headline text-sm placeholder:text-muted/40 border-0 focus:outline-none" />
-            {whereQuery && <button onClick={() => setWhereQuery("")} className="text-muted"><X className="w-4 h-4" /></button>}
+            <div className="flex-1 min-w-0">
+              <EventLocationAutocomplete
+                value={whereQuery}
+                onChange={handleWhereChange}
+                filter={selection}
+                onSelect={(label) => handleWhereSearch(label)}
+                onEnter={(q) => handleWhereSearch(q)}
+                placeholder="City or state"
+                className="search-field w-full bg-transparent text-light font-headline text-sm placeholder:text-placeholder border-0 focus:outline-none"
+              />
+            </div>
+            {isGeocoding
+              ? <Loader2 data-testid="geocoding-spinner" className="w-4 h-4 text-muted animate-spin flex-shrink-0" />
+              : <button onClick={locateMe} aria-label="Use my current location" title="Use my current location" className="text-muted hover:text-primary flex-shrink-0"><Locate className="w-4 h-4" /></button>}
+            {whereQuery && <button onClick={clearWhere} aria-label="Clear where" className="text-muted"><X className="w-4 h-4" /></button>}
           </div>
           <button onClick={() => setMobileSearch(false)} className="text-center font-headline text-xs uppercase tracking-widest text-muted py-1">Done</button>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
-          <button onClick={() => setMobileSearch(true)} className="flex-1 flex items-center gap-3 bg-dark rounded-xl px-4 h-11 text-left min-w-0">
-            <Search className="w-4 h-4 text-muted flex-shrink-0" />
-            <span className="flex-1 font-headline text-sm text-muted/60 truncate">
-              {whatQuery || whereQuery ? [whatQuery, whereQuery].filter(Boolean).join(" · ") : "Search events…"}
-            </span>
-          </button>
-          {viewToggle}
-        </div>
+        <button onClick={() => setMobileSearch(true)} className="w-full flex items-center gap-3 bg-dark rounded-2xl border border-dark-lighter px-4 h-11 text-left min-w-0">
+          <Search className="w-4 h-4 text-muted flex-shrink-0" />
+          <span className="flex-1 font-headline text-sm text-muted/60 truncate">
+            {whatQuery || whereQuery ? [whatQuery, whereQuery].filter(Boolean).join(" · ") : "Search events…"}
+          </span>
+        </button>
       )}
     </div>
   );
@@ -400,6 +760,20 @@ function EventsListingInner() {
   );
 
   const [priceMin, priceMax] = priceRange ?? [PRICE_RANGE_MIN, PRICE_RANGE_MAX];
+
+  // Clicking the track snaps the nearer endpoint to the clicked value.
+  const onTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const val = Math.round(frac * PRICE_RANGE_MAX);
+    const [lo, hi] = priceRange ?? [PRICE_RANGE_MIN, PRICE_RANGE_MAX];
+    if (Math.abs(val - lo) <= Math.abs(val - hi)) {
+      setPriceRange([Math.min(val, hi - 5), hi]);
+    } else {
+      setPriceRange([lo, Math.max(val, lo + 5)]);
+    }
+  };
+
   const priceDropdown = (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -410,7 +784,7 @@ function EventsListingInner() {
           <button onClick={() => setPriceRange(null)} className="font-headline text-[10px] font-bold uppercase tracking-widest text-primary hover:text-primary/70">Reset</button>
         )}
       </div>
-      <div className="relative h-4 mt-2 mb-1">
+      <div className="relative h-4 mt-2 mb-1 cursor-pointer" onClick={onTrackClick}>
         <div className="absolute top-1/2 -translate-y-1/2 w-full h-1 rounded-full bg-dark-lighter" />
         <div className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-primary"
           style={{ left: `${(priceMin / PRICE_RANGE_MAX) * 100}%`, right: `${100 - (priceMax / PRICE_RANGE_MAX) * 100}%` }}
@@ -454,8 +828,77 @@ function EventsListingInner() {
     </div>
   );
 
+  const sortDropdown = (
+    <div className="flex flex-col gap-2">
+      {SORT_OPTIONS.map((opt) => (
+        <button key={opt.value} onClick={() => { setSortBy(opt.value); setOpenDropdown(null); }}
+          className={`${pillClass(sortBy === opt.value)} text-left`}
+        >{opt.label}</button>
+      ))}
+    </div>
+  );
+
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? "Sort";
+  // Phones drop the "Date:" / "Price:" half of the label. The full label plus
+  // Filters plus Map/List does not fit a 390px row, and what got pushed out
+  // was Map/List (issue #309).
+  const shortSortLabel = sortLabel.includes(": ") ? sortLabel.split(": ")[1] : sortLabel;
+
+  // Phones get a Sort control plus a single Filters button that opens the
+  // sheet below; six pills in a sideways-scrolling row was unusable at 390px.
+  const mobileFilterBar = (
+    /* The sort and filter controls scroll inside their own track so a long sort
+       label cannot push Map/List off the right edge of a phone, which is what
+       hid the toggle entirely (issue #309). Mirrors the desktop row. */
+    <div className="lg:hidden border-b border-dark-lighter bg-dark-darker px-3 py-2 flex items-center gap-2">
+      <div className="flex flex-1 items-center gap-2 overflow-x-auto no-scrollbar min-w-0">
+      <FilterTrigger label={shortSortLabel} active={sortBy !== "date"}
+        isOpen={openDropdown === "sort-mobile"}
+        onToggle={() => setOpenDropdown(openDropdown === "sort-mobile" ? null : "sort-mobile")}
+        panelClassName="w-48" icon={<ArrowUpDown className="w-3.5 h-3.5" />}
+      >
+        {sortDropdown}
+      </FilterTrigger>
+
+      <button onClick={() => { setOpenDropdown(null); setFilterSheet(true); }} data-testid="mobile-filters-open"
+        className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-full font-headline text-xs font-bold uppercase tracking-widest border transition-colors ${activeChips.length > 0 ? "border-primary/35 bg-primary/[0.08] text-primary" : "border-transparent text-muted"}`}
+      >
+        <SlidersHorizontal className="w-3.5 h-3.5" />
+        Filters
+        {activeChips.length > 0 && (
+          <span className="ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-dark text-[10px] font-black flex items-center justify-center">
+            {activeChips.length}
+          </span>
+        )}
+      </button>
+
+      {activeChips.length > 0 && (
+        <button onClick={clearFilters} className="flex-shrink-0 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-light transition-colors">
+          Clear All
+        </button>
+      )}
+      </div>
+
+      {/* Outside the scrolling track, so it stays pinned to the right edge
+          and is always reachable. */}
+      {mobileViewToggle}
+    </div>
+  );
+
   const filterSubNav = (
-    <div ref={subNavRef} className="border-b border-dark-lighter bg-dark-darker px-3 lg:px-6 py-2 flex items-center gap-1 overflow-x-auto flex-shrink-0">
+    <div ref={subNavRef} className="flex-shrink-0">
+      {mobileFilterBar}
+      {/* Map/List sits with the filters. The filters get their own scrolling
+          container so the toggle stays pinned right instead of scrolling away
+          with them on a narrow desktop window. */}
+      <div className="hidden lg:flex border-b border-dark-lighter bg-dark-darker px-3 lg:px-6 py-2 items-center gap-2">
+      <div className="flex flex-1 items-center gap-1 overflow-x-auto min-w-0">
+      <FilterTrigger label={sortLabel} active={sortBy !== "date"}
+        isOpen={openDropdown === "sort"} onToggle={() => setOpenDropdown(openDropdown === "sort" ? null : "sort")}
+        panelClassName="w-48" icon={<ArrowUpDown className="w-3.5 h-3.5" />}
+      >
+        {sortDropdown}
+      </FilterTrigger>
       <FilterTrigger label="Discipline" active={typeFilters.length > 0} isOpen={openDropdown === "discipline"}
         onToggle={() => setOpenDropdown(openDropdown === "discipline" ? null : "discipline")}>
         {disciplineDropdown}
@@ -469,7 +912,11 @@ function EventsListingInner() {
         {dateDropdown}
       </FilterTrigger>
       <FilterTrigger label="Price" active={!!priceRange} isOpen={openDropdown === "price"}
-        onToggle={() => setOpenDropdown(openDropdown === "price" ? null : "price")} panelClassName="w-64">
+        onToggle={() => {
+          if (openDropdown === "price") setOpenDropdown(null);
+          else if (priceRange) setPriceRange(null);
+          else setOpenDropdown("price");
+        }} panelClassName="w-64">
         {priceDropdown}
       </FilterTrigger>
       <FilterTrigger label="Format & Level" active={formatFilters.length > 0 || levelFilters.length > 0} isOpen={openDropdown === "format-level"}
@@ -479,30 +926,60 @@ function EventsListingInner() {
       {hasActiveFilters && (
         <button onClick={clearFilters} className="ml-1 flex-shrink-0 font-headline text-xs font-medium uppercase tracking-widest text-muted hover:text-light transition-colors">Clear All</button>
       )}
+      </div>
+      {viewToggle}
+      </div>
     </div>
   );
 
-  const sortDropdown = (
-    <div className="flex flex-col gap-2">
-      {SORT_OPTIONS.map((opt) => (
-        <button key={opt.value} onClick={() => { setSortBy(opt.value); setOpenDropdown(null); }}
-          className={`${pillClass(sortBy === opt.value)} text-left`}
-        >{opt.label}</button>
-      ))}
-    </div>
-  );
+  const filterSheetOverlay = filterSheet ? createPortal(
+    <div className="lg:hidden fixed inset-0 z-[60] flex flex-col bg-dark-darker" role="dialog" aria-modal="true" aria-label="Filters">
+      <div className="flex items-center justify-between px-4 h-14 border-b border-dark-lighter flex-shrink-0">
+        <span className="font-headline text-sm font-black uppercase tracking-widest text-light">Filters</span>
+        <button onClick={() => setFilterSheet(false)} aria-label="Close filters"
+          className="w-10 h-10 -mr-2 flex items-center justify-center text-muted hover:text-light transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-7">
+        <SheetSection title="Discipline">{disciplineDropdown}</SheetSection>
+        <SheetSection title="Location">{locationDropdown}</SheetSection>
+        <SheetSection title="Date">{dateDropdown}</SheetSection>
+        <SheetSection title="Price">{priceDropdown}</SheetSection>
+        <SheetSection title="Format & Level">{formatLevelDropdown}</SheetSection>
+      </div>
+
+      <div className="flex-shrink-0 border-t border-dark-lighter px-4 py-3 flex items-center gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <button onClick={clearFilters} disabled={activeChips.length === 0}
+          className="font-headline text-xs font-bold uppercase tracking-widest text-muted hover:text-light transition-colors disabled:opacity-40">
+          Clear all
+        </button>
+        <button onClick={() => setFilterSheet(false)}
+          className="flex-1 bg-machined text-dark font-headline text-xs font-bold uppercase tracking-widest h-11 rounded-xl">
+          Show {total} event{total !== 1 ? "s" : ""}
+        </button>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
 
   const resultsHeader = (
     <div className="px-3 lg:px-6 pt-4 pb-1 flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
       <h2 className="font-headline text-base lg:text-xl font-black italic tracking-tighter text-light">
-        <span className="text-primary">{displayEvents.length}</span> event{displayEvents.length !== 1 ? "s" : ""} found
+        {whereChoices ? (
+          <>Choose a location to continue</>
+        ) : searchOrigin ? (
+          <>
+            <span className="text-primary">{total}</span> closest event{total !== 1 ? "s" : ""} to{" "}
+            <span className="text-light">{whereQuery || "your location"}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-primary">{total}</span> event{total !== 1 ? "s" : ""} found
+          </>
+        )}
       </h2>
-      <FilterTrigger label={SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? "Sort"} active={sortBy !== "date"}
-        isOpen={openDropdown === "sort"} onToggle={() => setOpenDropdown(openDropdown === "sort" ? null : "sort")}
-        panelClassName="w-48" align="right"
-      >
-        {sortDropdown}
-      </FilterTrigger>
     </div>
   );
 
@@ -518,50 +995,199 @@ function EventsListingInner() {
     </div>
   ) : null;
 
-  const emptyState = (
-    <div className="p-10 text-center">
-      <p className="font-headline text-2xl font-black italic tracking-tighter text-light mb-4">No events found.</p>
-      <button onClick={clearFilters}
-        className="font-headline text-sm font-medium uppercase tracking-widest border border-primary text-primary px-5 py-2.5 hover:bg-primary hover:text-dark transition-colors rounded-full"
-      >Clear Filters</button>
-    </div>
+  /** "Other events you may like", shown under a set of results. */
+  const otherEventsBlock = () => (
+    otherEvents.length > 0 ? (
+      <div className="mt-8 pt-6 border-t border-dark-lighter">
+        <p className="font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark mb-3">
+          Other events you may like
+        </p>
+        <div data-testid="other-events" className={CARD_LIST}>
+          {otherEvents.map((event) => (
+            <EventCard key={event.id} event={event} className="w-full" />
+          ))}
+        </div>
+      </div>
+    ) : null
   );
 
-  // Full-width results grid — shown for the "List" tab, all breakpoints
-  const gridContent = (
-    <div className={view === "list" ? "flex-1 overflow-y-auto px-3 lg:px-6 py-4 lg:py-5" : "hidden"}>
-      {displayEvents.length === 0 ? emptyState : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
-          {displayEvents.map((event) => (
-            <EventCard key={event.id} event={event} selected={false} onSelect={() => {}} />
-          ))}
+  /** Adds the next server page to the same list the map reads from. */
+  const loadMoreControl = hasMore ? (
+    <div className="flex justify-center py-5">
+      <button
+        type="button"
+        onClick={loadMore}
+        disabled={loadingMore}
+        data-testid="load-more-events"
+        className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-5 py-2.5 rounded-full transition-colors disabled:opacity-60"
+      >
+        {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+        {loadingMore ? "Loading" : "Load more events"}
+      </button>
+    </div>
+  ) : null;
+
+  /**
+   * Shared "nothing matched" block, sized for the full list or a side column.
+   * Only the message is padded: the suggested cards sit at the full width of
+   * the column, the same as real results. Padding them too shrank every card
+   * whenever a search came up empty (#338).
+   */
+  const noResults = (size: "lg" | "sm") => (
+    <div>
+      <div className={size === "lg" ? "p-10 text-center" : "px-4 py-8 text-center"}>
+        <p className={`font-headline font-black italic tracking-tighter text-light mb-2 ${size === "lg" ? "text-2xl" : "text-lg"}`}>
+          No events matched your search.
+        </p>
+        <p className="font-headline text-[13px] text-muted mb-4">
+          Nothing here fits every filter you have set. Try removing one, or take a look at these.
+        </p>
+        <button onClick={clearFilters}
+          className={`font-headline font-medium uppercase tracking-widest border border-primary text-primary hover:bg-primary hover:text-dark transition-colors rounded-full ${size === "lg" ? "text-sm px-5 py-2.5" : "text-xs px-4 py-2"}`}
+        >Clear Filters</button>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div>
+          <p className="font-headline text-[10px] font-black uppercase tracking-widest text-muted-dark mb-3">
+            All events
+          </p>
+          <div data-testid="suggested-events" className={CARD_LIST}>
+            {suggestions.map((event) => (
+              <EventCard key={event.id} event={event} className="w-full" />
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 
-  // List + map split — shown for the "Map" tab. Map mounts lazily on first
-  // visit to this tab, then stays mounted (hidden via CSS) to avoid
-  // re-initialising MapLibre / re-fetching tiles on every toggle.
-  const mapContent = (
-    <div className={view === "map" ? "flex flex-col lg:flex-row flex-1 min-h-0" : "hidden"}>
-      <div ref={listRef} className="flex flex-col w-full lg:w-[480px] xl:w-[564px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-dark-lighter bg-dark-darker overflow-y-auto max-h-[38vh] lg:max-h-none px-4 py-3 lg:py-4">
+  const whereChoicePending = (size: "lg" | "sm") => (
+    <div data-testid="where-choice-pending" className={size === "lg" ? "p-10 text-center" : "px-4 py-8 text-center"}>
+      <p className="font-headline text-[13px] text-muted">
+        Choose the state above, then the closest events will appear.
+      </p>
+    </div>
+  );
+
+  const emptyState = whereChoices ? whereChoicePending("lg") : noResults("lg");
+
+  const loadingState = (
+    <div className="flex items-center justify-center gap-2 py-10 font-headline text-xs uppercase tracking-widest text-muted">
+      <Loader2 className="w-4 h-4 animate-spin" />
+      Loading events
+    </div>
+  );
+
+  // Full-width results grid — shown for the "List" tab, all breakpoints
+  /** Placeholder while the selected event's information screen loads. */
+  const detailSkeleton = (
+    <div className="p-6 animate-pulse">
+      <div className="w-full h-[220px] rounded-2xl bg-dark" />
+      <div className="mt-6 h-6 w-2/3 rounded bg-dark" />
+      <div className="mt-3 h-4 w-1/3 rounded bg-dark" />
+      <div className="mt-6 space-y-2">
+        <div className="h-4 w-full rounded bg-dark" />
+        <div className="h-4 w-11/12 rounded bg-dark" />
+        <div className="h-4 w-9/12 rounded bg-dark" />
+      </div>
+    </div>
+  );
+
+  /* Phones and tablets: one centred column of cards. Rendered instead of the
+     split, never alongside it, so the listing holds one copy of the results
+     rather than two with one hidden. A tablet used to fit two columns here. */
+  const gridContent = (
+    <div className={view === "list" ? "flex-1 overflow-y-auto px-3 py-4" : "hidden"}>
+      <div className={`${CARD_COLUMN_WIDTH} mx-auto`}>
         {displayEvents.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="font-headline text-lg font-black italic tracking-tighter text-light mb-3">No events found.</p>
-            <button onClick={clearFilters}
-              className="font-headline text-xs font-medium uppercase tracking-widest border border-primary text-primary px-4 py-2 hover:bg-primary hover:text-dark transition-colors rounded-full"
-            >Clear Filters</button>
-          </div>
+          whereChoices ? emptyState : eventsLoading ? loadingState : emptyState
         ) : (
-          <div className="flex flex-col gap-2">
-            {displayEvents.map((event) => (
-              <EventCard key={event.id} event={event} selected={selectedId === event.id} onSelect={() => handleSelect(event.id)} />
-            ))}
-          </div>
+          <>
+            <div className={CARD_LIST}>
+              {displayEvents.map((event) => (
+                <EventCard key={event.id} event={event} className="w-full" />
+              ))}
+            </div>
+            {loadMoreControl}
+            {otherEventsBlock()}
+          </>
         )}
       </div>
-      <div className="flex-1 relative min-h-[320px]">
+    </div>
+  );
+
+  /* Desktop: one column of cards, the event information screen beside it.
+     Card column is the width of a home page card so the two read as the same
+     card, and the pane scrolls back to the top whenever the event changes. */
+  const splitContent = (
+    <div className={view === "list" ? "flex flex-1 min-h-0" : "hidden"}>
+      <div className="w-[372px] flex-shrink-0 border-r border-dark-lighter overflow-y-auto px-4 py-4">
+        {displayEvents.length === 0 ? (
+          whereChoices ? whereChoicePending("sm") : eventsLoading ? loadingState : noResults("sm")
+        ) : (
+          <>
+            <div className={CARD_LIST}>
+              {displayEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  className="w-full"
+                  selected={activeId === event.id}
+                  onSelect={() => handleListSelect(event.id)}
+                />
+              ))}
+            </div>
+            {loadMoreControl}
+            {otherEventsBlock()}
+          </>
+        )}
+      </div>
+
+      <div key={activeId ?? "none"} className="flex-1 min-w-0 overflow-y-auto">
+        {displayEvents.length === 0 ? null
+          : detailError ? (
+            <div className="p-10 text-center">
+              <p className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-4">
+                That event could not be loaded.
+              </p>
+              {activeId && (
+                <Link href={`/events/${activeId}`}
+                  className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors">
+                  Open the event page
+                </Link>
+              )}
+            </div>
+          )
+          : detail && detail.event.id === activeId ? <EventDetailView data={detail} variant="panel" />
+          : detailSkeleton}
+      </div>
+    </div>
+  );
+
+  // List + map split — shown for the "Map" tab. Map mounts lazily on first
+  // visit to this tab, then stays mounted (hidden via CSS) to avoid
+  // re-initialising Mapbox / re-fetching tiles on every toggle.
+  const mapContent = (
+    <div className={view === "map" ? "flex flex-col lg:flex-row flex-1 min-h-0" : "hidden"}>
+      {/* Phones show the map alone in this tab — a 32vh list on top of a short
+          map left neither usable. The List tab is the list. */}
+      <div ref={listRef} className="hidden lg:flex flex-col lg:w-[372px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-dark-lighter bg-dark-darker overflow-y-auto lg:max-h-none px-4 py-3 lg:py-4">
+        {displayEvents.length === 0 ? (
+          whereChoices ? whereChoicePending("sm") : eventsLoading ? loadingState : noResults("sm")
+        ) : (
+          <>
+            <div className={CARD_LIST}>
+              {displayEvents.map((event) => (
+                <EventCard key={event.id} event={event} className="w-full" selected={selectedId === event.id} onSelect={() => handleSelect(event.id)} />
+              ))}
+            </div>
+            {loadMoreControl}
+            {otherEventsBlock()}
+          </>
+        )}
+      </div>
+      <div className="flex-1 relative min-h-[260px] lg:min-h-[320px]">
         {mapEverViewed && (
           <EventMap
             events={displayEvents}
@@ -576,17 +1202,48 @@ function EventsListingInner() {
   );
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100dvh - 56px)" }}>
+    <div className="app-shell flex flex-col">
       {desktopHeader}
       {mobileHeader}
       {filterSubNav}
+      {locationError && (
+        <div role="alert" data-testid="location-error" className="px-3 lg:px-6 pt-3">
+          <p className="rounded-md border border-red-500/30 bg-red-900/20 px-4 py-2.5 font-headline text-[12px] leading-relaxed text-red-400">
+            {locationError}
+          </p>
+        </div>
+      )}
+      {whereChoices && (
+        <div role="group" aria-label="Choose a location" data-testid="where-choices"
+          className="px-3 lg:px-6 pt-3">
+          <div className="rounded-xl border border-primary/30 bg-dark px-4 py-3">
+            <p className="font-headline text-[11px] font-black uppercase tracking-widest text-primary">
+              Several places match “{whereQuery.trim()}” · choose one
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {whereChoices.map((choice) => (
+                <button key={choice.label} type="button"
+                  onClick={() => chooseWhere(choice)}
+                  className="rounded-lg border border-dark-lighter bg-dark-darker px-3 py-2 text-left font-headline text-[12px] text-light transition-colors hover:border-primary/50 hover:text-primary">
+                  <span className="block">{choice.label}</span>
+                  <span className="block text-[10px] uppercase tracking-widest text-muted">
+                    {choice.stateName || choice.stateCode.toUpperCase()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {resultsHeader}
       {activeChipsRow}
 
       <div className="flex-1 min-h-0 flex flex-col">
-        {gridContent}
+        {splitView ? splitContent : gridContent}
         {mapContent}
       </div>
+
+      {filterSheetOverlay}
     </div>
   );
 }

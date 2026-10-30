@@ -1,12 +1,17 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
+import { useApiResource } from "@/hooks/useApiResource";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
+import {
+  Skeleton, PageHeaderSkeleton, PageShellSkeleton,
+} from "@/components/ui/skeleton";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
 interface EventDetail {
   id: string;
@@ -75,6 +80,15 @@ const STATUS_META: Record<EventStatus, {
     headline:    "This event is live.",
     description: "Your event is published and taking registrations.",
   },
+  IN_PROGRESS: {
+    label:       "In progress",
+    color:       "text-amber-300",
+    bg:          "bg-amber-300/10",
+    border:      "border-amber-300/20",
+    icon:        Clock,
+    headline:    "This event is underway.",
+    description: "Registration has closed. Use the event dashboard for check-in and race-day operations.",
+  },
   REJECTED: {
     label:       "Rejected",
     color:       "text-red-300",
@@ -103,25 +117,32 @@ export default function EventStatusPage({
   const { id }  = use(params);
   const router  = useRouter();
 
-  const [event,      setEvent]      = useState<EventDetail | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState("");
 
+  const fetchEvent = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/organiser/events/${id}`, { signal });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error ?? "Failed to load");
+    return payload as EventDetail;
+  }, [id]);
+
+  const {
+    data: event,
+    loading,
+    error,
+    setData: setEvent,
+    reload,
+  } = useApiResource<EventDetail>(fetchEvent, { key: id });
+
   useEffect(() => {
-    fetch(`/api/organiser/events/${id}`)
-      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error ?? "Failed to load")))
-      .then((d: EventDetail) => {
-        if (d.status === "APPROVED") {
-          router.replace(`/organiser/events/${id}/dashboard`);
-          return;
-        }
-        setEvent(d);
-      })
-      .catch((e: string) => setError(e))
-      .finally(() => setLoading(false));
-  }, [id, router]);
+    if (event?.status === "APPROVED" || event?.status === "IN_PROGRESS") {
+      router.replace(`/organiser/events/${id}/dashboard`);
+    }
+  }, [event, id, router]);
+
+  const loadEvent = useCallback(() => { void reload(); }, [reload]);
+  useOnOrganiserEventsChanged(loadEvent);
 
   const submitForReview = async () => {
     if (!event) return;
@@ -143,13 +164,16 @@ export default function EventStatusPage({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-darker">
-        <main className="pt-14">
-          <div className="max-w-[900px] mx-auto px-6 py-16 text-center">
-            <div className="w-5 h-5 border-2 border-dark-lighter border-t-primary rounded-full animate-spin mx-auto" />
-          </div>
-        </main>
-      </div>
+      <PageShellSkeleton maxWidth="max-w-[900px]" className="pt-14 px-6">
+        <Skeleton className="h-3 w-28 mb-6" />
+        <PageHeaderSkeleton actions={1} />
+        <Skeleton className="h-48 w-full rounded-2xl mb-4" />
+        <div className="space-y-3">
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-32 w-full rounded-2xl" />
+        </div>
+      </PageShellSkeleton>
     );
   }
 
@@ -162,8 +186,9 @@ export default function EventStatusPage({
             <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-5">
               {error || "Event not found."}
             </div>
-            <Link href="/organiser/listings" className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-white transition-colors">
-              ← Back to listings
+            <Link href="/organiser/listings"
+              className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Listings
             </Link>
           </div>
         </main>
@@ -181,10 +206,13 @@ export default function EventStatusPage({
       <main className="pt-14">
         <div className="max-w-[900px] mx-auto px-6 py-8 pb-24 lg:pb-12 page-in">
 
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-widest text-muted-dark mb-8">
-            <Link href="/organiser/listings" className="hover:text-muted transition-colors flex items-center gap-1.5">
-              <ArrowLeft className="w-3 h-3" /> Listings
+          {/* Return to listings. Same pill the public event page uses for
+              "Back to Events" — the faint breadcrumb here read as a label
+              rather than a control (issue #309). */}
+          <div className="mb-8">
+            <Link href="/organiser/listings"
+              className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Listings
             </Link>
           </div>
 
@@ -231,7 +259,7 @@ export default function EventStatusPage({
               )}
               {isRejected && (
                 <Link
-                  href={`/organiser/new-listing?id=${event.id}`}
+                  href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}`)}`}
                   className="inline-flex items-center gap-2 bg-gradient-to-br from-[rgb(194,236,119)] to-[rgb(179,225,83)] text-dark font-headline text-[11px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 transition-transform"
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit &amp; resubmit
@@ -239,7 +267,7 @@ export default function EventStatusPage({
               )}
               {!isRejected && (
                 <Link
-                  href={`/organiser/new-listing?id=${event.id}`}
+                  href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}`)}`}
                   className="inline-flex items-center gap-2 border border-dark-lighter bg-transparent text-light font-headline text-[11px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg hover:border-primary hover:bg-dark-light transition-colors"
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit event

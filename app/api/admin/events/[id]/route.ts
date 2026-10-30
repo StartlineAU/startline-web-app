@@ -1,7 +1,154 @@
 import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
+import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
+import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getAdminSession();
+  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
+
+  try {
+    const event = await prisma.event.findUnique({ where: { id } });
+    if (!event) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    return NextResponse.json(event);
+  } catch {
+    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+}
+
+// PATCH /api/admin/events/[id] — edit any event, regardless of status.
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getAdminSession();
+  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
+  const parsedBody = eventPayloadSchema.safeParse(await req.json());
+  if (!parsedBody.success) {
+    return NextResponse.json(
+      { error: parsedBody.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 },
+    );
+  }
+  const body = parsedBody.data;
+  const { submit, ...data } = body;
+
+  try {
+    const existing = await prisma.event.findUnique({
+      where:  { id },
+      select: {
+        title: true, status: true,
+        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Event not found." }, { status: 404 });
+    }
+
+    if (submit) {
+      const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
+      for (const field of required) {
+        if (!data[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+      }
+      if (data.registrationType === "external" && !data.registrationUrl) {
+        return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
+      }
+    }
+
+    // Live events stay live after an admin edit; everything else re-enters the
+    // review queue. Archived events stay archived rather than reopening.
+    const submittedAs = submit
+      ? existing.status === "APPROVED" || existing.status === "IN_PROGRESS"
+        ? "APPROVED"
+        : existing.status === "ARCHIVED"
+          ? "ARCHIVED"
+          : "PENDING"
+      : existing.status;
+
+    const times = eventTimeData({
+      eventDate: data.eventDate ?? existing.eventDate,
+      endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+      startTime: data.startTime ?? existing.startTime,
+      endTime: data.endTime !== undefined ? data.endTime : existing.endTime,
+      state: data.state ?? existing.state,
+    });
+    const nextStatus = effectiveEventStatus({ status: submittedAs, ...times });
+
+    const updated = await prisma.event.update({
+      where: { id },
+      data: {
+        ...times,
+        title:             data.title             ?? undefined,
+        discipline:        data.discipline        ?? undefined,
+        description:       data.description       ?? undefined,
+        eventDate:         data.eventDate         ?? undefined,
+        endDate:           data.endDate !== undefined ? data.endDate : undefined,
+        startTime:         data.startTime         ?? undefined,
+        endTime:           data.endTime           ?? undefined,
+        venue:             data.venue             ?? undefined,
+        address:           data.address           ?? undefined,
+        city:              data.city              ?? undefined,
+        state:             data.state             ?? undefined,
+        latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
+        longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),
+        format:            data.format            ?? undefined,
+        level:             data.level             ?? undefined,
+        categories:        data.categories        ?? undefined,
+        cap:               data.cap               ?? null,
+        minAge:            data.minAge            ?? undefined,
+        waves:             data.waves             ?? undefined,
+        inclusions:        data.inclusions        ?? undefined,
+        extras:            data.extras            ?? undefined,
+        activations:       data.activations       ?? undefined,
+        refundTiers:       data.refundTiers       ?? undefined,
+        refundPolicy:      data.refundPolicy      ?? undefined,
+        registrationType:  data.registrationType  ?? undefined,
+        feeStructure:      data.feeStructure      ?? undefined,
+        registrationUrl:   data.registrationUrl   ?? undefined,
+        accessibilityInfo: data.accessibilityInfo ?? undefined,
+        coverImageUrl:     data.coverImageUrl     ?? undefined,
+        informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
+        photos:            Array.isArray(data.photos) ? data.photos : undefined,
+        status:            nextStatus,
+      },
+    });
+
+    await syncEventSchedules(updated).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
+
+    writeAuditLog({
+      adminId: session.sub,
+      action: "EDIT_EVENT",
+      targetType: "event",
+      targetId: id,
+      meta: { title: updated.title, status: nextStatus },
+    });
+
+    return NextResponse.json({ id: updated.id, status: updated.status });
+  } catch (err) {
+    console.error("Admin event update error:", err);
+    return NextResponse.json({ error: "Failed to update event." }, { status: 500 });
+  }
+}
 
 export async function DELETE(
   _req: Request,
@@ -10,7 +157,9 @@ export async function DELETE(
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
-  const { id } = await params;
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
 
   try {
     const event = await prisma.event.findUnique({
@@ -23,6 +172,9 @@ export async function DELETE(
     }
 
     await prisma.event.delete({ where: { id } });
+    await cancelEventSchedules(id).catch((err) =>
+      console.error("Event schedule cleanup failed:", err),
+    );
 
     writeAuditLog({
       adminId: session.sub,

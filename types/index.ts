@@ -37,18 +37,25 @@ export interface TicketDrop {
 
 export interface UserEvent {
   id: string;
+  slug?: string;
   title: string;
   description: string;
-  fullDescription?: string;
   date: string;
   endDate?: string;
   time: string;
   endTime?: string;
+  /** Persisted lifecycle status. Public discovery never includes ended events. */
+  status?: "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+  timeZone?: string;
+  startsAtUtc?: string | null;
+  endsAtUtc?: string | null;
   dates?: string[];
   location: string;
   address?: string;
   city: string;
   state: AustralianState;
+  latitude?: number | null;
+  longitude?: number | null;
   type: EventType;
   discipline: string;
   format: string;
@@ -57,6 +64,7 @@ export interface UserEvent {
   cap?: number | null;
   minAge?: number | null;
   refundPolicy?: string;
+  refundTiers?: unknown;
   image: string;
   registrationUrl: string | null;
   registrationType: string;
@@ -67,14 +75,15 @@ export interface UserEvent {
   isOfficial?: boolean;
   ticketDrops?: TicketDrop[];
   fromPrice: number | null;
-  tagline?: string | null;
   coverImageUrl?: string | null;
   photos?: string[];
+  informationPdfs?: { url: string; label: string | null; name: string | null }[];
   registrationCount: number;
   organiser?: {
     id: string;
     orgName: string | null;
     logoUrl: string | null;
+    rating?: { average: number; count: number } | null;
   };
 }
 
@@ -86,6 +95,9 @@ export interface FilterState {
   priceRange: [number, number] | null;
   dateRange: "this-month" | "next-3" | "all";
   searchQuery: string;
+  originLat?: number;
+  originLng?: number;
+  maxDistance?: number;
 }
 
 export type SortOption = "date" | "price-asc" | "price-desc" | "popular";

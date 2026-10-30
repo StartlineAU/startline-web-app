@@ -2,6 +2,7 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
 import type { UserEvent, FilterState, SortOption, ExperienceLevel } from "@/types";
+import { eventDistance } from "@/lib/distance";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -132,28 +133,46 @@ export function filterEvents(
         event.title.toLowerCase().includes(q) ||
         event.location.toLowerCase().includes(q) ||
         event.city.toLowerCase().includes(q) ||
-        (event.organizer?.toLowerCase().includes(q) ?? false);
+        (event.organizer?.toLowerCase().includes(q) ?? false) ||
+        // Divisions the organiser entered ("5K", "Half Marathon"), so searching
+        // a distance finds the events offering it — and so picking a division
+        // from the search dropdown narrows to it.
+        (event.categories?.some((c) => c.toLowerCase().includes(q)) ?? false);
       if (!matches) return false;
+    }
+
+    if (filters.originLat != null && filters.originLng != null && filters.maxDistance != null) {
+      const dist = eventDistance({ lat: filters.originLat, lng: filters.originLng }, event);
+      if (dist === null || dist > filters.maxDistance) return false;
     }
 
     return true;
   });
 }
 
+/**
+ * Stable tie-break for paginated sorts. Without it, two events with the same
+ * price or date could swap places between page requests and "Load more" would
+ * skip or repeat one.
+ */
+function byId(a: UserEvent, b: UserEvent): number {
+  return (a.id ?? "").localeCompare(b.id ?? "");
+}
+
 export function sortEventsByDate(events: UserEvent[]): UserEvent[] {
   return [...events].sort(
-    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime() || byId(a, b)
   );
 }
 
 export function sortEvents(events: UserEvent[], sortBy: SortOption): UserEvent[] {
   switch (sortBy) {
     case "price-asc":
-      return [...events].sort((a, b) => (a.fromPrice ?? Infinity) - (b.fromPrice ?? Infinity));
+      return [...events].sort((a, b) => (a.fromPrice ?? Infinity) - (b.fromPrice ?? Infinity) || byId(a, b));
     case "price-desc":
-      return [...events].sort((a, b) => (b.fromPrice ?? -Infinity) - (a.fromPrice ?? -Infinity));
+      return [...events].sort((a, b) => (b.fromPrice ?? -Infinity) - (a.fromPrice ?? -Infinity) || byId(a, b));
     case "popular":
-      return [...events].sort((a, b) => b.registrationCount - a.registrationCount);
+      return [...events].sort((a, b) => b.registrationCount - a.registrationCount || byId(a, b));
     case "date":
     default:
       return sortEventsByDate(events);
@@ -164,6 +183,15 @@ export function getUpcomingEvents(events: UserEvent[], limit = 10): UserEvent[] 
   const today = startOfDay(new Date());
   const upcoming = events.filter((e) => isOnOrAfterToday(e.date, today));
   return sortEventsByDate(upcoming).slice(0, limit);
+}
+
+/** Past events (before today), most recent first. */
+export function getPastEvents(events: UserEvent[], limit = 20): UserEvent[] {
+  const today = startOfDay(new Date());
+  const past = events.filter((e) => isBefore(startOfDay(parseISO(e.date)), today));
+  return [...past]
+    .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())
+    .slice(0, limit);
 }
 
 export function getTotalUpcomingEvents(events: UserEvent[]): number {

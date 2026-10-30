@@ -3,6 +3,7 @@ import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
   AdminGetUserCommand,
+  ListUsersCommand,
   UsernameExistsException,
 } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -48,7 +49,18 @@ export async function ensureAthleteCognitoUser(email: string): Promise<string> {
   return result.Username ?? normalized;
 }
 
-export async function getCognitoUserStatus(email: string): Promise<{ exists: boolean; status: string | null }> {
+/**
+ * Find a Cognito user by the email they type at sign-in.
+ *
+ * Native users have the email as their username, so AdminGetUser finds them.
+ * Google and Apple users get a provider-generated username (`Google_<sub>`),
+ * so the email is only an attribute and AdminGetUser cannot find them. A
+ * ListUsers filter does, and it returns the username the app must hand to
+ * Amplify once a password has been added to that profile.
+ */
+export async function findCognitoUserByEmail(
+  email: string,
+): Promise<{ username: string; status: string | null } | null> {
   const normalized = email.toLowerCase().trim();
 
   try {
@@ -56,14 +68,28 @@ export async function getCognitoUserStatus(email: string): Promise<{ exists: boo
       UserPoolId: userPoolId,
       Username: normalized,
     }));
-    return { exists: true, status: result.UserStatus ?? null };
+    return { username: result.Username ?? normalized, status: result.UserStatus ?? null };
   } catch (err) {
-    // Only a definitive "no such user" means the account doesn't exist.
-    // Anything else (AccessDenied, throttling, network) must propagate —
-    // otherwise real account holders get told they have no account.
-    if ((err as { name?: string }).name === "UserNotFoundException") {
-      return { exists: false, status: null };
-    }
-    throw err;
+    if ((err as { name?: string }).name !== "UserNotFoundException") throw err;
   }
+
+  const escaped = normalized.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const result = await client.send(new ListUsersCommand({
+    UserPoolId: userPoolId,
+    Filter: `email = "${escaped}"`,
+    Limit: 1,
+  }));
+  const user = result.Users?.[0];
+  if (!user?.Username) return null;
+  return { username: user.Username, status: user.UserStatus ?? null };
 }
+
+export async function getCognitoUserStatus(email: string): Promise<{ exists: boolean; status: string | null }> {
+  const user = await findCognitoUserByEmail(email);
+  if (!user) return { exists: false, status: null };
+  // Coarse status only — never leak the raw lifecycle (e.g.
+  // FORCE_CHANGE_PASSWORD / RESET_REQUIRED) to unauthenticated callers.
+  return { exists: true, status: user.status === "UNCONFIRMED" ? "UNCONFIRMED" : "CONFIRMED" };
+}
+
+

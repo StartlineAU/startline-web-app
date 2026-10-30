@@ -16,11 +16,19 @@ interface OrderSummaryProps {
   lines: OrderLine[];
   feeLine?: OrderLine | null;
   totalLabel: string | null;
+  /** A free RSVP never goes near Stripe, so it must not promise a payment. */
+  free?: boolean;
 }
 
 const TRUST = [
   "Instant confirmation by email",
   "Secure payment via Stripe",
+  "Event updates sent directly to you",
+];
+
+const FREE_TRUST = [
+  "Instant confirmation by email",
+  "No payment required",
   "Event updates sent directly to you",
 ];
 
@@ -32,6 +40,7 @@ export default function OrderSummary({
   lines,
   feeLine,
   totalLabel,
+  free = false,
 }: OrderSummaryProps) {
   return (
     <div className="lg:sticky lg:top-[76px]">
@@ -103,7 +112,7 @@ export default function OrderSummary({
       </div>
 
       <div className="flex flex-col gap-2 mt-4">
-        {TRUST.map((t) => (
+        {(free ? FREE_TRUST : TRUST).map((t) => (
           <div key={t} className="flex items-center gap-2 font-headline text-[11px] uppercase tracking-[0.1em] text-muted-dark">
             <Check className="w-[13px] h-[13px] text-primary shrink-0" strokeWidth={2} /> {t}
           </div>

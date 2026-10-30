@@ -21,24 +21,27 @@ export async function GET() {
         status:                   true,
         verified:                 true,
         stripeOnboardingComplete: true,
-        insuranceDeclared:        true,
         createdAt:                true,
         _count: {
-          select: { events: true, reviews: true, registrations: true },
+          select: { events: true, reviews: true, registrations: true, members: true },
         },
         events: {
-          where:  { status: "APPROVED" },
+          where: {
+            status: { in: ["APPROVED", "IN_PROGRESS"] },
+            endsAtUtc: { gt: new Date() },
+          },
           select: { id: true },
         },
       },
     });
 
-    const rows = organisers.map(({ events, _count, ...o }: { events: { id: string }[]; _count: { events: number; reviews: number; registrations: number } }) => ({
+    const rows = organisers.map(({ events, _count, ...o }: { events: { id: string }[]; _count: { events: number; reviews: number; registrations: number; members: number } }) => ({
       ...o,
       eventCount:        _count.events,
       liveEventCount:    events.length,
       reviewCount:       _count.reviews,
       registrationCount: _count.registrations,
+      memberCount:       _count.members,
     }));
 
     return NextResponse.json(rows);

@@ -1,27 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { getOrganiserSession } from "@/lib/amplify-server";
-import { archivePastEvents } from "@/lib/archive-events";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FIXED_CENTS } from "@/lib/platform-fee";
+import { idParams } from "@/lib/schemas";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getOrganiserSession();
-  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const auth = await requireOrganiser();
+  if (auth.error) return auth.error;
+  const session = auth.session;
 
-  const { id } = await params;
+  const parsedParams = idParams.safeParse(await params);
+  if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
+  const { id } = parsedParams.data;
 
   try {
-    await archivePastEvents();
     const event = await prisma.event.findUnique({
       where: { id },
+      include: { organiser: { select: { orgName: true } } },
     });
 
     if (!event)                            return NextResponse.json({ error: "Not found." },  { status: 404 });
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    if (event.status !== "APPROVED")       return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
+    const status = effectiveEventStatus(event);
+    if (status !== "APPROVED" && status !== "IN_PROGRESS") {
+      return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
+    }
 
     const waves = (event.waves as { label: string; price: string; qty?: number }[]) ?? [];
     const lowestPrice = waves.length
@@ -29,18 +36,25 @@ export async function GET(
       : 0;
 
     // Prefer real registration data when it exists, fall back to the estimate.
-    const [registrations, registrationCount] = await Promise.all([
+    const [registrations, registrationCount, checkedInCount] = await Promise.all([
       prisma.registration.findMany({
         where:   { eventId: id, status: "CONFIRMED" },
         orderBy: { createdAt: "desc" },
         select: {
           id: true, athleteName: true, athleteEmail: true, category: true,
-          waveLabel: true, gender: true, medicalNotes: true,
+          waveLabel: true, gender: true, medicalNotes: true, checkedInAt: true,
           amountCents: true, platformFeeCents: true, createdAt: true,
         },
       }),
       prisma.registration.count({ where: { eventId: id, status: "CONFIRMED" } }),
+      prisma.registration.count({ where: { eventId: id, status: "CONFIRMED", checkedInAt: { not: null } } }),
     ]);
+
+    const soldByWave: Record<string, number> = {};
+    for (const r of registrations) {
+      if (r.waveLabel) soldByWave[r.waveLabel] = (soldByWave[r.waveLabel] ?? 0) + 1;
+    }
+    const wavesWithSold = waves.map(w => ({ ...w, sold: soldByWave[w.label] ?? 0 }));
 
     const count = registrationCount;
     const hasRealData = count > 0;
@@ -56,7 +70,7 @@ export async function GET(
     }
     const netPayout = Math.max(0, gross - fees);
 
-    const recentRegistrations = registrations.slice(0, 20).map((r: { id: string; athleteName: string | null; athleteEmail: string | null; category: string | null; waveLabel: string | null; gender: string | null; medicalNotes: string | null; amountCents: number; platformFeeCents: number; createdAt: Date }) => ({
+    const recentRegistrations = registrations.slice(0, 20).map((r: { id: string; athleteName: string | null; athleteEmail: string | null; category: string | null; waveLabel: string | null; gender: string | null; medicalNotes: string | null; checkedInAt: Date | null; amountCents: number; platformFeeCents: number; createdAt: Date }) => ({
       id:           r.id,
       name:         r.athleteName,
       email:        r.athleteEmail,
@@ -64,6 +78,7 @@ export async function GET(
       wave:         r.waveLabel,
       gender:       r.gender,
       medicalNotes: r.medicalNotes,
+      checkedInAt:  r.checkedInAt,
       amount:       r.amountCents / 100,
       createdAt:    r.createdAt,
     }));
@@ -78,6 +93,7 @@ export async function GET(
       event: {
         id:                event.id,
         title:             event.title,
+        organiserName:     event.organiser.orgName,
         discipline:        event.discipline,
         eventDate:         event.eventDate,
         endDate:           event.endDate,
@@ -88,8 +104,9 @@ export async function GET(
         state:             event.state,
         cap:               event.cap,
         registrationCount: count,
+        checkedInCount,
         coverImageUrl:     event.coverImageUrl,
-        waves,
+        waves: wavesWithSold,
         feeStructure:      event.feeStructure,
         categories:        event.categories,
       },

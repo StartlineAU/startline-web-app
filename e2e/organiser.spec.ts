@@ -1,27 +1,110 @@
 import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { organiserLogin } from "./helpers";
+import { organiserLogin, organiserMemberLogin, openOrganiserSettings, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
+
+ensureDatabaseUrl();
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
+
+// Harper Jones (the __e2e_bypass "athlete" identity) belongs to no
+// organisation, which this flow needs: everyone who has one is now sent to
+// their portal instead of being offered the form (#338). The organisation the
+// test creates is deleted afterwards, so the run repeats.
+const SETUP_EMAIL = "harper.jones@startline.test";
+
+async function deleteOrganisersCreatedBy(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) return;
+  const memberships = await prisma.organiserMember.findMany({
+    where: { userId: user.id },
+    select: { organiserId: true },
+  });
+  await prisma.organiser.deleteMany({
+    where: { id: { in: memberships.map((m) => m.organiserId) } },
+  });
+}
+
+test.describe("organiser setup", () => {
+  test.afterEach(async () => {
+    await deleteOrganisersCreatedBy(SETUP_EMAIL);
+  });
+
+  test("requires contact details when creating a profile", async ({ page }) => {
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await page.goto("/organiser-setup");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByRole("button", { name: /continue/i }).click();
+
+    // Org name alone is no longer enough — contact details are required.
+    await page.getByPlaceholder(/Apex Endurance/i).fill("E2E Setup Org");
+    await page.getByRole("button", { name: /create organiser profile/i }).click();
+    await expect(page.getByText(/please enter a contact name/i)).toBeVisible();
+
+    // Filling the contact fields lets the form submit.
+    await page.getByPlaceholder(/full name/i).fill("E2E Contact");
+    await page.getByPlaceholder(/events@yourorg/i).fill("e2e@example.com");
+    await page.getByPlaceholder(/\+61/i).fill("0412000000");
+    await page.getByRole("button", { name: /create organiser profile/i }).click();
+    await expect(page).toHaveURL(/\/organiser\/dashboard/, { timeout: 15000 });
+  });
+
+  test("setup API rejects missing contact details", async ({ request }) => {
+    const res = await request.post("/api/organiser/setup", {
+      headers: { Cookie: "__e2e_bypass=athlete" },
+      data: { orgName: "X" },
+    });
+    expect(res.status()).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/contact details are required/i);
+  });
+
+  // Someone who already has one never gets a second, whatever they send.
+  test("setup API returns the existing organisation instead of creating another", async ({ request }) => {
+    const res = await request.post("/api/organiser/setup", {
+      headers: { Cookie: "__e2e_bypass=organiser" },
+      data: { orgName: "Should Not Be Created", contactName: "X", contactEmail: "x@e.com", phone: "0400000000" },
+    });
+    expect(res.ok()).toBeTruthy();
+    expect((await res.json()).orgName).toBe("Apex Endurance Events");
+  });
+});
+
+
 
 test.describe("organiser login", () => {
   test("signs in via modal and redirects to dashboard", async ({ page }) => {
+
     await organiserLogin(page);
 
-    await expect(page.locator("h1")).toContainText("Hi there");
+    await expectOrganiserDashboard(page);
   });
 
-  test("landing page renders without sign-in form", async ({ page }) => {
+  // Owners and managers never reach this page — getOrganiserSession resolves and
+  // the page redirects them to the dashboard. So it renders only for someone the
+  // portal doesn't recognise, and its two exits are sign-up and sign-in. The old
+  // "Go to Dashboard" link was unreachable for the people it was for, and
+  // clicking it bounced off middleware straight back here (issue #302).
+  test("landing page offers sign-up and sign-in to an unrecognised visitor", async ({ page }) => {
     await page.goto("/organiser");
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("heading", { name: /organiser/i })).toBeVisible();
     await expect(page.getByText(/sign up for a free user account/i)).toBeVisible();
     await expect(page.getByRole("link", { name: /get started/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /go to dashboard/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
   });
 });
 
 test.describe("new listing wizard", () => {
   test("new listing step 1 visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
@@ -29,6 +112,7 @@ test.describe("new listing wizard", () => {
   });
 
   test("new listing step 2 visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
@@ -39,6 +123,7 @@ test.describe("new listing wizard", () => {
   });
 
   test("new listing step 3 visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
@@ -47,9 +132,7 @@ test.describe("new listing wizard", () => {
     await page.waitForTimeout(500);
     await page.getByText("Pick start date").click();
     await page.getByRole("button", { name: /today/i }).click();
-    await page.getByRole("button", { name: /\d{4}/i }).first().click();
-    const timeInputs3 = page.locator('input[type="time"]');
-    await timeInputs3.first().fill("09:00");
+    await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
     const addrInput3 = page.getByPlaceholder(/start typing an address/i);
     await addrInput3.fill("1 Test St, Sydney NSW 2000");
     await page.getByRole("button", { name: /continue/i }).click();
@@ -58,6 +141,7 @@ test.describe("new listing wizard", () => {
   });
 
   test("new listing step 4 visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
@@ -66,9 +150,7 @@ test.describe("new listing wizard", () => {
     await page.waitForTimeout(500);
     await page.getByText("Pick start date").click();
     await page.getByRole("button", { name: /today/i }).click();
-    await page.getByRole("button", { name: /\d{4}/i }).first().click();
-    const timeInputs4 = page.locator('input[type="time"]');
-    await timeInputs4.first().fill("09:00");
+    await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
     const addrInput4 = page.getByPlaceholder(/start typing an address/i);
     await addrInput4.fill("1 Test St, Sydney NSW 2000");
     await page.getByRole("button", { name: /continue/i }).click();
@@ -78,11 +160,15 @@ test.describe("new listing wizard", () => {
     if (await price4.isVisible()) await price4.fill("50");
     await page.getByRole("button", { name: /no refunds/i }).click();
     await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
+    // Step 4 only renders after the tickets step settles — wait on the UI
+    // state instead of a fixed timeout so the screenshot is never of a
+    // half-transitioned wizard.
+    await expect(page.getByText(/cover image/i).first()).toBeVisible({ timeout: 15000 });
     await argosScreenshot(page, "new-listing-step4");
   });
 
   test("new listing final review visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
@@ -93,9 +179,7 @@ test.describe("new listing wizard", () => {
 
     await page.getByText("Pick start date").click();
     await page.getByRole("button", { name: /today/i }).click();
-    await page.getByRole("button", { name: /\d{4}/i }).first().click();
-    const timeInputs = page.locator('input[type="time"]');
-    await timeInputs.first().fill("09:00");
+    await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
     const addrInput = page.getByPlaceholder(/start typing an address/i);
     await addrInput.fill("1 Test St, Sydney NSW 2000");
     await page.getByRole("button", { name: /continue/i }).click();
@@ -113,10 +197,24 @@ test.describe("new listing wizard", () => {
 
     await argosScreenshot(page, "new-listing-review");
   });
+
+  test("location preview map shows empty state before address is selected", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByPlaceholder(/Apex Throwdown/i).fill("Map Preview Test Event");
+    await page.getByRole("button", { name: /^continue$/i }).click();
+
+    await expect(page.getByText(/when and where/i)).toBeVisible();
+    await expect(page.getByTestId("location-preview-empty")).toBeVisible();
+    await expect(page.getByText(/select an address above to preview the location/i)).toBeVisible();
+  });
 });
 
 test.describe("organiser dashboard", () => {
   test("dashboard visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(2000);
@@ -124,16 +222,27 @@ test.describe("organiser dashboard", () => {
   });
 
   test("dashboard shows stats and events after login", async ({ page }) => {
+
     await organiserLogin(page);
 
-    await expect(page.locator("h1")).toContainText("Hi there");
-    await expect(page.getByText("Live now")).toBeVisible();
-    await expect(page.getByText("Registrations")).toBeVisible();
-    await expect(page.getByText("Total events")).toBeVisible();
+    await expectOrganiserDashboard(page);
+    await expect(page.getByText("Followers")).toBeVisible();
+    await expect(page.getByText("Revenue (est.)")).toBeVisible();
+    await expect(page.getByText(/Trend/i).first()).toBeVisible();
+    await expect(page.getByLabel("Time range")).toBeVisible();
+    await expect(page.getByLabel("Event")).toBeVisible();
+    await expect(page.getByLabel("Metric")).toBeVisible();
+
+    await page.getByLabel("Metric").click();
+    await page.getByRole("option", { name: "Followers" }).click();
+    await expect(page.getByText("New followers")).toBeVisible();
+    await expect(page.getByLabel("Event")).toHaveCount(0);
+
     await expect(page.getByText("Your upcoming events")).toBeVisible();
   });
 
   test("dashboard has view my events button", async ({ page }) => {
+
     await organiserLogin(page);
 
     await expect(page.getByRole("link", { name: /view my events/i })).toBeVisible();
@@ -148,6 +257,7 @@ test.describe("organiser pages", () => {
   });
 
   test("organiser listings page visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/listings");
     await page.waitForLoadState("networkidle");
@@ -155,30 +265,356 @@ test.describe("organiser pages", () => {
   });
 
   test("organiser event dashboard visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/events/seed-event-001/dashboard");
     await page.waitForLoadState("networkidle");
     await argosScreenshot(page, "organiser-event-dashboard");
   });
 
+  test("ticket tiers show fill progress per tier", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/events/seed-event-001/dashboard");
+
+    await expect(page.getByText("Ticket tiers")).toBeVisible();
+    await expect(page.getByText("Sold / Cap").first()).toBeVisible();
+
+    // All three seeded tiers have caps, so each renders a fill gauge.
+    const bars = page.getByRole("progressbar");
+    await expect(bars).toHaveCount(3);
+    // Sold count is bound to the right tier cap, without pinning the exact count.
+    await expect(page.getByRole("progressbar", { name: /^Early Bird: \d+ of 80 sold$/ })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: /^General: \d+ of 150 sold$/ })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: /^Late Entry: \d+ of 90 sold$/ })).toBeVisible();
+  });
+
+  test("announcement editor applies bold formatting to new text", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/events/seed-event-001/dashboard?panel=announce");
+
+    const editor = page.locator('[contenteditable="true"]');
+    await expect(editor).toBeVisible();
+    await editor.click();
+    await page.getByRole("button", { name: /bold/i }).click();
+    await editor.pressSequentially("Hello bold");
+
+    expect(await editor.innerHTML()).toMatch(/<(b|strong)[\s>]/i);
+  });
+
+  test("profile settings reposition Done saves and confirms", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/profile");
+
+    await openOrganiserSettings(page);
+    await expect(page.getByText("Cover photo")).toBeVisible();
+
+    // The cover has an image in seed data, so Reposition is available.
+    await page.getByRole("button", { name: "Reposition" }).first().click();
+    await page.getByRole("button", { name: "Done" }).first().click();
+
+    // Done now commits the change rather than silently dropping it.
+    await expect(page.getByText("Saved")).toBeVisible();
+  });
+
+  // The notification rows drew switches that did nothing (#346). They are
+  // real now: each one saves, and off stays off. Following Manage payments
+  // also used to leave the modal open over the page it had loaded.
+  test("settings modal notification switches save, and it closes on Manage payments", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/profile");
+
+    // The navbar has its own Notifications button and Payments link.
+    const settings = await openOrganiserSettings(page);
+    await settings.getByRole("button", { name: "Notifications", exact: true }).click();
+    const registrations = settings.getByRole("switch", { name: "New registration" });
+    await expect(settings.getByRole("switch", { name: "Event approved" })).toHaveAttribute("aria-checked", "true");
+    await expect(settings.getByRole("switch", { name: "Event rejected" })).toHaveAttribute("aria-checked", "true");
+    await expect(registrations).toHaveAttribute("aria-checked", "true");
+
+    try {
+      // Nothing is sent until Save, like every other section.
+      const save = settings.getByRole("button", { name: /^save$/i });
+      await expect(save).toBeDisabled();
+      await registrations.click();
+      await expect(registrations).toHaveAttribute("aria-checked", "false");
+      const unsaved = await (await page.request.get("/api/organiser/profile")).json();
+      expect(unsaved.notifyNewRegistration).toBe(true);
+
+      await Promise.all([
+        page.waitForResponse(r => r.url().includes("/api/organiser/profile") && r.request().method() === "PATCH" && r.ok()),
+        save.click(),
+      ]);
+      await expect(settings.getByText("Saved")).toBeVisible();
+      // Saved, not just drawn: the server says the same after a fresh read.
+      const profile = await (await page.request.get("/api/organiser/profile")).json();
+      expect(profile.notifyNewRegistration).toBe(false);
+      expect(profile.notifyEventApproved).toBe(true);
+    } finally {
+      const restored = await page.request.patch("/api/organiser/profile", { data: { notifyNewRegistration: true } });
+      expect(restored.ok()).toBe(true);
+    }
+
+    await settings.getByRole("button", { name: "Payments", exact: true }).click();
+    await settings.getByRole("link", { name: "Manage payments" }).click();
+    await expect(page).toHaveURL(/\/organiser\/payments/);
+    await expect(settings).toHaveCount(0);
+  });
+
+  // Managers are told what the owner is told only while the owner allows it,
+  // and only the owner can change that (#348).
+  test("only the owner can change whether managers are notified", async ({ page, browser }) => {
+    // Two settings dialogs to open (owner, then manager), each behind a dev
+    // compile and a hydration wait, plus three API round-trips.
+    test.slow();
+    await organiserLogin(page);
+
+    // The switch reads shared seed state, and a cleanup that lost its
+    // connection in an earlier run can leave it off — which then fails the
+    // assertion below and every retry after it. Establish the precondition
+    // instead of inheriting it.
+    await expect.poll(async () => {
+      try {
+        return (await page.request.patch("/api/organiser/profile", { data: { notifyManagers: true } })).ok();
+      } catch { return false; }
+    }).toBe(true);
+
+    await page.goto("/organiser/profile");
+    const settings = await openOrganiserSettings(page);
+    await settings.getByRole("button", { name: "Notifications", exact: true }).click();
+    const toggle = settings.getByRole("switch", { name: "Include managers" });
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    try {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await Promise.all([
+        page.waitForResponse(r => r.url().includes("/api/organiser/profile") && r.request().method() === "PATCH" && r.ok()),
+        settings.getByRole("button", { name: /^save$/i }).click(),
+      ]);
+
+      // Tom manages the same organisation: he is shown the setting, cannot
+      // change it, and no longer receives the organisation's notifications.
+      const managerContext = await browser.newContext();
+      const manager = await managerContext.newPage();
+      await organiserMemberLogin(manager);
+
+      const refused = await manager.request.patch("/api/organiser/profile", { data: { notifyManagers: true } });
+      expect(refused.status()).toBe(403);
+      const feed = await (await manager.request.get("/api/organiser/notifications")).json();
+      expect(feed.notifications).toEqual([]);
+
+      await manager.goto("/organiser/profile");
+      const managerSettings = await openOrganiserSettings(manager);
+      await managerSettings.getByRole("button", { name: "Notifications", exact: true }).click();
+      await expect(managerSettings.getByRole("switch", { name: "Include managers" })).toBeDisabled();
+      await expect(managerSettings.getByRole("switch", { name: "New registration" })).toBeDisabled();
+      const refusedKind = await manager.request.patch("/api/organiser/profile", { data: { notifyNewRegistration: false } });
+      expect(refusedKind.status()).toBe(403);
+      await expect(managerSettings.getByText("Only the owner can change this.")).toBeVisible();
+      await expect(managerSettings.getByRole("button", { name: /^save$/i })).toHaveCount(0);
+      await managerContext.close();
+    } finally {
+      // Leave the seeded organisation as the other specs expect to find it.
+      // Poll so a dropped connection cannot fail the test at its last step.
+      await expect.poll(async () => {
+        try {
+          return (await page.request.patch("/api/organiser/profile", { data: { notifyManagers: true } })).ok();
+        } catch { return false; }
+      }).toBe(true);
+    }
+  });
+
   test("organiser payments page visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/payments");
     await page.waitForLoadState("networkidle");
     await argosScreenshot(page, "organiser-payments");
   });
 
-  test("organiser how it works page visual snapshot", async ({ page }) => {
+  test("top nav distinguishes Organisation from My profile", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
-    await page.goto("/organiser/how-it-works");
+    const orgNav = page.locator("nav").getByRole("link", { name: "Organisation", exact: true });
+    await expect(orgNav).toBeVisible();
+    await Promise.all([
+      page.waitForURL(/\/organiser\/profile/),
+      orgNav.click(),
+    ]);
+  });
+
+  // A phone used to show an account dropdown and a hamburger side by side,
+  // listing much the same things. Now the hamburger is the only menu, and it
+  // carries the same AccountMenu the desktop dropdown uses (Home, Athlete
+  // profile, the visitor's organisations, Settings, Sign Out).
+  test("phone nav has one menu holding everything", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await organiserLogin(page);
+    await page.goto("/organiser/dashboard");
+
+    const nav = page.locator("nav");
+    const toggle = nav.getByRole("button", { name: "Toggle menu" });
+    await expect(toggle).toBeVisible();
+    // Bell and hamburger only: the account dropdown's trigger is gone.
+    await expect(nav.locator("button:visible")).toHaveCount(2);
+
+    await toggle.click();
+    for (const name of ["Dashboard", "Listings", "Organisation", "Members", "Payments", "Home", "Athlete profile"]) {
+      await expect(nav.getByRole("link", { name, exact: true }).last()).toBeVisible();
+    }
+    // The organisation switcher and the rest of the account menu came with it.
+    await expect(nav.getByRole("button", { name: "Apex Endurance Events", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
+  });
+
+  test("payments page shows ABN field for Stripe connection", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByText(/ABN or ACN/i).first()).toBeVisible({ timeout: 20000 });
+    await expect(page.getByPlaceholder("12 345 678 901")).toBeVisible();
+  });
+
+  // Issue #378: the native date input drew the OS calendar, not the platform's.
+  test("payments date of birth uses the themed calendar", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+    const dob = page.locator("#organiser-dob");
+    await expect(dob).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('input[type="date"]')).toHaveCount(0);
+
+    await dob.click();
+    // The year grid sits behind the month label, as on every other birthday field.
+    const header = page.getByRole("button", { name: /^[A-Z][a-z]+ \d{4}$/ });
+    await expect(header).toBeVisible();
+    await header.click();
+    await expect(page.getByRole("button", { name: "1990", exact: true })).toBeVisible();
+  });
+
+  // Issue #387: after the form is submitted, Stripe can hold the account while
+  // it verifies. The page must say so rather than send the organiser back into
+  // the onboarding they already finished.
+  test("payments page waits on Stripe instead of offering setup again", async ({ page }) => {
+    await page.route("**/api/organiser/profile", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const body = await res.json();
+      await route.fulfill({ response: res, json: { ...body, stripeAccountId: "acct_e2e_review", stripeOnboardingComplete: false } });
+    });
+    await page.route("**/api/organiser/stripe/status", (route) =>
+      route.fulfill({ json: { connected: true, chargesEnabled: false, payoutsEnabled: false, actionRequired: false } }));
+
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+
+    await expect(page.getByText(/stripe is reviewing your details/i)).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole("button", { name: /continue stripe setup/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /connect with stripe/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /check again/i })).toBeVisible();
+  });
+
+  test("payments page still offers setup when Stripe needs more from the organiser", async ({ page }) => {
+    await page.route("**/api/organiser/profile", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const body = await res.json();
+      await route.fulfill({ response: res, json: { ...body, stripeAccountId: "acct_e2e_due", stripeOnboardingComplete: false } });
+    });
+    await page.route("**/api/organiser/stripe/status", (route) =>
+      route.fulfill({ json: { connected: true, chargesEnabled: false, payoutsEnabled: false, actionRequired: true } }));
+
+    await organiserLogin(page);
+    await page.goto("/organiser/payments");
+
+    await expect(page.getByRole("button", { name: /continue stripe setup/i }).first()).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/stripe is reviewing your details/i)).toHaveCount(0);
+  });
+
+  test("Stripe return page is dark and tells review apart from unfinished setup", async ({ page }) => {
+    let actionRequired = false;
+    await page.route("**/api/organiser/stripe/status", (route) =>
+      route.fulfill({ json: { connected: true, chargesEnabled: false, payoutsEnabled: false, actionRequired } }));
+
+    await organiserLogin(page);
+    await page.goto("/organiser/payments/return");
+    await expect(page.getByRole("heading", { name: /stripe is reviewing/i })).toBeVisible({ timeout: 20000 });
+
+    // Dark only: the page used to render on a light grey background.
+    const bg = await page.locator("main").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const [r, g, b] = (bg.match(/\d+/g) ?? []).map(Number);
+    expect(r + g + b).toBeLessThan(150);
+
+    actionRequired = true;
+    await page.reload();
+    await expect(page.getByRole("heading", { name: /not quite finished/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole("link", { name: /back to payments/i })).toBeVisible();
+  });
+
+  test("new listing media step supports multiple info PDFs with labels, reorder and remove", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
     await page.waitForLoadState("networkidle");
-    await argosScreenshot(page, "organiser-how-it-works");
+    await page.getByRole("button", { name: /Media & Description/i }).click();
+    await expect(page.getByText(/event information pdfs/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/add pdfs/i)).toBeVisible();
+
+    const pdfInput = page.locator('input[type="file"][accept="application/pdf"]');
+    await pdfInput.setInputFiles([
+      { name: "course-map.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 course map") },
+      { name: "rules.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 rules") },
+    ]);
+
+    await expect(page.getByText(/course-map\.pdf/i)).toBeVisible();
+    await expect(page.getByText(/rules\.pdf/i)).toBeVisible();
+
+    await page.getByPlaceholder(/label \(e\.g\. course map\)/i).nth(0).fill("Course Map");
+    await expect(page.getByRole("button", { name: "Remove PDF" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Move up" }).first()).toBeDisabled();
+    await page.getByRole("button", { name: "Move down" }).first().click();
+
+    await page.getByRole("button", { name: "Remove PDF" }).nth(1).click();
+    await expect(page.getByText(/course-map\.pdf/i)).not.toBeVisible();
+    await expect(page.getByText(/rules\.pdf/i)).toBeVisible();
+  });
+
+  test("organiser guide page is gone from the nav and the route", async ({ page }) => {
+
+    await organiserLogin(page);
+    await page.goto("/organiser/dashboard");
+    await expect(page.getByRole("link", { name: "Listings", exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Guide", exact: true })).toHaveCount(0);
+
+    const res = await page.goto("/organiser/how-it-works");
+    expect(res?.status()).toBe(404);
   });
 
   test("organiser profile page visual snapshot", async ({ page }) => {
+
     await organiserLogin(page);
     await page.goto("/organiser/profile");
     await page.waitForLoadState("networkidle");
     await argosScreenshot(page, "organiser-profile");
+  });
+});
+
+// On the dashboard the logo used to link to the dashboard, so clicking it did
+// nothing. It goes to the Startline home page, like the athlete and admin
+// logos (#338).
+test.describe("organiser header logo", () => {
+  test("takes an organiser from the dashboard to the Startline home page", async ({ page }) => {
+    await organiserLogin(page);
+    const logo = page.locator("nav").getByRole("link", { name: "Startline home" }).first();
+    await expect(logo).toHaveAttribute("href", "/");
+    await logo.click();
+    await expect(page).toHaveURL(/localhost:\d+\/$/);
+  });
+
+  // Already in the organiser portal, so its footer has no organiser login.
+  test("the organiser portal footer has no organiser login button", async ({ page }) => {
+    await organiserLogin(page);
+    await expect(page.locator("footer").getByRole("link", { name: "Organiser Login" })).toHaveCount(0);
   });
 });

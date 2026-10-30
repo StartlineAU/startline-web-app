@@ -4,29 +4,44 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, Phone, ChevronDown, Check, AtSign, ShieldAlert } from "lucide-react";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
+import Image from "next/image";
+import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, Check, AtSign, ShieldAlert } from "lucide-react";
 import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
+import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
+import { resolveSignInUsername } from "@/lib/sign-in-username";
+import { calcAge, MIN_AGE } from "@/lib/age";
+import PasswordRequirements from "@/components/PasswordRequirements";
+import SocialSignInButtons from "@/components/SocialSignInButtons";
 
-type View = "signin" | "signup" | "onboarding" | "username";
+type View = "signin" | "signup" | "onboarding" | "username" | "mfa";
 
 interface SignInModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  // Which tab the modal opens on. "signup" lets a SIGN UP button in the navbar
+  // land straight on the create-account form instead of the sign-in one.
+  initialView?: "signin" | "signup";
 }
 
-function calcAge(dobStr: string): number {
-  const dob   = new Date(dobStr);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-  return age;
+function totpUri(details: unknown): string | null {
+  if (!details || typeof details !== "object") return null;
+  const fn = (details as Record<string, unknown>).getSetupUri;
+  if (typeof fn !== "function") return null;
+  const uri = fn("Startline");
+  return uri && typeof uri.toString === "function" ? uri.toString() : null;
 }
 
-export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalProps) {
+export default function SignInModal({ isOpen, onClose, onSuccess, initialView = "signin" }: SignInModalProps) {
+  // The modal also opens on the organiser portal, where /contact does not exist.
+  const portalHost  = usePortalHost();
+  const contactHref = customerHref("/contact", portalHost);
+  const termsHref   = customerHref("/terms", portalHost);
+  const privacyHref = customerHref("/privacy", portalHost);
   const router      = useRouter();
   const { refresh } = useAuthContext();
 
@@ -37,12 +52,11 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [dobDay,          setDobDay]          = useState("");
   const [dobMonth,        setDobMonth]        = useState("");
   const [dobYear,         setDobYear]         = useState("");
-  const [phone,           setPhone]           = useState("");
+
   const [acceptedTerms,   setAcceptedTerms]   = useState(false);
-  const [showTerms,       setShowTerms]       = useState(false);
-  const [showPrivacy,     setShowPrivacy]     = useState(false);
   const [password,        setPassword]        = useState("");
   const [confirm,         setConfirm]         = useState("");
+  const [pwFocused,       setPwFocused]       = useState(false);
   const [showPw,          setShowPw]          = useState(false);
   const [error,           setError]           = useState("");
   const [loading,         setLoading]         = useState(false);
@@ -50,10 +64,12 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [usernameStatus,  setUsernameStatus]  = useState<"idle" | "checking" | "valid" | "invalid">("idle");
   const [usernameError,   setUsernameError]   = useState("");
 
-  // Two‑step sign‑in state
   const [checkingEmail,   setCheckingEmail]   = useState(false);
   const [userExists,      setUserExists]      = useState<boolean | null>(null);
   const [userStatus,      setUserStatus]      = useState<string | null>(null);
+  // Cognito's username for a password sign-in. Usually the email; a Google or
+  // Apple profile keeps its provider-generated username after a password is set.
+  const [signInUsername,  setSignInUsername]  = useState("");
   const [resetCode,       setResetCode]       = useState("");
   const [newPassword,     setNewPassword]     = useState("");
   const [newPwConfirm,    setNewPwConfirm]    = useState("");
@@ -61,6 +77,9 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const [newPwStep,       setNewPwStep]       = useState<"initial" | "sent" | "done">("initial");
   // When signIn returned CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED
   const [challengeFlow,   setChallengeFlow]   = useState(false);
+  const [mfaStep,         setMfaStep]         = useState<"none" | "select" | "setup" | "challenge">("none");
+  const [totpCode,        setTotpCode]        = useState("");
+  const [totpSetupUri,    setTotpSetupUri]    = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -70,25 +89,29 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   }, [isOpen, onClose]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      // Opening always starts on the requested tab, so closing on the signup
+      // form and reopening with SIGN IN does not show the signup form again.
+      setView(initialView);
     } else {
       document.body.style.overflow = "";
-      /* eslint-disable react-hooks/set-state-in-effect */
       setView("signin");
       setEmail(""); setFirstName(""); setLastName("");
-      setDobDay(""); setDobMonth(""); setDobYear(""); setPhone("");
-      setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
+      setDobDay(""); setDobMonth(""); setDobYear("");
+      setAcceptedTerms(false);
       setPassword(""); setConfirm("");
-      setError(""); setShowPw(false);
+      setError(""); setShowPw(false); setPwFocused(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
-      setCheckingEmail(false); setUserExists(null); setUserStatus(null);
+      setCheckingEmail(false); setUserExists(null); setUserStatus(null); setSignInUsername("");
       setResetCode(""); setNewPassword(""); setNewPwConfirm("");
       setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
-      /* eslint-enable react-hooks/set-state-in-effect */
+      setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
     return () => { document.body.style.overflow = ""; };
-  }, [isOpen]);
+  }, [isOpen, initialView]);
 
   // Username validation — format + profanity checked client-side.
   const usernameStatus_ = useMemo(() => {
@@ -106,8 +129,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   }, [usernameStatus_]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // ── Email check ─────────────────────────────────────────────────────────────
-  const handleCheckEmail = async () => {
+  const handleCheckEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError("");
     if (!email.includes("@")) { setError("Please enter a valid email."); return; }
     setCheckingEmail(true);
@@ -118,9 +141,6 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         body: JSON.stringify({ email }),
       });
       if (!res.ok) {
-        // Existence check unavailable (e.g. server lacks Cognito admin perms).
-        // Fall through to the password step — signIn() itself will report
-        // "no account" / "wrong password" accurately.
         setUserExists(true);
         setUserStatus("CONFIRMED");
         return;
@@ -129,22 +149,16 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       if (!data.exists) {
         setUserExists(false);
         setUserStatus(null);
+        setSignInUsername("");
       } else {
         setUserExists(true);
-        setUserStatus(data.status);
-        if (data.status === "CONFIRMED" || data.status === "UNCONFIRMED") {
-          // Show password field — for UNCONFIRMED users signIn() throws
-          // UserNotConfirmedException, which routes them to verify-email.
-          if (data.status === "UNCONFIRMED") setUserStatus("CONFIRMED");
-        } else {
-          // FORCE_CHANGE_PASSWORD or RESET_REQUIRED → start reset flow
-          setNewPwStep("initial");
-        }
+        setUserStatus(data.status === "UNCONFIRMED" ? "CONFIRMED" : data.status);
+        setSignInUsername(await resolveSignInUsername(email));
       }
     } catch {
-      // Network failure reaching our own API — same graceful fallback.
       setUserExists(true);
       setUserStatus("CONFIRMED");
+      setSignInUsername(email);
     } finally {
       setCheckingEmail(false);
     }
@@ -157,13 +171,23 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setLoading(true);
     try {
       await signOut({ global: false }).catch(() => {});
-      const result = await signIn({ username: email, password });
+      const result = await signIn({ username: signInUsername || email, password });
 
       if (result.nextStep.signInStep === "CONFIRM_SIGN_UP") {
         onClose(); router.push("/auth/verify-email?email=" + encodeURIComponent(email)); return;
       }
       if (result.nextStep.signInStep === "RESET_PASSWORD") {
         onClose(); router.push("/auth/forgot-password?email=" + encodeURIComponent(email)); return;
+      }
+      if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_TOTP_CODE") {
+        setView("mfa"); setMfaStep("challenge"); return;
+      }
+      if (result.nextStep.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+        setTotpSetupUri(totpUri(result.nextStep.totpSetupDetails));
+        setView("mfa"); setMfaStep("setup"); return;
+      }
+      if (result.nextStep.signInStep === "CONTINUE_SIGN_IN_WITH_MFA_SELECTION") {
+        setView("mfa"); setMfaStep("select"); return;
       }
       if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
         setPassword("");
@@ -206,7 +230,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       } else if (errName === "UserNotConfirmedException") {
         onClose(); router.push("/auth/verify-email?email=" + encodeURIComponent(email));
       } else if (errName === "UserNotFoundException") {
-        setError("No account found with that email.");
+        setUserExists(false);
+        setError("");
       } else {
         setError(msg || "Something went wrong. Please try again.");
       }
@@ -215,10 +240,84 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     }
   };
 
+  // ── MFA confirm ──────────────────────────────────────────────────────────────
+  const handleMfaConfirm = async () => {
+    setError("");
+    if (totpCode.length < 6) { setError("Please enter the full code."); return; }
+    setLoading(true);
+    try {
+      const result = await confirmSignIn({ challengeResponse: totpCode });
+      if (result.nextStep.signInStep === "DONE") {
+        await fetch("/api/user/auth/session", { method: "POST" });
+        await refresh();
+        onSuccess?.();
+        onClose();
+      } else {
+        setError("Verification failed. Please try again.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setError(msg || "Invalid code. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── MFA setup confirm ──────────────────────────────────────────────────────
+  const handleMfaSetupConfirm = async () => {
+    setError("");
+    if (totpCode.length < 6) { setError("Please enter the full code."); return; }
+    setLoading(true);
+    try {
+      const result = await confirmSignIn({ challengeResponse: totpCode });
+      if (result.nextStep.signInStep === "DONE") {
+        await fetch("/api/user/mfa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "enable" }) });
+        await fetch("/api/user/auth/session", { method: "POST" });
+        await refresh();
+        onSuccess?.();
+        onClose();
+      } else {
+        setError("Verification failed. Please try again.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setError(msg || "Invalid code. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Handle MFA selection ───────────────────────────────────────────────────
+  const handleMfaSelect = async (type: string) => {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await confirmSignIn({ challengeResponse: type });
+      if (result.nextStep.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+        setTotpSetupUri(totpUri(result.nextStep.totpSetupDetails));
+        setMfaStep("setup");
+      } else if (result.nextStep.signInStep === "CONFIRM_SIGN_IN_WITH_TOTP_CODE") {
+        setMfaStep("challenge");
+      } else if (result.nextStep.signInStep === "DONE") {
+        await fetch("/api/user/auth/session", { method: "POST" });
+        await refresh();
+        onSuccess?.();
+        onClose();
+      } else {
+        setError("Something went wrong. Try again.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      setError(msg || "Failed to select MFA method.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── Handle new‑password challenge from sign-in ──────────────────────────────
   const handleConfirmNewPassword = async () => {
     setError("");
-    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (!isPasswordValid(newPassword)) { setError("Password must be " + PASSWORD_POLICY_SUMMARY); return; }
     if (newPassword !== newPwConfirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {
@@ -245,7 +344,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     setError("");
     setLoading(true);
     try {
-      await resetPassword({ username: email });
+      await resetPassword({ username: signInUsername || email });
       setResetSent(true);
       setNewPwStep("sent");
     } catch (err: unknown) {
@@ -263,12 +362,12 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const handleCompleteReset = async () => {
     setError("");
     if (resetCode.length < 6) { setError("Please enter the full verification code."); return; }
-    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (!isPasswordValid(newPassword)) { setError("Password must be " + PASSWORD_POLICY_SUMMARY); return; }
     if (newPassword !== newPwConfirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {
       await confirmResetPassword({
-        username: email,
+        username: signInUsername || email,
         confirmationCode: resetCode,
         newPassword,
       });
@@ -277,7 +376,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       setError("");
       try {
         await signOut({ global: false }).catch(() => {});
-        const result = await signIn({ username: email, password: newPassword });
+        const result = await signIn({ username: signInUsername || email, password: newPassword });
         if (result.nextStep.signInStep === "DONE") {
           await fetch("/api/user/auth/session", { method: "POST" });
           await refresh();
@@ -287,6 +386,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         }
       } catch {}
       // Fallback: show the password field
+      setUserExists(true);
       setUserStatus("CONFIRMED");
       setNewPwStep("done");
     } catch (err: unknown) {
@@ -296,7 +396,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       } else if (msg.includes("ExpiredCodeException")) {
         setError("That code has expired. Please request a new one.");
       } else if (msg.includes("InvalidPasswordException")) {
-        setError("Password must be at least 8 characters with upper, lower and a number.");
+        setError("Password must be " + PASSWORD_POLICY_SUMMARY);
       } else {
         setError(msg);
       }
@@ -309,13 +409,13 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
   const handleSignUp = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    // The checklist under the field already lists every rule and the submit
+    // button stays disabled until they all pass, so this is a backstop rather
+    // than the user's first sight of the requirements.
+    if (!isPasswordValid(password)) { setError("Password must be " + PASSWORD_POLICY_SUMMARY); return; }
     if (password !== confirm) { setError("Passwords do not match."); return; }
-    if (password.length < 8)  { setError("Password must be at least 8 characters."); return; }
-    if (!/[A-Z]/.test(password)) { setError("Password must contain at least one uppercase letter."); return; }
-    if (!/[a-z]/.test(password)) { setError("Password must contain at least one lowercase letter."); return; }
-    if (!/[0-9]/.test(password)) { setError("Password must contain at least one number."); return; }
-    setFirstName(""); setLastName(""); setDobDay(""); setDobMonth(""); setDobYear(""); setPhone("");
-    setAcceptedTerms(false); setShowTerms(false); setShowPrivacy(false);
+    setFirstName(""); setLastName(""); setDobDay(""); setDobMonth(""); setDobYear("");
+    setAcceptedTerms(false);
     setView("onboarding");
   };
 
@@ -342,42 +442,28 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
     }
 
     const age = calcAge(isoDate);
-    if (age < 13)  { setError("You must be at least 13 years old to create an account."); return; }
-    if (age > 120) { setError("Please enter a valid date of birth."); return; }
+    if (age === null || age > 120) { setError("Please enter a valid date of birth."); return; }
+    if (age < MIN_AGE) { setError(`You must be ${MIN_AGE} or older to create an account. A parent or guardian can enter you into events.`); return; }
 
-    if (!phone.trim()) { setError("Please enter your phone number."); return; }
-    if (!acceptedTerms) { setError("You must accept the Terms & Conditions and Privacy Policy to continue."); return; }
-
-    const rawPhone  = phone.trim().replace(/[\s\-()]/g, "");
-    const e164Phone = rawPhone.startsWith("0")
-      ? "+61" + rawPhone.slice(1)
-      : rawPhone.startsWith("61")
-        ? "+" + rawPhone
-        : rawPhone.startsWith("+")
-          ? rawPhone
-          : "+61" + rawPhone;
+    if (!acceptedTerms) { setError("Please agree to the Terms of Service to continue."); return; }
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
 
+    const userAttributes: Record<string, string> = {
+      email,
+      name:      fullName,
+      birthdate: isoDate,
+    };
     setLoading(true);
     try {
       await signUp({
         username: email,
         password,
-        options: {
-          userAttributes: {
-            email,
-            name:         fullName,
-            phone_number: e164Phone,
-            birthdate:    isoDate,
-          },
-          autoSignIn: true,
-        },
+        options: { userAttributes, autoSignIn: true },
       });
       try {
         sessionStorage.setItem("startline_pending_name",  fullName);
         sessionStorage.setItem("startline_pending_dob",   isoDate);
-        sessionStorage.setItem("startline_pending_phone", e164Phone);
       } catch {}
       setError("");
       setView("username");
@@ -385,8 +471,15 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("UsernameExistsException")) {
         setError("An account with that email already exists.");
+      } else if (msg.includes("STARTLINE_FEDERATED_ACCOUNT")) {
+        // Refused by the pre sign-up trigger in startline-infra.
+        setError("This email already signs in with Google or Apple. Use that button on the Sign In tab.");
+      } else if (msg.includes("STARTLINE_LOOKUP_FAILED")) {
+        // The trigger could not check for an existing account, so it refused
+        // rather than risk creating a second one.
+        setError("We couldn't check your account just now. Please try again in a moment.");
       } else if (msg.includes("InvalidPasswordException")) {
-        setError("Password must be at least 8 characters with upper, lower and a number.");
+        setError("Password must be " + PASSWORD_POLICY_SUMMARY);
       } else {
         setError(msg || "Registration failed. Please try again.");
       }
@@ -407,18 +500,23 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
 
   const switchView = (v: "signin" | "signup") => {
     setView(v); setError(""); setPassword(""); setConfirm("");
+    setPwFocused(false);
     setCheckingEmail(false); setUserExists(null); setUserStatus(null);
     setResetCode(""); setNewPassword(""); setNewPwConfirm("");
     setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
+    setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
   };
 
   const goBackToEmail = () => {
     setUserExists(null);
     setUserStatus(null);
+    setSignInUsername("");
     setPassword("");
     setError("");
+    setPwFocused(false);
     setResetCode(""); setNewPassword(""); setNewPwConfirm("");
     setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
+    setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
   };
 
   const dobDayRef   = useRef<HTMLInputElement>(null);
@@ -427,8 +525,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
 
   if (!isOpen || typeof document === "undefined") return null;
 
-  const inputCls    = "w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors";
-  const dobInputCls = "w-full bg-dark border border-dark-lighter rounded-md px-3 py-2.5 text-[15px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none transition-colors text-center";
+  const inputCls    = "w-full bg-dark border border-dark-lighter rounded-md pl-10 pr-4 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
+  const dobInputCls = "w-full bg-dark border border-dark-lighter rounded-md px-3 py-2.5 text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors text-center";
   const labelCls    = "font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1";
   const btnCls      = "bg-machined shadow-machined w-full text-dark font-headline text-sm font-bold uppercase tracking-widest py-3 rounded-md flex items-center justify-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform disabled:opacity-50 disabled:cursor-not-allowed";
   const errCls      = "mb-3 px-3 py-2.5 rounded-md bg-red-900/20 border border-red-500/30 text-red-400 font-headline text-[13px]";
@@ -469,7 +567,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         {view === "signin" && userExists === null && !challengeFlow && (
           <>
             <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
                 Welcome<br /><span className="text-primary">back.</span>
               </h2>
@@ -478,7 +576,11 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
 
             {error && <div className={errCls}>{error}</div>}
 
-            <form onSubmit={(e) => { e.preventDefault(); handleCheckEmail(); }} className="space-y-4">
+            <div className="mb-4">
+              <SocialSignInButtons termsHref={termsHref} privacyHref={privacyHref} />
+            </div>
+
+            <form onSubmit={handleCheckEmail} className="space-y-4">
               <div>
                 <label htmlFor="signin-email" className={labelCls}>Email</label>
                 <div className="relative">
@@ -510,7 +612,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         {view === "signin" && userExists === false && (
           <>
             <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
                 No account<br /><span className="text-primary">found.</span>
               </h2>
@@ -523,11 +625,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
               <button onClick={() => switchView("signup")} className={btnCls}>
                 Create account <ArrowRight className="w-4 h-4" />
               </button>
-              <button
-                type="button"
-                onClick={goBackToEmail}
-                className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1"
-              >
+              <button type="button" onClick={goBackToEmail} className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1">
                 Use a different email
               </button>
             </div>
@@ -538,7 +636,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         {view === "signin" && userExists === true && userStatus === "CONFIRMED" && !challengeFlow && (
           <>
             <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-5xl font-black italic tracking-tighter leading-[0.9] mb-3">
                 Welcome<br /><span className="text-primary">back.</span>
               </h2>
@@ -582,119 +680,11 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
           </>
         )}
 
-        {/* ── Sign In – New password required (FORCE_CHANGE_PASSWORD) ── */}
-        {view === "signin" && userExists === true && userStatus !== "CONFIRMED" && !challengeFlow && (
-          <>
-            <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Finish Setup</span>
-              <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
-                {newPwStep === "done" ? "Password<br /><span className='text-primary'>set.</span>" : "Set your<br /><span className='text-primary'>password.</span>"}
-              </h2>
-              <p className="text-muted text-[14px] leading-relaxed">
-                {newPwStep === "initial" && "Your account was created automatically. Let's set a password so you can sign in."}
-                {newPwStep === "sent" && "A verification code was sent to your email. Enter it below along with your new password."}
-                {newPwStep === "done" && "Password set successfully. You can now sign in."}
-              </p>
-            </div>
-
-            {error && <div className={errCls}>{error}</div>}
-
-            {newPwStep === "initial" && (
-              <button onClick={handleStartReset} disabled={loading} className={btnCls}>
-                {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Sending code…</> : <>Send verification code <ArrowRight className="w-4 h-4" /></>}
-              </button>
-            )}
-
-            {newPwStep === "sent" && (
-              <form onSubmit={(e) => { e.preventDefault(); handleCompleteReset(); }} className="space-y-3">
-                <div>
-                  <label htmlFor="reset-code" className={labelCls}>Verification Code</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                    <input
-                      id="reset-code"
-                      type="text"
-                      inputMode="numeric"
-                      required
-                      value={resetCode}
-                      onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="000000"
-                      className={inputCls + " tracking-[0.5em] text-center font-bold"}
-                      autoFocus
-                    />
-                  </div>
-                  <p className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-1">Enter the 6-digit code sent to {email}</p>
-                </div>
-                <div>
-                  <label htmlFor="reset-new-password" className={labelCls}>New Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                    <input
-                      id="reset-new-password"
-                      type={showPw ? "text" : "password"}
-                      required
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Min 8 characters"
-                      className={inputCls + " pr-11"}
-                    />
-                    <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
-                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="reset-confirm-password" className={labelCls}>Confirm Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                    <input
-                      id="reset-confirm-password"
-                      type={showPw ? "text" : "password"}
-                      required
-                      value={newPwConfirm}
-                      onChange={(e) => setNewPwConfirm(e.target.value)}
-                      placeholder="Re-enter password"
-                      className={inputCls}
-                    />
-                  </div>
-                </div>
-                <button type="submit" disabled={loading || resetCode.length < 6} className={btnCls}>
-                  {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Setting password…</> : <>Set password <ArrowRight className="w-4 h-4" /></>}
-                </button>
-                <button type="button" onClick={handleStartReset} disabled={loading} className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1">
-                  Resend code
-                </button>
-              </form>
-            )}
-
-            {newPwStep === "done" && (
-              <div className="space-y-3">
-                <div className="px-3 py-2.5 rounded-md bg-green-900/20 border border-green-500/30 text-green-400 font-headline text-[13px] flex items-center gap-2">
-                  <Check className="w-4 h-4 flex-shrink-0" />
-                  Password set successfully. Sign in with your new password.
-                </div>
-                <button
-                  onClick={() => { setUserStatus("CONFIRMED"); setPassword(newPassword); setNewPwStep("done"); }}
-                  className={btnCls}
-                >
-                  Sign in <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {(newPwStep === "initial" || newPwStep === "sent") && (
-              <button type="button" onClick={goBackToEmail} className="w-full font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors py-1 mt-2">
-                Use a different email
-              </button>
-            )}
-          </>
-        )}
-
         {/* ── Sign In – New password challenge (CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED) ── */}
         {view === "signin" && challengeFlow && (
           <>
             <div className="mb-6">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Set New Password</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">Set New Password</span>
               <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
                 Update your<br /><span className="text-primary">password.</span>
               </h2>
@@ -714,13 +704,17 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Min 8 characters"
+                    aria-describedby="challenge-password-requirements"
+                    placeholder="Create a new password"
                     className={inputCls + " pr-11"}
                     autoFocus
                   />
                   <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+                </div>
+                <div id="challenge-password-requirements">
+                  <PasswordRequirements password={newPassword} />
                 </div>
               </div>
               <div>
@@ -745,11 +739,108 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
           </>
         )}
 
+        {/* ── MFA ── */}
+        {view === "mfa" && (
+          <>
+            <div className="mb-6">
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">Two-Factor Authentication</span>
+              <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
+                {mfaStep === "select" ? <><span>Choose your</span><br /><span className="text-primary">method.</span></> :
+                 mfaStep === "setup"  ? <><span>Set up</span><br /><span className="text-primary">MFA.</span></> :
+                                        <><span>Enter your</span><br /><span className="text-primary">code.</span></>}
+              </h2>
+              <p className="text-muted text-[14px] leading-relaxed">
+                {mfaStep === "select" && "Select how you'd like to verify your identity."}
+                {mfaStep === "setup"  && "Scan the QR code with your authenticator app, then enter the code shown."}
+                {mfaStep === "challenge" && "Open the authenticator app you set up for Startline and enter the 6-digit code it shows. This code is never sent by email or text."}
+              </p>
+            </div>
+
+            {error && <div className={errCls}>{error}</div>}
+
+            {mfaStep === "select" && (
+              <div className="space-y-3">
+                <button onClick={() => handleMfaSelect("TOTP")} disabled={loading} className={btnCls}>
+                  <ShieldAlert className="w-4 h-4" /> Authenticator App
+                </button>
+              </div>
+            )}
+
+            {mfaStep === "setup" && totpSetupUri && (
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <Image
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(totpSetupUri)}`}
+                    alt="TOTP QR Code"
+                    width={192}
+                    height={192}
+                    unoptimized
+                    className="w-48 h-48 rounded-lg"
+                  />
+                </div>
+                <form onSubmit={(e) => { e.preventDefault(); handleMfaSetupConfirm(); }} className="space-y-3">
+                  <div>
+                    <label htmlFor="mfa-setup-code" className={labelCls}>Verification Code</label>
+                    <div className="relative">
+                      <ShieldAlert className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                      <input
+                        id="mfa-setup-code"
+                        type="text"
+                        inputMode="numeric"
+                        required
+                        value={totpCode}
+                        onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        className={inputCls + " tracking-[0.5em] text-center font-bold"}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading || totpCode.length < 6} className={btnCls}>
+                    {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Verifying…</> : <>Verify & sign in <ArrowRight className="w-4 h-4" /></>}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {mfaStep === "challenge" && (
+              <form onSubmit={(e) => { e.preventDefault(); handleMfaConfirm(); }} className="space-y-4">
+                <div>
+                  <label htmlFor="mfa-challenge-code" className={labelCls}>Authentication Code</label>
+                  <div className="relative">
+                    <ShieldAlert className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
+                    <input
+                      id="mfa-challenge-code"
+                      type="text"
+                      inputMode="numeric"
+                      required
+                      value={totpCode}
+                      onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      className={inputCls + " tracking-[0.5em] text-center font-bold"}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <button type="submit" disabled={loading || totpCode.length < 6} className={btnCls}>
+                  {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Verifying…</> : <>Verify & sign in <ArrowRight className="w-4 h-4" /></>}
+                </button>
+                {/* Nothing can be resent here: the code only exists in the app
+                    (issue #320). Someone without it needs a person to help. */}
+                <p className="text-muted text-[13px] leading-relaxed text-center">
+                  Lost access to your authenticator app?{" "}
+                  <Link href={contactHref} onClick={onClose} className="text-primary hover:underline">Contact us</Link>
+                </p>
+              </form>
+            )}
+          </>
+        )}
+
         {/* ── Sign Up ── */}
         {view === "signup" && (
           <>
             <div className="mb-4">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">User Portal</span>
               <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
                 Join<br /><span className="text-primary">Startline.</span>
               </h2>
@@ -757,6 +848,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
             </div>
 
             {error && <div className={errCls}>{error}</div>}
+
+            <div className="mb-4">
+              <SocialSignInButtons termsHref={termsHref} privacyHref={privacyHref} />
+            </div>
 
             <form onSubmit={handleSignUp} className="space-y-3">
               <div>
@@ -770,10 +865,17 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                 <label htmlFor="signup-password" className={labelCls}>Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                  <input id="signup-password" type={showPw ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" className={inputCls + " pr-11"} />
+                  <input id="signup-password" type={showPw ? "text" : "password"} required value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onFocus={() => setPwFocused(true)}
+                    aria-describedby="signup-password-requirements"
+                    placeholder="Create a password" className={inputCls + " pr-11"} />
                   <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-dark hover:text-primary transition-colors">
                     {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+                </div>
+                <div id="signup-password-requirements">
+                  <PasswordRequirements password={password} visible={pwFocused || password.length > 0} />
                 </div>
               </div>
               <div>
@@ -783,7 +885,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                   <input id="signup-confirm-password" type={showPw ? "text" : "password"} required value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Re-enter password" className={inputCls} />
                 </div>
               </div>
-              <button type="submit" disabled={loading} className={btnCls}>
+              <button type="submit" disabled={loading || !isPasswordValid(password)} className={btnCls}>
                 {loading ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Creating account…</> : <>Create account <ArrowRight className="w-4 h-4" /></>}
               </button>
             </form>
@@ -794,7 +896,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         {view === "onboarding" && (
           <>
             <div className="mb-5 pt-2">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">Account Creation</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">Account Creation</span>
               <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
                 Welcome to<br /><span className="text-primary">Startline.</span>
               </h2>
@@ -876,15 +978,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                 </div>
               </div>
 
-              {/* Phone */}
-              <div>
-                <label htmlFor="onboarding-phone" className={labelCls}>Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
-                  <input id="onboarding-phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+61 400 000 000" className={inputCls} />
-                </div>
-              </div>
-
+              
               {/* T&C */}
               <div className="pt-1 space-y-2">
                 <label className="flex items-start gap-3 cursor-pointer group">
@@ -902,41 +996,15 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
                   </div>
                   <span className="font-headline text-[11px] uppercase tracking-widest text-muted leading-relaxed">
                     I agree to the{" "}
-                    <button type="button" onClick={(e) => { e.preventDefault(); setShowTerms(s => !s); setShowPrivacy(false); }} className="text-primary hover:underline">
-                      Terms &amp; Conditions
-                    </button>
-                    {" "}and{" "}
-                    <button type="button" onClick={(e) => { e.preventDefault(); setShowPrivacy(s => !s); setShowTerms(false); }} className="text-primary hover:underline">
+                    <a href={termsHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      Terms of Service
+                    </a>
+                    {" "}and have read the{" "}
+                    <a href={privacyHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                       Privacy Policy
-                    </button>
+                    </a>
                   </span>
                 </label>
-
-                {showTerms && (
-                  <div className="rounded-lg border border-dark-lighter bg-dark overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Terms &amp; Conditions</span>
-                      <button type="button" onClick={() => setShowTerms(false)}><ChevronDown className="w-4 h-4 text-muted rotate-180" /></button>
-                    </div>
-                    <div className="px-4 py-3 max-h-36 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-                      <p>Terms and Conditions content coming soon.</p>
-                      <p>By creating an account you agree to use this platform in accordance with our guidelines and applicable laws.</p>
-                    </div>
-                  </div>
-                )}
-
-                {showPrivacy && (
-                  <div className="rounded-lg border border-dark-lighter bg-dark overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-dark-lighter">
-                      <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">Privacy Policy</span>
-                      <button type="button" onClick={() => setShowPrivacy(false)}><ChevronDown className="w-4 h-4 text-muted rotate-180" /></button>
-                    </div>
-                    <div className="px-4 py-3 max-h-36 overflow-y-auto text-muted text-[12px] leading-relaxed space-y-2">
-                      <p>Privacy Policy content coming soon.</p>
-                      <p>We are committed to protecting your personal information and will only use your data in accordance with applicable privacy legislation.</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <button onClick={handleContinueOnboarding} disabled={loading} className={btnCls}>
@@ -953,7 +1021,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess }: SignInModalP
         {view === "username" && (
           <>
             <div className="mb-6 pt-2">
-              <span className="font-headline text-[11px] font-medium uppercase tracking-[0.25em] text-primary block mb-2">One last thing</span>
+              <span className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary block mb-2">One last thing</span>
               <h2 className="font-headline text-4xl font-black italic tracking-tighter leading-[0.9] mb-2">
                 Choose your<br /><span className="text-primary">handle.</span>
               </h2>

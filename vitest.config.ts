@@ -11,6 +11,11 @@ export default defineConfig({
         "postgresql://postgres:postgres@localhost:5432/startline?schema=public",
     },
   },
+  // tsconfig keeps `jsx: "preserve"` for Next.js, so the JSX runtime has to be
+  // named here for tests that render .tsx (the email templates).
+  esbuild: {
+    jsx: "automatic",
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),

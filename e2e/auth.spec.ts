@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 import { argosScreenshot } from "@argos-ci/playwright";
 import { goToHomepage } from "./helpers";
 
+const hasCognito = !!process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
+
 async function openSignInModal(page: import("@playwright/test").Page) {
   await goToHomepage(page);
   await page.getByRole("button", { name: "SIGN IN" }).click();
@@ -16,6 +18,7 @@ test.describe("auth modal — sign in", () => {
   });
 
   test("unknown email never dead-ends: 'no account found' or password fallback", async ({ page }) => {
+    if (!hasCognito) test.skip();
     await openSignInModal(page);
     await page.getByPlaceholder("you@example.com").fill(`nobody.${Date.now()}@example.com`);
     await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -46,32 +49,109 @@ test.describe("auth modal — sign in", () => {
   });
 });
 
+test.describe("navbar sign up button", () => {
+  test("signed-out visitors see both SIGN IN and SIGN UP", async ({ page }) => {
+    await goToHomepage(page);
+    await expect(page.getByRole("button", { name: "SIGN IN", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "SIGN UP", exact: true })).toBeVisible();
+  });
+
+  test("SIGN UP opens the modal on the create-account form", async ({ page }) => {
+    await goToHomepage(page);
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+
+    await expect(page.getByPlaceholder("Create a password")).toBeVisible();
+    await expect(page.locator("#signup-email")).toBeVisible();
+    await expect(page.locator("#signin-email")).toHaveCount(0);
+  });
+
+  test("SIGN IN still opens the sign-in form after using SIGN UP", async ({ page }) => {
+    await goToHomepage(page);
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+
+    await page.getByRole("button", { name: "SIGN IN", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+    await expect(page.locator("#signin-email")).toBeVisible();
+    await expect(page.locator("#signup-email")).toHaveCount(0);
+  });
+
+  test("mobile menu offers both SIGN UP and SIGN IN", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await goToHomepage(page);
+    await page.getByRole("button", { name: "Toggle menu" }).click();
+
+    await page.getByRole("button", { name: "SIGN UP", exact: true }).click();
+    await page.waitForSelector('[role="dialog"]');
+    await expect(page.getByPlaceholder("Create a password")).toBeVisible();
+  });
+
+  test("signed-in visitors get no SIGN UP button", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await goToHomepage(page);
+
+    await expect(page.getByTestId("user-menu")).toBeVisible();
+    await expect(page.getByRole("button", { name: "SIGN UP", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "SIGN IN", exact: true })).toHaveCount(0);
+  });
+});
+
 test.describe("auth modal — sign up", () => {
   test("rejects mismatched passwords before hitting the network", async ({ page }) => {
     await openSignInModal(page);
     await page.getByRole("button", { name: "Create Account", exact: true }).click();
     await page.getByPlaceholder("you@example.com").fill(`ux.${Date.now()}@example.com`);
-    await page.getByPlaceholder("Min 8 characters").fill("Password123!");
+    await page.getByPlaceholder("Create a password").fill("Password123!");
     await page.getByPlaceholder("Re-enter password").fill("Different123!");
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await expect(page.getByText("Passwords do not match.")).toBeVisible();
   });
 
-  test("rejects a too-short password", async ({ page }) => {
+  test("lists every password requirement up front and ticks them off (issue #286)", async ({ page }) => {
     await openSignInModal(page);
     await page.getByRole("button", { name: "Create Account", exact: true }).click();
     await page.getByPlaceholder("you@example.com").fill(`ux.${Date.now()}@example.com`);
-    await page.getByPlaceholder("Min 8 characters").fill("abc123");
-    await page.getByPlaceholder("Re-enter password").fill("abc123");
-    await page.getByRole("button", { name: "Create account", exact: true }).click();
-    await expect(page.getByText("Password must be at least 8 characters.")).toBeVisible();
+
+    const pw = page.getByPlaceholder("Create a password");
+    const submit = page.getByRole("button", { name: "Create account", exact: true });
+    const rule = (id: string) => page.locator(`[data-testid="password-rule-${id}"]`);
+
+    // All four rules are visible on focus, before anything is typed, so the
+    // user never discovers them one failed submit at a time.
+    await pw.click();
+    await expect(page.getByTestId("password-requirements")).toBeVisible();
+    for (const id of ["length", "uppercase", "lowercase", "number"]) {
+      await expect(rule(id)).toHaveAttribute("data-met", "false");
+    }
+    await expect(submit).toBeDisabled();
+
+    // A short, lowercase-only password satisfies exactly one rule.
+    await pw.fill("abc123");
+    await expect(rule("lowercase")).toHaveAttribute("data-met", "true");
+    await expect(rule("number")).toHaveAttribute("data-met", "true");
+    await expect(rule("length")).toHaveAttribute("data-met", "false");
+    await expect(rule("uppercase")).toHaveAttribute("data-met", "false");
+    await expect(submit).toBeDisabled();
+
+    // Meeting every rule ticks them all and releases the button.
+    await pw.fill("Password123");
+    for (const id of ["length", "uppercase", "lowercase", "number"]) {
+      await expect(rule(id)).toHaveAttribute("data-met", "true");
+    }
+    await expect(submit).toBeEnabled();
   });
 
-  test("onboarding rejects an under-13 date of birth", async ({ page }) => {
+  test("onboarding rejects an under-18 date of birth", async ({ page }) => {
     await openSignInModal(page);
     await page.getByRole("button", { name: "Create Account", exact: true }).click();
     await page.getByPlaceholder("you@example.com").fill(`ux.${Date.now()}@example.com`);
-    await page.getByPlaceholder("Min 8 characters").fill("Password123!");
+    await page.getByPlaceholder("Create a password").fill("Password123!");
     await page.getByPlaceholder("Re-enter password").fill("Password123!");
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await page.waitForSelector("text=Tell us a bit about yourself");
@@ -81,21 +161,21 @@ test.describe("auth modal — sign up", () => {
     const today = new Date();
     await page.locator('input[aria-label="Day"]').fill(String(today.getDate()).padStart(2, "0"));
     await page.locator('input[aria-label="Month"]').fill(String(today.getMonth() + 1).padStart(2, "0"));
-    await page.locator('input[aria-label="Year"]').fill(String(today.getFullYear() - 5));
-    await page.getByPlaceholder("+61 400 000 000").fill("0400123456");
+    await page.locator('input[aria-label="Year"]').fill(String(today.getFullYear() - 17));
     await page.locator('input[type="checkbox"]').check({ force: true });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
 
-    await expect(page.getByText("You must be at least 13 years old to create an account.")).toBeVisible();
+    await expect(page.getByText(/You must be 18 or older to create an account/)).toBeVisible();
   });
 
   test("completing signup lands on the verify-email page, not a 404", async ({ page }) => {
+    if (!hasCognito) test.skip();
     const email = `ux.e2e.${Date.now()}@example.com`;
 
     await openSignInModal(page);
     await page.getByRole("button", { name: "Create Account", exact: true }).click();
     await page.getByPlaceholder("you@example.com").fill(email);
-    await page.getByPlaceholder("Min 8 characters").fill("Password123!");
+    await page.getByPlaceholder("Create a password").fill("Password123!");
     await page.getByPlaceholder("Re-enter password").fill("Password123!");
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await page.waitForSelector("text=Tell us a bit about yourself");
@@ -105,7 +185,6 @@ test.describe("auth modal — sign up", () => {
     await page.locator('input[aria-label="Day"]').fill("15");
     await page.locator('input[aria-label="Month"]').fill("06");
     await page.locator('input[aria-label="Year"]').fill("1995");
-    await page.getByPlaceholder("+61 400 000 000").fill("0400123456");
     await page.locator('input[type="checkbox"]').check({ force: true });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
 
@@ -141,5 +220,10 @@ test.describe("forgot-password route", () => {
     await page.goto("/auth/forgot-password");
     await page.waitForLoadState("networkidle");
     await argosScreenshot(page, "forgot-password");
+  });
+
+  test("verify-email page shows a check-spam note", async ({ page }) => {
+    await page.goto("/auth/verify-email?email=user@example.com");
+    await expect(page.getByText(/check your spam or junk folder/i)).toBeVisible();
   });
 });

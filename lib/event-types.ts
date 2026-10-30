@@ -7,20 +7,45 @@ export interface PublicWave {
   startTime?: string;
 }
 
+export interface InformationPdf {
+  url: string;
+  label: string | null;
+  name: string | null;
+}
+
+/** Coerce an arbitrary JSON value (Prisma Json column) into InformationPdf[]. */
+export function normaliseInformationPdfs(value: unknown): InformationPdf[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null)
+    .map((p) => ({
+      url: typeof p.url === "string" ? p.url : "",
+      label: typeof p.label === "string" ? p.label : null,
+      name: typeof p.name === "string" ? p.name : null,
+    }))
+    .filter((p) => p.url.length > 0);
+}
+
 export interface PublicEvent {
   id: string;
+  slug: string | null;
   title: string;
   discipline: string;
-  tagline: string | null;
   description: string | null;
   eventDate: string;
   endDate: string | null;
   startTime: string;
   endTime: string;
+  status: string;
+  timeZone: string;
+  startsAtUtc: Date | string | null;
+  endsAtUtc: Date | string | null;
   venue: string;
   address: string | null;
   city: string;
   state: string;
+  latitude: number | null;
+  longitude: number | null;
   format: string;
   level: string;
   categories: unknown;
@@ -29,8 +54,10 @@ export interface PublicEvent {
   waves: unknown;
   extras: string | null;
   refundPolicy: string | null;
+  refundTiers: unknown;
   coverImageUrl: string | null;
   photos: string[];
+  informationPdfs: InformationPdf[];
   registrationType: string;
   registrationUrl: string | null;
   feeStructure: string;
@@ -43,6 +70,7 @@ export interface PublicEvent {
     logoUrl: string | null;
     stripeAccountId: string | null;
     stripeOnboardingComplete: boolean;
+    rating?: { average: number; count: number } | null;
   };
 }
 
@@ -55,6 +83,19 @@ export function todayIso(): string {
 export function waveIsOpen(wave: PublicWave, today = todayIso()): boolean {
   const closes = wave?.closes || wave?.date;
   return !closes || closes >= today;
+}
+
+/**
+ * A free event: it has ticket categories and every one of them costs nothing.
+ *
+ * Nothing is ever paid, so there is nothing to refund — the organiser is not
+ * asked for a refund policy and the athlete is not shown one (issue #304). A
+ * category with a blank or unparseable price is not free, so a half-filled draft
+ * never reads as one.
+ */
+export function isFreeEvent(waves: unknown): boolean {
+  if (!Array.isArray(waves) || waves.length === 0) return false;
+  return (waves as PublicWave[]).every((w) => parseFloat(w?.price ?? "") === 0);
 }
 
 /**

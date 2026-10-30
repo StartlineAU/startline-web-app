@@ -25,7 +25,8 @@ test.describe("homepage", () => {
     await goToHomepage(page);
     await expect(page.getByRole("link", { name: "HOME", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "EVENTS", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "ACTIVITY", exact: true })).toBeVisible();
+    // ACTIVITY is only shown to signed-in users
+    await expect(page.getByRole("link", { name: "ACTIVITY", exact: true })).not.toBeVisible();
   });
 
   test("event cards or empty state renders", async ({ page }) => {
@@ -35,5 +36,14 @@ test.describe("homepage", () => {
     expect(hasCards || hasContent).toBeTruthy();
   });
 
+  // Back from an event opened off the home page used to return home. It now
+  // carries on to the listing, where the visitor can keep looking (#299).
+  test("back from an event opened on the home page goes to the events listing", async ({ page }) => {
+    await goToHomepage(page);
+    await page.locator('a[href^="/events/"]').filter({ visible: true }).first().click();
+    await expect(page).toHaveURL(/\/events\/[^?]+/);
 
+    await page.getByRole("link", { name: "Back to Events" }).click();
+    await expect(page).toHaveURL(/\/events$/);
+  });
 });

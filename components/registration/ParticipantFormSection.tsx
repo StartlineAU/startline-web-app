@@ -1,8 +1,11 @@
 "use client";
 
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 import { RegisterField, registerInputCls } from "@/components/registration/RegisterField";
+import DatePicker from "@/components/ui/DatePicker";
+import SelectMenu from "@/components/ui/SelectMenu";
 import {
+  GENDER_OPTIONS,
   maxDateOfBirthForMinAge,
   MAX_MEDICAL_NOTES_LENGTH,
   type RegistrationFormData,
@@ -10,8 +13,8 @@ import {
   type RegistrationFormField,
 } from "@/lib/registration-form";
 
-const GENDER_OPTIONS = ["Prefer not to say", "Male", "Female", "Non-binary", "Other"];
-
+/** Oldest selectable birthday — keeps the year list to a sane length. */
+const EARLIEST_DATE_OF_BIRTH = `${new Date().getFullYear() - 100}-01-01`;
 function SectionDivider({ children }: { children: React.ReactNode }) {
   return (
     <div className="font-headline text-[9.5px] font-bold uppercase tracking-[0.2em] text-muted-dark pb-2.5 border-b border-dark-lighter mb-4">
@@ -29,6 +32,8 @@ interface ParticipantFormSectionProps {
   hideEmergencyContact?: boolean;
   /** Render without the outer card chrome (for embedding in an accordion card). */
   frameless?: boolean;
+  /** Rendered between the title and the first field, e.g. who the ticket is for. */
+  intro?: React.ReactNode;
   onRemove?: () => void;
   onChange: (field: keyof RegistrationFormData, value: string | boolean) => void;
 }
@@ -41,6 +46,7 @@ export default function ParticipantFormSection({
   showRemove,
   hideEmergencyContact,
   frameless,
+  intro,
   onRemove,
   onChange,
 }: ParticipantFormSectionProps) {
@@ -65,6 +71,8 @@ export default function ParticipantFormSection({
           )}
         </div>
       )}
+
+      {intro}
 
       {/* Contact */}
       <div className="mb-6">
@@ -122,31 +130,45 @@ export default function ParticipantFormSection({
         <SectionDivider>Personal</SectionDivider>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-[14px]">
           <RegisterField label="Date of birth" required error={errors.dateOfBirth} fieldKey={fieldKey("dateOfBirth")} htmlFor={id("dob")}>
-            <input
+            <DatePicker
               id={id("dob")}
-              type="date"
+              size="sm"
               value={participant.dateOfBirth}
-              onChange={(e) => onChange("dateOfBirth", e.target.value)}
-              max={maxDateOfBirthForMinAge()}
-              className={registerInputCls(!!errors.dateOfBirth)}
+              onChange={(v) => onChange("dateOfBirth", v)}
+              placeholder="Select date of birth"
+              disablePast={false}
+              minDate={EARLIEST_DATE_OF_BIRTH}
+              maxDate={maxDateOfBirthForMinAge()}
+              yearPicker
+              invalid={!!errors.dateOfBirth}
             />
           </RegisterField>
           <RegisterField label="Gender" htmlFor={id("gender")}>
-            <div className="relative">
-              <select
-                id={id("gender")}
-                value={participant.gender}
-                onChange={(e) => onChange("gender", e.target.value)}
-                className={cnSelect(!!participant.gender)}
-              >
-                <option value="">Select…</option>
-                {GENDER_OPTIONS.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-muted-dark absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+            <SelectMenu
+              id={id("gender")}
+              size="sm"
+              value={participant.gender}
+              onChange={(v) => onChange("gender", v)}
+              options={GENDER_OPTIONS.map((g) => ({ value: g, label: g }))}
+              ariaLabel="Gender"
+            />
           </RegisterField>
+          <div className="sm:col-span-2">
+            <RegisterField label="Estimated finish time" htmlFor={id("estFinish")}>
+              <input
+                id={id("estFinish")}
+                type="text"
+                inputMode="numeric"
+                value={participant.estimatedFinish}
+                onChange={(e) => onChange("estimatedFinish", e.target.value)}
+                placeholder="e.g. 0:45 or 3:30"
+                className={registerInputCls()}
+              />
+              <p className="mt-1.5 text-[11.5px] text-muted-dark leading-relaxed">
+                Optional. Roughly how long you expect to take (hours:minutes). Organisers use this to seed start waves by pace.
+              </p>
+            </RegisterField>
+          </div>
         </div>
       </div>
 
@@ -194,12 +216,5 @@ export default function ParticipantFormSection({
         </div>
       </div>
     </div>
-  );
-}
-
-function cnSelect(hasValue: boolean) {
-  return (
-    "w-full appearance-none cursor-pointer bg-dark-light border border-dark-lighter rounded-[10px] px-[13px] py-[11px] pr-9 text-[13.5px] font-headline focus:outline-none focus:border-primary transition-colors " +
-    (hasValue ? "text-light" : "text-muted-dark")
   );
 }

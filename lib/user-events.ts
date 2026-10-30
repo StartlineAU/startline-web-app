@@ -38,17 +38,23 @@ export function toUserEvent(event: PublicEvent): UserEvent {
 
   return {
     id: event.id,
+    slug: event.slug ?? undefined,
     title: event.title,
     description: event.description ?? "",
-    fullDescription: event.tagline ?? undefined,
     date: event.eventDate,
     endDate: event.endDate ?? undefined,
     time: event.startTime,
     endTime: event.endTime ?? undefined,
+    status: event.status as UserEvent["status"],
+    timeZone: event.timeZone,
+    startsAtUtc: event.startsAtUtc == null ? null : new Date(event.startsAtUtc).toISOString(),
+    endsAtUtc: event.endsAtUtc == null ? null : new Date(event.endsAtUtc).toISOString(),
     location: event.venue,
     address: event.address ?? undefined,
     city: event.city,
     state: mapState(event.state),
+    latitude: event.latitude ?? null,
+    longitude: event.longitude ?? null,
     type,
     discipline: event.discipline,
     format: event.format,
@@ -59,9 +65,10 @@ export function toUserEvent(event: PublicEvent): UserEvent {
     cap: event.cap,
     minAge: event.minAge,
     refundPolicy: event.refundPolicy?.trim() || undefined,
+    refundTiers: event.refundTiers,
     // Never fall back to the organiser logo — a logo stretched to 16:9 repeated
     // across every coverless card reads as broken. Use the placeholder instead.
-    image: event.coverImageUrl ?? "/images/placeholder-event.svg",
+    image: event.coverImageUrl || "/images/placeholder-event.svg",
     registrationUrl: event.registrationUrl,
     registrationType: event.registrationType,
     feeStructure: event.feeStructure,
@@ -71,11 +78,18 @@ export function toUserEvent(event: PublicEvent): UserEvent {
     isOfficial: false,
     ticketDrops,
     fromPrice: lowestPrice(waves),
-    tagline: event.tagline,
     coverImageUrl: event.coverImageUrl,
     photos: Array.isArray(event.photos) ? event.photos : [],
+    informationPdfs: Array.isArray(event.informationPdfs) ? event.informationPdfs : [],
     registrationCount: event.registrationCount,
-    organiser: event.organiser,
+    organiser: event.organiser
+      ? {
+          id: event.organiser.id,
+          orgName: event.organiser.orgName,
+          logoUrl: event.organiser.logoUrl,
+          rating: event.organiser.rating ?? null,
+        }
+      : undefined,
   };
 }
 

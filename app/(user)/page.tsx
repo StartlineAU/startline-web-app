@@ -4,7 +4,7 @@ import { getUserSession } from "@/lib/amplify-server";
 import prisma from "@/lib/prisma";
 import HeroCarousel from "@/components/HeroCarousel";
 import HeroSearch from "@/components/HeroSearch";
-import HomeEventCard from "@/components/HomeEventCard";
+import EventCard from "@/components/EventCard";
 import VerifiedBanner from "@/components/VerifiedBanner";
 import { ScrollCarousel } from "@/components/ui/ScrollCarousel";
 import type { UserEvent } from "@/types";
@@ -48,7 +48,9 @@ export default async function Home() {
       <VerifiedBanner />
 
       {/* ── Hero ── */}
-      <section className="relative min-h-[520px] sm:min-h-[600px] flex items-end overflow-hidden">
+      {/* No overflow-hidden here: it would clip the search bar's suggestion
+          dropdown at the section's bottom edge. The carousel clips itself. */}
+      <section className="relative min-h-[520px] sm:min-h-[600px] flex items-end">
         <HeroCarousel />
         <div className="relative z-10 w-full max-w-[1440px] mx-auto px-4 sm:px-6 pt-20 pb-8 sm:pb-12">
           <p className="font-headline text-[10px] sm:text-xs font-black uppercase tracking-widest text-primary mb-3">
@@ -70,7 +72,7 @@ export default async function Home() {
           eyebrow="Trending Now"
           title="Most Popular Events"
         >
-          {events.map((event) => <HomeEventCard key={event.id} event={event} />)}
+          {events.map((event) => <EventCard key={event.id} event={event} />)}
         </ScrollCarousel>
       </section>
 
@@ -81,7 +83,7 @@ export default async function Home() {
             eyebrow="Coming Up"
             title="Starting Soon"
           >
-            {startingSoon.map((event) => <HomeEventCard key={event.id} event={event} />)}
+            {startingSoon.map((event) => <EventCard key={event.id} event={event} />)}
           </ScrollCarousel>
         </section>
       )}
@@ -93,7 +95,7 @@ export default async function Home() {
             eyebrow="Personalised"
             title="Recommended For You"
           >
-            {recommended.map((event) => <HomeEventCard key={event.id} event={event} />)}
+            {recommended.map((event) => <EventCard key={event.id} event={event} />)}
           </ScrollCarousel>
         </section>
       )}

@@ -4,12 +4,14 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ArrowRight, ArrowLeft, Check } from "lucide-react";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 
 const inputCls = (err?: string) =>
-  `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-muted-dark focus:outline-none transition-colors ${
+  `w-full bg-dark border rounded-md px-4 py-3 text-[15px] text-light placeholder:text-placeholder focus:outline-none transition-colors ${
     err ? "border-orange-500/70 focus:border-orange-500" : "border-dark-lighter focus:border-primary"
   }`;
-const areaCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:border-primary focus:outline-none resize-none transition-colors";
+const areaCls  = "w-full bg-dark border border-dark-lighter rounded-md px-4 py-3 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none resize-none transition-colors";
 
 const validators = {
   name:  (v: string) => !v.trim() ? "Required" : v.trim().length < 2 ? "Must be at least 2 characters" : !/^[a-zA-Z\s\-']+$/.test(v.trim()) ? "Letters only" : "",
@@ -40,6 +42,7 @@ const STEPS = [
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const portalHost = usePortalHost();
   const [step,      setStep]      = useState(0);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [animating, setAnimating] = useState(false);
@@ -156,16 +159,16 @@ export default function OnboardingPage() {
 
       {/* ── Background gradient ── */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-dark/80 via-dark-darker to-dark/60 opacity-80" />
-        <div className="absolute inset-x-0 top-0    h-[30%] bg-gradient-to-b  from-dark-darker to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t  from-dark-darker to-transparent" />
-        <div className="absolute inset-y-0 left-0   w-[20%] bg-gradient-to-r  from-dark-darker to-transparent" />
-        <div className="absolute inset-y-0 right-0  w-[20%] bg-gradient-to-l  from-dark-darker to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-br from-dark/80 via-darker to-dark/60 opacity-80" />
+        <div className="absolute inset-x-0 top-0    h-[30%] bg-gradient-to-b  from-darker to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t  from-darker to-transparent" />
+        <div className="absolute inset-y-0 left-0   w-[20%] bg-gradient-to-r  from-darker to-transparent" />
+        <div className="absolute inset-y-0 right-0  w-[20%] bg-gradient-to-l  from-darker to-transparent" />
         <div className="absolute inset-0 scan-grid opacity-50" />
       </div>
 
       {/* ── Logo bar ── */}
-      <div className="fixed top-0 left-0 right-0 z-40 h-16 flex items-center justify-center">
+      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-center pt-safe pb-2">
         <Image src="/images/logo-title.svg" alt="Startline" width={140} height={36} className="h-8 w-auto" />
       </div>
 
@@ -331,9 +334,9 @@ export default function OnboardingPage() {
                   </div>
                   <p className="text-[14px] text-muted leading-relaxed">
                     I agree to the{" "}
-                    <a href="/terms" target="_blank" className="text-primary hover:underline">Terms of Service</a>
-                    {" "}and{" "}
-                    <a href="/privacy" target="_blank" className="text-primary hover:underline">Privacy Policy</a>.
+                    <a href={customerHref("/terms", portalHost)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>
+                    {", "}including the organiser terms, and have read the{" "}
+                    <a href={customerHref("/privacy", portalHost)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>.
                   </p>
                 </label>
               </>

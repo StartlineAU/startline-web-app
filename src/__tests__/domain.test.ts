@@ -3,8 +3,8 @@ import { EVENT_TYPE_OPTIONS, EVENT_TYPE_LABELS } from "@/types";
 
 describe("event status labels", () => {
   it("covers all statuses", () => {
-    const statuses = ["DRAFT", "PENDING", "APPROVED", "REJECTED", "ARCHIVED"];
-    expect(statuses).toHaveLength(5);
+    const statuses = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"];
+    expect(statuses).toHaveLength(6);
   });
 });
 

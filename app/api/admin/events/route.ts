@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
-const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "REJECTED", "ARCHIVED"] as const;
+import { getEventCoords } from "@/lib/australia-coords";
+import { writeAuditLog } from "@/lib/audit";
+import { adminEventPayloadSchema, eventPayloadSchema } from "@/lib/schemas";
+import { withUniqueSlug } from "@/lib/slugs";
+import { eventTimeData } from "@/lib/event-time";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import type { Prisma } from "@prisma/client";
+import { syncEventSchedules } from "@/lib/event-scheduler";
+import { z } from "zod";
+
+const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
+
+const eventListQuery = z.object({
+  status: z.enum(VALID_STATUSES).catch("PENDING"),
+  page: z.coerce.number().int().min(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(100).catch(50),
+});
 
 const EVENT_SELECT = {
   id:              true,
@@ -13,17 +29,26 @@ const EVENT_SELECT = {
   eventDate:       true,
   startTime:       true,
   status:          true,
+  startsAtUtc:     true,
+  endsAtUtc:       true,
   isPinned:        true,
   createdAt:       true,
   coverImageUrl:   true,
   rejectionReason: true,
   reviewedAt:      true,
+  registrationType: true,
+  // With registrationType, decides whether the event takes payments at all.
+  waves:           true,
   organiser: {
     select: {
       id:          true,
       orgName:     true,
       contactName: true,
       email:       true,
+      // Drives the "profile incomplete" warning on the review queue, so an
+      // admin sees why an event cannot be approved before clicking approve.
+      abn:                      true,
+      stripeOnboardingComplete: true,
     },
   },
 } as const;
@@ -33,29 +58,48 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const statusParam = (searchParams.get("status") ?? "PENDING").toUpperCase();
-  const status: EventStatus = (VALID_STATUSES as readonly string[]).includes(statusParam)
-    ? (statusParam as EventStatus)
-    : "PENDING";
-
-  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10)));
+  const { status, page, limit } = eventListQuery.parse(
+    Object.fromEntries(searchParams),
+  );
   const skip = (page - 1) * limit;
+  const now = new Date();
+
+  // The status tab must agree with the effective lifecycle, not wait for the
+  // worker. Approved means "has not started"; an event whose start has passed is
+  // in progress, and one whose end has passed is archived.
+  const where: Prisma.EventWhereInput =
+    status === "APPROVED"
+      ? { status, OR: [{ startsAtUtc: null }, { startsAtUtc: { gt: now } }] }
+      : status === "IN_PROGRESS"
+        ? {
+            OR: [
+              { status: "IN_PROGRESS" },
+              { status: "APPROVED", startsAtUtc: { lte: now }, endsAtUtc: { gt: now } },
+            ],
+          }
+        : status === "ARCHIVED"
+          ? {
+              OR: [
+                { status: "ARCHIVED" },
+                { status: { in: ["APPROVED", "IN_PROGRESS"] }, endsAtUtc: { lte: now } },
+              ],
+            }
+          : { status };
 
   try {
     const [events, total] = await Promise.all([
       prisma.event.findMany({
-        where:   { status },
+        where,
         orderBy: { createdAt: "desc" },
         select:  EVENT_SELECT,
         skip,
         take: limit,
       }),
-      prisma.event.count({ where: { status } }),
+      prisma.event.count({ where }),
     ]);
 
     const response = NextResponse.json({
-      events,
+      events: events.map((event) => ({ ...event, status: effectiveEventStatus(event, now) })),
       total,
       page,
       totalPages: Math.ceil(total / limit),
@@ -65,5 +109,120 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("Admin events fetch error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
+  }
+}
+
+// POST /api/admin/events — create an event on behalf of an organiser.
+// Body: { organiserId, ...event fields, submit }
+export async function POST(req: NextRequest) {
+  const session = await getAdminSession();
+  if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  const parsed = adminEventPayloadSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 },
+    );
+  }
+  const body = parsed.data;
+  const { submit, organiserId } = body;
+
+  if (!organiserId) {
+    return NextResponse.json({ error: "organiserId is required." }, { status: 400 });
+  }
+
+  const organiser = await prisma.organiser.findUnique({
+    where:  { id: organiserId },
+    select: { id: true, verified: true, status: true, orgName: true },
+  });
+  if (!organiser) return NextResponse.json({ error: "Organiser not found." }, { status: 404 });
+  if (organiser.status === "SUSPENDED") {
+    return NextResponse.json({ error: "Cannot create events for a suspended organiser." }, { status: 422 });
+  }
+
+  if (submit) {
+    const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
+    for (const field of required) {
+      if (!body[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+    }
+    if (body.registrationType === "external" && !body.registrationUrl) {
+      return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
+    }
+  } else {
+    if (!body.title?.trim()) {
+      return NextResponse.json({ error: "A title is required to save a draft." }, { status: 400 });
+    }
+  }
+
+  const eventStatus = submit ? (organiser.verified ? "APPROVED" : "PENDING") : "DRAFT";
+  const times = eventTimeData({
+    eventDate: body.eventDate ?? "",
+    endDate: body.endDate ?? null,
+    startTime: body.startTime ?? "",
+    endTime: body.endTime ?? null,
+    state: body.state ?? "",
+  });
+  const lifecycleStatus = effectiveEventStatus({ status: eventStatus, ...times });
+
+  try {
+    const event = await withUniqueSlug(body.title ?? "", (slug) =>
+      prisma.event.create({
+      data: {
+        organiserId:      organiserId,
+        status:           lifecycleStatus,
+        ...times,
+        slug,
+        title:            body.title ?? "",
+        discipline:       body.discipline        ?? "",
+        description:      body.description       ?? null,
+        eventDate:        body.eventDate         ?? "",
+        endDate:          body.endDate           ?? null,
+        startTime:        body.startTime         ?? "",
+        endTime:          body.endTime           || "",
+        venue:            body.venue             ?? "",
+        address:          body.address           ?? null,
+        city:             body.city              ?? "",
+        state:            body.state             ?? "",
+        latitude:         body.latitude          ?? (body.city && body.state ? getEventCoords(body.city, body.state)[0] : null),
+        longitude:        body.longitude         ?? (body.city && body.state ? getEventCoords(body.city, body.state)[1] : null),
+        format:           body.format            ?? "",
+        level:            body.level             ?? "",
+        categories:       body.categories        ?? [],
+        cap:              body.cap               ?? null,
+        minAge:           body.minAge            ?? 16,
+        waves:            body.waves             ?? [],
+        inclusions:       body.inclusions        ?? null,
+        extras:           body.extras            ?? null,
+        activations:      body.activations       ?? null,
+        refundTiers:      body.refundTiers       ?? [],
+        refundPolicy:     body.refundPolicy      ?? null,
+        registrationType: body.registrationType  ?? "startline",
+        feeStructure:     body.feeStructure      ?? "athlete",
+        registrationUrl:  body.registrationUrl   ?? null,
+        accessibilityInfo: body.accessibilityInfo ?? null,
+        coverImageUrl:    body.coverImageUrl      ?? null,
+        informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
+        photos:           Array.isArray(body.photos) ? body.photos : [],
+      },
+      }),
+    );
+
+    await syncEventSchedules(event).catch((err) =>
+      console.error("Event lifecycle schedule sync failed:", err),
+    );
+
+    writeAuditLog({
+      adminId: session.sub,
+      action: "CREATE_EVENT",
+      targetType: "event",
+      targetId: event.id,
+      meta: { title: body.title, organiserId, status: event.status },
+    });
+
+    return NextResponse.json({ id: event.id, status: event.status });
+  } catch (err) {
+    console.error("Admin event create error:", err);
+    return NextResponse.json({ error: "Failed to save event." }, { status: 500 });
   }
 }
