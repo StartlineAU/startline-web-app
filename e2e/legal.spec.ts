@@ -66,10 +66,14 @@ test.describe("legal pages", () => {
 test.describe("legal pages while in waitlist mode", () => {
   // Production rewrites /terms, /privacy and /cookies on the apex domain to
   // /waitlist/<page>. Dev skips host routing, so the targets are visited directly.
-  test("the waitlist footer names the company and links to all three pages", async ({ page }) => {
+  test("the waitlist footer names the company, the contact address and links to all three pages", async ({ page }) => {
     await page.goto("/waitlist");
     const footer = page.locator("footer").filter({ hasText: "ABN 85 775 067 904" });
     await expect(footer).toContainText("Startline Pty Ltd");
+    await expect(footer.getByRole("link", { name: "admin@startlineau.com" })).toHaveAttribute(
+      "href",
+      "mailto:admin@startlineau.com",
+    );
     for (const [label, path] of [["Terms", "/terms"], ["Privacy", "/privacy"], ["Cookies", "/cookies"]] as const) {
       await expect(footer.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", path);
     }
