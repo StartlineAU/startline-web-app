@@ -132,6 +132,110 @@ describe("athlete host in waitlist mode", () => {
   });
 });
 
+describe("admin host in waitlist mode", () => {
+  const host = "admin.startlineau.com";
+
+  it("shows the waitlist to an anonymous visitor", async () => {
+    const res = await middleware(request("/admin/dashboard", { host }));
+    expect(rewriteTarget(res)).toMatch(/\/waitlist$/);
+  });
+
+  it("keeps the login page reachable without touching Cognito", async () => {
+    const res = await middleware(request("/admin/login", { host }));
+    expect(passedThrough(res)).toBe(true);
+    expect(jwtVerify).not.toHaveBeenCalled();
+  });
+
+  it("keeps auth, API and asset paths reachable", async () => {
+    for (const path of ["/auth/callback", "/api/admin/events", "/_next/static/app.js"]) {
+      const res = await middleware(request(path, { host }));
+      expect(passedThrough(res), path).toBe(true);
+    }
+  });
+
+  it("shows the waitlist to a signed-in non-admin", async () => {
+    jwtVerify.mockResolvedValue({
+      payload: { sub: "user-sub", "cognito:groups": ["organisers"] },
+    });
+
+    const res = await middleware(request("/admin/dashboard", { host, signedIn: true }));
+
+    expect(rewriteTarget(res)).toMatch(/\/waitlist$/);
+  });
+
+  it("lets an admin into the portal", async () => {
+    jwtVerify.mockResolvedValue({
+      payload: { sub: "admin-sub", "cognito:groups": ["admins"] },
+    });
+
+    const res = await middleware(request("/admin/dashboard", { host, signedIn: true }));
+
+    expect(passedThrough(res)).toBe(true);
+    expect(rewriteTarget(res)).toBeNull();
+  });
+
+  it("leaves the waitlist itself reachable", async () => {
+    const res = await middleware(request("/waitlist", { host }));
+
+    expect(passedThrough(res)).toBe(true);
+    expect(rewriteTarget(res)).toBeNull();
+  });
+});
+
+describe("organiser host in waitlist mode", () => {
+  const host = "organiser.startlineau.com";
+
+  it("shows the waitlist to an anonymous visitor", async () => {
+    for (const path of ["/", "/organiser/dashboard"]) {
+      const res = await middleware(request(path, { host }));
+      expect(rewriteTarget(res), path).toMatch(/\/waitlist$/);
+    }
+  });
+
+  it("serves the waitlist copy of a legal page", async () => {
+    const res = await middleware(request("/terms", { host }));
+    expect(rewriteTarget(res)).toMatch(/\/waitlist\/terms$/);
+  });
+
+  it("keeps auth and API paths reachable", async () => {
+    for (const path of ["/auth/callback", "/api/organiser/events"]) {
+      const res = await middleware(request(path, { host }));
+      expect(passedThrough(res), path).toBe(true);
+    }
+  });
+
+  it("lets a signed-in organiser into the portal", async () => {
+    jwtVerify.mockResolvedValue({ payload: { sub: "organiser-sub" } });
+
+    const res = await middleware(request("/organiser/dashboard", { host, signedIn: true }));
+
+    expect(passedThrough(res)).toBe(true);
+  });
+
+  it("leaves the waitlist itself reachable", async () => {
+    const res = await middleware(request("/waitlist", { host }));
+
+    expect(passedThrough(res)).toBe(true);
+    expect(rewriteTarget(res)).toBeNull();
+  });
+});
+
+describe("portal hosts in live mode", () => {
+  beforeEach(() => {
+    process.env.PUBLIC_SITE_MODE = "live";
+  });
+
+  it("serves the organiser landing page", async () => {
+    const res = await middleware(request("/", { host: "organiser.startlineau.com" }));
+    expect(rewriteTarget(res)).toMatch(/\/organiser-landing$/);
+  });
+
+  it("serves the admin login page", async () => {
+    const res = await middleware(request("/admin/login", { host: "admin.startlineau.com" }));
+    expect(passedThrough(res)).toBe(true);
+  });
+});
+
 describe("athlete host in live mode", () => {
   beforeEach(() => {
     process.env.PUBLIC_SITE_MODE = "live";
