@@ -183,20 +183,23 @@ organiser portal permanently signed out in production.
 
 ### Public site visibility (waitlist)
 
-`PUBLIC_SITE_MODE` decides what `startlineau.com` shows the public, and only that
-host. Staging, PR previews and local dev serve the real site whatever it says.
-Unset or unrecognised means `waitlist`, so a missing value on the production app
-secret cannot open the site by accident.
+`PUBLIC_SITE_MODE` decides what production shows the public. It covers all
+three portals: `startlineau.com` (and `www.`), `organiser.startlineau.com` and
+`admin.startlineau.com`. Staging, PR previews and local dev serve the real site
+whatever it says. Unset or unrecognised means `waitlist`, so a missing value on
+the production app secret cannot open the site by accident.
 
-| Value | `startlineau.com` and `www.` |
+| Value | Production hosts |
 |---|---|
-| `waitlist` (default) | Anonymous visitors get `/waitlist`; `/terms`, `/privacy`, `/cookies` get their `app/waitlist/(legal)` copies |
+| `waitlist` (default) | Anonymous visitors get `/waitlist` on every production host; `/terms`, `/privacy`, `/cookies` get their `app/waitlist/(legal)` copies. Signed-in organisers keep their portal. `admin.startlineau.com/admin/login`, auth and API paths stay reachable so staff can sign in |
 | `live` | The real site, with the usual organiser/admin portal protection |
 
-The gate is in `middleware.ts`; the allowlist of paths that stay reachable while
-waitlisted (waitlist API, Stripe webhooks, the lifecycle worker, the organiser
-sign-up door, provider callbacks, check-in, assets) is `lib/site-mode.ts`. Adding
-to it widens what the public can reach without signing in, so each entry needs a
+The gate is in `middleware.ts`; the apex allowlist of paths that stay reachable
+while waitlisted (waitlist API, Stripe webhooks, the lifecycle worker, the
+organiser sign-up door, provider callbacks, check-in, assets) is
+`lib/site-mode.ts`. The organiser and admin hosts additionally keep `/auth`,
+`/api` and build assets reachable, plus `/admin/login`. Adding to either list
+widens what the public can reach without signing in, so each entry needs a
 reason.
 
 **Reviewing a production deploy before launch.** Sign in to the production admin

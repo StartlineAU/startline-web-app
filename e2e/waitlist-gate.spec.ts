@@ -44,6 +44,27 @@ test.describe("production waitlist gate", () => {
     expect(await res.text()).toContain("Cross the start line");
   });
 
+  test("gates the organiser and admin hostnames too", async ({ request }) => {
+    for (const [host, path] of [
+      ["organiser.startlineau.com", "/"],
+      ["organiser.startlineau.com", "/organiser/dashboard"],
+      ["admin.startlineau.com", "/admin/dashboard"],
+    ] as const) {
+      const res = await request.get(path, asProduction(host));
+      expect(res.status(), `${host}${path}`).toBe(200);
+      const html = await res.text();
+      expect(html, `${host}${path}`).toContain("Cross the start line");
+      expect(html, `${host}${path}`).not.toContain(SITE_NAV);
+    }
+  });
+
+  test("keeps the admin sign-in page reachable", async ({ request }) => {
+    const res = await request.get("/admin/login", asProduction("admin.startlineau.com"));
+
+    expect(res.status()).toBe(200);
+    expect(await res.text()).not.toContain("Cross the start line");
+  });
+
   test("serves the legal pages in their waitlist layout", async ({ request }) => {
     for (const [path, heading] of [
       ["/terms", "Terms of Service"],

@@ -81,6 +81,27 @@ function withPrivateNoStore(res: NextResponse): NextResponse {
   return res;
 }
 
+/** The waitlist page, or its legal-page copy, for a gated host. */
+function waitlistResponse(req: NextRequest, pathname: string): NextResponse {
+  if (isLegalPath(pathname)) {
+    return NextResponse.rewrite(new URL(`/waitlist${pathname}`, req.url));
+  }
+  return NextResponse.rewrite(new URL("/waitlist", req.url));
+}
+
+// Paths a gated portal host still has to answer: signing in, provider
+// callbacks, the APIs the portal calls, and Next's own assets. Each route
+// enforces its own access rules, so the waitlist does not need to hide them.
+function servesPortalInfrastructure(pathname: string): boolean {
+  return (
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/images") ||
+    pathname.startsWith("/favicon")
+  );
+}
+
 // Routing for any deployment that serves all three portals from one hostname:
 // local dev, PR previews, staging, and a staff preview of production while the
 // waitlist gate is on.
@@ -115,7 +136,22 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get("host") ?? "";
 
+  // The waitlist and its legal copies are the destination of every gate, so
+  // they always pass through. Rewriting /waitlist to itself would loop, and the
+  // organiser host would otherwise redirect it to the athlete site.
+  if (pathname === "/waitlist" || pathname.startsWith("/waitlist/")) {
+    return NextResponse.next();
+  }
+
   if (host === ORGANISER_DOMAIN) {
+    // Waitlist mode closes the whole portal, not only the athlete site. The
+    // auth and API paths above stay open so an organiser can still sign in;
+    // after that the portal's own routes decide what they may see.
+    if (publicSiteMode() === "waitlist" && !servesPortalInfrastructure(pathname)) {
+      const payload = await getVerifiedPayload(req);
+      if (!payload) return waitlistResponse(req, pathname);
+    }
+
     if (pathname === "/" || pathname === "/organiser") {
       return NextResponse.rewrite(new URL("/organiser-landing", req.url));
     }
@@ -147,6 +183,20 @@ export async function middleware(req: NextRequest) {
   }
 
   if (host === ADMIN_DOMAIN) {
+    // Waitlist mode hides the portal from everyone except staff. The login page
+    // is the exception, or there would be no way to sign in and review the
+    // deployment; auth, API and asset paths stay reachable for the same reason.
+    if (
+      publicSiteMode() === "waitlist" &&
+      pathname !== "/admin/login" &&
+      !servesPortalInfrastructure(pathname)
+    ) {
+      const payload = await getVerifiedPayload(req);
+      if (!payload || !isSitePreviewer(payload)) {
+        return waitlistResponse(req, pathname);
+      }
+    }
+
     if (ADMIN_PROTECTED.some((p) => pathname.startsWith(p))) {
       const payload = await getVerifiedPayload(req);
       if (!payload || !isAdmin(payload)) {
@@ -182,10 +232,7 @@ export async function middleware(req: NextRequest) {
       return res.headers.get("location") ? res : withPrivateNoStore(res);
     }
 
-    if (isLegalPath(pathname)) {
-      return NextResponse.rewrite(new URL(`/waitlist${pathname}`, req.url));
-    }
-    return NextResponse.rewrite(new URL("/waitlist", req.url));
+    return waitlistResponse(req, pathname);
   }
 
   return routeSingleHost(req, pathname);

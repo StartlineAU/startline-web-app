@@ -1,9 +1,10 @@
-// What the athlete site shows the public.
+// What production shows the public.
 //
-// `waitlist` keeps startlineau.com on the waitlist page. Staff who are signed in
-// to the `admins` Cognito group still get the real site, which is how a
-// production deployment is reviewed before launch. `live` drops the gate for
-// everyone.
+// `waitlist` keeps every production host on the waitlist page: the apex, the
+// organiser portal and the admin portal. Staff signed in to the `admins`
+// Cognito group still get the real site, which is how a production deployment
+// is reviewed before launch, and the admin login page stays reachable so they
+// can sign in. `live` drops the gate for everyone.
 //
 // Anything unrecognised falls back to `waitlist`: a missing or misspelt value on
 // the production app secret must not open the site by accident. Local dev never
@@ -24,7 +25,7 @@
 
 export type SiteMode = "waitlist" | "live";
 
-/** Which gate the athlete host runs. Unset or unrecognised means the waitlist. */
+/** Which gate the production hosts run. Unset or unrecognised means the waitlist. */
 export function publicSiteMode(): SiteMode {
   return process.env.PUBLIC_SITE_MODE?.trim().toLowerCase() === "live" ? "live" : "waitlist";
 }
