@@ -15,6 +15,17 @@ test.describe("admin login", () => {
     await expect(page.getByPlaceholder(/admin@startlineau/i)).toBeVisible();
     await expect(page.locator('input[type="password"]')).toBeVisible();
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /forgot password/i })).toBeVisible();
+  });
+
+  test("forgot-password link carries the entered admin email", async ({ page }) => {
+    await page.goto("/admin/login");
+
+    await page.getByPlaceholder(/admin@startlineau/i).fill("admin@startlineau.com");
+    await page.getByRole("link", { name: /forgot password/i }).click();
+
+    await expect(page).toHaveURL(/\/auth\/forgot-password\?email=admin%40startlineau\.com/);
+    await expect(page.getByPlaceholder("you@example.com")).toHaveValue("admin@startlineau.com");
   });
 });
 
