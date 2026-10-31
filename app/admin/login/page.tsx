@@ -23,6 +23,10 @@ export default function AdminLoginPage() {
   const [totpCode,         setTotpCode]         = useState("");
   const [totpSetupUri,     setTotpSetupUri]     = useState<string | null>(null);
 
+  const forgotPasswordHref = email.trim()
+    ? `/auth/forgot-password?email=${encodeURIComponent(email.trim())}`
+    : "/auth/forgot-password";
+
   const completeAdminSignIn = async () => {
     const session = await fetchAuthSession();
     const groups  = (session.tokens?.accessToken?.payload?.["cognito:groups"] as string[] | undefined) ?? [];
@@ -287,12 +291,18 @@ export default function AdminLoginPage() {
             </div>
 
             <div>
-              <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="admin-password" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                  Password
+                </label>
+                <Link href={forgotPasswordHref} className="font-headline text-[11px] uppercase tracking-widest text-muted hover:text-primary transition-colors">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
                 <input
+                  id="admin-password"
                   type={showPw ? "text" : "password"} required value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••"
