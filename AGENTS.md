@@ -301,12 +301,16 @@ host that started it. Amplify's OAuth listener (imported in
 | Manage linked accounts | `components/settings/SignInMethodsCard.tsx`, `app/api/user/sign-in-methods/`, `app/(user)/auth/link/callback/` |
 
 - **The Cognito hosts are `auth.startlineau.com` (prod) and
-  `sl-staging.auth.ap-southeast-2.amazoncognito.com` (staging).** Each one's
-  `/oauth2/idpresponse` is registered by hand in Google Cloud and in the
-  matching Apple Services ID (`com.startlineau.auth`,
-  `com.startlineau.auth.staging`). Change a host and both consoles must change
-  too. Prod is on its own domain so Google can brand-verify the consent screen
-  as Startline; `auth` is a DNS-only CNAME in Cloudflare and must stay unproxied.
+  `auth-staging.startlineau.com` (staging).** Each one's `/oauth2/idpresponse`
+  is registered by hand in Google Cloud and in the matching Apple Services ID
+  (`com.startlineau.auth`, `com.startlineau.auth.staging`). Change a host and
+  both consoles must change too. Both environments use their own domain so
+  Google can brand-verify the consent screen as Startline, and each is a
+  DNS-only CNAME in Cloudflare that must stay unproxied. `startline-infra`'s
+  README owns the DNS and certificate setup. The `sl-staging` prefix stays in
+  Terraform as the fallback if the staging custom domain is removed, but is not
+  the host users sign in through. Local dev shares the staging pool, so
+  `.env.local` must use `auth-staging.startlineau.com` too.
 - **Callback origins are a fixed list** (`oauth_origins` in the infra root
   module): the three prod hosts minus admin, the staging branch domain and
   `http://localhost:3000`. PR previews get no social sign-in, since Cognito
