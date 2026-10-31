@@ -21,6 +21,9 @@ test.describe("production waitlist gate", () => {
     const html = await res.text();
     expect(html).toContain("Cross the start line");
     expect(html).toContain(WAITLIST_FOOTER);
+    // The waitlist carries the contact address, so a visitor can reach someone
+    // before the site opens.
+    expect(html).toContain('href="mailto:admin@startlineau.com"');
     expect(html).not.toContain(SITE_NAV);
   });
 

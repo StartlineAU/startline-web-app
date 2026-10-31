@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LEGAL_ENTITY_ABN, LEGAL_ENTITY_NAME } from "@/lib/legal";
+import { LEGAL_CONTACT_EMAIL, LEGAL_ENTITY_ABN, LEGAL_ENTITY_NAME } from "@/lib/legal";
 
 const LINKS = [
   { href: "/terms",   label: "Terms" },
@@ -9,7 +9,8 @@ const LINKS = [
 
 /**
  * The waitlist is the only page production serves, so it carries the legal
- * links itself. Sits in the stage's bottom padding, clear of the panel.
+ * links and the contact address itself. Sits in the stage's bottom padding,
+ * clear of the panel.
  */
 export function LegalFooter() {
   return (
@@ -17,6 +18,12 @@ export function LegalFooter() {
       <span>
         {LEGAL_ENTITY_NAME} · ABN {LEGAL_ENTITY_ABN}
       </span>
+      <a
+        href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+        className="normal-case hover:text-primary transition-colors"
+      >
+        {LEGAL_CONTACT_EMAIL}
+      </a>
       <nav aria-label="Legal" className="flex gap-4">
         {LINKS.map((l) => (
           <Link key={l.href} href={l.href} className="hover:text-primary transition-colors">
