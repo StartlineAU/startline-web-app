@@ -19,7 +19,8 @@ describe("Cognito in the Content-Security-Policy", () => {
     const csp = await contentSecurityPolicy();
 
     expect(csp).toContain("https://auth-staging.startlineau.com");
-    // The prefix fallback stays allowed so local dev and e2e can still use it.
+    // The prefix fallback stays allowed for the e2e suite and any pool still
+    // on the old host.
     expect(csp).toContain("https://*.auth.ap-southeast-2.amazoncognito.com");
   });
 
