@@ -151,60 +151,101 @@ function RegisteredCard({
   meta?: RegMeta;
   onRequestRefund: (meta: RegMeta) => void;
 }) {
-  const refundRequested = meta?.status === "REFUND_REQUESTED";
   const refunded = meta?.status === "REFUNDED";
   // A free entry has no money attached, so the same flow reads as giving up the
   // spot rather than asking for money back (issue #304).
   const freeEntry = (meta?.paidCents ?? 0) === 0;
+  const withdrawn = !!meta && meta.status !== "CONFIRMED";
+  const refundIssued = refunded && !freeEntry;
+
+  // Withdrawal is the athlete's action, so the copy names them rather than
+  // saying "cancelled", which can be mistaken for the event being cancelled.
+  const withdrawnHeading = refundIssued
+    ? "Refund issued."
+    : freeEntry
+      ? "You withdrew from this event."
+      : "You withdrew.";
+  const withdrawnDetail = refundIssued
+    ? null
+    : freeEntry
+      ? "Your spot has been released."
+      : "Your refund request is awaiting the organiser’s decision.";
+
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col"
+      data-testid="registration-entry"
+      data-event-id={event.id}
+      data-registration-status={meta?.status ?? "CONFIRMED"}
+    >
       <EventCard
         event={event}
         cardClassName="rounded-b-none border-b-0 group-hover:ring-0"
       />
-      <div
-        className="bg-dark-light border border-dark-lighter rounded-b-xl px-4 py-3 flex items-center justify-between gap-3"
-        style={{ borderTopStyle: "dashed" }}
-      >
-        <div className="min-w-0">
-          <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-            Your Wave
-          </p>
-          <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-light mt-1 truncate">
-            {meta?.wave || "—"}
-          </p>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-            Bib
-          </p>
-          <p className={`font-headline text-[13px] font-black mt-1 ${meta?.bibNumber ? "text-primary" : "text-muted-dark"}`}>
-            {meta?.bibNumber ? `#${meta.bibNumber}` : "—"}
-          </p>
-        </div>
-      </div>
-      {meta && (
-        <div className="mt-1.5 flex justify-end">
-          {refunded ? (
-            <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted">
-              {freeEntry ? "Spot released" : `Refunded ${money(meta.refundAmountCents)}`}
-            </span>
-          ) : refundRequested ? (
-            <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-amber-300">
-              {freeEntry
-                ? "Cancellation requested"
-                : `Refund requested${meta.refundAmountCents > 0 ? ` · ${money(meta.refundAmountCents)}` : ""}`}
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onRequestRefund(meta)}
-              className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
+      {withdrawn ? (
+        <div
+          className="bg-dark-light border border-dark-lighter rounded-b-xl px-4 py-4 flex items-start gap-3"
+          style={{ borderTopStyle: "dashed" }}
+        >
+          <span
+            className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ${
+              refundIssued ? "bg-primary/10 text-primary" : "bg-amber-400/10 text-amber-300"
+            }`}
+          >
+            {refundIssued ? (
+              <Banknote className="w-4 h-4" strokeWidth={2.5} />
+            ) : (
+              <Undo2 className="w-4 h-4" strokeWidth={2.5} />
+            )}
+          </span>
+          <div className="min-w-0">
+            <p
+              className={`font-headline text-[11px] font-bold uppercase tracking-widest ${
+                refundIssued ? "text-primary" : "text-amber-300"
+              }`}
             >
-              {freeEntry ? "Cancel my spot" : "Request refund"}
-            </button>
-          )}
+              {withdrawnHeading}
+            </p>
+            {withdrawnDetail && (
+              <p className="text-[12px] text-muted leading-relaxed mt-1">{withdrawnDetail}</p>
+            )}
+          </div>
         </div>
+      ) : (
+        <>
+          <div
+            className="bg-dark-light border border-dark-lighter rounded-b-xl px-4 py-3 flex items-center justify-between gap-3"
+            style={{ borderTopStyle: "dashed" }}
+          >
+            <div className="min-w-0">
+              <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
+                Your Wave
+              </p>
+              <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-light mt-1 truncate">
+                {meta?.wave || "—"}
+              </p>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
+                Bib
+              </p>
+              <p className={`font-headline text-[13px] font-black mt-1 ${meta?.bibNumber ? "text-primary" : "text-muted-dark"}`}>
+                {meta?.bibNumber ? `#${meta.bibNumber}` : "—"}
+              </p>
+            </div>
+          </div>
+          {meta && (
+            <div className="mt-1.5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onRequestRefund(meta)}
+                className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
+              >
+                Withdraw my entry
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -313,7 +354,7 @@ export default function ActivityPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setRefundError(json.error ?? "Could not request a refund.");
+        setRefundError(json.error ?? "Could not withdraw your entry.");
         return;
       }
       const { eventId } = refundTarget.meta;
@@ -331,7 +372,7 @@ export default function ActivityPage() {
       }));
       setRefundTarget(null);
     } catch {
-      setRefundError("Could not request a refund. Check your connection.");
+      setRefundError("Could not withdraw your entry. Check your connection.");
     } finally {
       setRefunding(false);
     }
@@ -445,7 +486,17 @@ export default function ActivityPage() {
   }, []);
 
   const savedEvents = events.filter((e) => savedIds.includes(String(e.id)));
-  const registeredEvents = events.filter((e) => registeredIds.includes(String(e.id)));
+  const registeredEvents = events.filter((e) => {
+    const status = regMeta[String(e.id)]?.status;
+    return registeredIds.includes(String(e.id)) && (!status || status === "CONFIRMED");
+  });
+  // Withdrawn and refunded entries stay in Activity so the athlete can see what
+  // happened to them, but they are no longer live registrations and must not
+  // count in the Registered badge.
+  const withdrawnEvents = events.filter((e) => {
+    const status = regMeta[String(e.id)]?.status;
+    return registeredIds.includes(String(e.id)) && !!status && status !== "CONFIRMED";
+  });
 
   const tabCounts = {
     registered: registeredEvents.length,
@@ -532,15 +583,16 @@ export default function ActivityPage() {
               ))}
             </div>
           </div>
-        ) : (activeTab === "registered" ? registeredEvents : savedEvents).length === 0 ? (
-          <EmptyState tab={activeTab} />
-        ) : (
-          <div
-            className="grid gap-5"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
-          >
-            {activeTab === "registered"
-              ? registeredEvents.map((event) => (
+        ) : activeTab === "registered" ? (
+          <>
+            {registeredEvents.length === 0 ? (
+              <EmptyState tab="registered" />
+            ) : (
+              <div
+                className="grid gap-5"
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+              >
+                {registeredEvents.map((event) => (
                   <RegisteredCard
                     key={event.id}
                     event={event}
@@ -550,10 +602,52 @@ export default function ActivityPage() {
                       setRefundTarget({ meta, title: event.title });
                     }}
                   />
-                ))
-              : savedEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
                 ))}
+              </div>
+            )}
+
+            {withdrawnEvents.length > 0 && (
+              <section aria-labelledby="withdrawn-entries-heading" className="mt-10">
+                <div className="flex items-center gap-3 mb-3">
+                  <h2
+                    id="withdrawn-entries-heading"
+                    className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-muted"
+                  >
+                    Withdrawn entries
+                  </h2>
+                  <span className="font-headline text-[11px] font-bold text-muted-dark">
+                    {withdrawnEvents.length}
+                  </span>
+                </div>
+                <div
+                  className="grid gap-5"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+                >
+                  {withdrawnEvents.map((event) => (
+                    <RegisteredCard
+                      key={event.id}
+                      event={event}
+                      meta={regMeta[String(event.id)]}
+                      onRequestRefund={(meta) => {
+                        setRefundError("");
+                        setRefundTarget({ meta, title: event.title });
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        ) : savedEvents.length === 0 ? (
+          <EmptyState tab="saved" />
+        ) : (
+          <div
+            className="grid gap-5"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+          >
+            {savedEvents.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
           </div>
         )}
       </div>
@@ -561,7 +655,7 @@ export default function ActivityPage() {
       <Dialog open={!!refundTarget} onOpenChange={(open) => { if (!open) setRefundTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{freeRefundTarget ? "Cancel my spot" : "Request a refund"}</DialogTitle>
+            <DialogTitle>Withdraw your entry?</DialogTitle>
             <DialogDescription>
               {refundTarget?.title}. You will come out of the start list and free your spot.
             </DialogDescription>
@@ -577,8 +671,8 @@ export default function ActivityPage() {
                       Free entry
                     </p>
                     <p className="text-[13px] text-muted leading-relaxed mt-1">
-                      This entry cost nothing, so there is no refund to make. Cancelling gives your spot back
-                      to the event and takes you out of the start list.
+                      This entry cost nothing, so there is no refund to make. Withdrawing your entry gives
+                      your spot back to the event and takes you out of the start list.
                     </p>
                   </>
                 ) : refundTarget.meta.outsidePolicy ? (
@@ -629,13 +723,7 @@ export default function ActivityPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRefundTarget(null)}>Keep my spot</Button>
             <Button onClick={confirmRefund} disabled={refunding}>
-              {refunding
-                ? freeRefundTarget ? "Cancelling…" : "Requesting…"
-                : freeRefundTarget
-                  ? "Cancel my spot"
-                  : refundTarget?.meta.outsidePolicy
-                    ? "Ask anyway"
-                    : `Request ${money(refundTarget?.meta.refundAmountCents ?? 0)}`}
+              {refunding ? "Withdrawing…" : "Withdraw my entry"}
             </Button>
           </DialogFooter>
         </DialogContent>

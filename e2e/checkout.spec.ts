@@ -415,4 +415,35 @@ test.describe("free event RSVP", () => {
     await expect(page.getByRole("button", { name: /i'm going/i })).toBeVisible();
     await expect(page.locator("#p0-firstName")).toHaveCount(0);
   });
+
+  test("withdrawing a free entry moves it out of Registered without a reload", async ({ page }) => {
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "user", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await page.goto(`/events/${FREE_SINGLE_ID}/register`);
+    await page.locator('[role="checkbox"][aria-describedby="registration-terms-copy"]').click();
+    await page.getByRole("button", { name: /i'm going/i }).click();
+    await expect(page.getByText(/you're in/i)).toBeVisible();
+
+    await page.goto("/activity");
+    const registeredTab = page.getByRole("button", { name: /^registered/i });
+    const entry = page
+      .getByTestId("registration-entry")
+      .filter({ hasText: "Free RSVP Single Tier" });
+    await expect(entry).toBeVisible();
+    const before = Number(await registeredTab.locator("span").innerText());
+
+    await entry.getByRole("button", { name: /withdraw my entry/i }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: /withdraw your entry/i })).toBeVisible();
+    await dialog.getByRole("button", { name: /withdraw my entry/i }).click();
+
+    await expect(page.getByText("You withdrew from this event.")).toBeVisible();
+    await expect(page.getByText("Your spot has been released.")).toBeVisible();
+    await expect(registeredTab.locator("span")).toHaveText(String(before - 1));
+
+    const withdrawn = page.getByRole("region", { name: /withdrawn entries/i });
+    await expect(withdrawn.getByText("Free RSVP Single Tier")).toBeVisible();
+    await expect(withdrawn.getByRole("button", { name: /withdraw my entry/i })).toHaveCount(0);
+  });
 });
