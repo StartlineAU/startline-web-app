@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   // root, which can make dev extremely slow or appear to hang on first load.
   outputFileTracingRoot: path.join(__dirname),
   output: "standalone",
+  // pdfkit picks its built-in PDF fonts with a computed require, so Next's file
+  // tracer cannot see `js/standard-fonts/*.cjs`. The standalone output Amplify
+  // runs then threw MODULE_NOT_FOUND for Helvetica.cjs and every server-rendered
+  // PDF failed to download: check-in QR poster and start-list export (#473).
+  outputFileTracingIncludes: {
+    "/*": ["./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/**/*"],
+  },
   turbopack: {
     root: path.join(__dirname),
   },
