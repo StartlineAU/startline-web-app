@@ -146,7 +146,10 @@ const stepperBtnCls =
   "w-[30px] h-[30px] p-0 rounded-full border-2 border-dark-lighter grid place-items-center leading-none text-light hover:border-primary hover:text-primary transition-colors disabled:opacity-30 disabled:pointer-events-none";
 
 export default function RegisterPage() {
-  return <RegisterContent />;
+  const params = useParams();
+  // A new event is a new wizard: clear the block and every other per-event
+  // field rather than carrying them across an in-app navigation.
+  return <RegisterContent key={String(params.id)} />;
 }
 
 function RegisterContent() {
@@ -190,6 +193,9 @@ function RegisterContent() {
   const [serverTotal, setServerTotal] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
   const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean } | null>(null);
+  // A duplicate can still lose the race against another tab. If the confirm
+  // request says so, move to the same gate the precheck would have shown.
+  const [rsvpBlockedAfterSubmit, setRsvpBlockedAfterSubmit] = useState(false);
 
   const prefilledRef = useRef(false);
   // Signed-in only: the buyer's saved details, and which ticket (if any) is
@@ -361,6 +367,40 @@ function RegisterContent() {
   }, [freeRsvpWave, openFreeWaves]);
   // One free tier needs no picker, so the confirmation is the first step.
   const freeRsvpDisplayStep = freeRsvp && openFreeWaves.length === 1 ? 1 : step;
+
+  // Check for an existing entry before offering the RSVP confirm. This is the
+  // same identity and status rule the POST applies inside its transaction.
+  const fetchRsvpStatus = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(
+      `/api/registrations/free/rsvp?eventId=${encodeURIComponent(eventId)}`,
+      { signal },
+    );
+    if (!response.ok) throw new Error("Could not check your existing entry.");
+    return await response.json() as { alreadyRegistered: boolean };
+  }, [eventId]);
+
+  const {
+    data: rsvpStatus,
+    loading: rsvpStatusLoading,
+    error: rsvpStatusError,
+    reload: reloadRsvpStatus,
+  } = useApiResource<{ alreadyRegistered: boolean }>(fetchRsvpStatus, {
+    key: `${eventId}:${status}`,
+    enabled: status === "authenticated" && freeRsvp,
+  });
+
+  const rsvpBlocked = Boolean(rsvpStatus?.alreadyRegistered || rsvpBlockedAfterSubmit);
+  // Fail closed while the answer is still pending. The extra !rsvpStatus
+  // covers the render before useApiResource flips loading on for a newly
+  // enabled check, which would otherwise flash the review step.
+  const rsvpCheckPending =
+    freeRsvp &&
+    status === "authenticated" &&
+    !confirmed &&
+    !rsvpBlocked &&
+    !rsvpStatusError &&
+    (rsvpStatusLoading || !rsvpStatus);
+
   const accountName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : "";
   const accountEmail = profile?.email ?? "";
   const freeRsvpReviewRows: ReviewRow[] = [
@@ -591,10 +631,15 @@ function RegisterContent() {
         registrationIds?: string[];
         error?: string;
         email?: string;
+        reason?: "capacity" | "duplicate";
       };
       if (res.status === 401) {
         setError("Please sign in again to RSVP.");
         setIsSignInOpen(true);
+        return null;
+      }
+      if (!res.ok && data.reason === "duplicate") {
+        setRsvpBlockedAfterSubmit(true);
         return null;
       }
       if (!res.ok || !data.registrationIds?.length) {
@@ -739,7 +784,7 @@ function RegisterContent() {
   }, [participants, tierLines, ticketWaves, sharedContactActive, sharedEmergencyContact]);
 
   // ── Loading / not-found ──
-  if (loading || status === "loading") {
+  if (loading || status === "loading" || rsvpCheckPending) {
     return (
       <PageShellSkeleton maxWidth="max-w-[1100px]">
         <Skeleton className="h-3 w-28 mb-6" />
@@ -881,6 +926,83 @@ function RegisterContent() {
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to event
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Existing RSVP gate ──
+  // A live (or refund-pending) entry means there is nothing to confirm. Send
+  // the athlete to the entry they already hold rather than showing a review
+  // step whose only possible outcome is a 409.
+  if (freeRsvp && status === "authenticated" && rsvpBlocked) {
+    return (
+      <div className="min-h-screen bg-dark-darker">
+        <div className="max-w-[520px] mx-auto px-5 pt-24 pb-24">
+          <Link
+            href={`/events/${eventId}`}
+            className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors mb-8"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+          </Link>
+          <div
+            data-testid="rsvp-existing-entry"
+            className="bg-dark border border-dark-lighter rounded-[14px] p-6 text-center"
+          >
+            <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2.5">
+              Already registered
+            </div>
+            <h1 className="font-headline text-[clamp(28px,4vw,40px)] font-bold italic tracking-[-0.04em] text-light leading-[.95] mb-3">
+              You&apos;re already<br /><span className="text-primary">going.</span>
+            </h1>
+            <p className="text-[13px] text-muted leading-relaxed mb-6">
+              You already have an entry for <strong className="text-light">{event.title}</strong>.
+              Open Activity to find it.
+            </p>
+            <Link href="/activity" className={continueBtnCls}>
+              View my entry <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // A failed check must not let the athlete through to a confirm button we
+  // cannot prove is safe.
+  if (freeRsvp && status === "authenticated" && rsvpStatusError) {
+    return (
+      <div className="min-h-screen bg-dark-darker">
+        <div className="max-w-[520px] mx-auto px-5 pt-24 pb-24">
+          <Link
+            href={`/events/${eventId}`}
+            className="inline-flex items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors mb-8"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+          </Link>
+          <div
+            data-testid="rsvp-check-error"
+            className="bg-dark border border-dark-lighter rounded-[14px] p-6 text-center"
+          >
+            <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-2.5">
+              Couldn&apos;t check your entry
+            </div>
+            <h1 className="font-headline text-[clamp(28px,4vw,40px)] font-bold italic tracking-[-0.04em] text-light leading-[.95] mb-3">
+              Let&apos;s try<br /><span className="text-primary">that again.</span>
+            </h1>
+            <p className="text-[13px] text-muted leading-relaxed mb-6">
+              We couldn&apos;t check whether you already have an entry for this event.
+              Try again before you RSVP, so you don&apos;t end up with a duplicate.
+            </p>
+            <div className="flex flex-col items-center gap-3">
+              <button type="button" onClick={() => void reloadRsvpStatus()} className={continueBtnCls}>
+                Try again <ArrowRight className="w-4 h-4" />
+              </button>
+              <Link href="/activity" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors">
+                Go to Activity
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     );

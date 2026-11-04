@@ -7,13 +7,14 @@ import { assertTurnstile } from "@/lib/turnstile";
 import { isFreeEvent, waveIsOpen, type PublicWave } from "@/lib/event-types";
 import {
   compactParticipant,
-  createEmptyParticipant,
-  splitFullName,
   athleteNameFromParticipant,
 } from "@/lib/registration-form";
 import {
   announceRegistrations,
+  findBlockingRsvpRegistration,
   insertConfirmedRegistrations,
+  RSVP_DUPLICATE_STATUSES,
+  rsvpParticipantFromSession,
   type PricedEntry,
 } from "@/lib/registration-confirm";
 
@@ -25,6 +26,42 @@ const rsvpSchema = z.object({
   }),
   turnstileToken: z.string().max(4000).optional(),
 });
+
+const rsvpStatusQuery = z.object({
+  eventId: z.string().min(1).max(255),
+});
+
+/**
+ * GET — whether this account already holds a blocking entry for the event.
+ * The RSVP wizard calls this before showing the confirm step, so an athlete
+ * with a live entry is sent to Activity rather than into a dead end.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getUserSession();
+    if (!session) {
+      return NextResponse.json({ error: "Sign in to check your entries." }, { status: 401 });
+    }
+
+    const parsed = rsvpStatusQuery.safeParse({
+      eventId: req.nextUrl.searchParams.get("eventId") ?? "",
+    });
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Valid eventId required." }, { status: 400 });
+    }
+
+    const existing = await findBlockingRsvpRegistration({
+      eventId: parsed.data.eventId,
+      userId: session.sub,
+      participant: rsvpParticipantFromSession(session),
+    });
+
+    return NextResponse.json({ alreadyRegistered: Boolean(existing) });
+  } catch (err) {
+    console.error("Free RSVP status error:", err);
+    return NextResponse.json({ error: "Failed to check your RSVP." }, { status: 503 });
+  }
+}
 
 /**
  * POST — a signed-in athlete's RSVP to an event whose ticket tiers are all free.
@@ -112,15 +149,7 @@ export async function POST(req: NextRequest) {
 
     // The account is the attendee. A missing display name falls back to the
     // email so the organiser always has something recognisable in the list.
-    const accountName = session.name?.trim() || session.email;
-    const { firstName, lastName } = splitFullName(accountName);
-    const participant = {
-      ...createEmptyParticipant(),
-      firstName: firstName || accountName,
-      lastName,
-      email: session.email,
-      waiverAccepted: true,
-    };
+    const participant = rsvpParticipantFromSession(session);
 
     const entries: PricedEntry[] = [{
       participant: { ...compactParticipant(participant), wav: wave.label },
@@ -138,10 +167,11 @@ export async function POST(req: NextRequest) {
       stripePaymentIntentId: null,
       rejectExistingEntries: true,
       rejectExistingUserEntries: true,
+      duplicateStatuses: RSVP_DUPLICATE_STATUSES,
     });
 
     if (!outcome.ok) {
-      return NextResponse.json({ error: outcome.error }, { status: 409 });
+      return NextResponse.json({ error: outcome.error, reason: outcome.reason }, { status: 409 });
     }
 
     await announceRegistrations(event, event.organiser.id, entries);
