@@ -98,6 +98,15 @@ test("downloads a print-ready A4 check-in poster", async ({ page }) => {
     dialog.getByRole("link", { name: /download a4 pdf/i }).click(),
   ]);
 
+  // #473 presented as a `pdf.txt` download: the route had failed in the deployed
+  // standalone build. Assert the response itself, not only the saved bytes.
+  const pdfResponse = await page.request.get(
+    `/api/organiser/events/${EVENT_ID}/check-in-qr/pdf`,
+  );
+  expect(pdfResponse.status()).toBe(200);
+  expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
+  expect(pdfResponse.headers()["content-disposition"]).toMatch(/-check-in-qr\.pdf/i);
+
   expect(download.suggestedFilename()).toMatch(/-check-in-qr\.pdf$/i);
   const file = await download.path();
   expect(file).toBeTruthy();

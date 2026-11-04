@@ -1,11 +1,15 @@
 import { randomUUID } from "crypto";
+import type { RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import {
+  createEmptyParticipant,
   expandCompactParticipant,
   athleteNameFromParticipant,
+  splitFullName,
   type CompactParticipant,
+  type RegistrationFormData,
 } from "@/lib/registration-form";
 import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
 
@@ -33,6 +37,90 @@ export interface ConfirmEvent {
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 const normalizeEmail = (email: string | undefined) => (email ?? "").trim().toLowerCase();
+
+/**
+ * Entries that stop the signed-in athlete from RSVPing again. A refund request
+ * still holds the place until it is processed, so it blocks; a cancelled or
+ * refunded entry has given the place back and does not.
+ */
+export const RSVP_DUPLICATE_STATUSES: RegistrationStatus[] = ["CONFIRMED", "REFUND_REQUESTED"];
+
+/** Match on the person, not just the address: one email can carry several entries. */
+function entryIdentityKey(email: string, first: string, last: string, dob: string): string {
+  return `${normalizeEmail(email)}|${first.trim().toLowerCase()}|${last.trim().toLowerCase()}|${dob}`;
+}
+
+/**
+ * The attendee details for a free RSVP. The account is the attendee, so the
+ * name and email come from the session and there is no date of birth.
+ */
+export function rsvpParticipantFromSession(session: { email: string; name?: string | null }): RegistrationFormData {
+  const accountName = session.name?.trim() || session.email;
+  const { firstName, lastName } = splitFullName(accountName);
+  return {
+    ...createEmptyParticipant(),
+    firstName: firstName || accountName,
+    lastName,
+    email: session.email,
+    waiverAccepted: true,
+  };
+}
+
+/**
+ * Whether the account already holds a blocking entry for this event. Mirrors
+ * the duplicate checks in insertConfirmedRegistrations, including the
+ * email-and-person fallback for entries created before the account was linked.
+ */
+export async function findBlockingRsvpRegistration(opts: {
+  eventId: string;
+  userId: string;
+  participant: RegistrationFormData;
+}): Promise<{ id: string } | null> {
+  const existingForAccount = await prisma.registration.findFirst({
+    where: {
+      eventId: opts.eventId,
+      userId: opts.userId,
+      status: { in: RSVP_DUPLICATE_STATUSES },
+    },
+    select: { id: true },
+  });
+  if (existingForAccount) return existingForAccount;
+
+  const email = normalizeEmail(opts.participant.email);
+  if (!email) return null;
+
+  const existing = await prisma.registration.findMany({
+    where: {
+      eventId: opts.eventId,
+      status: { in: RSVP_DUPLICATE_STATUSES },
+      athleteEmail: { in: [email], mode: "insensitive" },
+    },
+    select: {
+      id: true,
+      athleteEmail: true,
+      firstName: true,
+      lastName: true,
+      dateOfBirth: true,
+    },
+  });
+  const key = entryIdentityKey(
+    opts.participant.email,
+    opts.participant.firstName,
+    opts.participant.lastName,
+    opts.participant.dateOfBirth,
+  );
+  return (
+    existing.find(
+      (row) =>
+        entryIdentityKey(
+          row.athleteEmail,
+          row.firstName ?? "",
+          row.lastName ?? "",
+          row.dateOfBirth ?? "",
+        ) === key,
+    ) ?? null
+  );
+}
 
 /**
  * Give every guest participant a Cognito account and a User row, so the entry
@@ -96,15 +184,25 @@ export async function insertConfirmedRegistrations(opts: {
    * cannot see an earlier RSVP that was stored with a date of birth.
    */
   rejectExistingUserEntries?: boolean;
+  /**
+   * Statuses that count as an existing entry for the duplicate guards above.
+   * Defaults to every status except CANCELLED, preserving the other order
+   * flows. The free RSVP passes RSVP_DUPLICATE_STATUSES so an entry that has
+   * already been cancelled or refunded no longer blocks a fresh RSVP.
+   */
+  duplicateStatuses?: RegistrationStatus[];
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
   const registrationIds = entries.map(() => randomUUID());
+  const duplicateStatus = opts.duplicateStatuses
+    ? { in: opts.duplicateStatuses }
+    : { not: "CANCELLED" as const };
 
   return prisma.$transaction(async (tx) => {
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({
-        where: { eventId: event.id, userId: buyerUserId, status: { not: "CANCELLED" } },
+        where: { eventId: event.id, userId: buyerUserId, status: duplicateStatus },
         select: { id: true },
       });
       if (existingForAccount) {
@@ -119,20 +217,18 @@ export async function insertConfirmedRegistrations(opts: {
     if (opts.rejectExistingEntries) {
       const emails = [...new Set(entries.map((e) => normalizeEmail(e.participant.em)).filter(Boolean))];
       const existing = await tx.registration.findMany({
-        where: { eventId: event.id, status: { not: "CANCELLED" }, athleteEmail: { in: emails, mode: "insensitive" } },
+        where: { eventId: event.id, status: duplicateStatus, athleteEmail: { in: emails, mode: "insensitive" } },
         select: { athleteEmail: true, firstName: true, lastName: true, dateOfBirth: true },
       });
       // Match on the person, not just the address: one email can legitimately
       // carry several entries (a parent registering their children).
-      const identity = (email: string, first: string, last: string, dob: string) =>
-        `${normalizeEmail(email)}|${first.trim().toLowerCase()}|${last.trim().toLowerCase()}|${dob}`;
       const taken = new Set(
         existing.map((r) =>
-          identity(r.athleteEmail, r.firstName ?? "", r.lastName ?? "", r.dateOfBirth ?? ""),
+          entryIdentityKey(r.athleteEmail, r.firstName ?? "", r.lastName ?? "", r.dateOfBirth ?? ""),
         ),
       );
       for (const { participant } of entries) {
-        const key = identity(participant.em, participant.fn, participant.ln, participant.dob);
+        const key = entryIdentityKey(participant.em, participant.fn, participant.ln, participant.dob);
         if (taken.has(key)) {
           return {
             ok: false as const,

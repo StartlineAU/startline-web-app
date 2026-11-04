@@ -48,7 +48,7 @@ vi.mock("@/lib/stripe", () => ({
 }));
 
 import { POST as registerFree } from "@/app/api/registrations/free/route";
-import { POST as registerFreeRsvp } from "@/app/api/registrations/free/rsvp/route";
+import { GET as getRsvpStatus, POST as registerFreeRsvp } from "@/app/api/registrations/free/rsvp/route";
 import { POST as checkout } from "@/app/api/checkout/route";
 
 const participant = (over: Record<string, unknown> = {}) => ({
@@ -93,6 +93,10 @@ const post = (handler: (req: NextRequest) => Promise<Response>, path: string, bo
 
 const postFree = (body: unknown) => post(registerFree, "/api/registrations/free", body);
 const postRsvp = (body: unknown) => post(registerFreeRsvp, "/api/registrations/free/rsvp", body);
+const getRsvp = (eventId = "evt-free") =>
+  getRsvpStatus(new NextRequest(
+    `http://localhost/api/registrations/free/rsvp?eventId=${encodeURIComponent(eventId)}`,
+  ));
 const postCheckout = (body: unknown) => post(checkout, "/api/checkout", body);
 
 beforeEach(() => {
@@ -236,6 +240,62 @@ describe("POST /api/registrations/free/rsvp", () => {
     ...over,
   });
 
+  it("reports an existing entry without writing anything", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.registrationFindFirst.mockResolvedValue({ id: "existing-registration" });
+
+    const res = await getRsvp();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ alreadyRegistered: true });
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("reports no entry when the account has none", async () => {
+    mocks.session.mockReturnValue(account());
+
+    const res = await getRsvp();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ alreadyRegistered: false });
+    expect(mocks.registrationFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["CONFIRMED", "REFUND_REQUESTED"] },
+        }),
+      }),
+    );
+  });
+
+  it("finds an earlier entry by the session email and name", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.registrationFindMany.mockResolvedValue([
+      {
+        athleteEmail: "Jordan@example.com",
+        firstName: "Jordan",
+        lastName: "Clarke",
+        dateOfBirth: null,
+      },
+    ]);
+
+    const res = await getRsvp();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ alreadyRegistered: true });
+  });
+
+  it("requires a signed-in account to check for an entry", async () => {
+    mocks.session.mockReturnValue(null);
+
+    const res = await getRsvp();
+
+    expect(res.status).toBe(401);
+    expect(mocks.registrationFindFirst).not.toHaveBeenCalled();
+  });
+
   it("requires a signed-in account", async () => {
     mocks.session.mockReturnValue(null);
 
@@ -324,10 +384,40 @@ describe("POST /api/registrations/free/rsvp", () => {
       waveLabel: "General",
       acceptedTerms: true,
     });
+    const body = await res.json();
 
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toContain("already registered");
+    expect(body.error).toContain("already registered");
+    expect(body.reason).toBe("duplicate");
     expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("lets a cancelled or refunded entry through to a fresh RSVP", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postRsvp({
+      eventId: "evt-free",
+      waveLabel: "General",
+      acceptedTerms: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(mocks.registrationCreateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.registrationFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["CONFIRMED", "REFUND_REQUESTED"] },
+        }),
+      }),
+    );
+    expect(mocks.registrationFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ["CONFIRMED", "REFUND_REQUESTED"] },
+        }),
+      }),
+    );
   });
 
   it("leaves paid and mixed-price events on the standard registration flow", async () => {
