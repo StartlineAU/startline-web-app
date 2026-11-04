@@ -17,7 +17,7 @@ type Method = {
   canRemove: boolean;
 };
 
-type State = { hasPassword: boolean; providers: Method[] };
+type State = { hasPassword: boolean; mfaRequired?: boolean; providers: Method[] };
 
 const google = (linked: boolean, canRemove = false): Method => ({
   provider: "google", label: "Google", linked, enabled: true, canRemove,
@@ -39,7 +39,11 @@ async function openSettings(page: Page, query = "settings=security") {
   return settings;
 }
 
-async function mockMethods(page: Page, initial: State) {
+async function mockMethods(
+  page: Page,
+  initial: State,
+  options: { refuseCode?: string } = {},
+) {
   let state = initial;
   const requests: Array<Record<string, unknown>> = [];
 
@@ -53,13 +57,21 @@ async function mockMethods(page: Page, initial: State) {
     const body = request.postDataJSON() as Record<string, unknown>;
     requests.push(body);
 
+    if (options.refuseCode && body.code === options.refuseCode) {
+      await route.fulfill({
+        status: 403,
+        json: { error: "That password or code didn't match. Check both and try again.", code: "step-up-failed" },
+      });
+      return;
+    }
+
     if (body.action === "link") {
       await route.fulfill({ json: { url: "/?linked=google" } });
       return;
     }
 
     state = {
-      hasPassword: state.hasPassword,
+      ...state,
       providers: state.providers.map((method) =>
         method.provider === body.provider ? { ...method, linked: false, canRemove: false } : method,
       ),
@@ -131,5 +143,83 @@ test.describe("linked Google and Apple accounts", () => {
 
     const refused = await openSettings(page, "settings=security&linkError=already-linked");
     await expect(refused.getByText(/already connected to a different Startline account/i)).toBeVisible();
+  });
+});
+
+test.describe("accounts with an authenticator app", () => {
+  test("connecting asks for the password and a code before it leaves for Google", async ({ page }) => {
+    await loginAs(page, "athlete");
+    const requests = await mockMethods(page, {
+      hasPassword: true,
+      mfaRequired: true,
+      providers: [google(false), apple(false)],
+    });
+
+    const settings = await openSettings(page);
+    await expect(settings.getByText(/Your account uses an authenticator app/)).toBeVisible();
+    await settings.getByRole("button", { name: "Connect", exact: true }).first().click();
+
+    const submit = settings.getByRole("button", { name: "Connect Google" });
+    await expect(settings.getByLabel("Password", { exact: true })).toBeVisible();
+    await expect(settings.getByLabel("Authenticator code", { exact: true })).toBeVisible();
+    await expect(submit).toBeDisabled();
+
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
+    await settings.getByLabel("Authenticator code", { exact: true }).fill("12345");
+    await expect(submit).toBeDisabled();
+
+    await settings.getByLabel("Authenticator code", { exact: true }).fill("123456");
+    await expect(submit).toBeEnabled();
+    await submit.click();
+
+    await expect.poll(() => page.url()).toContain("linked=google");
+    expect(requests).toEqual([{
+      action: "link",
+      provider: "google",
+      returnTo: "/",
+      password: "Password123!",
+      code: "123456",
+    }]);
+  });
+
+  test("a refused code keeps the form open and says why", async ({ page }) => {
+    await loginAs(page, "athlete");
+    await mockMethods(page, {
+      hasPassword: true,
+      mfaRequired: true,
+      providers: [google(false), apple(false)],
+    }, { refuseCode: "000000" });
+
+    const settings = await openSettings(page);
+    await settings.getByRole("button", { name: "Connect", exact: true }).first().click();
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
+    await settings.getByLabel("Authenticator code", { exact: true }).fill("000000");
+    await settings.getByRole("button", { name: "Connect Google" }).click();
+
+    await expect(settings.getByText("That password or code didn't match. Check both and try again.")).toBeVisible();
+    await expect(settings.getByLabel("Authenticator code", { exact: true })).toBeVisible();
+  });
+
+  test("disconnecting asks for the password and a code", async ({ page }) => {
+    await loginAs(page, "athlete");
+    const requests = await mockMethods(page, {
+      hasPassword: true,
+      mfaRequired: true,
+      providers: [google(true, true), apple(false)],
+    });
+
+    const settings = await openSettings(page);
+    await settings.getByRole("button", { name: "Disconnect", exact: true }).click();
+    const confirm = settings.getByRole("button", { name: "Yes, disconnect" });
+    await expect(settings.getByLabel("Password", { exact: true })).toBeVisible();
+    await expect(confirm).toBeDisabled();
+
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
+    await settings.getByLabel("Authenticator code", { exact: true }).fill("123456");
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+
+    await expect(settings.getByText("Google is no longer connected.")).toBeVisible();
+    expect(requests).toEqual([{ action: "unlink", provider: "google", password: "Password123!", code: "123456" }]);
   });
 });

@@ -2,7 +2,9 @@ import {
   AdminDeleteUserCommand,
   AdminDisableProviderForUserCommand,
   AdminGetUserCommand,
+  AdminInitiateAuthCommand,
   AdminLinkProviderForUserCommand,
+  AdminRespondToAuthChallengeCommand,
   AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
@@ -22,6 +24,7 @@ import {
 
 const region     = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
+const linkClientId = process.env.NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID ?? "";
 const client     = new CognitoIdentityProviderClient({ region });
 
 export class SignInMethodError extends Error {
@@ -39,6 +42,7 @@ export type CognitoUserSnapshot = {
   username: string;
   userStatus: string | null;
   attributes: CognitoAttribute[];
+  mfaEnabled: boolean;
 };
 
 export async function getCognitoUserSnapshot(username: string): Promise<CognitoUserSnapshot> {
@@ -53,7 +57,64 @@ export async function getCognitoUserSnapshot(username: string): Promise<CognitoU
     username: result.Username ?? username,
     userStatus: result.UserStatus ?? null,
     attributes: result.UserAttributes ?? [],
+    mfaEnabled: (result.UserMFASettingList ?? []).includes("SOFTWARE_TOKEN_MFA"),
   };
+}
+
+const STEP_UP_REFUSED = "That password or code didn't match. Check both and try again.";
+
+/**
+ * Checks the password and a code from the account's authenticator app, the way a
+ * sign-in does. Google and Apple can't be asked for the code, so the app asks for
+ * it before linking or unlinking an account that has TOTP on. Cognito's tokens
+ * from this check are not kept.
+ */
+export async function verifyAuthenticatorStepUp({
+  username,
+  password,
+  code,
+}: {
+  username: string;
+  password: string;
+  code: string;
+}): Promise<void> {
+  if (!userPoolId || !linkClientId) {
+    throw new SignInMethodError("unavailable", 503, "Sign-in methods cannot be managed in this environment.");
+  }
+
+  try {
+    const challenge = await client.send(new AdminInitiateAuthCommand({
+      UserPoolId: userPoolId,
+      ClientId: linkClientId,
+      AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+      AuthParameters: { USERNAME: username, PASSWORD: password },
+    }));
+    if (challenge.ChallengeName !== "SOFTWARE_TOKEN_MFA" || !challenge.Session) {
+      throw new SignInMethodError("step-up-failed", 403, STEP_UP_REFUSED);
+    }
+
+    const response = await client.send(new AdminRespondToAuthChallengeCommand({
+      UserPoolId: userPoolId,
+      ClientId: linkClientId,
+      ChallengeName: "SOFTWARE_TOKEN_MFA",
+      Session: challenge.Session,
+      ChallengeResponses: { USERNAME: username, SOFTWARE_TOKEN_MFA_CODE: code },
+    }));
+    if (!response.AuthenticationResult) {
+      throw new SignInMethodError("step-up-failed", 403, STEP_UP_REFUSED);
+    }
+  } catch (error) {
+    if (error instanceof SignInMethodError) throw error;
+    const name = error instanceof Error ? error.name : "";
+    if (
+      name === "NotAuthorizedException"
+      || name === "UserNotFoundException"
+      || name === "CodeMismatchException"
+    ) {
+      throw new SignInMethodError("step-up-failed", 403, STEP_UP_REFUSED);
+    }
+    throw mapCognitoError(error, "Could not check your password and code.");
+  }
 }
 
 export async function getSignInMethods(

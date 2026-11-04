@@ -5,25 +5,35 @@ import {
   getSignInMethods,
   SignInMethodError,
   unlinkProvider,
+  verifyAuthenticatorStepUp,
 } from "@/lib/cognito-sign-in-methods";
 import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import {
   createLinkRequest,
   LINK_COOKIE_MAX_AGE,
   LINK_COOKIES,
+  signLinkGrant,
 } from "@/lib/cognito-oauth";
-import { safeReturnTo } from "@/lib/sign-in-methods";
+import { safeReturnTo, type SignInMethods } from "@/lib/sign-in-methods";
 import { enabledSocialProviders } from "@/lib/social-providers";
+
+// Only read when the account has an authenticator app; see requireStepUp.
+const proofFields = {
+  password: z.string().min(1).max(256).optional(),
+  code: z.string().regex(/^\d{6}$/).optional(),
+};
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("link"),
     provider: z.enum(["google", "apple"]),
     returnTo: z.string().max(500).optional(),
+    ...proofFields,
   }),
   z.object({
     action: z.literal("unlink"),
     provider: z.enum(["google", "apple"]),
+    ...proofFields,
   }),
 ]);
 
@@ -40,6 +50,25 @@ function errorResponse(error: unknown) {
   }
   console.error("Sign-in methods request failed:", error);
   return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+}
+
+// An account with an authenticator app needs the password and a current code to
+// link or unlink. Google and Apple can't be asked for the code, so this check is
+// the only one there is for those changes.
+async function requireStepUp(
+  username: string,
+  methods: SignInMethods,
+  body: { password?: string; code?: string },
+): Promise<void> {
+  if (!methods.mfaRequired) return;
+  if (!body.password || !body.code) {
+    throw new SignInMethodError(
+      "step-up-required",
+      400,
+      "Enter your password and a code from your authenticator app.",
+    );
+  }
+  await verifyAuthenticatorStepUp({ username, password: body.password, code: body.code });
 }
 
 export async function GET() {
@@ -75,6 +104,7 @@ export async function POST(req: Request) {
           { status: 409 },
         );
       }
+      await requireStepUp(session.username, current, body);
 
       const methods = await unlinkProvider({
         username: session.username,
@@ -91,8 +121,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const current = await getSignInMethods(session.username, enabled);
+    await requireStepUp(session.username, current, body);
+
     const request = createLinkRequest(body.provider, new URL(req.url).origin);
     if (!request) return unavailable();
+
+    // The callback links an account with an authenticator app only when this
+    // grant comes back with it, so a cookie set by hand cannot skip the check.
+    const grant = current.mfaRequired
+      ? signLinkGrant({ state: request.state, sub: session.sub, provider: body.provider })
+      : null;
+    if (current.mfaRequired && !grant) return unavailable();
 
     const response = NextResponse.json({ url: request.url });
     const cookieOptions = {
@@ -106,6 +146,7 @@ export async function POST(req: Request) {
     response.cookies.set(LINK_COOKIES.verifier, request.verifier, cookieOptions);
     response.cookies.set(LINK_COOKIES.provider, body.provider, cookieOptions);
     response.cookies.set(LINK_COOKIES.returnTo, safeReturnTo(body.returnTo), cookieOptions);
+    if (grant) response.cookies.set(LINK_COOKIES.grant, grant, cookieOptions);
     return response;
   } catch (error) {
     return errorResponse(error);
