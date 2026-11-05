@@ -243,6 +243,86 @@ test.describe("events page", () => {
     await viewToggle(page, "map").click();
     await expect(page.getByTestId("events-map")).toBeVisible();
   });
+
+  // A card opened from an earlier marker used to be painted underneath the
+  // markers that came later in DOM order, so other event dots showed through
+  // it on a phone (#481). The test supplies a spare Mapbox style because E2E
+  // runs with a placeholder token; no tiles or network data are needed.
+  test("the selected event pin renders above every other pin", async ({ page }) => {
+    await page.setViewportSize({ width: 414, height: 768 });
+    await page.route("https://api.mapbox.com/**", async (route) => {
+      const { pathname } = new URL(route.request().url());
+      if (pathname.startsWith("/styles/v1/")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            version: 8,
+            sources: {},
+            layers: [
+              { id: "background", type: "background", paint: { "background-color": "#141414" } },
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.route("https://events.mapbox.com/**", (route) =>
+      route.fulfill({ status: 204, body: "" }),
+    );
+
+    await page.goto("/events?view=map");
+    const pins = page.getByRole("button", { name: /^View / }).filter({ visible: true });
+    await expect(pins.first()).toBeVisible({ timeout: 20000 });
+    await expect.poll(() => page.locator(".mapboxgl-marker").count()).toBeGreaterThan(1);
+    // Several seed events share a city-centre coordinate. Pick the last pin so
+    // the click starts on the topmost marker rather than one already covered.
+    const pin = pins.last();
+
+    const markerStack = () =>
+      page.locator(".mapboxgl-marker").evaluateAll((markers) =>
+        markers.map((marker) => ({
+          selected: marker.querySelector("button")?.getAttribute("aria-pressed") === "true",
+          zIndex: Number.parseInt(getComputedStyle(marker).zIndex || "0", 10),
+        })),
+      );
+    const selectedIsOnTop = async () => {
+      const stack = await markerStack();
+      const selected = stack.find((marker) => marker.selected);
+      return selected
+        ? selected.zIndex > Math.max(...stack.filter((m) => !m.selected).map((m) => m.zIndex))
+        : false;
+    };
+
+    await pin.click();
+    await expect(pin).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(selectedIsOnTop).toBe(true);
+
+    // Closing the card drops the marker back to the shared level.
+    await pin.click();
+    await expect(pin).toHaveAttribute("aria-pressed", "false");
+    await expect
+      .poll(async () => {
+        const stack = await markerStack();
+        // A pin under the resting cursor may still be hovered (z-index 1).
+        // What matters is that no marker keeps the selected level (2).
+        return stack.every((marker) => !marker.selected && marker.zIndex < 2);
+      })
+      .toBe(true);
+
+    // The card itself stays open and usable, not covered by a neighbouring
+    // marker's transparent 44px tap area.
+    await pin.click();
+    await expect(pin).toHaveAttribute("aria-pressed", "true");
+    const selectedMarker = pin.locator(
+      "xpath=ancestor::div[contains(@class, 'mapboxgl-marker')]",
+    );
+    const moreInfo = selectedMarker.getByRole("link", { name: "More Info" });
+    await expect(moreInfo).toBeVisible();
+    await moreInfo.click();
+    await expect(page).toHaveURL(/\/events\/[^?]+$/);
+  });
 });
 
 test.describe("event detail page", () => {
