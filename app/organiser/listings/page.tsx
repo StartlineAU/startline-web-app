@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Plus, Trash2, MapPin, RefreshCw, Search,
-  MoreHorizontal, Pencil, LayoutDashboard, Copy,
+  MoreHorizontal, Pencil, LayoutDashboard, Copy, Megaphone,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
+import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
@@ -104,6 +105,9 @@ function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => voi
     }
   };
 
+  const canEdit = organiserCanEditEvent(event.status);
+  const canPostUpdate = event.status === "APPROVED" || event.status === "IN_PROGRESS";
+
   return (
     <div ref={ref} className="relative">
       <Button
@@ -122,12 +126,21 @@ function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => voi
           >
             <LayoutDashboard className="w-4 h-4" /> View dashboard
           </button>
-          <button
-            onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent("/organiser/listings")}`); }}
-            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/5 transition-colors font-headline font-bold uppercase tracking-widest"
-          >
-            <Pencil className="w-4 h-4" /> Edit event
-          </button>
+          {canEdit ? (
+            <button
+              onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent("/organiser/listings")}`); }}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/5 transition-colors font-headline font-bold uppercase tracking-widest"
+            >
+              <Pencil className="w-4 h-4" /> Edit event
+            </button>
+          ) : canPostUpdate ? (
+            <button
+              onClick={e => { e.stopPropagation(); setOpen(false); router.push(`/organiser/events/${event.id}/dashboard?panel=announce`); }}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/5 transition-colors font-headline font-bold uppercase tracking-widest"
+            >
+              <Megaphone className="w-4 h-4" /> Post an update
+            </button>
+          ) : null}
           <button
             onClick={handleDuplicate}
             disabled={duplicating}
