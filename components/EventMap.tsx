@@ -305,7 +305,16 @@ const EventMap = forwardRef<EventMapHandle, EventMapProps>(function EventMap(
             const showCard = isSelected || isHovered;
 
             return (
-              <Marker key={event.id} longitude={ll.lng} latitude={ll.lat} anchor="bottom">
+              <Marker
+                key={event.id}
+                longitude={ll.lng}
+                latitude={ll.lat}
+                anchor="bottom"
+                // Markers paint in DOM order, so without this a card opened from
+                // an earlier marker is covered by pins that come later in the
+                // list (#481). Lift whichever marker is showing a card.
+                style={{ zIndex: isSelected ? 2 : isHovered ? 1 : 0 }}
+              >
                 <div
                   className="group/pin flex flex-col items-center pointer-events-auto"
                   onMouseEnter={() => setHoveredId(event.id)}
