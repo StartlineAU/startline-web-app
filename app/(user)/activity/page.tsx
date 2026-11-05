@@ -221,8 +221,19 @@ function RegisteredCard({
   now: Date;
   onRequestRefund: (meta: RegMeta) => void;
 }) {
+  const cardStatus = metas.length === 0
+    ? "CONFIRMED"
+    : metas.length === 1
+      ? metas[0].status
+      : "MIXED";
+
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col"
+      data-testid="registration-entry"
+      data-event-id={event.id}
+      data-registration-status={cardStatus}
+    >
       <EventCard
         event={event}
         cardClassName="rounded-b-none border-b-0 group-hover:ring-0"
@@ -246,12 +257,26 @@ function RegisteredCard({
             </div>
           </div>
         )}
+
         {metas.map((meta, index) => {
-          const refundRequested = meta.status === "REFUND_REQUESTED";
+          const withdrawn = meta.status !== "CONFIRMED";
           const refunded = meta.status === "REFUNDED";
-          // A free entry has no money attached, so the same flow reads as giving up
-          // the spot rather than asking for money back (issue #304).
           const freeEntry = meta.paidCents === 0;
+          const refundIssued = refunded && !freeEntry;
+
+          // Withdrawal is the athlete's action, so the copy names them rather than
+          // saying "cancelled", which can be mistaken for the event being cancelled.
+          const withdrawnHeading = refundIssued
+            ? "Refund issued."
+            : freeEntry
+              ? "You withdrew from this event."
+              : "You withdrew.";
+          const withdrawnDetail = refundIssued
+            ? null
+            : freeEntry
+              ? "Your spot has been released."
+              : "Your refund request is awaiting the organiser’s decision.";
+
           return (
             <div
               key={meta.id}
@@ -262,48 +287,65 @@ function RegisteredCard({
                   {meta.athleteName}
                 </p>
               )}
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-                    Your Wave
-                  </p>
-                  <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-light mt-1 truncate">
-                    {meta.wave || "—"}
-                  </p>
+
+              {withdrawn ? (
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ${
+                      refundIssued ? "bg-primary/10 text-primary" : "bg-amber-400/10 text-amber-300"
+                    }`}
+                  >
+                    {refundIssued ? (
+                      <Banknote className="w-4 h-4" strokeWidth={2.5} />
+                    ) : (
+                      <Undo2 className="w-4 h-4" strokeWidth={2.5} />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <p
+                      className={`font-headline text-[11px] font-bold uppercase tracking-widest ${
+                        refundIssued ? "text-primary" : "text-amber-300"
+                      }`}
+                    >
+                      {withdrawnHeading}
+                    </p>
+                    {withdrawnDetail && (
+                      <p className="text-[12px] text-muted leading-relaxed mt-1">{withdrawnDetail}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-                    Bib
-                  </p>
-                  <p className={`font-headline text-[13px] font-black mt-1 ${meta.bibNumber ? "text-primary" : "text-muted-dark"}`}>
-                    {meta.bibNumber ? `#${meta.bibNumber}` : "—"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <CheckInAction meta={meta} now={now} />
-                <div className="ml-auto">
-                  {refunded ? (
-                    <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted">
-                      {freeEntry ? "Spot released" : `Refunded ${money(meta.refundAmountCents)}`}
-                    </span>
-                  ) : refundRequested ? (
-                    <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-amber-300">
-                      {freeEntry
-                        ? "Cancellation requested"
-                        : `Refund requested${meta.refundAmountCents > 0 ? ` · ${money(meta.refundAmountCents)}` : ""}`}
-                    </span>
-                  ) : (
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
+                        Your Wave
+                      </p>
+                      <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-light mt-1 truncate">
+                        {meta.wave || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
+                        Bib
+                      </p>
+                      <p className={`font-headline text-[13px] font-black mt-1 ${meta.bibNumber ? "text-primary" : "text-muted-dark"}`}>
+                        {meta.bibNumber ? `#${meta.bibNumber}` : "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <CheckInAction meta={meta} now={now} />
                     <button
                       type="button"
                       onClick={() => onRequestRefund(meta)}
-                      className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
+                      className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
                     >
-                      {freeEntry ? "Cancel my spot" : "Request refund"}
+                      Withdraw my entry
                     </button>
-                  )}
-                </div>
-              </div>
+                  </div>
+                </>
+              )}
             </div>
           );
         })}
@@ -416,7 +458,7 @@ export default function ActivityPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setRefundError(json.error ?? "Could not request a refund.");
+        setRefundError(json.error ?? "Could not withdraw your entry.");
         return;
       }
       const { eventId } = refundTarget.meta;
@@ -438,7 +480,7 @@ export default function ActivityPage() {
       }));
       setRefundTarget(null);
     } catch {
-      setRefundError("Could not request a refund. Check your connection.");
+      setRefundError("Could not withdraw your entry. Check your connection.");
     } finally {
       setRefunding(false);
     }
@@ -561,7 +603,23 @@ export default function ActivityPage() {
   }, []);
 
   const savedEvents = events.filter((e) => savedIds.includes(String(e.id)));
-  const registeredEvents = events.filter((e) => registeredIds.includes(String(e.id)));
+  const metasFor = (eventId: string) => regMeta[eventId] ?? [];
+  const confirmedMetas = (eventId: string) =>
+    metasFor(eventId).filter((meta) => meta.status === "CONFIRMED");
+  const withdrawnMetas = (eventId: string) =>
+    metasFor(eventId).filter((meta) => meta.status !== "CONFIRMED");
+
+  const registeredEvents = events.filter((e) => {
+    const id = String(e.id);
+    return registeredIds.includes(id) && (metasFor(id).length === 0 || confirmedMetas(id).length > 0);
+  });
+  // Withdrawn and refunded entries stay in Activity so the athlete can see what
+  // happened to them, but they are no longer live registrations and must not
+  // count in the Registered badge.
+  const withdrawnEvents = events.filter((e) => {
+    const id = String(e.id);
+    return registeredIds.includes(id) && withdrawnMetas(id).length > 0;
+  });
 
   const tabCounts = {
     registered: registeredEvents.length,
@@ -648,29 +706,73 @@ export default function ActivityPage() {
               ))}
             </div>
           </div>
-        ) : (activeTab === "registered" ? registeredEvents : savedEvents).length === 0 ? (
-          <EmptyState tab={activeTab} />
-        ) : (
-          <div
-            className="grid gap-5"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
-          >
-            {activeTab === "registered"
-              ? registeredEvents.map((event) => (
+        ) : activeTab === "registered" ? (
+          <>
+            {registeredEvents.length === 0 ? (
+              <EmptyState tab="registered" />
+            ) : (
+              <div
+                className="grid gap-5"
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+              >
+                {registeredEvents.map((event) => (
                   <RegisteredCard
                     key={event.id}
                     event={event}
-                    metas={regMeta[String(event.id)] ?? []}
+                    metas={confirmedMetas(String(event.id))}
                     now={now}
                     onRequestRefund={(meta) => {
                       setRefundError("");
                       setRefundTarget({ meta, title: event.title });
                     }}
                   />
-                ))
-              : savedEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
                 ))}
+              </div>
+            )}
+
+            {withdrawnEvents.length > 0 && (
+              <section aria-labelledby="withdrawn-entries-heading" className="mt-10">
+                <div className="flex items-center gap-3 mb-3">
+                  <h2
+                    id="withdrawn-entries-heading"
+                    className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-muted"
+                  >
+                    Withdrawn entries
+                  </h2>
+                  <span className="font-headline text-[11px] font-bold text-muted-dark">
+                    {withdrawnEvents.length}
+                  </span>
+                </div>
+                <div
+                  className="grid gap-5"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+                >
+                  {withdrawnEvents.map((event) => (
+                    <RegisteredCard
+                      key={event.id}
+                      event={event}
+                      metas={withdrawnMetas(String(event.id))}
+                      now={now}
+                      onRequestRefund={(meta) => {
+                        setRefundError("");
+                        setRefundTarget({ meta, title: event.title });
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        ) : savedEvents.length === 0 ? (
+          <EmptyState tab="saved" />
+        ) : (
+          <div
+            className="grid gap-5"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+          >
+            {savedEvents.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
           </div>
         )}
       </div>
@@ -678,7 +780,7 @@ export default function ActivityPage() {
       <Dialog open={!!refundTarget} onOpenChange={(open) => { if (!open) setRefundTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{freeRefundTarget ? "Cancel my spot" : "Request a refund"}</DialogTitle>
+            <DialogTitle>Withdraw your entry?</DialogTitle>
             <DialogDescription>
               {refundTarget?.title}. You will come out of the start list and free your spot.
             </DialogDescription>
@@ -694,8 +796,8 @@ export default function ActivityPage() {
                       Free entry
                     </p>
                     <p className="text-[13px] text-muted leading-relaxed mt-1">
-                      This entry cost nothing, so there is no refund to make. Cancelling gives your spot back
-                      to the event and takes you out of the start list.
+                      This entry cost nothing, so there is no refund to make. Withdrawing your entry gives
+                      your spot back to the event and takes you out of the start list.
                     </p>
                   </>
                 ) : refundTarget.meta.outsidePolicy ? (
@@ -746,13 +848,7 @@ export default function ActivityPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRefundTarget(null)}>Keep my spot</Button>
             <Button onClick={confirmRefund} disabled={refunding}>
-              {refunding
-                ? freeRefundTarget ? "Cancelling…" : "Requesting…"
-                : freeRefundTarget
-                  ? "Cancel my spot"
-                  : refundTarget?.meta.outsidePolicy
-                    ? "Ask anyway"
-                    : `Request ${money(refundTarget?.meta.refundAmountCents ?? 0)}`}
+              {refunding ? "Withdrawing…" : "Withdraw my entry"}
             </Button>
           </DialogFooter>
         </DialogContent>

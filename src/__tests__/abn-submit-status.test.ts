@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { addDays, format } from "date-fns";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -30,9 +31,14 @@ import { POST } from "@/app/api/organiser/events/route";
 
 const ABN = "51824753556";
 
+// Relative to today: the route persists the status the event should have right
+// now (lib/event-lifecycle.ts), so a fixed date eventually falls into the past
+// and every APPROVED assertion turns into ARCHIVED.
+const upcoming = () => format(addDays(new Date(), 30), "yyyy-MM-dd");
+
 // A payload complete enough to pass the submit-time required-field check.
 const payload = (over: Record<string, unknown> = {}) => ({
-  title: "Trail Half", discipline: "running", eventDate: "2026-11-01",
+  title: "Trail Half", discipline: "running", eventDate: upcoming(),
   startTime: "07:00", city: "Melbourne", state: "VIC",
   format: "Road", level: "All levels",
   registrationType: "startline", submit: true,

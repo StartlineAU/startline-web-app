@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
+import { organiserCanEditEvent } from "@/lib/event-edit-policy";
+import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
@@ -199,6 +201,7 @@ export default function EventStatusPage({
   const meta       = STATUS_META[event.status];
   const isRejected = event.status === "REJECTED";
   const isDraft    = event.status === "DRAFT";
+  const canEdit    = organiserCanEditEvent(event.status);
 
   return (
       <div className="min-h-screen bg-dark-darker">
@@ -265,7 +268,7 @@ export default function EventStatusPage({
                   <Pencil className="w-3.5 h-3.5" /> Edit &amp; resubmit
                 </Link>
               )}
-              {!isRejected && (
+              {!isRejected && canEdit && (
                 <Link
                   href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}`)}`}
                   className="inline-flex items-center gap-2 border border-dark-lighter bg-transparent text-light font-headline text-[11px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-lg hover:border-primary hover:bg-dark-light transition-colors"
@@ -294,6 +297,12 @@ export default function EventStatusPage({
               )}
             </div>
           </div>
+
+          {!canEdit && (
+            <div className="mb-8">
+              <EventEditLockedNotice eventId={event.id} status={event.status} />
+            </div>
+          )}
 
           {/* Event summary */}
           <div>

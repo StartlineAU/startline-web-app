@@ -420,6 +420,9 @@ pnpm test:e2e          # Playwright (needs Docker PostgreSQL + dev server)
 
 - Unit tests: `src/__tests__/`. E2E: `e2e/`.
 - **Every new feature MUST include E2E tests.**
+- **Do not run the full E2E suite unless explicitly asked.** Run only the
+  specs covering the areas changed. The full suite is slow and can exhaust the
+  local dev server; CI owns the complete run.
 - Playwright config: auto-starts dev server, `reuseExistingServer: true`, 1 retry, Chromium only.
 
 ### E2E auth bypass
@@ -470,8 +473,10 @@ npx prisma generate            # required before typecheck
 pnpm lint        # 0 errors
 pnpm typecheck   # 0 errors
 pnpm test        # all pass
-pnpm test:e2e    # all pass (needs Docker PostgreSQL)
+pnpm test:e2e e2e/<affected>.spec.ts  # impacted specs only (needs Docker PostgreSQL)
 ```
+
+Run the full E2E suite only when explicitly requested.
 
 ## GitHub
 
