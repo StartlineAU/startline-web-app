@@ -348,8 +348,8 @@ host that started it. Amplify's OAuth listener (imported in
   connecting or disconnecting Google/Apple on such an account needs the password
   and a code (`verifyAuthenticatorStepUp` in `lib/cognito-sign-in-methods.ts`),
   and the link callback only links it with the signed grant that check issues.
-  Admins are refused on every path. Turning TOTP off is still allowed without a
-  code, so a session can switch it off and then link; that is an open decision.
+  Admins are refused on every path. Turning TOTP off takes the same password and
+  code, so a session cannot switch it off and then link without one.
 - **Infra must allow the link flow.** Both environments' `callback_urls` need
   `${origin}/auth/link/callback` on the link client
   (`NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID`). The Amplify role needs

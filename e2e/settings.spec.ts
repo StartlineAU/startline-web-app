@@ -235,3 +235,77 @@ test.describe("settings menu", () => {
     await expect(sections.getByRole("button", { name: "Cookies" })).toBeVisible();
   });
 });
+
+test.describe("turning off the authenticator app", () => {
+  // The bypass identities have no Cognito user, so the MFA route is mocked.
+  // Whether the password and code are really checked is covered by
+  // src/__tests__/cognito-sign-in-methods.test.ts; this covers the prompt.
+  async function mockMfa(page: Page, options: { refuseCode?: string } = {}) {
+    const requests: Array<Record<string, unknown>> = [];
+    // The section reads its state from /api/user/security; the card's actions
+    // post to /api/user/mfa.
+    await page.route("**/api/user/security", async (route) => {
+      await route.fulfill({ json: { providers: [], hasPassword: true, mfaEnabled: true } });
+    });
+    await page.route("**/api/user/mfa", async (route) => {
+      const request = route.request();
+      if (request.method() === "GET") {
+        await route.fulfill({ json: { mfaEnabled: true } });
+        return;
+      }
+      const body = request.postDataJSON() as Record<string, unknown>;
+      requests.push(body);
+      if (options.refuseCode && body.code === options.refuseCode) {
+        await route.fulfill({
+          status: 403,
+          json: { error: "That password or code didn't match. Check both and try again.", code: "step-up-failed" },
+        });
+        return;
+      }
+      await route.fulfill({ json: { ok: true } });
+    });
+    return requests;
+  }
+
+  async function openAuthenticatorCard(page: Page) {
+    test.slow();
+    await page.goto("/");
+    const settings = await openFromAthleteMenu(page);
+    await settings.getByRole("button", { name: "Login & security" }).click();
+    await expect(settings.getByRole("heading", { name: "Authenticator app" })).toBeVisible({ timeout: 40000 });
+    return settings;
+  }
+
+  test("asks for the password and a code before it switches off", async ({ page }) => {
+    await loginAs(page, "athlete");
+    const requests = await mockMfa(page);
+    const settings = await openAuthenticatorCard(page);
+
+    await settings.getByRole("button", { name: "Turn off" }).click();
+    const confirm = settings.getByRole("button", { name: "Yes, turn off" });
+    await expect(confirm).toBeDisabled();
+
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
+    await settings.getByLabel("Authenticator code", { exact: true }).fill("123456");
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+
+    await expect(settings.getByText("Authenticator app turned off.")).toBeVisible();
+    expect(requests).toEqual([{ action: "disable", password: "Password123!", code: "123456" }]);
+  });
+
+  test("a refused code keeps the form open and says why", async ({ page }) => {
+    await loginAs(page, "athlete");
+    await mockMfa(page, { refuseCode: "000000" });
+    const settings = await openAuthenticatorCard(page);
+
+    await settings.getByRole("button", { name: "Turn off" }).click();
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
+    await settings.getByLabel("Authenticator code", { exact: true }).fill("000000");
+    await settings.getByRole("button", { name: "Yes, turn off" }).click();
+
+    await expect(settings.getByText("That password or code didn't match. Check both and try again.")).toBeVisible();
+    await expect(settings.getByLabel("Authenticator code", { exact: true })).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Yes, turn off" })).toBeVisible();
+  });
+});

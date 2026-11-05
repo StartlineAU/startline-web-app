@@ -217,6 +217,9 @@ function AuthenticatorCard({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [secretCopied, setSecretCopied] = useState(false);
   const [totpCode, setTotpCode] = useState("");
+  // Turning the app off takes the password and a current code, like a sign-in.
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableCode, setDisableCode] = useState("");
   const [message, setMessage] = useState<Message>(null);
 
   const startSetup = async () => {
@@ -267,17 +270,20 @@ function AuthenticatorCard({
     setMessage(null);
     setStep("disabling");
     try {
-      const { ok, data } = await postMfa({ action: "disable" });
+      const { ok, data } = await postMfa({ action: "disable", password: disablePassword, code: disableCode });
       if (!ok) {
         setMessage({ kind: "error", text: data.error || "Could not turn off the authenticator app." });
-      } else {
-        onChange(false);
-        setMessage({ kind: "success", text: "Authenticator app turned off." });
+        setDisableCode("");
+        setStep("confirm-disable");
+        return;
       }
+      onChange(false);
+      setDisablePassword(""); setDisableCode("");
+      setMessage({ kind: "success", text: "Authenticator app turned off." });
+      setStep("idle");
     } catch {
       setMessage({ kind: "error", text: "Something went wrong. Please try again." });
-    } finally {
-      setStep("idle");
+      setStep("confirm-disable");
     }
   };
 
@@ -309,7 +315,7 @@ function AuthenticatorCard({
           </button>
         )}
         {enabled && step === "idle" && (
-          <button type="button" onClick={() => { setMessage(null); setStep("confirm-disable"); }}
+          <button type="button" onClick={() => { setMessage(null); setDisablePassword(""); setDisableCode(""); setStep("confirm-disable"); }}
             className={btnCls + " shrink-0 border-red-500/30 text-red-400 hover:bg-red-500/10"}>
             <Trash2 className="w-3.5 h-3.5" /> Turn off
           </button>
@@ -320,13 +326,35 @@ function AuthenticatorCard({
         <div className="border-t border-dark-lighter pt-4">
           <p className="text-[13px] text-muted leading-relaxed">
             Turn off the authenticator app? Your password alone will be enough to sign in.
+            {canUse
+              ? " Enter your password and a current code to confirm."
+              : " Set a password first, then you can turn this off."}
           </p>
+          {canUse && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <label htmlFor="settings-disable-pw" className={labelCls}>Password</label>
+                <input id="settings-disable-pw" type="password" autoComplete="current-password" required
+                  value={disablePassword} onChange={(e) => setDisablePassword(e.target.value)}
+                  disabled={step === "disabling"} className={inputCls} />
+              </div>
+              <div>
+                <label htmlFor="settings-disable-code" className={labelCls}>Authenticator code</label>
+                <input id="settings-disable-code" type="text" inputMode="numeric" autoComplete="one-time-code" required
+                  value={disableCode} onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  disabled={step === "disabling"} placeholder="000000"
+                  className={`${inputCls} tracking-[0.5em] text-center font-bold`} />
+              </div>
+            </div>
+          )}
           <div className="flex gap-2 mt-3">
-            <button type="button" onClick={disable} disabled={step === "disabling"}
+            <button type="button" onClick={disable}
+              disabled={step === "disabling" || (canUse && (!disablePassword || disableCode.length !== 6))}
               className={btnCls + " border-red-500/30 text-red-400 hover:bg-red-500/10"}>
               {step === "disabling" ? "Turning off…" : "Yes, turn off"}
             </button>
-            <button type="button" onClick={() => setStep("idle")} disabled={step === "disabling"}
+            <button type="button" onClick={() => { setStep("idle"); setDisablePassword(""); setDisableCode(""); }}
+              disabled={step === "disabling"}
               className={btnCls + " border-dark-lighter text-muted hover:text-light"}>
               Keep it on
             </button>
