@@ -597,6 +597,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     waveId: r.waveId,
                     bibNumber: r.bibNumber,
                     medicalNotes: r.medicalNotes,
+                    checkedInAt: r.checkedInAt,
                     finishLabel,
                     gender: r.gender,
                     age,

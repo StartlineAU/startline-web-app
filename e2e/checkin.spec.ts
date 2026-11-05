@@ -17,13 +17,14 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
-const EVENT_ID = "seed-event-001";
-const REG_ID = "seed-reg-checkin-e2e";
-// Tom Whitfield (the __e2e_bypass "member" identity). Unlike jade, he has no
-// seeded registration on seed-event-001, so the check-in lookup resolves
-// unambiguously to the registration this spec creates.
+const EVENT_ID = "e2e-checkin-event";
+const REG_ID = "e2e-checkin-registration";
 const USER_EMAIL = "tom.whitfield@startline.test";
 const ATHLETE_NAME = "Tom Whitfield";
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+const STORED_START = new Date(Date.now() + 30 * 60 * 1000);
+const STORED_END = new Date(Date.now() + 3 * 60 * 60 * 1000);
 
 async function setBypass(page: Page, value: string): Promise<void> {
   await page.context().addCookies([
@@ -45,46 +46,98 @@ async function getCheckinUrl(page: Page): Promise<string> {
   return (await input.inputValue()).trim();
 }
 
-test.beforeAll(async () => {
-  // Warm the check-in QR route (cold-compiles the qrcode module in CI) so the
-  // first test's clock isn't spent on compilation. Idempotent — reuses the
-  // event's existing checkInCode.
-  await fetch(`http://localhost:3000/api/organiser/events/${EVENT_ID}/check-in-qr`, {
-    method: "POST",
-    headers: { Cookie: "__e2e_bypass=organiser" },
-  }).catch(() => {});
-
-  const event = await prisma.event.findUnique({
+async function setWindow(startsAtUtc: Date, endsAtUtc: Date) {
+  await prisma.event.update({
     where: { id: EVENT_ID },
-    select: { organiserId: true },
+    data: { startsAtUtc, endsAtUtc },
   });
-  expect(event, `seeded event ${EVENT_ID} should exist`).toBeTruthy();
-  await prisma.registration.upsert({
-    where: { id: REG_ID },
-    update: { checkedInAt: null },
-    create: {
+}
+
+async function restoreWindow() {
+  await setWindow(STORED_START, STORED_END);
+}
+
+test.beforeAll(async () => {
+  // A dedicated event keeps the time-window tests independent of the seed
+  // event's real date and of other specs running in parallel.
+  const organiser = await prisma.organiser.findFirst({
+    where: { orgName: "Apex Endurance Events" },
+    select: { id: true },
+  });
+  expect(organiser, "seeded organiser should exist").toBeTruthy();
+
+  const user = await prisma.user.findUnique({
+    where: { email: USER_EMAIL },
+    select: { id: true },
+  });
+  expect(user, `seeded user ${USER_EMAIL} should exist`).toBeTruthy();
+
+  await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
+  await prisma.event.create({
+    data: {
+      id: EVENT_ID,
+      organiserId: organiser!.id,
+      status: "APPROVED",
+      title: "E2E Check-in Event",
+      discipline: "running",
+      eventDate: new Date().toISOString().slice(0, 10),
+      startTime: "07:30",
+      endTime: "12:00",
+      timeZone: "Australia/Sydney",
+      startsAtUtc: STORED_START,
+      endsAtUtc: STORED_END,
+      venue: "Test Venue",
+      city: "Sydney",
+      state: "nsw",
+      format: "individual",
+      level: "open",
+      categories: [],
+      waves: [],
+      photos: [],
+      registrationType: "startline",
+      feeStructure: "athlete",
+    },
+  });
+  await prisma.registration.create({
+    data: {
       id: REG_ID,
       eventId: EVENT_ID,
-      organiserId: event!.organiserId,
+      organiserId: organiser!.id,
+      userId: user!.id,
       athleteName: ATHLETE_NAME,
       athleteEmail: USER_EMAIL,
       waveLabel: "General",
-      amountCents: 11500,
+      amountCents: 0,
       platformFeeCents: 0,
       feeStructure: "athlete",
       status: "CONFIRMED",
     },
   });
+
+  // Warm the check-in QR route (cold-compiles the qrcode module in CI) so the
+  // first test's clock isn't spent on compilation. Generated code is persisted.
+  await fetch(`${BASE_URL}/api/organiser/events/${EVENT_ID}/check-in-qr`, {
+    method: "POST",
+    headers: { Cookie: "__e2e_bypass=organiser" },
+  }).catch(() => {});
 });
 
 test.afterAll(async () => {
-  await prisma.registration.delete({ where: { id: REG_ID } }).catch(() => {});
+  await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
   await prisma.$disconnect();
+});
+
+test.beforeEach(async () => {
+  await prisma.registration.update({
+    where: { id: REG_ID },
+    data: { checkedInAt: null },
+  });
+  await restoreWindow();
 });
 
 test("organiser generates a scannable check-in QR for their event", async ({ page }) => {
   const url = await getCheckinUrl(page);
-  expect(url).toMatch(new RegExp(`^http://localhost:3000/checkin/${EVENT_ID}/`));
+  expect(new URL(url).pathname).toMatch(new RegExp(`^/checkin/${EVENT_ID}/`));
   // The QR image itself renders inside the dialog.
   await expect(page.getByRole("dialog").getByRole("img", { name: /Check-in QR code/ })).toBeVisible();
 });
@@ -137,15 +190,70 @@ test("logged-out visitor scanning the QR is prompted to sign in", async ({ page 
 test("a user not registered for the event sees a clear error", async ({ page }) => {
   const url = await getCheckinUrl(page);
   await page.context().clearCookies();
-  await setBypass(page, "avery"); // avery.quinn@startline.test — not registered for seed-event-001
+  await setBypass(page, "avery"); // avery.quinn@startline.test — not registered for this event
   await page.goto(url);
   await expect(page.getByText("You're not registered for this event")).toBeVisible();
 });
 
-test("signed-in registered athlete checks in and sees the confirmed state", async ({ page }) => {
-  // Reset to a clean state so this test is idempotent across retries.
-  await prisma.registration.update({ where: { id: REG_ID }, data: { checkedInAt: null } });
+test("check-in is blocked before it opens", async ({ page }) => {
+  const url = await getCheckinUrl(page);
+  const beforeOpenStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const beforeOpenEnd = new Date(Date.now() + 4 * 60 * 60 * 1000);
 
+  try {
+    await setWindow(beforeOpenStart, beforeOpenEnd);
+    await setBypass(page, "member");
+    await page.goto(url);
+
+    await expect(page.getByText("Check-in isn't open yet")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check In" })).toHaveCount(0);
+
+    const res = await page.request.post(`/api/checkin/${EVENT_ID}`, {
+      data: { registrationId: REG_ID },
+    });
+    expect(res.status()).toBe(409);
+    expect((await res.json()).checkIn.state).toBe("before");
+  } finally {
+    await restoreWindow();
+  }
+});
+
+test("check-in is closed after the event ends", async ({ page }) => {
+  const url = await getCheckinUrl(page);
+  const endedStart = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const endedEnd = new Date(Date.now() - 60 * 1000);
+
+  try {
+    await setWindow(endedStart, endedEnd);
+    await setBypass(page, "member");
+    await page.goto(url);
+
+    await expect(page.getByText("Check-in is closed")).toBeVisible();
+
+    const res = await page.request.post(`/api/checkin/${EVENT_ID}`, {
+      data: { registrationId: REG_ID },
+    });
+    expect(res.status()).toBe(409);
+    expect((await res.json()).checkIn.state).toBe("closed");
+  } finally {
+    await restoreWindow();
+  }
+});
+
+test("Activity opens the athlete's registration-specific check-in page", async ({ page }) => {
+  await setBypass(page, "member");
+  await page.goto("/activity");
+
+  const checkIn = page.getByTestId("activity-check-in");
+  await expect(checkIn).toBeVisible();
+  await checkIn.click();
+
+  await expect(page).toHaveURL(new RegExp(`/checkin/${EVENT_ID}\\?registration=${REG_ID}`));
+  await expect(page.getByRole("heading", { name: "Check in to this event" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check In" })).toBeVisible();
+});
+
+test("signed-in registered athlete checks in and sees the confirmed state", async ({ page }) => {
   const url = await getCheckinUrl(page);
   await setBypass(page, "member"); // tom.whitfield@startline.test
   await page.goto(url);
@@ -164,7 +272,9 @@ test("signed-in registered athlete checks in and sees the confirmed state", asyn
 test("organiser dashboard shows the live checked-in count", async ({ page }) => {
   // Check in via the athlete API so the assertion doesn't depend on UI clicks.
   await setBypass(page, "member");
-  const res = await page.request.post(`/api/checkin/${EVENT_ID}`);
+  const res = await page.request.post(`/api/checkin/${EVENT_ID}`, {
+    data: { registrationId: REG_ID },
+  });
   expect(res.ok()).toBeTruthy();
   const body = await res.json();
   expect(body.checkedInAt).toBeTruthy();
@@ -175,4 +285,16 @@ test("organiser dashboard shows the live checked-in count", async ({ page }) => 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(/1 of \d+ checked in/)).toBeVisible();
+});
+
+test("the full organiser roster shows who has checked in", async ({ page }) => {
+  await setBypass(page, "member");
+  const res = await page.request.post(`/api/checkin/${EVENT_ID}`, {
+    data: { registrationId: REG_ID },
+  });
+  expect(res.ok()).toBeTruthy();
+
+  await organiserLogin(page);
+  await page.goto(`/organiser/events/${EVENT_ID}/dashboard?panel=manage`);
+  await expect(page.getByTestId("roster-check-in")).toBeVisible();
 });

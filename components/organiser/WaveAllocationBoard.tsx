@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronRight, Search, Users, AlertTriangle, AlertCircle,
-  ArrowRightLeft, X, Pencil, CheckSquare, Square, GripVertical,
+  ArrowRightLeft, X, Pencil, CheckSquare, Square, GripVertical, CheckCheck,
 } from "lucide-react";
 import { animate } from "animejs";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,8 @@ export interface BoardAthlete {
   waveId: string | null;
   bibNumber: string | null;
   medicalNotes: string | null;
+  /** Set when the athlete has checked themselves in. */
+  checkedInAt: string | null;
   /** Estimated finish as "h:mm", when known. */
   finishLabel?: string | null;
   gender?: string | null;
@@ -448,6 +450,18 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
             )}
           </span>
           <span className="block text-[11px] text-muted-dark truncate mt-0.5">
+            {a.checkedInAt ? (
+              <span
+                data-testid="roster-check-in"
+                className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary mr-1.5"
+              >
+                <CheckCheck className="w-3 h-3" /> Checked in
+              </span>
+            ) : (
+              <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark mr-1.5">
+                Not checked in
+              </span>
+            )}
             {[
               a.finishLabel ? `Finish ${a.finishLabel}` : "No finish time",
               a.gender || "No gender",
