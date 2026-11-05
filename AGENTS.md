@@ -360,7 +360,8 @@ host that started it. Amplify's OAuth listener (imported in
   `${origin}/auth/link/callback` on the link client
   (`NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID`). The Amplify role needs
   `cognito-idp:AdminLinkProviderForUser`, `cognito-idp:AdminDisableProviderForUser`,
-  `cognito-idp:AdminInitiateAuth` and `cognito-idp:AdminRespondToAuthChallenge`.
+  `cognito-idp:AdminInitiateAuth`, `cognito-idp:AdminRespondToAuthChallenge` and
+  `cognito-idp:AdminSetUserMFAPreference` (recovery).
   `AdministratorAccess-Amplify` does not include these. `LINK_GRANT_SECRET` signs
   the grant between the password check and the callback; it is server-only.
 - `NEXT_PUBLIC_SOCIAL_SIGN_IN` lists the providers whose keys exist, and the
