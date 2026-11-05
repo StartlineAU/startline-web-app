@@ -341,6 +341,12 @@ host that started it. Amplify's OAuth listener (imported in
 - **Provider-managed email.** An in-app email change is only offered once every
   Google/Apple identity is disconnected; until then the provider owns the
   address and can write it back on the next sign-in.
+- **Recovery codes.** Setting up the authenticator app issues ten one-time
+  codes and shows them once; only their SHA-256 is stored (`RecoveryCode`).
+  `/auth/recovery` proves the password with Cognito, spends a code, and turns
+  TOTP off so it can be set up again. Codes are replaced on every setup and
+  cleared when TOTP is turned off. There is no email fallback: email is the
+  account's root identity, and for provider accounts the provider owns it.
 - **TOTP is password-only.** The authenticator app is a Cognito challenge on the
   password flow. A linked Google/Apple sign-in may bypass it, so the settings
   copy says so and setup needs a password. On the sign-in path the pre sign-up

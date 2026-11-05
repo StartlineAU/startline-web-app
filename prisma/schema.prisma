@@ -532,6 +532,7 @@ model User {
   isPublic      Boolean  @default(true) // public profile visible to others
   isBanned      Boolean  @default(false)
   mfaEnabled    Boolean  @default(false)
+  // Legacy and unused: one-time codes live in RecoveryCode.
   recoveryCodes String?
   // Private registration prefill — never exposed on public profiles
   mobile                String?
@@ -555,8 +556,23 @@ model User {
   reviews           Review[]
   reviewReports     ReviewReport[]
   notifications     UserNotification[]
+  recoveryCodeRows  RecoveryCode[]
 
   @@map("users")
+}
+
+// One-time codes for the authenticator app. Only the SHA-256 of each code is
+// stored; the plaintext is shown once when the app is set up.
+model RecoveryCode {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("recovery_codes")
 }
 
 // ─── Athlete notifications ────────────────────────────────────────────────────

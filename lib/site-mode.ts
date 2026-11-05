@@ -57,6 +57,11 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // Linking a provider to an already signed-in account has its own callback so
   // it never becomes a sign-in as that provider's user.
   "/auth/link/callback",
+  // Someone who has lost their authenticator app cannot sign in at all, so
+  // recovery has to work while the athlete site is waitlisted. The route still
+  // checks the password and a one-time code.
+  "/auth/recovery",
+  "/api/auth/recovery",
 ]);
 
 // Prefixes, matched on a path segment so `/checkin` does not also open

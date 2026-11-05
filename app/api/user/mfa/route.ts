@@ -5,6 +5,7 @@ import { getServerSession } from "@/lib/amplify-server";
 import { canUseMfa } from "@/lib/sign-in-methods";
 import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import { SignInMethodError, verifyAuthenticatorStepUp } from "@/lib/cognito-sign-in-methods";
+import { clearRecoveryCodes, issueRecoveryCodes } from "@/lib/authenticator-recovery";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
 
@@ -128,6 +129,8 @@ async function handleAction(body: z.infer<typeof mfaActionSchema>, userId: strin
         where: { id: userId },
         data: { mfaEnabled: false },
       });
+      // The codes only open the door this just removed.
+      await clearRecoveryCodes(userId);
       return NextResponse.json({ ok: true });
     }
 
@@ -156,7 +159,9 @@ async function handleAction(body: z.infer<typeof mfaActionSchema>, userId: strin
         where: { id: userId },
         data: { mfaEnabled: true },
       });
-      return NextResponse.json({ ok: true });
+      // Shown once, here. Nothing else can read them back.
+      const recoveryCodes = await issueRecoveryCodes(userId);
+      return NextResponse.json({ ok: true, recoveryCodes });
     }
 
     case "change-password": {

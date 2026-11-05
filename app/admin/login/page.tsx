@@ -6,6 +6,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldAlert } from "lucide-react";
 import { signIn, signOut, confirmSignIn, fetchAuthSession } from "aws-amplify/auth";
+import { customerHref } from "@/lib/portal-domains";
+import { usePortalHost } from "@/lib/use-portal-host";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -23,9 +25,16 @@ export default function AdminLoginPage() {
   const [totpCode,         setTotpCode]         = useState("");
   const [totpSetupUri,     setTotpSetupUri]     = useState<string | null>(null);
 
+  const portalHost = usePortalHost();
   const forgotPasswordHref = email.trim()
     ? `/auth/forgot-password?email=${encodeURIComponent(email.trim())}`
     : "/auth/forgot-password";
+  // Admin accounts cannot link Google or Apple, so a lost authenticator is a
+  // full lockout. Recovery runs on the customer portal.
+  const recoveryHref = customerHref(
+    `/auth/recovery${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`,
+    portalHost,
+  );
 
   const completeAdminSignIn = async () => {
     const session = await fetchAuthSession();
@@ -205,6 +214,10 @@ export default function AdminLoginPage() {
                 ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Verifying…</>
                 : <>Verify & sign in <ArrowRight className="w-4 h-4" /></>}
             </button>
+            <p className="font-headline text-[11px] uppercase tracking-widest text-muted-dark text-center">
+              Lost your authenticator?{" "}
+              <Link href={recoveryHref} className="text-primary hover:underline">Use a recovery code</Link>
+            </p>
           </form>
         ) : mfaStep === "setup" && totpSetupUri ? (
           <div className="space-y-5">

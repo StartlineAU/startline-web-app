@@ -212,7 +212,7 @@ function AuthenticatorCard({
   onChange: (enabled: boolean) => void;
 }) {
   const { user } = useAuthContext();
-  const [step, setStep] = useState<"idle" | "starting" | "scan" | "verifying" | "confirm-disable" | "disabling">("idle");
+  const [step, setStep] = useState<"idle" | "starting" | "scan" | "verifying" | "codes" | "confirm-disable" | "disabling">("idle");
   const [secretCode, setSecretCode] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [secretCopied, setSecretCopied] = useState(false);
@@ -220,6 +220,9 @@ function AuthenticatorCard({
   // Turning the app off takes the password and a current code, like a sign-in.
   const [disablePassword, setDisablePassword] = useState("");
   const [disableCode, setDisableCode] = useState("");
+  // Shown once, straight after setup. Nothing can read them back later.
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [codesCopied, setCodesCopied] = useState(false);
   const [message, setMessage] = useState<Message>(null);
 
   const startSetup = async () => {
@@ -256,10 +259,19 @@ function AuthenticatorCard({
         setStep("scan");
         return;
       }
+      const codes = Array.isArray(data.recoveryCodes)
+        ? (data.recoveryCodes as unknown as string[])
+        : [];
       setTotpCode(""); setSecretCode(""); setQrDataUrl("");
-      setStep("idle");
       onChange(true);
-      setMessage({ kind: "success", text: "Authenticator app turned on." });
+      if (codes.length > 0) {
+        setRecoveryCodes(codes);
+        setMessage(null);
+        setStep("codes");
+      } else {
+        setStep("idle");
+        setMessage({ kind: "success", text: "Authenticator app turned on." });
+      }
     } catch {
       setMessage({ kind: "error", text: "Something went wrong. Please try again." });
       setStep("scan");
@@ -357,6 +369,37 @@ function AuthenticatorCard({
               disabled={step === "disabling"}
               className={btnCls + " border-dark-lighter text-muted hover:text-light"}>
               Keep it on
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === "codes" && recoveryCodes.length > 0 && (
+        <div className="border-t border-dark-lighter pt-4 space-y-4">
+          <p className="text-[13px] text-muted leading-relaxed">
+            Save these recovery codes somewhere safe. Each turns the authenticator app off
+            once, so you can get back in if you lose your phone. They are shown only now.
+          </p>
+          <ul className="grid grid-cols-2 gap-2 font-mono text-[13px] text-light">
+            {recoveryCodes.map((code) => (
+              <li key={code} className="bg-dark-light rounded px-2 py-1.5 tracking-wider text-center">{code}</li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            <button type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(recoveryCodes.join("\n")).catch(() => {});
+                setCodesCopied(true);
+                setTimeout(() => setCodesCopied(false), 2000);
+              }}
+              className={btnCls + " border-primary/30 text-primary hover:bg-primary/10"}>
+              {codesCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              {codesCopied ? "Copied" : "Copy codes"}
+            </button>
+            <button type="button"
+              onClick={() => { setRecoveryCodes([]); setStep("idle"); setMessage({ kind: "success", text: "Authenticator app turned on." }); }}
+              className={btnCls + " border-dark-lighter text-muted hover:text-light"}>
+              I have saved them
             </button>
           </div>
         </div>

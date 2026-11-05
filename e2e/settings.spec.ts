@@ -309,3 +309,43 @@ test.describe("turning off the authenticator app", () => {
     await expect(settings.getByRole("button", { name: "Yes, turn off" })).toBeVisible();
   });
 });
+
+test.describe("recovery codes", () => {
+  test("shows the codes once after the authenticator app is set up", async ({ page }) => {
+    test.slow();
+    await loginAs(page, "athlete");
+    const codes = ["ABCDE-FGHJK", "MNPQR-STUVW"];
+
+    await page.route("**/api/user/security", (route) =>
+      route.fulfill({ json: { providers: [], hasPassword: true, mfaEnabled: false } }));
+    await page.route("**/api/user/mfa", async (route) => {
+      const request = route.request();
+      if (request.method() === "GET") {
+        await route.fulfill({ json: { mfaEnabled: false } });
+        return;
+      }
+      const body = request.postDataJSON() as Record<string, unknown>;
+      if (body.action === "setup") {
+        await route.fulfill({ json: { secretCode: "JBSWY3DPEHPK3PXP" } });
+        return;
+      }
+      await route.fulfill({ json: { ok: true, recoveryCodes: codes } });
+    });
+
+    await page.goto("/");
+    const settings = await openFromAthleteMenu(page);
+    await settings.getByRole("button", { name: "Login & security" }).click();
+    await expect(settings.getByRole("heading", { name: "Authenticator app" })).toBeVisible({ timeout: 40000 });
+
+    await settings.getByRole("button", { name: "Set up" }).click();
+    await settings.getByLabel("6-digit code").fill("123456");
+    await settings.getByRole("button", { name: /^Verify/ }).click();
+
+    await expect(settings.getByText("ABCDE-FGHJK")).toBeVisible();
+    await expect(settings.getByText("MNPQR-STUVW")).toBeVisible();
+    await expect(settings.getByRole("button", { name: "Copy codes" })).toBeVisible();
+
+    await settings.getByRole("button", { name: "I have saved them" }).click();
+    await expect(settings.getByText("ABCDE-FGHJK")).toHaveCount(0);
+  });
+});

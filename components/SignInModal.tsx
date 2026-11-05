@@ -47,6 +47,12 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
 
   const [view,            setView]            = useState<View>("signin");
   const [email,           setEmail]           = useState("");
+  // Recovery lives on the customer portal, so the link is absolute when the
+  // portals are split.
+  const recoveryHref = customerHref(
+    `/auth/recovery${email ? `?email=${encodeURIComponent(email)}` : ""}`,
+    portalHost,
+  );
   const [firstName,       setFirstName]       = useState("");
   const [lastName,        setLastName]        = useState("");
   const [dobDay,          setDobDay]          = useState("");
@@ -829,7 +835,10 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
                     (issue #320). Someone without it needs a person to help. */}
                 <p className="text-muted text-[13px] leading-relaxed text-center">
                   Lost access to your authenticator app?{" "}
-                  <Link href={contactHref} onClick={onClose} className="text-primary hover:underline">Contact us</Link>
+                  <Link href={recoveryHref} onClick={onClose} className="text-primary hover:underline">
+                    Use a recovery code
+                  </Link>
+                  {" "}or <Link href={contactHref} onClick={onClose} className="text-primary hover:underline">contact us</Link>.
                 </p>
               </form>
             )}
