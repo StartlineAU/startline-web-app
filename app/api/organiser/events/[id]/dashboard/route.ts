@@ -93,6 +93,7 @@ export async function GET(
       event: {
         id:                event.id,
         title:             event.title,
+        status,
         organiserName:     event.organiser.orgName,
         discipline:        event.discipline,
         eventDate:         event.eventDate,

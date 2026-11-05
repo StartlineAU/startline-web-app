@@ -9,6 +9,24 @@ import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 
+const AUDIT_FIELDS = [
+  "title", "discipline", "description", "eventDate", "endDate", "startTime", "endTime",
+  "venue", "address", "city", "state", "latitude", "longitude", "format", "level",
+  "categories", "cap", "minAge", "waves", "inclusions", "extras", "activations",
+  "refundTiers", "refundPolicy", "registrationType", "feeStructure", "registrationUrl",
+  "accessibilityInfo", "coverImageUrl", "informationPdfs", "photos", "status",
+] as const;
+
+function auditChanges(before: Record<string, unknown>, after: Record<string, unknown>) {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const field of AUDIT_FIELDS) {
+    const from = before[field] ?? null;
+    const to = after[field] ?? null;
+    if (JSON.stringify(from) !== JSON.stringify(to)) changes[field] = { from, to };
+  }
+  return changes;
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -51,13 +69,7 @@ export async function PATCH(
   const { submit, ...data } = body;
 
   try {
-    const existing = await prisma.event.findUnique({
-      where:  { id },
-      select: {
-        title: true, status: true,
-        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
-      },
-    });
+    const existing = await prisma.event.findUnique({ where: { id } });
 
     if (!existing) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
@@ -135,12 +147,22 @@ export async function PATCH(
       console.error("Event lifecycle schedule sync failed:", err),
     );
 
-    writeAuditLog({
+    const changes = auditChanges(
+      existing as unknown as Record<string, unknown>,
+      updated as unknown as Record<string, unknown>,
+    );
+
+    await writeAuditLog({
       adminId: session.sub,
       action: "EDIT_EVENT",
       targetType: "event",
       targetId: id,
-      meta: { title: updated.title, status: nextStatus },
+      meta: {
+        title: updated.title,
+        status: nextStatus,
+        changedFields: Object.keys(changes),
+        changes,
+      },
     });
 
     return NextResponse.json({ id: updated.id, status: updated.status });

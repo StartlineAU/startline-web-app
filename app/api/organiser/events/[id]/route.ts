@@ -8,9 +8,10 @@ import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { eventTimeData } from "@/lib/event-time";
-import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { effectiveEventStatus, type PersistedEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { takesPayments } from "@/lib/event-approval";
+import { organiserCanEditEvent, organiserEditBlockedMessage } from "@/lib/event-edit-policy";
 
 export async function GET(
   _req: NextRequest,
@@ -69,8 +70,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     if (existing.organiserId !== session.sub)
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    if (existing.status !== "DRAFT")
-      return NextResponse.json({ error: "Only draft events can be updated this way." }, { status: 409 });
+
+    // The stored status can lag a due lifecycle transition. Judge what the
+    // event is now, not what it was at the last scheduler tick.
+    const currentStatus = effectiveEventStatus({
+      status: existing.status,
+      ...eventTimeData(existing),
+    });
+    if (!organiserCanEditEvent(currentStatus))
+      return NextResponse.json(
+        { error: organiserEditBlockedMessage(currentStatus) },
+        { status: 409 },
+      );
 
     if (submit) {
       const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
@@ -95,9 +106,18 @@ export async function PATCH(
       abnOk = hasAbn(org?.abn);
     }
 
-    const nextStatus = submit
-      ? (session.verified && abnOk ? "APPROVED" : "PENDING")
-      : "DRAFT";
+    // A draft can still auto-publish. An event already in review stays there,
+    // and a rejected event re-enters review on resubmission rather than
+    // bypassing the decision that rejected it. Saving without submitting keeps
+    // the event where it is; it must never demote a pending or rejected event
+    // back to DRAFT.
+    const nextStatus: PersistedEventStatus = !submit
+      ? currentStatus
+      : existing.status === "PENDING" || existing.status === "REJECTED"
+        ? "PENDING"
+        : session.verified && abnOk
+          ? "APPROVED"
+          : "PENDING";
 
     const times = eventTimeData({
       eventDate: data.eventDate ?? existing.eventDate,
@@ -161,7 +181,7 @@ export async function PATCH(
       console.error("Event lifecycle schedule sync failed:", err),
     );
 
-    // Existing was DRAFT (enforced above); notify when submit goes straight to live.
+    // Only a draft can auto-publish, so this is the moment it goes live.
     if (nextStatus === "APPROVED") {
       // Awaited, not fired and forgotten: Amplify's compute freezes the
       // container once the response is returned, so a floating promise is
@@ -181,8 +201,9 @@ export async function PATCH(
         .catch((err) => console.error("Follower notify failed:", err));
     }
 
-    // Existing was DRAFT, so this is the moment the listing joins the queue.
-    if (updated.status === "PENDING") {
+    // Notify only when the event enters the review queue, not on every edit to
+    // an event that is already waiting there.
+    if (updated.status === "PENDING" && existing.status !== "PENDING") {
       await notifyAdminsEventSubmitted(updated.id)
         .catch((err) => console.error("Admin review notify failed:", err));
     }

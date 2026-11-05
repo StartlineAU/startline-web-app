@@ -348,7 +348,8 @@ test.describe("new listing wizard", () => {
   // A saved event whose discipline has no picker (crossfit, hybrid, triathlon)
   // still carries categories on the record. The summary shows what will
   // publish, so it must list them rather than drop them because the picker
-  // list does not apply. seed-event-022 is a crossfit event owned by Apex.
+  // list does not apply. seed-event-002 is a pending hybrid event owned by
+  // Apex; published events are intentionally locked from organiser editing.
   test("review table shows saved categories for a discipline with no picker", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
@@ -358,9 +359,9 @@ test.describe("new listing wizard", () => {
     // hydration focuses the button but never fires. Retry the load until the
     // review table shows the event's categories.
     await expect(async () => {
-      await page.goto("/organiser/new-listing?id=seed-event-022");
+      await page.goto("/organiser/new-listing?id=seed-event-002");
       await page.getByRole("button", { name: /Final Review/i }).click();
-      await expect(page.getByText("Rx, Scaled", { exact: true })).toBeVisible({ timeout: 3000 });
+      await expect(page.getByText("Open Male, Open Female, Masters 40+", { exact: true })).toBeVisible({ timeout: 3000 });
     }).toPass({ timeout: 30000 });
 
     await expect(page.getByText("Categories", { exact: true })).toBeVisible();

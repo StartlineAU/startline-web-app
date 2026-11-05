@@ -17,6 +17,7 @@ import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
 import RaceManagementPanel from "@/components/organiser/RaceManagementPanel";
+import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { sanitizeHtml } from "@/lib/sanitize-html";
@@ -29,6 +30,7 @@ interface Wave { label: string; price: string; qty?: number; sold?: number }
 interface DashboardData {
   event: {
     id: string; title: string; organiserName?: string | null; discipline: string;
+    status: "APPROVED" | "IN_PROGRESS";
     eventDate: string; endDate?: string | null;
     startTime: string; endTime: string;
     venue: string; city: string; state: string;
@@ -384,23 +386,15 @@ function EventDashboardInner({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
-            {panelActive ? (
-              <Button
-                variant="outline"
-                type="button"
-                className="w-full opacity-40 pointer-events-none"
-                aria-disabled
-                tabIndex={-1}
-              >
-                <Pencil className="w-4 h-4" /> Edit event
-              </Button>
-            ) : (
-              <Button variant="outline" asChild className="w-full">
-                <Link href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`}>
-                  <Pencil className="w-4 h-4" /> Edit event
-                </Link>
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              type="button"
+              className="w-full opacity-40 pointer-events-none"
+              aria-disabled
+              tabIndex={-1}
+            >
+              <Pencil className="w-4 h-4" /> Editing locked
+            </Button>
             <Button
               variant={managePanel ? "default" : "outline"}
               type="button"
@@ -446,6 +440,12 @@ function EventDashboardInner({
               <QrCode className="w-4 h-4" /> Check-in QR
             </Button>
           </div>
+
+          {!panelActive && (
+            <div className="mb-8">
+              <EventEditLockedNotice eventId={id} status={event.status} compact />
+            </div>
+          )}
 
           {announcePanel && (
             <Card className="mb-8">
