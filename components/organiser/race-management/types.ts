@@ -14,6 +14,7 @@ export interface Registration {
   estimatedFinishMinutes: number | null;
   medicalNotes: string | null;
   status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED";
+  checkedInAt: string | null;
   amount: number;
   refundAmountCents: number | null;
   refundPercent: number | null;
