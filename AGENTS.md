@@ -341,15 +341,29 @@ host that started it. Amplify's OAuth listener (imported in
 - **Provider-managed email.** An in-app email change is only offered once every
   Google/Apple identity is disconnected; until then the provider owns the
   address and can write it back on the next sign-in.
+- **Recovery codes.** Setting up the authenticator app issues ten one-time
+  codes and shows them once; only their SHA-256 is stored (`RecoveryCode`).
+  `/auth/recovery` proves the password with Cognito, spends a code, and turns
+  TOTP off so it can be set up again. Codes are replaced on every setup and
+  cleared when TOTP is turned off. There is no email fallback: email is the
+  account's root identity, and for provider accounts the provider owns it.
 - **TOTP is password-only.** The authenticator app is a Cognito challenge on the
   password flow. A linked Google/Apple sign-in may bypass it, so the settings
-  copy says so and setup needs a password. The pre sign-up trigger still refuses
-  to add a new provider to an account with TOTP enabled.
+  copy says so and setup needs a password. On the sign-in path the pre sign-up
+  trigger refuses an account with TOTP enabled. Settings is the exception:
+  connecting or disconnecting Google/Apple on such an account needs the password
+  and a code (`verifyAuthenticatorStepUp` in `lib/cognito-sign-in-methods.ts`),
+  and the link callback only links it with the signed grant that check issues.
+  Admins are refused on every path. Turning TOTP off takes the same password and
+  code, so a session cannot switch it off and then link without one.
 - **Infra must allow the link flow.** Both environments' `callback_urls` need
-  `${origin}/auth/link/callback`, and the Amplify role needs
-  `cognito-idp:AdminLinkProviderForUser` and
-  `cognito-idp:AdminDisableProviderForUser`. `AdministratorAccess-Amplify` does
-  not include either action.
+  `${origin}/auth/link/callback` on the link client
+  (`NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID`). The Amplify role needs
+  `cognito-idp:AdminLinkProviderForUser`, `cognito-idp:AdminDisableProviderForUser`,
+  `cognito-idp:AdminInitiateAuth`, `cognito-idp:AdminRespondToAuthChallenge` and
+  `cognito-idp:AdminSetUserMFAPreference` (recovery).
+  `AdministratorAccess-Amplify` does not include these. `LINK_GRANT_SECRET` signs
+  the grant between the password check and the callback; it is server-only.
 - `NEXT_PUBLIC_SOCIAL_SIGN_IN` lists the providers whose keys exist, and the
   buttons render only for those. Without `NEXT_PUBLIC_COGNITO_DOMAIN` there are
   none, which is local dev unless `.env.local` sets it.

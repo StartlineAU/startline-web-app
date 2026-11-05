@@ -92,7 +92,7 @@ export function planSocialCallback(failure: string | null): SocialCallbackPlan {
 // (lambda/pre-signup/index.mjs).
 export function socialSignInErrorMessage(description: string): string {
   if (description.includes("STARTLINE_MFA_ACCOUNT")) {
-    return "This account is protected by an authenticator app, so it can't use Google or Apple sign-in. Sign in with your email and password instead.";
+    return "This account uses an authenticator app, so Google and Apple can't sign you in here. Sign in with your email and password, then connect Google or Apple under Login & security.";
   }
   if (description.includes("STARTLINE_FEDERATED_ACCOUNT")) {
     return "This email already signs in with Google or Apple. Use that button instead.";

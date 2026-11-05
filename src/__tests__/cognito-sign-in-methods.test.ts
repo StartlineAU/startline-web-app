@@ -15,6 +15,8 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => {
     AdminDeleteUserCommand: class extends Command { readonly type = "delete"; },
     AdminLinkProviderForUserCommand: class extends Command { readonly type = "link"; },
     AdminDisableProviderForUserCommand: class extends Command { readonly type = "disable"; },
+    AdminInitiateAuthCommand: class extends Command { readonly type = "initiate"; },
+    AdminRespondToAuthChallengeCommand: class extends Command { readonly type = "respond"; },
   };
 });
 
@@ -28,6 +30,7 @@ let mod: Module;
 beforeAll(async () => {
   vi.stubEnv("NEXT_PUBLIC_COGNITO_USER_POOL_ID", "ap-southeast-2_test");
   vi.stubEnv("NEXT_PUBLIC_AWS_REGION", "ap-southeast-2");
+  vi.stubEnv("NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID", "link-client-id");
   vi.resetModules();
   mod = await import("@/lib/cognito-sign-in-methods");
 });
@@ -176,5 +179,72 @@ describe("completeProviderLink", () => {
 
     await expect(mod.completeProviderLink({ ...base, resultSub: "current-sub" }))
       .rejects.toMatchObject({ code: "failed" });
+  });
+});
+
+describe("getCognitoUserSnapshot", () => {
+  it("reads whether an authenticator app is on", async () => {
+    mockSend.mockResolvedValueOnce({ UserStatus: "CONFIRMED", UserMFASettingList: ["SOFTWARE_TOKEN_MFA"] });
+    await expect(mod.getCognitoUserSnapshot("someone")).resolves.toMatchObject({ mfaEnabled: true });
+  });
+
+  it("treats no MFA settings as off", async () => {
+    mockSend.mockResolvedValueOnce({ UserStatus: "CONFIRMED" });
+    await expect(mod.getCognitoUserSnapshot("someone")).resolves.toMatchObject({ mfaEnabled: false });
+  });
+});
+
+describe("verifyAuthenticatorStepUp", () => {
+  const input = { username: "someone", password: "Password123!", code: "123456" };
+
+  it("checks the password, then the code, on the link client", async () => {
+    mockSend
+      .mockResolvedValueOnce({ ChallengeName: "SOFTWARE_TOKEN_MFA", Session: "session-1" })
+      .mockResolvedValueOnce({ AuthenticationResult: { AccessToken: "not kept" } });
+
+    await expect(mod.verifyAuthenticatorStepUp(input)).resolves.toBeUndefined();
+
+    expect(commandTypes()).toEqual(["initiate", "respond"]);
+    expect(mockSend.mock.calls[0][0].input).toEqual({
+      UserPoolId: "ap-southeast-2_test",
+      ClientId: "link-client-id",
+      AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+      AuthParameters: { USERNAME: "someone", PASSWORD: "Password123!" },
+    });
+    expect(mockSend.mock.calls[1][0].input).toEqual({
+      UserPoolId: "ap-southeast-2_test",
+      ClientId: "link-client-id",
+      ChallengeName: "SOFTWARE_TOKEN_MFA",
+      Session: "session-1",
+      ChallengeResponses: { USERNAME: "someone", SOFTWARE_TOKEN_MFA_CODE: "123456" },
+    });
+  });
+
+  it("refuses a wrong password before any code is asked for", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("Incorrect username or password."), { name: "NotAuthorizedException" }));
+
+    await expect(mod.verifyAuthenticatorStepUp(input)).rejects.toMatchObject({ code: "step-up-failed", status: 403 });
+    expect(commandTypes()).toEqual(["initiate"]);
+  });
+
+  it("refuses a wrong code", async () => {
+    mockSend
+      .mockResolvedValueOnce({ ChallengeName: "SOFTWARE_TOKEN_MFA", Session: "session-1" })
+      .mockRejectedValueOnce(Object.assign(new Error("Code mismatch"), { name: "CodeMismatchException" }));
+
+    await expect(mod.verifyAuthenticatorStepUp(input)).rejects.toMatchObject({ code: "step-up-failed" });
+  });
+
+  it("refuses when Cognito does not ask for the authenticator code", async () => {
+    mockSend.mockResolvedValueOnce({ AuthenticationResult: { AccessToken: "not kept" } });
+
+    await expect(mod.verifyAuthenticatorStepUp(input)).rejects.toMatchObject({ code: "step-up-failed" });
+    expect(commandTypes()).toEqual(["initiate"]);
+  });
+
+  it("reports rate limiting as rate limiting", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("Slow down"), { name: "TooManyRequestsException" }));
+
+    await expect(mod.verifyAuthenticatorStepUp(input)).rejects.toMatchObject({ code: "rate-limited", status: 429 });
   });
 });

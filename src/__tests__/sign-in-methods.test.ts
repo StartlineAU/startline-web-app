@@ -104,6 +104,11 @@ describe("signInMethodsFromCognito", () => {
     expect(googleMethod).toMatchObject({ linked: true, enabled: false, canRemove: true });
   });
 
+  it("reports whether an authenticator app is on, so a link or unlink asks for a code", () => {
+    expect(signInMethodsFromCognito({ ...snapshot("CONFIRMED", [google]), mfaEnabled: true }, []).mfaRequired).toBe(true);
+    expect(signInMethodsFromCognito(snapshot("CONFIRMED", [google]), []).mfaRequired).toBe(false);
+  });
+
   it("treats a normal Cognito user as having a password", () => {
     expect(signInMethodsFromCognito(snapshot("CONFIRMED", []), []).hasPassword).toBe(true);
     expect(signInMethodsFromCognito(snapshot("FORCE_CHANGE_PASSWORD", []), []).hasPassword).toBe(true);

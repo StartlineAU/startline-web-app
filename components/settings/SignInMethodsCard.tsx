@@ -6,7 +6,7 @@ import { Link2 } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ErrorNote, SuccessNote, cardCls, outlineBtnCls,
+  ErrorNote, SuccessNote, cardCls, inputCls, labelCls, outlineBtnCls,
 } from "@/components/settings/primitives";
 import { linkErrorMessage, type SignInMethods } from "@/lib/sign-in-methods";
 import type { SocialProvider } from "@/lib/social-providers";
@@ -16,6 +16,10 @@ const neutralBtn = outlineBtnCls + " border-dark-lighter text-muted hover:text-l
 const dangerBtn  = outlineBtnCls + " border-red-500/30 text-red-400 hover:bg-red-500/10";
 
 type Message = { kind: "error" | "success"; text: string } | null;
+
+// The password and a code from the authenticator app, sent only when the account
+// has one (see requireStepUp in the sign-in-methods route).
+type Proof = { password: string; code: string };
 
 async function send(body: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const response = await fetch("/api/user/sign-in-methods", {
@@ -37,6 +41,50 @@ function flashFromQuery(query: URLSearchParams): Message {
   }
   if (error) return { kind: "error", text: linkErrorMessage(error) ?? "Something went wrong." };
   return null;
+}
+
+function ProofFields({
+  id, password, code, onPassword, onCode, disabled,
+}: {
+  id: string;
+  password: string;
+  code: string;
+  onPassword: (value: string) => void;
+  onCode: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor={`${id}-password`} className={labelCls}>Password</label>
+        <input
+          id={`${id}-password`}
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => onPassword(e.target.value)}
+          disabled={disabled}
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${id}-code`} className={labelCls}>Authenticator code</label>
+        <input
+          id={`${id}-code`}
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          required
+          value={code}
+          onChange={(e) => onCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          disabled={disabled}
+          placeholder="000000"
+          className={`${inputCls} tracking-[0.5em] text-center font-bold`}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function SignInMethodsCard({
@@ -61,6 +109,10 @@ export default function SignInMethodsCard({
   );
   const [busy, setBusy] = useState<SocialProvider | null>(null);
   const [confirming, setConfirming] = useState<SocialProvider | null>(null);
+  const [connectingWith, setConnectingWith] = useState<SocialProvider | null>(null);
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [proofError, setProofError] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -91,7 +143,23 @@ export default function SignInMethodsCard({
     return () => { cancelled = true; };
   }, [reloadKey, refreshKey]);
 
-  const connect = async (provider: SocialProvider) => {
+  const openProof = (mode: "connect" | "disconnect", provider: SocialProvider) => {
+    setMessage(null);
+    setPassword("");
+    setCode("");
+    setProofError("");
+    if (mode === "connect") {
+      setConnectingWith(provider);
+      setConfirming(null);
+    } else {
+      setConfirming(provider);
+      setConnectingWith(null);
+    }
+  };
+
+  // With an authenticator app, the password and a code go with the request. A
+  // refusal keeps the form open with the reason, rather than leaving the card.
+  const connect = async (provider: SocialProvider, proof: Proof | null = null) => {
     setBusy(provider);
     setMessage(null);
     try {
@@ -99,9 +167,16 @@ export default function SignInMethodsCard({
         action: "link",
         provider,
         returnTo: window.location.pathname,
+        ...proof,
       });
       if (!ok || typeof data.url !== "string") {
-        setMessage({ kind: "error", text: errorOf(data, "Could not start connecting that account.") });
+        const text = errorOf(data, "Could not start connecting that account.");
+        if (proof) {
+          setProofError(text);
+          setCode("");
+        } else {
+          setMessage({ kind: "error", text });
+        }
         setBusy(null);
         return;
       }
@@ -112,17 +187,26 @@ export default function SignInMethodsCard({
     }
   };
 
-  const disconnect = async (provider: SocialProvider) => {
+  const disconnect = async (provider: SocialProvider, proof: Proof | null = null) => {
     setBusy(provider);
     setMessage(null);
     try {
-      const { ok, data } = await send({ action: "unlink", provider });
+      const { ok, data } = await send({ action: "unlink", provider, ...proof });
       if (!ok) {
-        setMessage({ kind: "error", text: errorOf(data, "Could not disconnect that account.") });
+        const text = errorOf(data, "Could not disconnect that account.");
+        if (proof) {
+          setProofError(text);
+          setCode("");
+        } else {
+          setMessage({ kind: "error", text });
+        }
         return;
       }
       setMethods(data as SignInMethods);
       setConfirming(null);
+      setPassword("");
+      setCode("");
+      setProofError("");
       setMessage({ kind: "success", text: `${provider === "google" ? "Google" : "Apple"} is no longer connected.` });
       await onChanged?.();
     } catch {
@@ -143,6 +227,13 @@ export default function SignInMethodsCard({
           <p className="text-muted text-[12px] mt-0.5 leading-relaxed">
             Manage the Google and Apple accounts that can sign in to Startline.
           </p>
+          {methods?.mfaRequired && (
+            <p className="text-muted-dark text-[11px] mt-1 leading-relaxed">
+              Your account uses an authenticator app. Connecting or disconnecting Google or Apple needs
+              your password and a code from the app. Once connected, signing in with them doesn&apos;t ask
+              for that code.
+            </p>
+          )}
           {user?.email && <p className="text-muted-dark text-[11px] mt-1 break-all">{user.email}</p>}
         </div>
       </div>
@@ -204,7 +295,7 @@ export default function SignInMethodsCard({
                   {method.linked ? (
                     <button
                       type="button"
-                      onClick={() => { setMessage(null); setConfirming(method.provider); }}
+                      onClick={() => openProof("disconnect", method.provider)}
                       disabled={!method.canRemove || !methods.hasPassword || busy !== null}
                       className={dangerBtn + " shrink-0"}
                     >
@@ -213,7 +304,7 @@ export default function SignInMethodsCard({
                   ) : method.enabled ? (
                     <button
                       type="button"
-                      onClick={() => connect(method.provider)}
+                      onClick={() => (methods.mfaRequired ? openProof("connect", method.provider) : connect(method.provider))}
                       disabled={busy !== null}
                       className={primaryBtn + " shrink-0"}
                     >
@@ -222,16 +313,67 @@ export default function SignInMethodsCard({
                   ) : null}
                 </div>
 
+                {connectingWith === method.provider && (
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); connect(method.provider, { password, code }); }}
+                    className="border-t border-dark-lighter pt-3 space-y-3"
+                  >
+                    <p className="text-[13px] text-muted leading-relaxed">
+                      Confirm it&apos;s you, then connect {name}. After this, signing in with {name} won&apos;t ask for
+                      your authenticator code.
+                    </p>
+                    <ProofFields
+                      id={`connect-${method.provider}`}
+                      password={password}
+                      code={code}
+                      onPassword={setPassword}
+                      onCode={setCode}
+                      disabled={busy !== null}
+                    />
+                    {proofError && <ErrorNote>{proofError}</ErrorNote>}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="submit"
+                        disabled={busy !== null || !password || code.length !== 6}
+                        className={primaryBtn}
+                      >
+                        {busy === method.provider ? "Connecting…" : `Connect ${name}`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConnectingWith(null)}
+                        disabled={busy !== null}
+                        className={neutralBtn}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
                 {confirming === method.provider && (
                   <div className="border-t border-dark-lighter pt-3">
                     <p className="text-[13px] text-muted leading-relaxed">
                       Disconnect {name}? You will no longer be able to sign in with this account.
                     </p>
+                    {methods.mfaRequired && (
+                      <div className="mt-3 space-y-3">
+                        <ProofFields
+                          id={`disconnect-${method.provider}`}
+                          password={password}
+                          code={code}
+                          onPassword={setPassword}
+                          onCode={setCode}
+                          disabled={busy !== null}
+                        />
+                        {proofError && <ErrorNote>{proofError}</ErrorNote>}
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2 mt-3">
                       <button
                         type="button"
-                        onClick={() => disconnect(method.provider)}
-                        disabled={busy !== null}
+                        onClick={() => disconnect(method.provider, methods.mfaRequired ? { password, code } : null)}
+                        disabled={busy !== null || (methods.mfaRequired && (!password || code.length !== 6))}
                         className={dangerBtn}
                       >
                         {busy === method.provider ? "Disconnecting…" : "Yes, disconnect"}

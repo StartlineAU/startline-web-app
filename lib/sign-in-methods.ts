@@ -25,12 +25,16 @@ export type SignInMethod = {
 
 export type SignInMethods = {
   hasPassword: boolean;
+  // An authenticator app is on. Connecting or disconnecting a provider then
+  // needs the password and a code from the app.
+  mfaRequired: boolean;
   providers: SignInMethod[];
 };
 
 export type CognitoUserSnapshot = {
   userStatus: string | null;
   attributes: CognitoAttribute[];
+  mfaEnabled?: boolean;
 };
 
 // `identities` is a JSON array on the user profile, e.g.
@@ -104,6 +108,7 @@ export function signInMethodsFromCognito(
 
   return {
     hasPassword: password,
+    mfaRequired: snapshot.mfaEnabled === true,
     providers: SOCIAL_PROVIDERS.map((provider) => {
       const linked = Boolean(identityFor(identities, provider));
       return {
@@ -154,6 +159,8 @@ export function linkErrorMessage(code: string | null): string | null {
       return "That sign-in provider is not available on this deployment.";
     case "unavailable":
       return "Sign-in methods cannot be managed in this environment.";
+    case "step-up-required":
+      return "Enter your password and a code from your authenticator app to connect this account.";
     default:
       return "We couldn't connect that account. Please try again.";
   }

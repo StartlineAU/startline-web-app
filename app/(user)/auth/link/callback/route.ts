@@ -3,12 +3,14 @@ import { cookies } from "next/headers";
 import { getServerSession } from "@/lib/amplify-server";
 import {
   completeProviderLink,
+  getSignInMethods,
   SignInMethodError,
 } from "@/lib/cognito-sign-in-methods";
 import {
   exchangeLinkCode,
   LINK_COOKIES,
   verifyCognitoIdToken,
+  verifyLinkGrant,
 } from "@/lib/cognito-oauth";
 import {
   identityFor,
@@ -68,6 +70,17 @@ export async function GET(req: NextRequest) {
   if (!session?.username) return failure(req, returnTo, "unavailable");
 
   try {
+    // An account with an authenticator app is only linked with the grant that the
+    // password-and-code check issued, and only for this state and person.
+    const current = await getSignInMethods(session.username, enabledSocialProviders());
+    if (current.mfaRequired && !verifyLinkGrant(store.get(LINK_COOKIES.grant)?.value, {
+      state,
+      sub: session.sub,
+      provider,
+    })) {
+      return failure(req, returnTo, "step-up-required");
+    }
+
     const tokens = await exchangeLinkCode({
       code,
       verifier,
