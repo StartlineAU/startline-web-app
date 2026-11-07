@@ -141,3 +141,69 @@ export function entryRefundAmountCents(input: EntryRefundInput): number {
   if (snapshot == null) return Math.max(0, paid);
   return Math.max(0, Math.min(snapshot, paid));
 }
+
+// ── Full refunds (organiser changed the event, #490) ──────────────────────────
+//
+// A FULL refund returns everything the athlete paid, booking fee included, and
+// the organiser pays for all of it. That cannot be expressed with the flags
+// above: reverse_transfer reverses in proportion to the WHOLE charge, which on
+// a group booking is not this entry's share, and refund_application_fee would
+// hand the fee to the connected account rather than recover it from them.
+//
+// So the refund itself moves no transfer at all. Startline refunds the athlete
+// from its balance, then reverses exact amounts from the event's transfers
+// (lib/issue-entry-refund.ts) until it has recovered what the athlete got back.
+
+export interface FullRefundRequest {
+  chargeId: string;
+  /** Everything this entry's payer handed over: entryPaidCents(). */
+  amountCents: number;
+  idempotencyKey: string;
+  hasApplicationFee: boolean;
+}
+
+export function buildFullRefundParams(
+  request: FullRefundRequest,
+): [Stripe.RefundCreateParams, Stripe.RequestOptions] {
+  if (!Number.isInteger(request.amountCents) || request.amountCents <= 0) {
+    throw new Error(
+      `Refund amount must be a positive whole number of cents, got ${request.amountCents}.`,
+    );
+  }
+  return [
+    {
+      charge: request.chargeId,
+      amount: request.amountCents,
+      // Explicitly kept: Startline recovers its fee from the organiser instead.
+      ...(request.hasApplicationFee ? { refund_application_fee: false } : {}),
+      metadata: { refund_type: "full" },
+    },
+    { idempotencyKey: request.idempotencyKey },
+  ];
+}
+
+/**
+ * What the organiser's connected account received for one entry: the ticket
+ * price when the athlete paid the fee on top, the ticket price minus the fee
+ * when the organiser absorbed it. Mirrors registrationPayoutCents in
+ * lib/payout.ts, kept here so this module stays free of the database.
+ */
+export function organiserShareCents(input: Pick<EntryRefundInput, "amountCents" | "platformFeeCents" | "feeStructure">): number {
+  return input.feeStructure === "athlete"
+    ? input.amountCents
+    : Math.max(0, input.amountCents - input.platformFeeCents);
+}
+
+/**
+ * How much a FULL refund takes out of the organiser's payout beyond the entry's
+ * own share, which the payout already leaves out. This is the booking fee: the
+ * organiser pays the athlete's whole refund, but only ever received the share.
+ */
+export function fullRefundPayoutDeductionCents(input: {
+  organiserRecoveryOwedCents: number;
+  amountCents: number;
+  platformFeeCents: number;
+  feeStructure: string;
+}): number {
+  return Math.max(0, input.organiserRecoveryOwedCents - organiserShareCents(input));
+}

@@ -13,6 +13,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { takesPayments } from "@/lib/event-approval";
+import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 export async function GET() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -148,7 +149,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const event = await withUniqueSlug(body.title ?? "", (slug) =>
-      prisma.event.create({
+      // The event and its baseline change-log row commit together, so an event
+      // published at creation has its original details on record from the start.
+      prisma.$transaction(async (tx) => {
+      const created = await tx.event.create({
       data: {
         organiserId,
         status:           lifecycleStatus,
@@ -186,6 +190,21 @@ export async function POST(req: NextRequest) {
         informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
         photos:           Array.isArray(body.photos) ? body.photos : [],
       },
+      });
+      if (created.status !== "DRAFT") {
+        await recordEventChange(tx, {
+          eventId: created.id,
+          eventTitle: created.title,
+          source: "ORGANISER",
+          kind: "BASELINE",
+          changedById: organiserId,
+          changedByEmail: auth.actorEmail ?? session.email,
+          organiserVerified: verified,
+          statusAtChange: created.status,
+          changes: baselineChanges(created as unknown as Record<string, unknown>),
+        });
+      }
+      return created;
       }),
     );
 

@@ -8,6 +8,13 @@ import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
+import {
+  baselineChanges, diffEventFields, entitledRegistrationsWhere, fullRefundDeadline,
+  ensureBaseline, materialChanges, recordEventChange,
+} from "@/lib/event-change-log";
+import { notifyEventChange } from "@/lib/notify-event-change";
 
 const AUDIT_FIELDS = [
   "title", "discipline", "description", "eventDate", "endDate", "startTime", "endTime",
@@ -58,7 +65,8 @@ export async function PATCH(
   const parsedParams = idParams.safeParse(await params);
   if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const { id } = parsedParams.data;
-  const parsedBody = eventPayloadSchema.safeParse(await req.json());
+  const raw: unknown = await req.json().catch(() => null);
+  const parsedBody = eventPayloadSchema.safeParse(raw);
   if (!parsedBody.success) {
     return NextResponse.json(
       { error: parsedBody.error.issues[0]?.message ?? "Invalid input." },
@@ -67,9 +75,14 @@ export async function PATCH(
   }
   const body = parsedBody.data;
   const { submit, ...data } = body;
+  const acknowledged =
+    !!raw && typeof raw === "object" && (raw as Record<string, unknown>).acknowledgeChangeRefunds === true;
 
   try {
-    const existing = await prisma.event.findUnique({ where: { id } });
+    const existing = await prisma.event.findUnique({
+      where: { id },
+      include: { organiser: { select: { verified: true } } },
+    });
 
     if (!existing) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
@@ -104,50 +117,124 @@ export async function PATCH(
     });
     const nextStatus = effectiveEventStatus({ status: submittedAs, ...times });
 
-    const updated = await prisma.event.update({
-      where: { id },
-      data: {
-        ...times,
-        title:             data.title             ?? undefined,
-        discipline:        data.discipline        ?? undefined,
-        description:       data.description       ?? undefined,
-        eventDate:         data.eventDate         ?? undefined,
-        endDate:           data.endDate !== undefined ? data.endDate : undefined,
-        startTime:         data.startTime         ?? undefined,
-        endTime:           data.endTime           ?? undefined,
-        venue:             data.venue             ?? undefined,
-        address:           data.address           ?? undefined,
-        city:              data.city              ?? undefined,
-        state:             data.state             ?? undefined,
-        latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
-        longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),
-        format:            data.format            ?? undefined,
-        level:             data.level             ?? undefined,
-        categories:        data.categories        ?? undefined,
-        cap:               data.cap               ?? null,
-        minAge:            data.minAge            ?? undefined,
-        waves:             data.waves             ?? undefined,
-        inclusions:        data.inclusions        ?? undefined,
-        extras:            data.extras            ?? undefined,
-        activations:       data.activations       ?? undefined,
-        refundTiers:       data.refundTiers       ?? undefined,
-        refundPolicy:      data.refundPolicy      ?? undefined,
-        registrationType:  data.registrationType  ?? undefined,
-        feeStructure:      data.feeStructure      ?? undefined,
-        registrationUrl:   data.registrationUrl   ?? undefined,
-        accessibilityInfo: data.accessibilityInfo ?? undefined,
-        coverImageUrl:     data.coverImageUrl     ?? undefined,
-        informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
-        photos:            Array.isArray(data.photos) ? data.photos : undefined,
-        status:            nextStatus,
-      },
+    const fields = {
+      title:             data.title             ?? undefined,
+      discipline:        data.discipline        ?? undefined,
+      description:       data.description       ?? undefined,
+      eventDate:         data.eventDate         ?? undefined,
+      endDate:           data.endDate !== undefined ? data.endDate : undefined,
+      startTime:         data.startTime         ?? undefined,
+      endTime:           data.endTime           ?? undefined,
+      venue:             data.venue             ?? undefined,
+      address:           data.address           ?? undefined,
+      city:              data.city              ?? undefined,
+      state:             data.state             ?? undefined,
+      latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
+      longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),
+      format:            data.format            ?? undefined,
+      level:             data.level             ?? undefined,
+      categories:        (data.categories ?? undefined) as Prisma.InputJsonValue | undefined,
+      cap:               data.cap               ?? null,
+      minAge:            data.minAge            ?? undefined,
+      waves:             (data.waves ?? undefined) as Prisma.InputJsonValue | undefined,
+      inclusions:        data.inclusions        ?? undefined,
+      extras:            data.extras            ?? undefined,
+      activations:       data.activations       ?? undefined,
+      refundTiers:       data.refundTiers       ?? undefined,
+      refundPolicy:      data.refundPolicy      ?? undefined,
+      registrationType:  data.registrationType  ?? undefined,
+      feeStructure:      data.feeStructure      ?? undefined,
+      registrationUrl:   data.registrationUrl   ?? undefined,
+      accessibilityInfo: data.accessibilityInfo ?? undefined,
+      coverImageUrl:     data.coverImageUrl     ?? undefined,
+      informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
+      photos:            Array.isArray(data.photos) ? data.photos : undefined,
+    };
+
+    // Same change log and full-refund rules as an organiser edit
+    // (app/api/organiser/events/[id]/route.ts). An admin moving the date of
+    // an event athletes have paid for is no less a change for those athletes.
+    const wasDraft = existing.status === "DRAFT";
+    const leavingDraft = wasDraft && nextStatus !== "DRAFT";
+    const changes = wasDraft
+      ? []
+      : diffEventFields(existing as unknown as Record<string, unknown>, fields as Record<string, unknown>);
+    const material = materialChanges(changes);
+    const refundUntil = fullRefundDeadline(new Date(), times.startsAtUtc);
+    const entitledCount = material.length > 0
+      ? await prisma.registration.count({ where: entitledRegistrationsWhere(id) })
+      : 0;
+
+    if (entitledCount > 0 && !acknowledged) {
+      return NextResponse.json(
+        {
+          error: "This change gives registered athletes a full refund. Confirm to save it.",
+          code: "MATERIAL_CHANGE_CONFIRM_REQUIRED",
+          changes: material,
+          affectedCount: entitledCount,
+          fullRefundUntil: refundUntil.toISOString(),
+        },
+        { status: 409 },
+      );
+    }
+
+    const changeId = randomUUID();
+    const { updated, affectedCount } = await prisma.$transaction(async (tx) => {
+      const updated = await tx.event.update({
+        where: { id },
+        data: { ...times, ...fields, status: nextStatus },
+      });
+
+      let affectedCount = 0;
+      if (material.length > 0) {
+        const granted = await tx.registration.updateMany({
+          where: entitledRegistrationsWhere(id),
+          data: { fullRefundUntil: refundUntil, fullRefundChangeId: changeId },
+        });
+        affectedCount = granted.count;
+      }
+
+      if (!wasDraft && changes.length > 0) {
+        await ensureBaseline(tx, existing as unknown as Parameters<typeof ensureBaseline>[1], existing.organiser.verified);
+      }
+      if (leavingDraft || changes.length > 0) {
+        await recordEventChange(tx, {
+          id: changeId,
+          eventId: id,
+          eventTitle: updated.title,
+          source: "ADMIN",
+          kind: leavingDraft ? "BASELINE" : "EDIT",
+          changedById: session.sub,
+          changedByEmail: session.email,
+          organiserVerified: existing.organiser.verified,
+          statusAtChange: existing.status,
+          changes: leavingDraft
+            ? baselineChanges(updated as unknown as Record<string, unknown>)
+            : changes,
+          affectedCount,
+          fullRefundUntil: affectedCount > 0 ? refundUntil : null,
+        });
+      }
+
+      return { updated, affectedCount };
     });
+
+    if (affectedCount > 0) {
+      await notifyEventChange({
+        eventId: updated.id,
+        changeId,
+        changes: material,
+        fullRefundUntil: refundUntil,
+        notifyEntrants: true,
+        notifyAdmins: false,
+      }).catch((err) => console.error("Event change notify failed:", err));
+    }
 
     await syncEventSchedules(updated).catch((err) =>
       console.error("Event lifecycle schedule sync failed:", err),
     );
 
-    const changes = auditChanges(
+    const auditDiff = auditChanges(
       existing as unknown as Record<string, unknown>,
       updated as unknown as Record<string, unknown>,
     );
@@ -160,12 +247,16 @@ export async function PATCH(
       meta: {
         title: updated.title,
         status: nextStatus,
-        changedFields: Object.keys(changes),
-        changes,
+        changedFields: Object.keys(auditDiff),
+        changes: auditDiff,
       },
     });
 
-    return NextResponse.json({ id: updated.id, status: updated.status });
+    return NextResponse.json({
+      id: updated.id,
+      status: updated.status,
+      ...(affectedCount > 0 ? { affectedCount, fullRefundUntil: refundUntil.toISOString() } : {}),
+    });
   } catch (err) {
     console.error("Admin event update error:", err);
     return NextResponse.json({ error: "Failed to update event." }, { status: 500 });

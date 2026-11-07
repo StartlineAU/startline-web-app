@@ -9,6 +9,8 @@ import {
   refundPercentFor,
 } from "@/lib/refund-policy";
 import { checkInWindow } from "@/lib/check-in-window";
+import { entryPaidCents } from "@/lib/stripe-refunds";
+import { describeChangeValue, type EventFieldChange } from "@/lib/event-change-log";
 
 /** GET — confirmed registrations for the signed-in athlete (wave + bib for Activity). */
 export async function GET() {
@@ -38,6 +40,10 @@ export async function GET() {
       // commits rather than asking them to request one blind.
       amountCents: true,
       platformFeeCents: true,
+      feeStructure: true,
+      refundType: true,
+      fullRefundUntil: true,
+      fullRefundChangeId: true,
       refundPercent: true,
       refundAmountCents: true,
       refundOutsidePolicy: true,
@@ -65,10 +71,45 @@ export async function GET() {
   });
 
   const today = new Date().toISOString().slice(0, 10);
+  const now = Date.now();
+
+  // What changed, for entries holding a full-refund entitlement, so the athlete
+  // sees why they can have everything back rather than just that they can.
+  const changeIds = [...new Set(
+    registrations
+      .filter((r) => r.status === "CONFIRMED" && r.fullRefundUntil && r.fullRefundUntil.getTime() > now)
+      .map((r) => r.fullRefundChangeId)
+      .filter((id): id is string => !!id),
+  )];
+  const changeRows = changeIds.length
+    ? await prisma.eventChange.findMany({
+        where: { id: { in: changeIds } },
+        select: { id: true, changes: true, createdAt: true },
+      })
+    : [];
+  const changesById = new Map(
+    changeRows.map((c) => [
+      c.id,
+      {
+        changedAt: c.createdAt.toISOString(),
+        lines: (Array.isArray(c.changes) ? (c.changes as unknown as EventFieldChange[]) : [])
+          .filter((line) => line.material)
+          .map((line) => ({
+            label: line.label,
+            from: describeChangeValue(line.field, line.from),
+            to: describeChangeValue(line.field, line.to),
+          })),
+      },
+    ]),
+  );
 
   return NextResponse.json({
     registrations: registrations.map((r) => {
-      const paidCents = r.amountCents + r.platformFeeCents;
+      // What this entry's payer handed over; the fee only when they paid it.
+      const paidCents = entryPaidCents(r);
+      const fullRefundOpen =
+        r.status === "CONFIRMED" && paidCents > 0 &&
+        r.fullRefundUntil != null && r.fullRefundUntil.getTime() > now;
       const tiers = parseTiers(r.event.refundTiers);
       const days = daysUntil(r.event.eventDate, today);
       const window = checkInWindow({
@@ -97,9 +138,19 @@ export async function GET() {
         paidCents,
         // Once a refund is in flight the frozen snapshot wins, so the athlete is
         // never shown a different number than the one they agreed to.
-        refundAmountCents: r.refundAmountCents ?? refundAmountCents(tiers, paidCents, days),
-        refundPercent: r.refundPercent ?? refundPercentFor(tiers, days),
+        refundAmountCents: r.refundAmountCents ?? (fullRefundOpen ? paidCents : refundAmountCents(tiers, paidCents, days)),
+        refundPercent: r.refundPercent ?? (fullRefundOpen ? 100 : refundPercentFor(tiers, days)),
+        refundType: r.refundType,
         outsidePolicy: r.refundOutsidePolicy,
+        ticketCents: r.amountCents,
+        feeCents: paidCents - r.amountCents,
+        // Set while the organiser's change entitles this entry to everything back.
+        fullRefund: fullRefundOpen
+          ? {
+              until: r.fullRefundUntil!.toISOString(),
+              change: (r.fullRefundChangeId && changesById.get(r.fullRefundChangeId)) || null,
+            }
+          : null,
         policyLines: describeTiers(tiers),
         daysUntilEvent: days,
         event: r.event,
