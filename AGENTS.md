@@ -409,6 +409,38 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
   (`User.notifyFollowedOrganiserEvents`). Entry emails are always sent.
 - Section fetches must ignore a reply that arrives after cleanup: in development the effect runs twice, and the late reply overwrites what was typed or toggled.
 
+## Mobile app
+
+The iOS and Android apps (`StartlineAU/startline-mobile-app`) are a Capacitor
+shell that loads this site, so product changes ship with a web deploy. Native
+behaviour lives here, behind `isNative()` in `lib/capacitor.ts`, and a browser
+never runs it.
+
+| Concern | Where |
+|---|---|
+| Status bar, splash screen, Android back button, deep links | `setUpNativeShell()` in `lib/capacitor.ts`, called by `components/NativeLinkHandler.tsx` |
+| Other sites open in the system browser, not the webview | `NativeLinkHandler` |
+| Google and Apple sign-in | `lib/native-oauth.ts` |
+| App-link verification files | `app/.well-known/*`, values in `lib/mobile-app.ts` |
+
+- **Social sign-in can't use Amplify's redirect in the app.**
+  - Google refuses OAuth in embedded webviews, so the hosted page opens in the
+    system browser.
+  - It returns to `com.startlineau.app://auth/callback`.
+  - Amplify's listener would swap the code with a same-origin redirect URI that
+    doesn't match, so `lib/native-oauth.ts` runs the PKCE flow itself and
+    stores the tokens through `cognitoUserPoolsTokenProvider.tokenOrchestrator`,
+    exactly as Amplify's code flow does.
+  - The scheme must be in both Cognito app clients' callback and logout URLs
+    (`startline-infra`) and in the app's manifest and `Info.plist`.
+- **App links.** `/.well-known/apple-app-site-association` and
+  `/.well-known/assetlinks.json` answer 404 until `APPLE_TEAM_ID` and
+  `ANDROID_CERT_SHA256` in `lib/mobile-app.ts` are filled in. They are on the
+  waitlist gate's allow-list because the OS fetches them from the apex.
+- **Sign-out in the app is local.** It clears the tokens without visiting
+  Cognito's logout page. The system browser keeps its own Cognito session, so
+  the next Google sign-in may not ask which account to use.
+
 ## Design system
 
 **`design/design.md`** is authoritative.

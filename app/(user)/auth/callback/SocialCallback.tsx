@@ -15,7 +15,14 @@ import {
 // load is a fresh module, so this never needs resetting.
 let started = false;
 
-export default function SocialCallback({ failure }: { failure: string | null }) {
+export default function SocialCallback({
+  failure,
+  nativeCode = null,
+}: {
+  failure: string | null;
+  /** Set when the mobile app's system-browser sign-in came back (lib/native-oauth.ts). */
+  nativeCode?: { code: string; state: string } | null;
+}) {
   const { refresh } = useAuthContext();
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +46,12 @@ export default function SocialCallback({ failure }: { failure: string | null }) 
       }
 
       try {
-        // Waits for the code exchange the OAuth listener started.
+        // In the app the code is swapped here; on the web the OAuth listener
+        // has already started that exchange and fetchAuthSession waits for it.
+        if (nativeCode) {
+          const { completeNativeSignIn } = await import("@/lib/native-oauth");
+          await completeNativeSignIn(nativeCode.code, nativeCode.state);
+        }
         const session = await fetchAuthSession();
         if (!session.tokens?.accessToken) throw new Error("No session");
 
@@ -73,7 +85,7 @@ export default function SocialCallback({ failure }: { failure: string | null }) 
         setError(socialSignInErrorMessage(""));
       }
     })();
-  }, [failure, refresh]);
+  }, [failure, nativeCode, refresh]);
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
