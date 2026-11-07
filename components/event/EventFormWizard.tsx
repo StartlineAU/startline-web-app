@@ -18,6 +18,7 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { describeChangeValue } from "@/lib/event-change-log";
 import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
@@ -42,6 +43,35 @@ import {
   SESSION_EXPIRED_MESSAGE,
 } from "./event-form/steps";
 import { LivePreview, EventFullPreview } from "./event-form/previews";
+
+interface EditContext {
+  /** Paid, confirmed entrants a material change would entitle to a full refund. */
+  entitledCount: number;
+  fullRefundWindowDays: number;
+}
+
+interface PendingChangeConfirm {
+  changes: { field: string; label: string; from: unknown; to: unknown }[];
+  affectedCount: number;
+  fullRefundUntil: string | null;
+  payload: Record<string, unknown>;
+  asDraft: boolean;
+  redirectTo?: string;
+}
+
+/** Where the Edit link came from (?from=), so saving returns there. Same-site
+ *  paths only, so the parameter can never send anyone off the site. */
+function returnPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const from = new URLSearchParams(window.location.search).get("from");
+  return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
+}
+
+function formatDeadline(iso: string) {
+  return new Date(iso).toLocaleString("en-AU", {
+    weekday: "short", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
 
 interface EventFormWizardProps {
   apiBase: string;             // "/api/organiser" | "/api/admin"
@@ -81,7 +111,16 @@ export default function EventFormWizard({
   const [direction,       setDirection]       = useState<"forward" | "back">("forward");
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const [eventId,         setEventId]         = useState<string | null>(null);
+  // Edit mode: the status the event had when it loaded, and how many paid
+  // entrants a date/time/location/type change would give a full refund.
+  const [eventStatus,     setEventStatus]     = useState<string | null>(null);
+  const [editContext,     setEditContext]     = useState<EditContext | null>(null);
+  const [loadError,       setLoadError]       = useState("");
+  const [changeConfirm,   setChangeConfirm]   = useState<PendingChangeConfirm | null>(null);
   const originalFields = useRef<Record<string, unknown>>({});
+
+  const isLive = eventStatus === "APPROVED" || eventStatus === "IN_PROGRESS";
+  const isEditingPublished = !!eventId && eventStatus !== null && eventStatus !== "DRAFT";
 
   const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
 
@@ -100,10 +139,17 @@ export default function EventFormWizard({
     const id = eventIdProp ?? new URLSearchParams(window.location.search).get("id");
     if (!id) return;
     fetch(`${apiBase}/events/${id}`)
-      .then(r => r.json())
-      .then(e => {
-        if (e.error) return;
+      .then(async r => ({ ok: r.ok, e: await r.json().catch(() => ({})) }))
+      .then(({ ok, e }) => {
+        // Failing silently here left an empty wizard that, saved, would have
+        // created a second event instead of editing this one.
+        if (!ok || e.error) {
+          setLoadError(e.error ?? "This event could not be loaded. Go back and try again.");
+          return;
+        }
         setEventId(id);
+        setEventStatus(typeof e.status === "string" ? e.status : null);
+        setEditContext(e.editContext ?? null);
         originalFields.current = { inclusions: e.inclusions, activations: e.activations, accessibilityInfo: e.accessibilityInfo };
         setForm({
           title:             e.title          ?? "",
@@ -146,7 +192,7 @@ export default function EventFormWizard({
           photoUrls:         Array.isArray(e.photos) ? e.photos.filter((p: unknown): p is string => typeof p === "string") : [],
         });
       })
-      .catch(() => {})
+      .catch(() => setLoadError("This event could not be loaded. Check your connection and try again."))
       .finally(() => setLoadingEvent(false));
   }, [apiBase, eventIdProp]);
 
@@ -256,30 +302,63 @@ export default function EventFormWizard({
         ...(!eventId && organiserId ? { organiserId } : {}),
       };
 
-      let res: Response;
-      if (eventId) {
-        res = await fetch(`${apiBase}/events/${eventId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      } else {
-        res = await fetch(`${apiBase}/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setApiError(res.status === 401 ? SESSION_EXPIRED_MESSAGE : (data.error ?? "Something went wrong."));
-        return false;
-      }
-      if (asDraft && !eventId && data.id) setEventId(data.id);
-      // The event is saved. Hold the redirect so the organiser is told what the
-      // missing ABN cost them, rather than being refused before anything saved.
-      if (!asDraft && data.abnRequired) {
-        setAbnNotice(data.notice ?? "");
-        return true;
-      }
-      router.push(redirectTo ?? submitRedirect);
-      return true;
+      return await sendPayload(payload, asDraft, redirectTo);
     } catch {
       setApiError("Something went wrong. Please check your connection and try again.");
       return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // The request half of a save, kept apart from the uploads so confirming the
+  // full-refund warning resends the same payload rather than uploading twice.
+  const sendPayload = async (payload: Record<string, unknown>, asDraft: boolean, redirectTo?: string): Promise<boolean> => {
+    let res: Response;
+    if (eventId) {
+      res = await fetch(`${apiBase}/events/${eventId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    } else {
+      res = await fetch(`${apiBase}/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // A date, time, location or type change on an event with paid entrants.
+      // Nothing has been saved: show what it would cost and let them choose.
+      if (res.status === 409 && data.code === "MATERIAL_CHANGE_CONFIRM_REQUIRED") {
+        setChangeConfirm({
+          changes: Array.isArray(data.changes) ? data.changes : [],
+          affectedCount: data.affectedCount ?? 0,
+          fullRefundUntil: data.fullRefundUntil ?? null,
+          payload,
+          asDraft,
+          redirectTo,
+        });
+        return false;
+      }
+      setApiError(res.status === 401 ? SESSION_EXPIRED_MESSAGE : (data.error ?? "Something went wrong."));
+      return false;
+    }
+    if (asDraft && !eventId && data.id) setEventId(data.id);
+    // The event is saved. Hold the redirect so the organiser is told what the
+    // missing ABN cost them, rather than being refused before anything saved.
+    if (!asDraft && data.abnRequired) {
+      setAbnNotice(data.notice ?? "");
+      return true;
+    }
+    router.push(redirectTo ?? returnPath() ?? submitRedirect);
+    return true;
+  };
+
+  const confirmMaterialChange = async () => {
+    if (!changeConfirm) return;
+    const { payload, asDraft, redirectTo } = changeConfirm;
+    setSaving(true); setApiError("");
+    try {
+      const saved = await sendPayload({ ...payload, acknowledgeChangeRefunds: true }, asDraft, redirectTo);
+      if (saved) setChangeConfirm(null);
+    } catch {
+      setApiError("Something went wrong. Please check your connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -309,8 +388,34 @@ export default function EventFormWizard({
     { h: <>When and where <span className="text-primary">do athletes race?</span></>, sub: "Athletes search by city, state and date." },
     { h: <>Tickets, pricing <span className="text-primary">and registration.</span></>, sub: "Add ticket categories, pricing and per-category wave start times." },
     { h: <>Images and <span className="text-primary">event description.</span></>, sub: "Upload your cover image and write the event description." },
-    { h: <>Review, then <span className="text-primary">hit publish.</span></>, sub: "Nothing is live yet. You can edit anytime after publishing." },
+    isLive
+      ? { h: <>Review, then <span className="text-primary">save changes.</span></>, sub: "Changes go live as soon as you save, and every change is kept in the event's change history." }
+      : eventStatus === "REJECTED"
+        ? { h: <>Review, then <span className="text-primary">resubmit.</span></>, sub: "Your event goes back to Startline for review." }
+        : { h: <>Review, then <span className="text-primary">hit publish.</span></>, sub: "Nothing is live yet. You can still edit after publishing, and every change is recorded." },
   ];
+
+  const finalLabel = isLive ? "Save changes" : eventStatus === "REJECTED" ? "Resubmit" : eventStatus === "PENDING" ? "Save & keep in review" : "Publish listing";
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-dark-darker pt-14">
+        <main className="max-w-[720px] mx-auto px-6 py-12">
+          <div className="rounded-xl border border-red-400/20 bg-red-400/10 p-6 flex items-start gap-3" role="alert">
+            <AlertTriangle className="w-5 h-5 text-red-300 shrink-0 mt-0.5" />
+            <div>
+              <h1 className="font-headline text-[18px] font-black italic tracking-tight text-light">Couldn&apos;t open this event</h1>
+              <p className="text-[13px] text-muted-light mt-1">{loadError}</p>
+              <button onClick={() => router.push(returnPath() ?? cancelRedirect)}
+                className="mt-4 inline-flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-3.5 py-2 rounded-full transition-colors">
+                <ArrowLeft className="w-3.5 h-3.5" /> Go back
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark-darker pt-14">
@@ -380,6 +485,19 @@ export default function EventFormWizard({
                   <p className="font-headline text-light mt-3 max-w-2xl text-[14px]">{STEP_HEADINGS[step].sub}</p>
                 </div>
 
+                {(step === 0 || step === 1) && isEditingPublished && (editContext?.entitledCount ?? 0) > 0 && (
+                  <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 flex items-start gap-3" data-testid="change-refund-notice">
+                    <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+                    <p className="text-[13px] text-muted-light leading-relaxed">
+                      <span className="font-headline font-bold text-light">
+                        {editContext!.entitledCount} athlete{editContext!.entitledCount === 1 ? " has" : "s have"} paid to enter.
+                      </span>{" "}
+                      Changing the {step === 0 ? "discipline or format" : "date, times or location"} lets each of them
+                      withdraw for a full refund, booking fee included, for {editContext!.fullRefundWindowDays} days
+                      or until the event starts. You&apos;ll see exactly what changes before anything is saved.
+                    </p>
+                  </div>
+                )}
                 {step === 0 && <BasicsStep  form={form} update={update} />}
                 {step === 1 && <WhenStep    form={form} update={update} />}
                 {step === 2 && <TicketsStep form={form} update={update} />}
@@ -411,16 +529,21 @@ export default function EventFormWizard({
                   <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Cancel" : "Back"}
                 </button>
                 <div className="flex items-center gap-1 sm:gap-3">
-                  <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
-                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
-                    Save draft
-                  </button>
+                  {/* Quick save from any step. A published event has no draft to
+                      fall back to, so there it saves changes and keeps its
+                      status; on the last step the primary button does that. */}
+                  {!(isEditingPublished && step === STEPS.length - 1) && (
+                    <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
+                      className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
+                      {isEditingPublished ? "Save changes" : "Save draft"}
+                    </button>
+                  )}
                   <button onClick={next} disabled={saving || (step === STEPS.length - 1 && (!confirmed || missing.length > 0))}
                     className="bg-machined shadow-machined disabled:opacity-40 disabled:cursor-not-allowed text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform">
                     {saving
                       ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Saving…</>
                       : step === STEPS.length - 1
-                        ? <><Check className="w-4 h-4" /> Publish listing</>
+                        ? <><Check className="w-4 h-4" /> {finalLabel}</>
                         : <>Continue <ArrowRight className="w-4 h-4" /></>}
                   </button>
                 </div>
@@ -442,21 +565,81 @@ export default function EventFormWizard({
           <div className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-sm p-7 modal-in">
             <h2 className="font-headline text-[22px] font-black italic tracking-tight text-light mb-2">Leave without saving?</h2>
             <p className="font-headline text-light text-[14px] leading-relaxed mb-7">
-              Your event details haven&apos;t been saved yet. Save as a draft so you can come back and finish it later.
+              {isEditingPublished
+                ? "Your changes haven't been saved yet. Save them now, or leave and keep the event as it is."
+                : "Your event details haven't been saved yet. Save as a draft so you can come back and finish it later."}
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={async () => { await submitToApi(true, form.title.trim() || "Untitled draft", leaveTo ?? undefined); closeLeavePrompt(); }}
                 disabled={saving}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                {saving ? "Saving…" : <><Check className="w-4 h-4" /> Save draft &amp; leave</>}
+                {saving ? "Saving…" : <><Check className="w-4 h-4" /> {isEditingPublished ? "Save changes & leave" : <>Save draft &amp; leave</>}</>}
               </button>
-              <button onClick={() => router.push(leaveTo ?? cancelRedirect)}
+              <button onClick={() => router.push(leaveTo ?? returnPath() ?? cancelRedirect)}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:text-light hover:border-primary/40 transition-colors">
                 Discard &amp; leave
               </button>
               <button onClick={closeLeavePrompt}
                 className="font-headline text-[12px] uppercase tracking-widest text-light hover:text-light transition-colors text-center py-1">
                 Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* A date, time, location or type change on an event with paid entrants.
+          Nothing is saved until the organiser confirms: the server refused the
+          first attempt and sent back exactly what would change. */}
+      {changeConfirm !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !saving && setChangeConfirm(null)} />
+          <div role="alertdialog" aria-modal="true" aria-labelledby="change-refund-title" aria-describedby="change-refund-body"
+            className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-lg p-7 modal-in max-h-[calc(100dvh-2rem)] overflow-y-auto">
+            <div className="flex items-start gap-3 mb-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 mt-1 shrink-0" />
+              <h2 id="change-refund-title" className="font-headline text-[20px] font-black uppercase tracking-wide text-light leading-tight">
+                This change triggers full refunds
+              </h2>
+            </div>
+            <div id="change-refund-body">
+              <p className="font-headline text-light text-[14px] leading-relaxed mb-4">
+                <strong>{changeConfirm.affectedCount} athlete{changeConfirm.affectedCount === 1 ? " has" : "s have"}</strong> already
+                paid to enter. Changing the date, time, location or event type means each of them can withdraw for a
+                <strong> full refund, including the booking fee</strong>
+                {changeConfirm.fullRefundUntil ? <> until <strong>{formatDeadline(changeConfirm.fullRefundUntil)}</strong></> : null}.
+              </p>
+              <dl className="rounded-xl border border-dark-lighter bg-dark-light p-4 mb-4 grid gap-2" data-testid="change-refund-diff">
+                {changeConfirm.changes.map((c) => (
+                  <div key={c.field} className="grid sm:grid-cols-[120px_1fr] gap-1 sm:gap-3 text-[13px]">
+                    <dt className="font-headline text-[11px] uppercase tracking-widest text-amber-300">{c.label}</dt>
+                    <dd className="min-w-0 break-words">
+                      <span className="text-muted line-through">{describeChangeValue(c.field, c.from)}</span>
+                      <span className="text-muted-dark mx-2" aria-hidden>→</span>
+                      <span className="sr-only"> changes to </span>
+                      <span className="text-light">{describeChangeValue(c.field, c.to)}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <ul className="text-[13px] text-muted-light leading-relaxed mb-6 list-disc pl-5 grid gap-1">
+                <li>Refunds they claim come out of your payout, booking fee included.</li>
+                <li>Athletes who enter after this change are on your normal refund policy.</li>
+                <li>We&apos;ll email registered athletes the details of the change.</li>
+                <li>The change and the original details are kept in this event&apos;s change history.</li>
+              </ul>
+            </div>
+            {apiError && (
+              <div className="mb-4 px-4 py-3 rounded-md bg-red-400/10 border border-red-400/20 text-red-300 font-headline text-[13px]">{apiError}</div>
+            )}
+            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+              <button onClick={() => setChangeConfirm(null)} disabled={saving}
+                className="font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-3 rounded-md border border-dark-lighter text-light hover:border-primary/40 transition-colors disabled:opacity-50">
+                Keep original details
+              </button>
+              <button onClick={confirmMaterialChange} disabled={saving}
+                className="font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-3 rounded-md border border-red-400/40 bg-red-400/10 text-red-200 hover:bg-red-400/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving ? "Saving…" : "Save and offer refunds"}
               </button>
             </div>
           </div>

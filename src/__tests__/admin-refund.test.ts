@@ -78,7 +78,7 @@ describe("admin refund route", () => {
   it("expands the charge so the transfer and application fee can be read", async () => {
     await refund();
     expect(mocks.retrievePaymentIntent).toHaveBeenCalledWith("pi_1", {
-      expand: ["latest_charge"],
+      expand: ["latest_charge", "latest_charge.transfer"],
     });
   });
 

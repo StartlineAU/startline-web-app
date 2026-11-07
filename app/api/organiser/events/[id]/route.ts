@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { getEventCoords } from "@/lib/australia-coords";
@@ -11,7 +13,14 @@ import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus, type PersistedEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { takesPayments } from "@/lib/event-approval";
-import { organiserCanEditEvent, organiserEditBlockedMessage } from "@/lib/event-edit-policy";
+import {
+  isLiveEventStatus, organiserCanEditEvent, organiserEditBlockedMessage,
+} from "@/lib/event-edit-policy";
+import {
+  FULL_REFUND_WINDOW_DAYS, MATERIAL_FIELD_GROUPS, baselineChanges, diffEventFields,
+  ensureBaseline, entitledRegistrationsWhere, fullRefundDeadline, materialChanges, recordEventChange,
+} from "@/lib/event-change-log";
+import { notifyEventChange } from "@/lib/notify-event-change";
 
 export async function GET(
   _req: NextRequest,
@@ -29,13 +38,38 @@ export async function GET(
     const event = await prisma.event.findUnique({ where: { id } });
     if (!event) return NextResponse.json({ error: "Not found." }, { status: 404 });
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    return NextResponse.json(event);
+
+    // What the wizard needs to warn before an edit rather than after it: how
+    // many paid entrants a date, time, location or type change would affect.
+    const entitledCount = event.status === "DRAFT"
+      ? 0
+      : await prisma.registration.count({ where: entitledRegistrationsWhere(id) });
+
+    return NextResponse.json({
+      ...event,
+      editContext: {
+        entitledCount,
+        materialFields: MATERIAL_FIELD_GROUPS,
+        fullRefundWindowDays: FULL_REFUND_WINDOW_DAYS,
+      },
+    });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 }
 
-// PATCH /api/organiser/events/[id] — update an existing draft
+const REQUIRED_ON_SUBMIT = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
+
+// PATCH /api/organiser/events/[id] — edit an event the organiser may still edit
+// (see lib/event-edit-policy.ts). Every edit after the event first leaves DRAFT
+// is written to the event change log in the same transaction as the edit.
+//
+// A material change (date, time, location or event type) to an event with paid
+// entrants gives each of them a full-refund entitlement. That costs the
+// organiser money, so the first attempt is refused with
+// MATERIAL_CHANGE_CONFIRM_REQUIRED and the list of what would change; the
+// wizard shows it and resends with `acknowledgeChangeRefunds: true`. Checking
+// on the server means no client can skip the warning.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -47,7 +81,8 @@ export async function PATCH(
   const parsedParams = idParams.safeParse(await params);
   if (!parsedParams.success) return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   const { id } = parsedParams.data;
-  const parsedBody = eventPayloadSchema.safeParse(await req.json());
+  const raw: unknown = await req.json().catch(() => null);
+  const parsedBody = eventPayloadSchema.safeParse(raw);
   if (!parsedBody.success) {
     return NextResponse.json(
       { error: parsedBody.error.issues[0]?.message ?? "Invalid input." },
@@ -56,15 +91,11 @@ export async function PATCH(
   }
   const body = parsedBody.data;
   const { submit, ...data } = body;
+  const acknowledged =
+    !!raw && typeof raw === "object" && (raw as Record<string, unknown>).acknowledgeChangeRefunds === true;
 
   try {
-    const existing = await prisma.event.findUnique({
-      where:  { id },
-      select: {
-        organiserId: true, status: true, title: true, registrationType: true, waves: true,
-        eventDate: true, endDate: true, startTime: true, endTime: true, state: true,
-      },
-    });
+    const existing = await prisma.event.findUnique({ where: { id } });
 
     if (!existing)
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
@@ -83,12 +114,16 @@ export async function PATCH(
         { status: 409 },
       );
 
+    // Judge required fields on the event as it will be once written. A partial
+    // payload (the event page's "Submit for review" sends only `submit`) keeps
+    // every saved value, so it must not be refused for fields it left out.
     if (submit) {
-      const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
-      for (const field of required) {
-        if (!data[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
+      const provided = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+      const merged = { ...existing, ...provided } as Record<string, unknown>;
+      for (const field of REQUIRED_ON_SUBMIT) {
+        if (!merged[field]) return NextResponse.json({ error: `${field} is required.` }, { status: 400 });
       }
-      if (data.registrationType === "external" && !data.registrationUrl) {
+      if (merged.registrationType === "external" && !merged.registrationUrl) {
         return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
       }
     }
@@ -108,10 +143,12 @@ export async function PATCH(
 
     // A draft can still auto-publish. An event already in review stays there,
     // and a rejected event re-enters review on resubmission rather than
-    // bypassing the decision that rejected it. Saving without submitting keeps
-    // the event where it is; it must never demote a pending or rejected event
-    // back to DRAFT.
-    const nextStatus: PersistedEventStatus = !submit
+    // bypassing the decision that rejected it. A live event stays live: an
+    // edit never sends it back to review or takes it off sale. Saving without
+    // submitting keeps the event where it is; it must never demote a pending,
+    // rejected or live event back to DRAFT.
+    const live = isLiveEventStatus(currentStatus);
+    const nextStatus: PersistedEventStatus = !submit || live
       ? currentStatus
       : existing.status === "PENDING" || existing.status === "REJECTED"
         ? "PENDING"
@@ -128,52 +165,124 @@ export async function PATCH(
     });
     const lifecycleStatus = effectiveEventStatus({ status: nextStatus, ...times });
 
+    // Fields the payload leaves out are not written. That used to be true of
+    // every field except cap and the map pin, which a partial save wiped.
+    const coords = data.city && data.state ? getEventCoords(data.city, data.state) : null;
+    const fields = {
+      title:             data.title             ?? undefined,
+      discipline:        data.discipline        ?? undefined,
+      description:       data.description       ?? undefined,
+      eventDate:         data.eventDate         ?? undefined,
+      endDate:           data.endDate !== undefined ? data.endDate : undefined,
+      startTime:         data.startTime         ?? undefined,
+      endTime:           data.endTime           ?? undefined,
+      venue:             data.venue             ?? undefined,
+      address:           data.address           ?? undefined,
+      city:              data.city              ?? undefined,
+      state:             data.state             ?? undefined,
+      latitude:          data.latitude          ?? (coords ? coords[0] : undefined),
+      longitude:         data.longitude         ?? (coords ? coords[1] : undefined),
+      format:            data.format            ?? undefined,
+      level:             data.level             ?? undefined,
+      categories:        (data.categories ?? undefined) as Prisma.InputJsonValue | undefined,
+      cap:               data.cap !== undefined ? data.cap : undefined,
+      minAge:            data.minAge            ?? undefined,
+      waves:             (data.waves ?? undefined) as Prisma.InputJsonValue | undefined,
+      inclusions:        data.inclusions        ?? undefined,
+      extras:            data.extras            ?? undefined,
+      activations:       data.activations       ?? undefined,
+      refundTiers:       data.refundTiers       ?? undefined,
+      refundPolicy:      data.refundPolicy      ?? undefined,
+      registrationType:  data.registrationType  ?? undefined,
+      feeStructure:      data.feeStructure      ?? undefined,
+      registrationUrl:   data.registrationUrl   ?? undefined,
+      accessibilityInfo: data.accessibilityInfo ?? undefined,
+      coverImageUrl:     data.coverImageUrl     ?? undefined,
+      informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
+      photos:            Array.isArray(data.photos) ? data.photos : undefined,
+    };
+
+    // ── Change log and the material-change handshake ──────────────────────
+    // Drafts have no audience, so their edits are not logged. The edit that
+    // takes an event out of DRAFT writes the baseline: the "original
+    // information". Every edit after that writes the fields it changed.
+    const wasDraft = existing.status === "DRAFT";
+    const leavingDraft = wasDraft && lifecycleStatus !== "DRAFT";
+    const changes = wasDraft
+      ? []
+      : diffEventFields(existing as unknown as Record<string, unknown>, fields as Record<string, unknown>);
+    const material = materialChanges(changes);
+
+    const refundUntil = fullRefundDeadline(new Date(), times.startsAtUtc);
+    const entitledCount = material.length > 0
+      ? await prisma.registration.count({ where: entitledRegistrationsWhere(id) })
+      : 0;
+
+    if (entitledCount > 0 && !acknowledged) {
+      return NextResponse.json(
+        {
+          error: "This change gives registered athletes a full refund. Confirm to save it.",
+          code: "MATERIAL_CHANGE_CONFIRM_REQUIRED",
+          changes: material,
+          affectedCount: entitledCount,
+          fullRefundUntil: refundUntil.toISOString(),
+        },
+        { status: 409 },
+      );
+    }
+
     // Only a rename reassigns the slug; every other edit leaves it alone so links
     // already in the wild keep resolving, and skips the lookup entirely.
     const renamed = data.title !== undefined && data.title !== existing.title;
+    const changeId = randomUUID();
 
+    // One transaction per attempt: the edit, the entitlement and the log row
+    // land together or not at all. withUniqueSlug retries a slug clash with a
+    // fresh transaction, so a rolled-back attempt leaves nothing behind.
     const runUpdate = (slug: string | undefined) =>
-      prisma.event.update({
-      where: { id },
-      data: {
-        slug,
-        ...times,
-        title:             data.title             ?? undefined,
-        discipline:        data.discipline        ?? undefined,
-        description:       data.description       ?? undefined,
-        eventDate:         data.eventDate         ?? undefined,
-        endDate:           data.endDate !== undefined ? data.endDate : undefined,
-        startTime:         data.startTime         ?? undefined,
-        endTime:           data.endTime           ?? undefined,
-        venue:             data.venue             ?? undefined,
-        address:           data.address           ?? undefined,
-        city:              data.city              ?? undefined,
-        state:             data.state             ?? undefined,
-        latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
-        longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),
-        format:            data.format            ?? undefined,
-        level:             data.level             ?? undefined,
-        categories:        data.categories        ?? undefined,
-        cap:               data.cap               ?? null,
-        minAge:            data.minAge            ?? undefined,
-        waves:             data.waves             ?? undefined,
-        inclusions:        data.inclusions        ?? undefined,
-        extras:            data.extras            ?? undefined,
-        activations:       data.activations       ?? undefined,
-        refundTiers:       data.refundTiers       ?? undefined,
-        refundPolicy:      data.refundPolicy      ?? undefined,
-        registrationType:  data.registrationType  ?? undefined,
-        feeStructure:      data.feeStructure      ?? undefined,
-        registrationUrl:   data.registrationUrl   ?? undefined,
-        accessibilityInfo: data.accessibilityInfo ?? undefined,
-        coverImageUrl:     data.coverImageUrl     ?? undefined,
-        informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
-        photos:            Array.isArray(data.photos) ? data.photos : undefined,
-        status:            lifecycleStatus,
-      },
+      prisma.$transaction(async (tx) => {
+        const updated = await tx.event.update({
+          where: { id },
+          data: { slug, ...times, ...fields, status: lifecycleStatus },
+        });
+
+        let affectedCount = 0;
+        if (material.length > 0) {
+          // Everyone entered at this moment gains (or, after a second change,
+          // renews) the entitlement. Entries made later never match.
+          const granted = await tx.registration.updateMany({
+            where: entitledRegistrationsWhere(id),
+            data: { fullRefundUntil: refundUntil, fullRefundChangeId: changeId },
+          });
+          affectedCount = granted.count;
+        }
+
+        if (!wasDraft && changes.length > 0) {
+        await ensureBaseline(tx, existing as unknown as Parameters<typeof ensureBaseline>[1], session.verified);
+      }
+      if (leavingDraft || changes.length > 0) {
+          await recordEventChange(tx, {
+            id: changeId,
+            eventId: id,
+            eventTitle: updated.title,
+            source: "ORGANISER",
+            kind: leavingDraft ? "BASELINE" : "EDIT",
+            changedById: session.sub,
+            changedByEmail: auth.actorEmail ?? session.email,
+            organiserVerified: session.verified,
+            statusAtChange: currentStatus,
+            changes: leavingDraft
+              ? baselineChanges(updated as unknown as Record<string, unknown>)
+              : changes,
+            affectedCount,
+            fullRefundUntil: affectedCount > 0 ? refundUntil : null,
+          });
+        }
+
+        return { updated, affectedCount };
       });
 
-    const updated = renamed
+    const { updated, affectedCount } = renamed
       ? await withUniqueSlug(data.title!, runUpdate, { excludeId: id })
       : await runUpdate(undefined);
 
@@ -182,7 +291,7 @@ export async function PATCH(
     );
 
     // Only a draft can auto-publish, so this is the moment it goes live.
-    if (nextStatus === "APPROVED") {
+    if (wasDraft && nextStatus === "APPROVED") {
       // Awaited, not fired and forgotten: Amplify's compute freezes the
       // container once the response is returned, so a floating promise is
       // dropped at random. A notify failure still must not fail the publish.
@@ -208,10 +317,25 @@ export async function PATCH(
         .catch((err) => console.error("Admin review notify failed:", err));
     }
 
+    // Entrants are told what changed and how to claim. Admins are told when an
+    // unverified organiser changes a live event, since nobody reviews that
+    // edit before athletes see it.
+    if (material.length > 0 && (affectedCount > 0 || (live && !session.verified))) {
+      await notifyEventChange({
+        eventId: updated.id,
+        changeId,
+        changes: material,
+        fullRefundUntil: refundUntil,
+        notifyEntrants: affectedCount > 0,
+        notifyAdmins: live && !session.verified,
+      }).catch((err) => console.error("Event change notify failed:", err));
+    }
+
     return NextResponse.json({
       id:     updated.id,
       status: updated.status,
-      ...(submit && !abnOk ? { abnRequired: true, notice: ABN_REQUIRED_MESSAGE } : {}),
+      ...(affectedCount > 0 ? { affectedCount, fullRefundUntil: refundUntil.toISOString() } : {}),
+      ...(submit && !abnOk && !live ? { abnRequired: true, notice: ABN_REQUIRED_MESSAGE } : {}),
     });
   } catch (err) {
     console.error("Event update error:", err);

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import AdminEventReviewBar from "@/components/admin/AdminEventReviewBar";
 import EventDetailView from "@/components/event/EventDetailView";
+import EventChangeHistory from "@/components/event/EventChangeHistory";
 import { getAdminSession } from "@/lib/amplify-server";
 import { approvalBlocker } from "@/lib/event-approval";
 import { getEventDetail } from "@/lib/event-detail";
@@ -62,6 +63,9 @@ export default async function AdminEventPreviewPage({ params }: { params: Promis
         rejectionReason={review.rejectionReason}
       />
       <EventDetailView data={detail} hideBackLink />
+      <div className="max-w-[900px] mx-auto px-4 sm:px-6 py-10">
+        <EventChangeHistory eventId={review.id} apiBase="/api/admin" />
+      </div>
     </main>
   );
 }

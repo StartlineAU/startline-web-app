@@ -224,6 +224,7 @@ model Event {
   registrations Registration[]
   savedEvents   SavedEvent[]
   startWaveRows StartWave[]
+  changes       EventChange[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -444,7 +445,7 @@ model Registration {
 
   // Money is stored in integer cents (AUD) to avoid float rounding.
   amountCents      Int    @default(0) // ticket price paid by the athlete
-  platformFeeCents Int    @default(0) // Startline fee (3% + $1) on this entry
+  platformFeeCents Int    @default(0) // Startline fee (3.95% + $1.45) on this entry
   feeStructure     String @default("athlete") // "athlete" | "organiser"
 
   status                RegistrationStatus @default(CONFIRMED)
@@ -458,6 +459,24 @@ model Registration {
   refundAmountCents Int?
   refundRequestedAt DateTime?
   refundOutsidePolicy Boolean @default(false)
+  // NORMAL follows the event's refund tiers; FULL returns everything the athlete
+  // paid, platform fee included, because the organiser changed the event.
+  refundType     RefundType?
+  stripeRefundId String?
+
+  // Set on every paid entry that existed when the organiser made a material
+  // change (date, time, location or event type). Until this moment the athlete
+  // can claim a FULL refund. Entries made after the change never get it.
+  fullRefundUntil    DateTime?
+  fullRefundChangeId String?
+  // A FULL refund is paid for by the organiser, booking fee included (#490).
+  // Owed is what the organiser bears for this entry: everything the athlete got
+  // back, when the charge transferred funds to them. Recovered is what has been
+  // reversed from the event's transfers so far, starting with this entry's own.
+  // The event payout is reduced by owed minus this entry's own share either
+  // way, so an unfinished recovery never overpays the organiser.
+  organiserRecoveryOwedCents Int @default(0)
+  organiserRecoveredCents    Int @default(0)
 
   // Set when the athlete confirms attendance via the check-in QR.
   checkedInAt DateTime?
@@ -479,6 +498,11 @@ model Registration {
   @@index([startWaveId])
   @@index([stripePaymentIntentId])
   @@map("registrations")
+}
+
+enum RefundType {
+  NORMAL
+  FULL
 }
 
 enum RegistrationStatus {
@@ -599,6 +623,52 @@ enum UserNotificationType {
   // Sent to the athlete once an admin has actually processed their refund, so the
   // loop closes instead of leaving them wondering.
   REFUND_PROCESSED
+  // The organiser changed the date, time, location or type of an event the
+  // athlete had already entered, which entitles them to a full refund.
+  EVENT_CHANGED
+}
+
+// ─── Event change log ─────────────────────────────────────────────────────────
+// Append-only record of what an event said and when, so a dispute about the
+// original details can be settled from the record rather than from memory.
+// The first row for an event is its baseline: every field as it stood when it
+// first left DRAFT. Every later edit, by the organiser or by an admin, adds a
+// row with the fields it changed. Nothing updates or deletes these rows, and
+// they outlive the event itself (eventId goes null, eventTitle stays).
+model EventChange {
+  id         String            @id @default(uuid())
+  eventId    String?
+  event      Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  eventTitle String
+  source     EventChangeSource
+  // BASELINE for the first published snapshot, EDIT for everything after.
+  kind           EventChangeKind
+  changedById    String? // Organiser id or Admin id, per source
+  changedByEmail String?
+  organiserVerified Boolean @default(false)
+  statusAtChange    EventStatus
+  // [{ field, label, from, to, material }]
+  changes Json
+  // True when a date, time, location or event type field changed.
+  material        Boolean   @default(false)
+  // Paid entries that gained a full-refund entitlement from this change.
+  affectedCount   Int       @default(0)
+  fullRefundUntil DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([eventId, createdAt])
+  @@map("event_changes")
+}
+
+enum EventChangeSource {
+  ORGANISER
+  ADMIN
+  SYSTEM
+}
+
+enum EventChangeKind {
+  BASELINE
+  EDIT
 }
 
 model WaitlistSubscriber {

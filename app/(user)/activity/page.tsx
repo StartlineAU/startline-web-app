@@ -51,7 +51,19 @@ type RegMeta = {
   outsidePolicy: boolean;
   policyLines: string[];
   daysUntilEvent: number;
+  ticketCents: number;
+  feeCents: number;
+  /** Open while the organiser's change entitles this entry to everything back. */
+  fullRefund: FullRefundOffer | null;
 };
+
+type FullRefundOffer = {
+  until: string;
+  change: { changedAt: string; lines: { label: string; from: string; to: string }[] } | null;
+};
+
+const formatOfferDeadline = (iso: string) =>
+  new Date(iso).toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
 const money = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
 
@@ -316,6 +328,24 @@ function RegisteredCard({
                 </div>
               ) : (
                 <>
+                  {meta.fullRefund && (
+                    <div className="mb-3 rounded-lg border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2.5" data-testid="event-changed-notice">
+                      <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                        This event has changed
+                      </p>
+                      {meta.fullRefund.change?.lines.map((line) => (
+                        <p key={line.label} className="text-[12px] text-muted-light leading-relaxed mt-1">
+                          {line.label}: <span className="line-through text-muted">{line.from}</span>{" "}
+                          <span aria-hidden>→</span><span className="sr-only">now</span>{" "}
+                          <span className="text-light">{line.to}</span>
+                        </p>
+                      ))}
+                      <p className="text-[12px] text-muted leading-relaxed mt-1">
+                        Your entry still stands. If the new details don&apos;t work for you, withdraw by{" "}
+                        {formatOfferDeadline(meta.fullRefund.until)} for a full refund, booking fee included.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
@@ -341,7 +371,7 @@ function RegisteredCard({
                       onClick={() => onRequestRefund(meta)}
                       className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
                     >
-                      Withdraw my entry
+                      {meta.fullRefund ? "Withdraw for a full refund" : "Withdraw my entry"}
                     </button>
                   </div>
                 </>
@@ -470,7 +500,8 @@ export default function ActivityPage() {
           entry.id === refundTarget.meta.id
             ? {
                 ...entry,
-                status: "REFUND_REQUESTED" as const,
+                status: (json.status === "REFUNDED" ? "REFUNDED" : "REFUND_REQUESTED") as RegStatus,
+                fullRefund: null,
                 refundAmountCents: json.refundAmountCents ?? entry.refundAmountCents ?? 0,
                 refundPercent: json.refundPercent ?? entry.refundPercent ?? 0,
                 outsidePolicy: json.outsidePolicy ?? entry.outsidePolicy ?? false,
@@ -563,6 +594,9 @@ export default function ActivityPage() {
               outsidePolicy: r.outsidePolicy ?? false,
               policyLines: r.policyLines ?? [],
               daysUntilEvent: r.daysUntilEvent ?? 0,
+              ticketCents: r.ticketCents ?? 0,
+              feeCents: r.feeCents ?? 0,
+              fullRefund: r.fullRefund ?? null,
             };
             (meta[r.eventId] ??= []).push(entry);
             regIds.push(r.eventId);
@@ -800,6 +834,31 @@ export default function ActivityPage() {
                       your spot back to the event and takes you out of the start list.
                     </p>
                   </>
+                ) : refundTarget.meta.fullRefund ? (
+                  <>
+                    <p className="font-headline text-[20px] font-black italic tracking-tighter text-primary">
+                      {money(refundTarget.meta.paidCents)} back
+                    </p>
+                    <p className="text-[13px] text-muted leading-relaxed mt-1">
+                      The organiser changed this event after you entered, so you get everything you paid back:
+                    </p>
+                    <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-[13px]" data-testid="full-refund-breakdown">
+                      <dt className="text-muted">Entry</dt>
+                      <dd className="text-light text-right">{money(refundTarget.meta.ticketCents)}</dd>
+                      {refundTarget.meta.feeCents > 0 && (
+                        <>
+                          <dt className="text-muted">Booking fee</dt>
+                          <dd className="text-light text-right">{money(refundTarget.meta.feeCents)}</dd>
+                        </>
+                      )}
+                      <dt className="text-light font-bold border-t border-dark-lighter pt-1">Refund</dt>
+                      <dd className="text-primary font-bold text-right border-t border-dark-lighter pt-1">{money(refundTarget.meta.paidCents)}</dd>
+                    </dl>
+                    <p className="text-[12px] text-muted-dark leading-relaxed mt-2">
+                      Available until {formatOfferDeadline(refundTarget.meta.fullRefund.until)}. The refund is
+                      issued as soon as you confirm.
+                    </p>
+                  </>
                 ) : refundTarget.meta.outsidePolicy ? (
                   <>
                     <p className="font-headline text-[13px] font-bold uppercase tracking-widest text-amber-300">
@@ -827,7 +886,7 @@ export default function ActivityPage() {
                 )}
               </div>
 
-              {!freeRefundTarget && (
+              {!freeRefundTarget && !refundTarget.meta.fullRefund && (
                 <>
                   <div>
                     <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark mb-1">
@@ -848,7 +907,9 @@ export default function ActivityPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRefundTarget(null)}>Keep my spot</Button>
             <Button onClick={confirmRefund} disabled={refunding}>
-              {refunding ? "Withdrawing…" : "Withdraw my entry"}
+              {refunding
+                ? "Withdrawing…"
+                : refundTarget?.meta.fullRefund ? "Withdraw and refund in full" : "Withdraw my entry"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -409,6 +409,58 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
   (`User.notifyFollowedOrganiserEvents`). Entry emails are always sent.
 - Section fetches must ignore a reply that arrives after cleanup: in development the effect runs twice, and the late reply overwrites what was typed or toggled.
 
+## Editing events
+
+Organisers can edit an event while it is DRAFT, PENDING, REJECTED or live
+(APPROVED). Once it is underway or archived it is locked
+(`lib/event-edit-policy.ts`). An edit to a live event keeps it live: it is not
+sent back to review, and followers are not notified again.
+
+**Change log.** `EventChange` is an append-only record of what each event said
+and when, kept so that a dispute about the original details can be settled
+from the record. The rules live in `lib/event-change-log.ts`:
+
+| When | Row |
+|---|---|
+| An event first leaves DRAFT (at creation or by a later edit) | `BASELINE`: every populated field |
+| Any later edit, by the organiser or an admin | `EDIT`: each changed field with its from and to values |
+| The first edit to an event published before the log existed | a `SYSTEM` `BASELINE`, written before that edit's own row |
+
+Each row is written in the same transaction as the edit it describes. No route
+updates or deletes a row, and the rows outlive the event (`eventId` is set to
+null and `eventTitle` is kept). Organisers and admins see the log in the Change
+history panel on the event page (`/api/{organiser,admin}/events/[id]/changes`).
+
+**Material changes.** A change to the date, times, venue, address, city, state,
+discipline or format is material. Material text is compared ignoring case and
+spacing. When a material change hits an event with paid CONFIRMED entries:
+
+1. `PATCH` answers `409 MATERIAL_CHANGE_CONFIRM_REQUIRED` with the diff, writing
+   nothing. The wizard shows the warning and resends with
+   `acknowledgeChangeRefunds: true`. The check is on the server, so no client
+   can skip it.
+2. Every one of those entries gets `fullRefundUntil`, which is 14 days or the
+   event start, whichever is sooner. A later change renews it. Entries made
+   after the change never get it.
+3. Entrants get an in-app notice and an email. If the organiser is unverified,
+   admins are emailed too, because nobody reviews the edit before athletes see
+   it.
+
+**Full refunds.** While `fullRefundUntil` is open, the athlete's refund request
+returns everything they paid, booking fee included, and is issued immediately
+(`lib/issue-entry-refund.ts`). If Stripe fails, the request stays frozen as
+`FULL` for an admin to finish. The organiser pays for the whole refund:
+
+- The refund itself moves no transfer.
+- Startline then reverses exact amounts from the event's transfers, starting
+  with the entry's own.
+- `lib/payout.ts` takes the booking fee off the payout whether or not that
+  recovery has finished, so the organiser is never overpaid.
+- Anything not yet recovered is `organiserRecoveryOwedCents -
+  organiserRecoveredCents` on the registration.
+
+NORMAL refunds are unchanged.
+
 ## Design system
 
 **`design/design.md`** is authoritative.

@@ -167,7 +167,8 @@ test.describe("admin event editing", () => {
     await expect(page.getByPlaceholder(/Apex Throwdown/i)).toHaveValue(originalTitle);
 
     await page.getByPlaceholder(/Apex Throwdown/i).fill(newTitle);
-    await page.getByRole("button", { name: /save draft/i }).click();
+    // A published event has no draft: its quick save keeps it live (#490).
+    await page.getByRole("button", { name: /save changes/i }).click();
     await page.waitForURL("**/admin/events**", { timeout: 20000 });
 
     // Still APPROVED, with the new title. Assert it on the event itself: the

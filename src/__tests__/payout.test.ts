@@ -185,9 +185,19 @@ describe("getPayoutEligibleEvents", () => {
     expect(events[0].netCents).toBe(19460);
     expect(mocks.event.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
+        // Confirmed entries, plus the FULL refunds whose booking fee the
+        // organiser bears (#490).
         registrations: {
-          where: { status: "CONFIRMED" },
-          select: { amountCents: true, platformFeeCents: true, feeStructure: true },
+          where: {
+            OR: [
+              { status: "CONFIRMED" },
+              { status: "REFUNDED", refundType: "FULL" },
+            ],
+          },
+          select: {
+            amountCents: true, platformFeeCents: true, feeStructure: true,
+            status: true, refundType: true, organiserRecoveryOwedCents: true,
+          },
         },
       }),
     }));
