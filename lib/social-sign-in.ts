@@ -1,4 +1,5 @@
 import { signInWithRedirect } from "aws-amplify/auth";
+import { isNative } from "./capacitor";
 import type { SocialProvider } from "./social-providers";
 
 // The provider list is shared with the server-side account-linking routes.
@@ -15,12 +16,19 @@ const RETRIED_KEY   = "startline_social_retried";
 // Leaves the page for Google or Apple. The return path and provider sit in
 // sessionStorage so /auth/callback can send the person back where they were,
 // or retry once when Cognito has just linked the account (see callback page).
+// Inside the mobile app the hosted page opens in the system browser instead,
+// because Google refuses OAuth in embedded webviews (lib/native-oauth.ts).
 export async function startSocialSignIn(provider: SocialProvider, returnTo?: string) {
   try {
     sessionStorage.setItem(RETURN_TO_KEY, returnTo ?? window.location.pathname + window.location.search);
     sessionStorage.setItem(PROVIDER_KEY, provider);
   } catch {
     // Storage blocked: the person lands on the home page instead.
+  }
+  if (isNative()) {
+    const { startNativeSocialSignIn } = await import("./native-oauth");
+    await startNativeSocialSignIn(provider);
+    return;
   }
   await signInWithRedirect({ provider: AMPLIFY_PROVIDER[provider] });
 }

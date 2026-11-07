@@ -13,9 +13,15 @@ export const metadata: Metadata = {
 export default async function AuthCallbackPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; error_description?: string }>;
+  searchParams: Promise<{
+    error?: string; error_description?: string;
+    native?: string; code?: string; state?: string;
+  }>;
 }) {
-  const { error, error_description } = await searchParams;
+  const { error, error_description, native, code, state } = await searchParams;
   const failure = error ? `${error} ${error_description ?? ""}`.trim() : null;
-  return <SocialCallback failure={failure} />;
+  // The mobile app's sign-in returns through its own URL scheme and lands here
+  // with native=1; the code is swapped by lib/native-oauth.ts, not Amplify.
+  const nativeCode = native === "1" && code && state ? { code, state } : null;
+  return <SocialCallback failure={failure} nativeCode={nativeCode} />;
 }
