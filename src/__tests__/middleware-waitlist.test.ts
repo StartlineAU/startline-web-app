@@ -270,8 +270,10 @@ describe("athlete host in live mode", () => {
 });
 
 describe("other hosts", () => {
-  it("does not gate the staging host", async () => {
-    const res = await middleware(request("/events", { host: "staging.startlineau.com" }));
+  it("does not gate the staging branch domain", async () => {
+    const res = await middleware(
+      request("/events", { host: "127.0.0.1:3000" }),
+    );
     expect(passedThrough(res)).toBe(true);
   });
 

@@ -177,6 +177,14 @@ Cross-portal links must go through `lib/portal-domains.ts` so they stay relative
 on single-host deployments and absolute in production; hardcoding either shape
 breaks one of the two (issue #302).
 
+Staging is the Amplify branch domain (`<branch>.<app-id>.amplifyapp.com`). No
+`staging.` subdomain has ever been delegated, so do not add one to code, tests
+or docs. Terraform resolves the staging `site_url` from the branch domain, and
+the deploy workflow reports it in the deployment status. Tests never name a
+deployed host: use `localhost` so a unit test cannot depend on, or point at,
+a real environment. Treating a `staging.` host as production is what silently
+disabled bot checks there.
+
 Cognito cookies are scoped to `.startlineau.com` in `components/AmplifyProvider.tsx`
 so a single sign-in covers all three portals. Host-only cookies left the
 organiser portal permanently signed out in production.
