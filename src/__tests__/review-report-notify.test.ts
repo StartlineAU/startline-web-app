@@ -88,8 +88,8 @@ describe("buildReviewReportedEmail", () => {
     reportCount: 3,
   };
 
-  it("escapes user-written text and links to the reported queue", () => {
-    const { html } = buildReviewReportedEmail(data, { environment: "prod", siteUrl: "https://startlineau.com" });
+  it("escapes user-written text and links to the reported queue", async () => {
+    const { html } = await buildReviewReportedEmail(data, { environment: "prod", siteUrl: "https://startlineau.com" });
 
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
@@ -98,8 +98,8 @@ describe("buildReviewReportedEmail", () => {
     expect(html).toContain('href="https://admin.startlineau.com/admin/reviews?filter=reported"');
   });
 
-  it("tags staging so a test report is not mistaken for a real one", () => {
-    const { subject } = buildReviewReportedEmail(data, { environment: "staging" });
+  it("tags staging so a test report is not mistaken for a real one", async () => {
+    const { subject } = await buildReviewReportedEmail(data, { environment: "staging" });
     expect(subject).toBe("[Staging] Review reported: <script>x</script> (3 reports)");
   });
 });
