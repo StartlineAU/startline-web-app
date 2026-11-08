@@ -21,7 +21,7 @@ import { getLifecyclePhase } from "@/lib/event-status";
 import { useApiResource } from "@/hooks/useApiResource";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
-const BOT_CHECK_HOSTS = ["startlineau.com", "www.startlineau.com", "staging.startlineau.com"];
+const BOT_CHECK_HOSTS = ["startlineau.com", "www.startlineau.com"];
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";

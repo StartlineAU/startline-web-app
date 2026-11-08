@@ -84,10 +84,10 @@ describe("buildEventSubmittedForReviewEmail", () => {
   it("tags staging so a test listing is not mistaken for a real one", () => {
     const { subject, html } = buildEventSubmittedForReviewEmail(
       { eventId: "evt-1", eventTitle: "Hugos", organiserName: "Hugo Publications" },
-      { environment: "staging", siteUrl: "https://main.d2tvgx9pzd2e81.amplifyapp.com" },
+      { environment: "staging", siteUrl: "http://localhost:3000" },
     );
     expect(subject).toBe("[Staging] New event to review: Hugos");
-    expect(html).toContain('href="https://main.d2tvgx9pzd2e81.amplifyapp.com/admin/events/evt-1"');
+    expect(html).toContain('href="http://localhost:3000/admin/events/evt-1"');
   });
 
   it("escapes organiser-supplied text and surfaces an approval blocker", () => {

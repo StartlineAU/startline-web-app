@@ -38,7 +38,13 @@ jobs:
         shell: bash
         run: |
           APP_ID=$(aws amplify list-apps --query "apps[?name=='startline'].appId" --output text)
+          # Staging is served from the branch domain, not a staging subdomain,
+          # so the deployment environment URL needs the app's default domain.
+          DEFAULT_DOMAIN=$(aws amplify get-app \
+            --app-id "$APP_ID" \
+            --query 'app.defaultDomain' --output text)
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
+          echo "default_domain=$DEFAULT_DOMAIN" >> "$GITHUB_OUTPUT"
 
       - name: Start deployment
         id: deployment
@@ -105,7 +111,13 @@ jobs:
           script: |
             const state = '${{ job.status }}' === 'success' ? 'success' : 'failure'
             const env = process.env.ENV
-            const url = env === 'prod' ? 'https://startlineau.com' : `https://${env}.startlineau.com`
+            const branch = process.env.AMPLIFY_BRANCH
+            const defaultDomain = '${{ steps.amplify-app.outputs.default_domain }}'
+            // Production has the apex domain. Staging is the Amplify branch
+            // domain; there is no staging subdomain.
+            const url = env === 'prod'
+              ? 'https://startlineau.com'
+              : (defaultDomain ? `https://${branch}.${defaultDomain}` : undefined)
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,

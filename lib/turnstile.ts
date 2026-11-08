@@ -26,7 +26,6 @@ export function turnstileConfigured(): boolean {
 const BOT_CHECK_HOSTS = new Set([
   "startlineau.com",
   "www.startlineau.com",
-  "staging.startlineau.com",
 ]);
 
 function botCheckApplicable(req?: NextRequest): boolean {
