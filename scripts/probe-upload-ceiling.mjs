@@ -15,15 +15,24 @@
  * layer replied.
  *
  * Usage:
- *   node scripts/probe-upload-ceiling.mjs                 # staging
- *   node scripts/probe-upload-ceiling.mjs <base-url>      # any environment
- *   pnpm upload:probe
+ *   node scripts/probe-upload-ceiling.mjs <base-url>
+ *   PROBE_BASE_URL=https://... pnpm upload:probe
+ *
+ * The base URL is required. This repo is public, so no deployed environment is
+ * committed as a default; ask a maintainer for the staging URL.
  *
  * Exits non-zero if the fix has regressed.
  */
 
-const STAGING = "https://main.d2tvgx9pzd2e81.amplifyapp.com";
-const base = (process.argv[2] || STAGING).replace(/\/$/, "");
+const base = (process.argv[2] || process.env.PROBE_BASE_URL || "").replace(/\/$/, "");
+if (!base) {
+  console.error(
+    "Pass the environment to probe:\n" +
+      "  node scripts/probe-upload-ceiling.mjs <base-url>\n" +
+      "  PROBE_BASE_URL=https://... pnpm upload:probe",
+  );
+  process.exit(1);
+}
 
 // Either side of the measured ceiling, plus the size that was reported failing.
 const SIZES_KB = [1024, 4096, 4400, 4608, 8192];
