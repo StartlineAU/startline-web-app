@@ -1,17 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { organiserLogin } from "./helpers";
+import { ensureDatabaseUrl, organiserLogin } from "./helpers";
 
-// Prefer the CI-provided DATABASE_URL; locally read it from .env.local (which
-// may not exist in CI). Only DATABASE_URL is read — loading the whole file
-// would leak NEXT_PUBLIC_* vars (e.g. a real Cognito pool id) into the shared
-// worker env and make auth.spec's hasCognito guard run its real-Cognito tests.
-if (!process.env.DATABASE_URL && existsSync(".env.local")) {
-  const dbUrl = readFileSync(".env.local", "utf8").match(/^DATABASE_URL=(.+)$/m)?.[1]?.trim();
-  if (dbUrl) process.env.DATABASE_URL = dbUrl;
-}
+// Reads only DATABASE_URL (loading the whole file would leak NEXT_PUBLIC_* vars
+// into the shared worker env) and strips dotenv quotes, which left Prisma
+// trying to reach a host called "base" when the value was quoted.
+ensureDatabaseUrl();
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
