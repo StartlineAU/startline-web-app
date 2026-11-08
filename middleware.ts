@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { JWTPayload } from "jose";
-import { USER_DOMAIN, ORGANISER_DOMAIN, ADMIN_DOMAIN } from "@/lib/portal-domains";
+import {
+  USER_DOMAIN,
+  ORGANISER_DOMAIN,
+  ADMIN_DOMAIN,
+  portalsAreSplit,
+} from "@/lib/portal-domains";
 import { isLegalPath, publicSiteMode, servesWhileWaitlisted } from "@/lib/site-mode";
 
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
@@ -81,6 +86,18 @@ function withPrivateNoStore(res: NextResponse): NextResponse {
   return res;
 }
 
+// Only the production portals may be indexed. A branch deployment and every PR
+// preview serve the whole app — including the staging database — from a host
+// that is neither of them, so a crawlable staging build ends up in search
+// results as a second copy of the product. The header covers every response,
+// not just the ones Next renders a <meta> tag for.
+function withNoIndexOnNonProduction(res: NextResponse, host: string): NextResponse {
+  if (!portalsAreSplit(host)) {
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  return res;
+}
+
 /** The waitlist page, or its legal-page copy, for a gated host. */
 function waitlistResponse(req: NextRequest, pathname: string): NextResponse {
   if (isLegalPath(pathname)) {
@@ -127,7 +144,7 @@ async function routeSingleHost(req: NextRequest, pathname: string): Promise<Next
   return NextResponse.next();
 }
 
-export async function middleware(req: NextRequest) {
+async function handleRequest(req: NextRequest) {
   if (process.env.NODE_ENV === "development") {
     const bypass = req.cookies.get("__e2e_bypass")?.value;
     if (bypass) return NextResponse.next();
@@ -236,6 +253,11 @@ export async function middleware(req: NextRequest) {
   }
 
   return routeSingleHost(req, pathname);
+}
+
+export async function middleware(req: NextRequest) {
+  const res = await handleRequest(req);
+  return withNoIndexOnNonProduction(res, req.headers.get("host") ?? "");
 }
 
 export const config = {

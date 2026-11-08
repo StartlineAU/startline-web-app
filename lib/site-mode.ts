@@ -72,6 +72,10 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // Public by design: they list the app's identifiers, nothing else.
   "/.well-known/apple-app-site-association",
   "/.well-known/assetlinks.json",
+  // A crawler asks for this before it asks for anything else. A waitlist rewrite
+  // answered it with HTML, which is not a valid robots.txt, and the file is
+  // public by definition. The route itself tells a branch deployment to stay out.
+  "/robots.txt",
 ]);
 
 // Prefixes, matched on a path segment so `/checkin` does not also open

@@ -180,11 +180,17 @@ breaks one of the two (issue #302).
 
 Staging is the Amplify branch domain (`<branch>.<app-id>.amplifyapp.com`). No
 `staging.` subdomain has ever been delegated, so do not add one to code, tests
-or docs. Terraform resolves the staging `site_url` from the branch domain, and
-the deploy workflow reports it in the deployment status. Tests never name a
-deployed host: use `localhost` so a unit test cannot depend on, or point at,
-a real environment. Treating a `staging.` host as production is what silently
-disabled bot checks there.
+or docs. Terraform resolves the staging `site_url` from the branch domain.
+Tests never name a deployed host: use `localhost` so a unit test cannot depend
+on, or point at, a real environment. Treating a `staging.` host as production is
+what silently disabled bot checks there.
+
+This repository is public, so the staging host is never committed: the upload
+probe requires its base URL, and the deploy workflow publishes an environment
+URL only for prod. Staging and PR previews answer with
+`X-Robots-Tag: noindex, nofollow` and a `Disallow: /` robots.txt
+(`middleware.ts`, `app/robots.ts`), because a branch deployment serves a
+crawlable copy of the product against the staging database.
 
 Cognito cookies are scoped to `.startlineau.com` in `components/AmplifyProvider.tsx`
 so a single sign-in covers all three portals. Host-only cookies left the
