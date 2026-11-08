@@ -65,7 +65,9 @@ next-env.d.ts
 .dev-run.log
 .playwright-cli/
 
-# opencode internal state
+# opencode internal state and local config
 .opencode/
+opencode.json
+opencode.jsonc
 skills-lock.json
 screenshots/
