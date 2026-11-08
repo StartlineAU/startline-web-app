@@ -122,10 +122,11 @@ file**, well below the 10 MB `lib/upload-limits.ts` allows. Anything in between
 is rejected by the platform before the handler runs, and the reply is a **413
 with a zero-length body**, so the client cannot even read a reason off it.
 
-`pnpm upload:probe [base-url]` measures this against a deployed environment
-(staging by default). It needs no credentials: an unauthenticated POST that
-reaches the handler answers `401` with JSON, so the status says which layer
-replied. Measured on staging:
+`pnpm upload:probe <base-url>` measures this against a deployed environment,
+and the URL is required: this repo is public, so no environment is committed as
+a default. It needs no credentials: an unauthenticated POST that reaches the
+handler answers `401` with JSON, so the status says which layer replied.
+Measured on staging:
 
 ```
  4.30 MB -> 401  reached our handler
