@@ -361,9 +361,87 @@ export async function sendEventChangedEmail(to: string, data: EventChangedEmailD
   await resend.emails.send({ from: getEmailFrom(), to, subject, html });
 }
 
+// ── Edit of a published event waiting for review (admins) ─────────────────────
+// An unverified organiser cannot change a live listing in place. Admins get
+// this while the approved version stays on sale.
+export interface EventEditPendingReviewEmailData {
+  eventId: string;
+  eventTitle: string;
+  organiserName: string;
+  changes: EventChangeLine[];
+}
+
+export function buildEventEditPendingReviewEmail(
+  data: EventEditPendingReviewEmailData,
+  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
+) {
+  const tag = environment === "staging" ? "[Staging] " : "";
+  const eventUrl = adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl);
+  return {
+    subject: `${tag}Event edit to review: ${data.eventTitle}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">${tag}Needs review</p>
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
+        <p style="font-size:15px;line-height:1.6">
+          <strong>${escapeHtml(data.organiserName)}</strong> is not verified and edited this published event.
+          The listing athletes see is unchanged until you approve it.
+        </p>
+        <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
+        <a href="${eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Review the edit
+        </a>
+      </div>
+    `,
+  };
+}
+
+export async function sendEventEditPendingReviewEmails(
+  recipients: string[],
+  data: EventEditPendingReviewEmailData,
+) {
+  await sendToEachAdmin(recipients, buildEventEditPendingReviewEmail(data), "event edit review notification");
+}
+
+export async function sendEventEditDecisionEmail(
+  to: string,
+  data: { eventTitle: string; approved: boolean; reason?: string; eventUrl: string },
+) {
+  const resend = getResend();
+  if (!resend) return;
+  const { subject, html } = buildEventEditDecisionEmail(data);
+  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
+}
+
+export function buildEventEditDecisionEmail(data: {
+  eventTitle: string;
+  approved: boolean;
+  reason?: string;
+  eventUrl: string;
+}) {
+  return {
+    subject: data.approved
+      ? `Your changes to ${data.eventTitle} are live`
+      : `Changes to ${data.eventTitle} were not approved`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
+        <p style="font-size:15px;line-height:1.6">
+          ${data.approved
+            ? "Startline approved your changes. They are now the live listing. The event was not taken off sale while they waited."
+            : `Startline did not approve your changes, so the live listing is unchanged.${data.reason ? ` Reason: ${escapeHtml(data.reason)}` : ""}`}
+        </p>
+        <a href="${data.eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Open the event
+        </a>
+      </div>
+    `,
+  };
+}
+
 // ── Event changed by an unverified organiser (admins) ─────────────────────────
-// Unverified organisers' events are reviewed before they go live, but an edit to
-// a live event goes straight out. Admins get this so it can be checked after.
+// Kept for a change that is already public. Unpublished edits use the review
+// email above instead.
 export interface EventChangedAdminEmailData {
   eventId: string;
   eventTitle: string;

@@ -19,6 +19,7 @@ import {
 import RaceManagementPanel from "@/components/organiser/RaceManagementPanel";
 import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
 import EventChangeHistory from "@/components/event/EventChangeHistory";
+import PendingRevisionNotice from "@/components/event/PendingRevisionNotice";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
@@ -757,6 +758,7 @@ function EventDashboardInner({
           {/* Live events open here rather than on the event page, so the
               record of what changed has to be here too. */}
           <div className="mt-8">
+            <PendingRevisionNotice eventId={id} />
             <EventChangeHistory eventId={id} apiBase="/api/organiser" />
           </div>
           </>

@@ -15,6 +15,8 @@ import {
   ensureBaseline, materialChanges, recordEventChange,
 } from "@/lib/event-change-log";
 import { notifyEventChange } from "@/lib/notify-event-change";
+import { supersedePendingRevision } from "@/lib/event-revision";
+import { notifyOrganiserRevisionSuperseded } from "@/lib/notify-event-revision";
 
 const AUDIT_FIELDS = [
   "title", "discipline", "description", "eventDate", "endDate", "startTime", "endTime",
@@ -179,7 +181,11 @@ export async function PATCH(
     }
 
     const changeId = randomUUID();
+    let superseded = 0;
     const { updated, affectedCount } = await prisma.$transaction(async (tx) => {
+      // A direct admin edit is the review. A queued organiser revision would
+      // otherwise apply on top of it and overwrite this change.
+      superseded = await supersedePendingRevision(tx, id);
       const updated = await tx.event.update({
         where: { id },
         data: { ...times, ...fields, status: nextStatus },
@@ -218,6 +224,11 @@ export async function PATCH(
 
       return { updated, affectedCount };
     });
+
+    if (superseded > 0) {
+      await notifyOrganiserRevisionSuperseded(id)
+        .catch((err) => console.error("Revision superseded notify failed:", err));
+    }
 
     if (affectedCount > 0) {
       await notifyEventChange({

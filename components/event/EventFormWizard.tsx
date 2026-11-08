@@ -48,12 +48,19 @@ interface EditContext {
   /** Paid, confirmed entrants a material change would entitle to a full refund. */
   entitledCount: number;
   fullRefundWindowDays: number;
+  /** Published event owned by an unverified organiser: a save waits for review. */
+  needsReview?: boolean;
+  pendingRevision?: {
+    lines: { label: string; from: string; to: string }[];
+    payload: Record<string, unknown>;
+  } | null;
 }
 
 interface PendingChangeConfirm {
   changes: { field: string; label: string; from: unknown; to: unknown }[];
   affectedCount: number;
   fullRefundUntil: string | null;
+  awaitsReview: boolean;
   payload: Record<string, unknown>;
   asDraft: boolean;
   redirectTo?: string;
@@ -121,6 +128,8 @@ export default function EventFormWizard({
 
   const isLive = eventStatus === "APPROVED" || eventStatus === "IN_PROGRESS";
   const isEditingPublished = !!eventId && eventStatus !== null && eventStatus !== "DRAFT";
+  const awaitsReview = isLive && editContext?.needsReview === true;
+  const saveLabel = awaitsReview ? "Submit for review" : "Save changes";
 
   const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
 
@@ -150,6 +159,9 @@ export default function EventFormWizard({
         setEventId(id);
         setEventStatus(typeof e.status === "string" ? e.status : null);
         setEditContext(e.editContext ?? null);
+        // The form edits the queued revision, not the live row, so a later save
+        // does not drop changes that are still waiting for review.
+        if (e.editContext?.pendingRevision?.payload) Object.assign(e, e.editContext.pendingRevision.payload);
         originalFields.current = { inclusions: e.inclusions, activations: e.activations, accessibilityInfo: e.accessibilityInfo };
         setForm({
           title:             e.title          ?? "",
@@ -330,6 +342,7 @@ export default function EventFormWizard({
           changes: Array.isArray(data.changes) ? data.changes : [],
           affectedCount: data.affectedCount ?? 0,
           fullRefundUntil: data.fullRefundUntil ?? null,
+          awaitsReview: data.awaitsReview === true,
           payload,
           asDraft,
           redirectTo,
@@ -388,14 +401,16 @@ export default function EventFormWizard({
     { h: <>When and where <span className="text-primary">do athletes race?</span></>, sub: "Athletes search by city, state and date." },
     { h: <>Tickets, pricing <span className="text-primary">and registration.</span></>, sub: "Add ticket categories, pricing and per-category wave start times." },
     { h: <>Images and <span className="text-primary">event description.</span></>, sub: "Upload your cover image and write the event description." },
-    isLive
+    awaitsReview
+      ? { h: <>Review, then <span className="text-primary">submit for review.</span></>, sub: "The live listing stays as it is until Startline approves these changes." }
+      : isLive
       ? { h: <>Review, then <span className="text-primary">save changes.</span></>, sub: "Changes go live as soon as you save, and every change is kept in the event's change history." }
       : eventStatus === "REJECTED"
         ? { h: <>Review, then <span className="text-primary">resubmit.</span></>, sub: "Your event goes back to Startline for review." }
         : { h: <>Review, then <span className="text-primary">hit publish.</span></>, sub: "Nothing is live yet. You can still edit after publishing, and every change is recorded." },
   ];
 
-  const finalLabel = isLive ? "Save changes" : eventStatus === "REJECTED" ? "Resubmit" : eventStatus === "PENDING" ? "Save & keep in review" : "Publish listing";
+  const finalLabel = awaitsReview ? "Submit for review" : isLive ? "Save changes" : eventStatus === "REJECTED" ? "Resubmit" : eventStatus === "PENDING" ? "Save & keep in review" : "Publish listing";
 
   if (loadError) {
     return (
@@ -485,6 +500,15 @@ export default function EventFormWizard({
                   <p className="font-headline text-light mt-3 max-w-2xl text-[14px]">{STEP_HEADINGS[step].sub}</p>
                 </div>
 
+                {editContext?.pendingRevision && (
+                  <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4" data-testid="pending-revision-notice">
+                    <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-amber-300">Changes awaiting review</p>
+                    <p className="text-[13px] text-muted-light leading-relaxed mt-1">
+                      The live listing is unchanged. Saving again replaces what is waiting.
+                    </p>
+                  </div>
+                )}
+
                 {(step === 0 || step === 1) && isEditingPublished && (editContext?.entitledCount ?? 0) > 0 && (
                   <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 flex items-start gap-3" data-testid="change-refund-notice">
                     <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
@@ -495,6 +519,7 @@ export default function EventFormWizard({
                       Changing the {step === 0 ? "discipline or format" : "date, times or location"} lets each of them
                       withdraw for a full refund, booking fee included, for {editContext!.fullRefundWindowDays} days
                       or until the event starts. You&apos;ll see exactly what changes before anything is saved.
+                      {awaitsReview && " The listing stays as it is until Startline approves the edit, and the refund starts then."}
                     </p>
                   </div>
                 )}
@@ -535,7 +560,7 @@ export default function EventFormWizard({
                   {!(isEditingPublished && step === STEPS.length - 1) && (
                     <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
                       className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
-                      {isEditingPublished ? "Save changes" : "Save draft"}
+                      {isEditingPublished ? saveLabel : "Save draft"}
                     </button>
                   )}
                   <button onClick={next} disabled={saving || (step === STEPS.length - 1 && (!confirmed || missing.length > 0))}
@@ -573,7 +598,7 @@ export default function EventFormWizard({
               <button onClick={async () => { await submitToApi(true, form.title.trim() || "Untitled draft", leaveTo ?? undefined); closeLeavePrompt(); }}
                 disabled={saving}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                {saving ? "Saving…" : <><Check className="w-4 h-4" /> {isEditingPublished ? "Save changes & leave" : <>Save draft &amp; leave</>}</>}
+                {saving ? "Saving…" : <><Check className="w-4 h-4" /> {isEditingPublished ? <>{saveLabel} &amp; leave</> : <>Save draft &amp; leave</>}</>}
               </button>
               <button onClick={() => router.push(leaveTo ?? returnPath() ?? cancelRedirect)}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:text-light hover:border-primary/40 transition-colors">
@@ -625,7 +650,11 @@ export default function EventFormWizard({
               <ul className="text-[13px] text-muted-light leading-relaxed mb-6 list-disc pl-5 grid gap-1">
                 <li>Refunds they claim come out of your payout, booking fee included.</li>
                 <li>Athletes who enter after this change are on your normal refund policy.</li>
-                <li>We&apos;ll email registered athletes the details of the change.</li>
+                <li>
+                  {changeConfirm.awaitsReview
+                    ? "Athletes are told, and the refund opens, only once Startline approves. Anyone who pays before then is included."
+                    : "We'll email registered athletes the details of the change."}
+                </li>
                 <li>The change and the original details are kept in this event&apos;s change history.</li>
               </ul>
             </div>

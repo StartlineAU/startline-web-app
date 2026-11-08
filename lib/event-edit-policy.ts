@@ -7,6 +7,9 @@
  * entries gives those athletes a full refund entitlement, which the organiser
  * must confirm before the change saves. See `lib/event-change-log.ts`.
  *
+ * An unverified organiser's edit of a published event does not go live. It
+ * waits as a revision until an admin approves it (`lib/event-revision.ts`).
+ *
  * Events that are underway or finished stay locked: race day is not the time
  * to move the start line.
  */

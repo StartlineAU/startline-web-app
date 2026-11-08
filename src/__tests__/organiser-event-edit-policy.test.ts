@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   registrationCount: vi.fn(),
   registrationUpdateMany: vi.fn(),
   notifyEventChange: vi.fn(),
+  notifyAdminsEventEditPending: vi.fn(),
+  eventRevisionUpdateMany: vi.fn(),
+  eventRevisionCreate: vi.fn(),
 }));
 
 vi.mock("@/lib/organiser-api-auth", () => ({
@@ -30,11 +33,15 @@ vi.mock("@/lib/prisma", () => {
     organiser: { findUnique: mocks.organiserFindUnique },
     eventChange: { create: mocks.eventChangeCreate, findFirst: mocks.eventChangeFindFirst },
     registration: { count: mocks.registrationCount, updateMany: mocks.registrationUpdateMany },
+    eventRevision: { updateMany: mocks.eventRevisionUpdateMany, create: mocks.eventRevisionCreate },
   };
   client.$transaction = (fn: (tx: unknown) => unknown) => fn(client);
   return { default: client };
 });
 vi.mock("@/lib/notify-event-change", () => ({ notifyEventChange: mocks.notifyEventChange }));
+vi.mock("@/lib/notify-event-revision", () => ({
+  notifyAdminsEventEditPending: mocks.notifyAdminsEventEditPending,
+}));
 vi.mock("@/lib/event-scheduler", () => ({
   syncEventSchedules: mocks.syncEventSchedules,
   cancelEventSchedules: vi.fn(),
@@ -104,6 +111,9 @@ beforeEach(() => {
   mocks.registrationCount.mockResolvedValue(0);
   mocks.registrationUpdateMany.mockResolvedValue({ count: 0 });
   mocks.notifyEventChange.mockResolvedValue(undefined);
+  mocks.notifyAdminsEventEditPending.mockResolvedValue(undefined);
+  mocks.eventRevisionUpdateMany.mockResolvedValue({ count: 0 });
+  mocks.eventRevisionCreate.mockResolvedValue({ id: "rev-1" });
   mocks.withUniqueSlug.mockImplementation(async (_title: string, write: (slug: string) => unknown) => write("updated-title"));
   mocks.eventUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
     ...baseEvent,
@@ -272,18 +282,41 @@ describe("PATCH /api/organiser/events/[id] — change log and full-refund handsh
     }));
   });
 
-  it("alerts admins when an unverified organiser makes a material change to a live event", async () => {
-    mocks.session.mockResolvedValue({ sub: "org-1", verified: false, role: "OWNER" });
+  it("queues an unverified organiser's edit of a live event instead of publishing it", async () => {
+    mocks.session.mockResolvedValue({ sub: "org-1", verified: false, role: "OWNER", email: "jade@example.com" });
     mocks.eventFindUnique.mockResolvedValue(liveEvent);
 
     const res = await patch({ venue: "Princes Park" });
 
     expect(res.status).toBe(200);
-    expect(mocks.eventUpdate.mock.calls[0][0].data.status).toBe("APPROVED");
-    expect(mocks.notifyEventChange).toHaveBeenCalledWith(expect.objectContaining({
-      notifyEntrants: false,
-      notifyAdmins: true,
+    expect(await res.json()).toMatchObject({ pendingReview: true, status: "APPROVED" });
+    expect(mocks.eventUpdate).not.toHaveBeenCalled();
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.eventChangeCreate).not.toHaveBeenCalled();
+    expect(mocks.eventRevisionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        eventId: "evt-1",
+        material: true,
+        payload: expect.objectContaining({ venue: "Princes Park" }),
+      }),
     }));
+    expect(mocks.notifyAdminsEventEditPending).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: "evt-1",
+    }));
+    expect(mocks.notifyEventChange).not.toHaveBeenCalled();
+  });
+
+  it("still asks an unverified organiser to confirm a material change before queueing it", async () => {
+    mocks.session.mockResolvedValue({ sub: "org-1", verified: false, role: "OWNER" });
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+    mocks.registrationCount.mockResolvedValue(4);
+
+    const res = await patch({ venue: "Princes Park" });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).awaitsReview).toBe(true);
+    expect(mocks.eventRevisionCreate).not.toHaveBeenCalled();
+    expect(mocks.eventUpdate).not.toHaveBeenCalled();
   });
 
   it("logs a non-material edit without asking for confirmation", async () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   eventChangeFindFirst: vi.fn(),
   registrationCount: vi.fn(),
   registrationUpdateMany: vi.fn(),
+  eventRevisionUpdateMany: vi.fn(),
 }));
 
 vi.mock("@/lib/amplify-server", () => ({
@@ -25,11 +26,13 @@ vi.mock("@/lib/prisma", () => {
     },
     eventChange: { create: mocks.eventChangeCreate, findFirst: mocks.eventChangeFindFirst },
     registration: { count: mocks.registrationCount, updateMany: mocks.registrationUpdateMany },
+    eventRevision: { updateMany: mocks.eventRevisionUpdateMany },
   };
   client.$transaction = (fn: (tx: unknown) => unknown) => fn(client);
   return { default: client };
 });
 vi.mock("@/lib/notify-event-change", () => ({ notifyEventChange: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/notify-event-revision", () => ({ notifyOrganiserRevisionSuperseded: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
 vi.mock("@/lib/event-scheduler", () => ({
   syncEventSchedules: mocks.syncEventSchedules,
@@ -73,6 +76,7 @@ beforeEach(() => {
   mocks.eventChangeFindFirst.mockResolvedValue({ id: "baseline" });
   mocks.registrationCount.mockResolvedValue(0);
   mocks.registrationUpdateMany.mockResolvedValue({ count: 0 });
+  mocks.eventRevisionUpdateMany.mockResolvedValue({ count: 0 });
   mocks.syncEventSchedules.mockResolvedValue(undefined);
   mocks.writeAuditLog.mockResolvedValue(undefined);
   mocks.eventUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {

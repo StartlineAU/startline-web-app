@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { organiserLogin, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, adminLogin, ensureDatabaseUrl } from "./helpers";
 
 // Editing a published event (#490): every edit is logged, and changing the
 // date, time, location or type of an event with paid entrants offers those
@@ -243,5 +243,73 @@ test.describe("editing a published event", () => {
       data: { venue: "Somewhere else", acknowledgeChangeRefunds: true },
     });
     expect(res.status()).toBe(409);
+  });
+});
+
+test.describe("unverified organiser edits a published event", () => {
+  const EVENT_ID = "e2e-unverified-edit";
+
+  test("the listing stays live until an admin approves the edit", async ({ page }) => {
+    const organiser = await prisma.organiser.findFirst({
+      where: { orgName: "Coastal Fitness Collective" },
+      select: { id: true, verified: true },
+    });
+    expect(organiser, "seeded Coastal organiser should exist").toBeTruthy();
+
+    await prisma.registration.deleteMany({ where: { eventId: EVENT_ID } });
+    await prisma.eventChange.deleteMany({ where: { eventId: EVENT_ID } });
+    await prisma.eventRevision.deleteMany({ where: { eventId: EVENT_ID } });
+    await prisma.event.deleteMany({ where: { id: EVENT_ID } });
+    await prisma.organiser.update({ where: { id: organiser!.id }, data: { verified: false } });
+
+    const startsAtUtc = new Date(`${eventDate}T07:00:00+11:00`);
+    await prisma.event.create({
+      data: {
+        id: EVENT_ID,
+        organiserId: organiser!.id,
+        status: "APPROVED",
+        title: "E2E Unverified Edit",
+        discipline: "running",
+        eventDate,
+        startTime: "07:00",
+        endTime: "10:00",
+        timeZone: "Australia/Melbourne",
+        startsAtUtc,
+        endsAtUtc: new Date(startsAtUtc.getTime() + 3 * 60 * 60 * 1000),
+        venue: "Albert Park",
+        city: "Melbourne",
+        state: "vic",
+        format: "individual",
+        level: "moderate",
+        categories: ["10K"],
+        waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
+        coverImageUrl: "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1600&q=80",
+        photos: [],
+      },
+    });
+
+    try {
+      await page.context().addCookies([
+        { name: "__e2e_bypass", value: "user", domain: "localhost", path: "/", sameSite: "Lax" },
+      ]);
+      const queued = await page.request.patch(`/api/organiser/events/${EVENT_ID}`, {
+        data: { venue: "Princes Park" },
+      });
+      expect(queued.status()).toBe(200);
+      expect((await queued.json()).pendingReview).toBe(true);
+      expect((await prisma.event.findUnique({ where: { id: EVENT_ID } }))?.venue).toBe("Albert Park");
+
+      await adminLogin(page);
+      const approved = await page.request.post(`/api/admin/events/${EVENT_ID}/revision`, {
+        data: { action: "approve" },
+      });
+      expect(approved.status()).toBe(200);
+      expect((await prisma.event.findUnique({ where: { id: EVENT_ID } }))?.venue).toBe("Princes Park");
+    } finally {
+      await prisma.organiser.update({ where: { id: organiser!.id }, data: { verified: organiser!.verified } });
+      await prisma.eventRevision.deleteMany({ where: { eventId: EVENT_ID } });
+      await prisma.eventChange.deleteMany({ where: { eventId: EVENT_ID } });
+      await prisma.event.deleteMany({ where: { id: EVENT_ID } });
+    }
   });
 });

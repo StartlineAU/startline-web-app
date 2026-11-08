@@ -25,6 +25,11 @@ export interface AdminEventReviewBarProps {
   /** From approvalBlocker(); approve stays disabled while this is set. */
   blocker: string | null;
   rejectionReason: string | null;
+  pendingRevision?: {
+    material: boolean;
+    acknowledged: boolean;
+    lines: { field: string; label: string; from: string; to: string }[];
+  } | null;
 }
 
 /**
@@ -39,6 +44,7 @@ export default function AdminEventReviewBar({
   submittedAt,
   blocker,
   rejectionReason,
+  pendingRevision,
 }: AdminEventReviewBarProps) {
   const router = useRouter();
   const [approving,  setApproving]  = useState(false);
@@ -72,6 +78,22 @@ export default function AdminEventReviewBar({
   const handleReject = async (reason: string) => {
     setRejecting(true);
     try { await review({ action: "reject", reason }); } finally { setRejecting(false); }
+  };
+
+  const reviewRevision = async (body: { action: "approve" } | { action: "reject"; reason: string }) => {
+    setError("");
+    const res = await fetch(`/api/admin/events/${eventId}/revision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      setRejectOpen(false);
+      router.refresh();
+      return;
+    }
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    setError(data.error ?? `Failed to ${body.action} the edit.`);
   };
 
   const s = STATUS_STYLE[status];
@@ -138,6 +160,59 @@ export default function AdminEventReviewBar({
           </div>
         </div>
 
+        {pendingRevision && status !== "PENDING" && (
+          <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/[0.08] px-4 py-3" data-testid="admin-pending-revision">
+            <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-amber-300">
+              Edit awaiting review
+            </p>
+            <p className="text-[13px] text-amber-200 mt-1">
+              The live listing is unchanged until you approve this.
+              {pendingRevision.material
+                ? pendingRevision.acknowledged
+                  ? " Approving a date, time, location or type change gives paid entrants a full refund."
+                  : " The organiser has not confirmed the refund cost, so this cannot be approved until they save again."
+                : ""}
+            </p>
+            <dl className="mt-2 grid gap-1">
+              {pendingRevision.lines.map((line) => (
+                <div key={line.field} className="text-[13px] text-light">
+                  <span className="text-amber-300">{line.label}: </span>
+                  <span className="text-muted line-through">{line.from}</span>
+                  <span className="text-muted-dark mx-1">→</span>
+                  {line.to}
+                </div>
+              ))}
+            </dl>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setApproving(true); reviewRevision({ action: "approve" }).finally(() => setApproving(false)); }}
+                disabled={approving || rejecting}
+                className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-2 rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Check className="w-3.5 h-3.5" /> Approve changes
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRejectOpen((o) => !o); setError(""); }}
+                disabled={approving || rejecting}
+                className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-red-500/30 text-red-400 px-3 py-2 rounded-md hover:bg-red-500/10 transition-colors disabled:opacity-40"
+              >
+                <X className="w-3.5 h-3.5" /> Reject changes
+              </button>
+            </div>
+            {rejectOpen && (
+              <div className="mt-3">
+                <RejectPanel
+                  onConfirm={(reason) => { setRejecting(true); reviewRevision({ action: "reject", reason }).finally(() => setRejecting(false)); }}
+                  onCancel={() => setRejectOpen(false)}
+                  loading={rejecting}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {status === "PENDING" && blocker && (
           <div className="mt-3 flex items-start gap-3 bg-amber-400/[0.08] border border-amber-400/20 rounded-lg px-4 py-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
@@ -167,7 +242,7 @@ export default function AdminEventReviewBar({
           </div>
         )}
 
-        {rejectOpen && (
+        {status === "PENDING" && rejectOpen && (
           <RejectPanel onConfirm={handleReject} onCancel={() => setRejectOpen(false)} loading={rejecting} />
         )}
       </div>

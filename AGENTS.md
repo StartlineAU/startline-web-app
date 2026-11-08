@@ -413,8 +413,14 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
 
 Organisers can edit an event while it is DRAFT, PENDING, REJECTED or live
 (APPROVED). Once it is underway or archived it is locked
-(`lib/event-edit-policy.ts`). An edit to a live event keeps it live: it is not
-sent back to review, and followers are not notified again.
+(`lib/event-edit-policy.ts`). A verified organiser's edit of a live event keeps
+it live: it is not sent back to review, and followers are not notified again.
+
+An unverified organiser's edit of a published event does not change the listing.
+It is stored as a pending `EventRevision` and an admin has to approve it
+(`lib/event-revision.ts`). The current offer stays on sale until then. A
+rejection leaves the live event untouched. Refund entitlements are written only
+when the revision is approved, not when the organiser saves.
 
 **Change log.** `EventChange` is an append-only record of what each event said
 and when, kept so that a dispute about the original details can be settled
@@ -442,9 +448,9 @@ spacing. When a material change hits an event with paid CONFIRMED entries:
 2. Every one of those entries gets `fullRefundUntil`, which is 14 days or the
    event start, whichever is sooner. A later change renews it. Entries made
    after the change never get it.
-3. Entrants get an in-app notice and an email. If the organiser is unverified,
-   admins are emailed too, because nobody reviews the edit before athletes see
-   it.
+3. Entrants get an in-app notice and an email. This happens when the change
+   becomes the public offer: immediately for a verified organiser, and only
+   after an admin approves a revision for an unverified one.
 
 **Full refunds.** While `fullRefundUntil` is open, the athlete's refund request
 returns everything they paid, booking fee included, and is issued immediately

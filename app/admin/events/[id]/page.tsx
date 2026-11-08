@@ -5,6 +5,7 @@ import EventDetailView from "@/components/event/EventDetailView";
 import EventChangeHistory from "@/components/event/EventChangeHistory";
 import { getAdminSession } from "@/lib/amplify-server";
 import { approvalBlocker } from "@/lib/event-approval";
+import { pendingRevision } from "@/lib/event-revision";
 import { getEventDetail } from "@/lib/event-detail";
 import prisma from "@/lib/prisma";
 
@@ -50,6 +51,7 @@ export default async function AdminEventPreviewPage({ params }: { params: Promis
 
   if (!detail || !review) notFound();
 
+  const revision = await pendingRevision(review.id).catch(() => null);
   const { organiser } = review;
 
   return (
@@ -61,6 +63,7 @@ export default async function AdminEventPreviewPage({ params }: { params: Promis
         submittedAt={formatSubmitted(review.createdAt)}
         blocker={approvalBlocker(review)}
         rejectionReason={review.rejectionReason}
+        pendingRevision={revision}
       />
       <EventDetailView data={detail} hideBackLink />
       <div className="max-w-[900px] mx-auto px-4 sm:px-6 py-10">

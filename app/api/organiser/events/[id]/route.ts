@@ -21,6 +21,10 @@ import {
   ensureBaseline, entitledRegistrationsWhere, fullRefundDeadline, materialChanges, recordEventChange,
 } from "@/lib/event-change-log";
 import { notifyEventChange } from "@/lib/notify-event-change";
+import { notifyAdminsEventEditPending } from "@/lib/notify-event-revision";
+import {
+  definedPayload, pendingRevision, publishedEditNeedsReview, queueEventRevision,
+} from "@/lib/event-revision";
 
 export async function GET(
   _req: NextRequest,
@@ -44,6 +48,7 @@ export async function GET(
     const entitledCount = event.status === "DRAFT"
       ? 0
       : await prisma.registration.count({ where: entitledRegistrationsWhere(id) });
+    const revision = event.status === "APPROVED" ? await pendingRevision(id) : null;
 
     return NextResponse.json({
       ...event,
@@ -51,6 +56,8 @@ export async function GET(
         entitledCount,
         materialFields: MATERIAL_FIELD_GROUPS,
         fullRefundWindowDays: FULL_REFUND_WINDOW_DAYS,
+        needsReview: publishedEditNeedsReview(session.verified, event.status),
+        pendingRevision: revision,
       },
     });
   } catch {
@@ -226,9 +233,31 @@ export async function PATCH(
           changes: material,
           affectedCount: entitledCount,
           fullRefundUntil: refundUntil.toISOString(),
+          awaitsReview: publishedEditNeedsReview(session.verified, currentStatus),
         },
         { status: 409 },
       );
+    }
+
+    // An unverified organiser's edit of a published event does not change the
+    // listing. It waits for an admin. Athletes keep seeing the last approved offer.
+    if (publishedEditNeedsReview(session.verified, currentStatus) && changes.length > 0) {
+      const revision = await queueEventRevision({
+        eventId: id,
+        payload: definedPayload(fields as Record<string, unknown>),
+        changes,
+        acknowledged: material.length === 0 || acknowledged,
+        submittedById: session.sub,
+        submittedByEmail: auth.actorEmail ?? session.email,
+      });
+      await notifyAdminsEventEditPending({ eventId: id, changes })
+        .catch((err) => console.error("Event edit review notify failed:", err));
+      return NextResponse.json({
+        id,
+        status: existing.status,
+        pendingReview: true,
+        revisionId: revision.id,
+      });
     }
 
     // Only a rename reassigns the slug; every other edit leaves it alone so links
@@ -317,9 +346,9 @@ export async function PATCH(
         .catch((err) => console.error("Admin review notify failed:", err));
     }
 
-    // Entrants are told what changed and how to claim. Admins are told when an
-    // unverified organiser changes a live event, since nobody reviews that
-    // edit before athletes see it.
+    // Entrants are told what changed and how to claim. An unverified organiser's
+    // edit never reaches here: it is queued for review above, and athletes are
+    // told only once an admin approves it.
     if (material.length > 0 && (affectedCount > 0 || (live && !session.verified))) {
       await notifyEventChange({
         eventId: updated.id,

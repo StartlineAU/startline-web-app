@@ -225,6 +225,7 @@ model Event {
   savedEvents   SavedEvent[]
   startWaveRows StartWave[]
   changes       EventChange[]
+  revisions     EventRevision[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -669,6 +670,42 @@ enum EventChangeSource {
 enum EventChangeKind {
   BASELINE
   EDIT
+}
+
+// A proposed edit to a published event that is not yet the public offer.
+// Unverified organisers cannot change a live listing in place: the revision
+// waits here, and the event row stays as last approved until an admin applies
+// it. One PENDING row per event (enforced by a partial unique index).
+enum EventRevisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUPERSEDED
+}
+
+model EventRevision {
+  id               String              @id @default(uuid())
+  eventId          String
+  event            Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  status           EventRevisionStatus @default(PENDING)
+  // Fields the edit would write. Keys left out are not a clear.
+  payload          Json
+  // Diff against the live event at submit time: [{ field, label, from, to, material }]
+  changes          Json
+  material         Boolean             @default(false)
+  // The organiser accepted the refund cost. Required before a material change
+  // with paid entrants can be applied.
+  acknowledged     Boolean             @default(false)
+  submittedById    String?
+  submittedByEmail String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([eventId, status])
+  @@map("event_revisions")
 }
 
 model WaitlistSubscriber {
