@@ -1,6 +1,7 @@
 import { PayoutAttemptStatus, PayoutStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
+import { entryOrganiserNetCents, type FeeSnapshot } from "@/lib/platform-fee";
 
 const PAYOUT_CURRENCY = "aud";
 
@@ -76,28 +77,15 @@ export type PayoutEligibleEvent = {
   netCents: number;
 };
 
-export interface PayoutRegistration {
-  amountCents: number;
-  platformFeeCents: number;
-  feeStructure: string;
-}
+export type PayoutRegistration = FeeSnapshot;
 
 /**
- * What the organiser's connected account actually holds for one entry.
- *
- * Checkout always takes the platform fee as an application fee, so the
- * organiser's balance is the ticket price when the athlete paid the fee on top,
- * and the ticket price minus the fee when the organiser absorbed it. Reading
- * platformFeeCents as part of the organiser's share would pay out money the
- * connected account never received (issue #251).
- *
- * An unrecognised structure is treated as organiser-absorbed, matching
- * calculateTotalWithFee: that is the safer direction when the snapshot is odd.
+ * What the organiser's connected account actually holds for one entry: the
+ * ticket price less any booking fee the organiser absorbed and less the Stripe
+ * processing fee (#470). See entryOrganiserNetCents.
  */
 export function registrationPayoutCents(registration: PayoutRegistration): number {
-  return registration.feeStructure === "athlete"
-    ? registration.amountCents
-    : Math.max(0, registration.amountCents - registration.platformFeeCents);
+  return entryOrganiserNetCents(registration);
 }
 
 /** Net payout for a set of confirmed entries, using each entry's own snapshot. */
@@ -172,7 +160,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       payoutOperation: { select: { status: true } },
       registrations: {
         where: { status: "CONFIRMED" },
-        select: { amountCents: true, platformFeeCents: true, feeStructure: true },
+        select: { amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true },
       },
     },
   });
@@ -294,7 +282,7 @@ async function loadEvent(eventId: string): Promise<PayoutEventRecord> {
       organiser: { select: { id: true, stripeAccountId: true } },
       registrations: {
         where: { status: "CONFIRMED" },
-        select: { amountCents: true, platformFeeCents: true, feeStructure: true },
+        select: { amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true },
       },
       payoutOperation: { select: operationSelect },
     },

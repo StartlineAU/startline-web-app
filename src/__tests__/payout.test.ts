@@ -154,6 +154,19 @@ describe("registrationPayoutCents", () => {
     expect(registrationPayoutCents(entry(100, 540, "organiser"))).toBe(0);
   });
 
+  // #470: the organiser absorbs Stripe's processing fee under both structures.
+  it("deducts the Stripe fee when the athlete paid the booking fee", () => {
+    expect(registrationPayoutCents({ ...entry(5000, 343, "athlete"), stripeFeeCents: 124 })).toBe(4876);
+  });
+
+  it("deducts the Stripe fee on top of an absorbed booking fee", () => {
+    expect(registrationPayoutCents({ ...entry(5000, 343, "organiser"), stripeFeeCents: 118 })).toBe(4539);
+  });
+
+  it("leaves entries paid before the change untouched", () => {
+    expect(registrationPayoutCents({ ...entry(5000, 343, "athlete"), stripeFeeCents: 0 })).toBe(5000);
+  });
+
   it("uses each entry's own snapshot in a mixed event", () => {
     expect(registrationsPayoutCents([
       entry(10000, 540, "athlete"),
@@ -187,7 +200,7 @@ describe("getPayoutEligibleEvents", () => {
       select: expect.objectContaining({
         registrations: {
           where: { status: "CONFIRMED" },
-          select: { amountCents: true, platformFeeCents: true, feeStructure: true },
+          select: { amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true },
         },
       }),
     }));

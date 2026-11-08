@@ -41,7 +41,7 @@ interface DashboardData {
   };
   payout: {
     registrationCount: number; lowestTicketPrice: number;
-    grossRevenue: number; platformFees: number;
+    grossRevenue: number; platformFees: number; stripeFees: number;
     estimatedPayout: number; feeStructure: string; note: string;
     isEstimate: boolean;
   };

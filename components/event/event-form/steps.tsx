@@ -18,7 +18,7 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
-import { takesPayments } from "@/lib/event-approval";
+import { ticketFeeBreakdown } from "@/lib/platform-fee";import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
@@ -351,10 +351,6 @@ export function WhenStep({ form, update }: { form: FormState; update: (p: Partia
  */
 
 
-export const STARTLINE_PCT  = 0.0395;
-export const STARTLINE_FLAT = 1.45;
-export const STRIPE_PCT     = 0.0175;
-export const STRIPE_FLAT    = 0.30;
 
 export function TicketsStep({ form, update }: { form: FormState; update: (p: Partial<FormState>) => void }) {
   const updateWave = (i: number, patch: Partial<Wave>) => {
@@ -459,19 +455,19 @@ export function TicketsStep({ form, update }: { form: FormState; update: (p: Par
                   {form.registrationType === "startline" && (() => {
                     const p = parseFloat(w.price);
                     if (!w.price || w.price === "0" || isNaN(p) || p <= 0) return null;
-                    const startlineFee = p * STARTLINE_PCT + STARTLINE_FLAT;
-                    const stripeFee    = p * STRIPE_PCT + STRIPE_FLAT;
-                    const athletePays  = form.feeStructure === "athlete" ? p + startlineFee : p;
-                    const youReceive   = form.feeStructure === "athlete" ? p - stripeFee : p - startlineFee - stripeFee;
-                    const fmt = (n: number) => `A$${n.toFixed(2)}`;
+                    // The same arithmetic checkout charges, so the preview
+                    // matches the real payout to the cent (#470).
+                    const fees = ticketFeeBreakdown(Math.round(p * 100), form.feeStructure);
+                    const fmt = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
                     return (
-                      <div className="mt-2 rounded-md bg-dark px-3 py-2.5 space-y-1">
+                      <div className="mt-2 rounded-md bg-dark px-3 py-2.5 space-y-1" data-testid="ticket-fee-preview">
                         {([
-                          { label: "Athlete pays",  value: fmt(athletePays),  muted: false, sub: null              },
-                          { label: "You receive",   value: fmt(youReceive),   muted: false, sub: "after Stripe fee" },
-                          { label: "Startline fee", value: fmt(startlineFee), muted: true,  sub: null              },
+                          { label: "Athlete pays",  value: fmt(fees.athletePaysCents),       muted: false, sub: null                },
+                          { label: "You receive",   value: fmt(fees.organiserReceivesCents), muted: false, sub: "after Stripe fee"  },
+                          { label: "Startline fee", value: fmt(fees.platformFeeCents),       muted: true,  sub: null                },
+                          { label: "Stripe fee",    value: fmt(fees.stripeFeeCents),         muted: true,  sub: "estimate, deducted from your payout" },
                         ] as const).map(r => (
-                          <div key={r.label} className="flex items-baseline justify-between">
+                          <div key={r.label} className="flex items-baseline justify-between" data-fee-row={r.label}>
                             <span className="font-headline text-[13px] uppercase tracking-widest text-light">
                               {r.label}{r.sub && <span className="ml-1.5 normal-case text-[11px] text-light">({r.sub})</span>}
                             </span>

@@ -1,4 +1,4 @@
-import { PLATFORM_FEE_FIXED_CENTS, PLATFORM_FEE_PERCENT } from "@/lib/platform-fee";
+import { PLATFORM_FEE_FIXED_CENTS, PLATFORM_FEE_PERCENT, STRIPE_FEE_FIXED_CENTS, STRIPE_FEE_PERCENT } from "@/lib/platform-fee";
 
 /**
  * The details the Terms of Service and Privacy Policy state about Startline
@@ -16,9 +16,12 @@ export const LEGAL_CONTACT_EMAIL = "admin@startlineau.com";
 /** Governing law and the forum for disputes (Terms of Service §9.1). */
 export const LEGAL_JURISDICTION = "Victoria";
 
-export const TERMS_LAST_UPDATED = "17 October 2026";
+export const TERMS_LAST_UPDATED = "8 November 2026";
 export const PRIVACY_LAST_UPDATED = "17 October 2026";
 export const COOKIES_LAST_UPDATED = "17 October 2026";
+
+/** The Stripe processing fee estimate organisers absorb, read from the rate checkout uses. */
+export const STRIPE_FEE_DESCRIPTION = `${(STRIPE_FEE_PERCENT * 100).toFixed(2).replace(/\.?0+$/, "")}% plus A$${(STRIPE_FEE_FIXED_CENTS / 100).toFixed(2)}`;
 
 /** The booking fee as the documents state it, read from the fee the checkout charges. */
 export const PLATFORM_FEE_DESCRIPTION = `${(PLATFORM_FEE_PERCENT * 100).toFixed(2).replace(/\.?0+$/, "")}% of the ticket price plus A$${(PLATFORM_FEE_FIXED_CENTS / 100).toFixed(2)}`;

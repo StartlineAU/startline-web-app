@@ -19,6 +19,11 @@ export interface PricedEntry {
   waveLabel: string | null;
   priceCents: number;
   platformFeeCents: number;
+  /**
+   * This entry's share of the Stripe processing fee the organiser absorbs
+   * (#470). Absent on the free path, where nothing is charged.
+   */
+  stripeFeeCents?: number;
 }
 
 /** The event fields needed to write and announce a registration. */
@@ -276,7 +281,7 @@ export async function insertConfirmedRegistrations(opts: {
     }
 
     await tx.registration.createMany({
-      data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents }, index) => {
+      data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, stripeFeeCents }, index) => {
         const expanded = expandCompactParticipant(participant);
         const email = normalizeEmail(participant.em);
         return {
@@ -299,6 +304,7 @@ export async function insertConfirmedRegistrations(opts: {
           waveLabel,
           amountCents: priceCents,
           platformFeeCents,
+          stripeFeeCents: stripeFeeCents ?? 0,
           feeStructure: event.feeStructure,
           status: "CONFIRMED" as const,
           stripePaymentIntentId,

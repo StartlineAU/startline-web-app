@@ -444,7 +444,8 @@ model Registration {
 
   // Money is stored in integer cents (AUD) to avoid float rounding.
   amountCents      Int    @default(0) // ticket price paid by the athlete
-  platformFeeCents Int    @default(0) // Startline fee (3% + $1) on this entry
+  platformFeeCents Int    @default(0) // Startline fee (3.95% + $1.45) on this entry
+  stripeFeeCents   Int    @default(0) // Stripe processing fee the organiser absorbs on this entry (#470)
   feeStructure     String @default("athlete") // "athlete" | "organiser"
 
   status                RegistrationStatus @default(CONFIRMED)

@@ -92,18 +92,24 @@ describe("organiser-dashboard helpers", () => {
           eventId: "a",
           amountCents: 10000,
           platformFeeCents: 500,
+          feeStructure: "organiser",
           createdAt: new Date("2026-08-09T10:00:00"),
         },
         {
           eventId: "a",
           amountCents: 5000,
           platformFeeCents: 200,
+          // Athlete paid the booking fee on top; the organiser still absorbs
+          // Stripe's processing fee (#470).
+          stripeFeeCents: 118,
+          feeStructure: "athlete",
           createdAt: new Date("2026-08-08T10:00:00"),
         },
         {
           eventId: "a",
           amountCents: 1000,
           platformFeeCents: 0,
+          feeStructure: "organiser",
           createdAt: new Date("2026-07-01T10:00:00"),
         },
       ],
@@ -118,7 +124,7 @@ describe("organiser-dashboard helpers", () => {
     expect(today?.registrations).toBe(1);
     expect(today?.revenueCents).toBe(9500);
     expect(yesterday?.registrations).toBe(1);
-    expect(yesterday?.revenueCents).toBe(4800);
+    expect(yesterday?.revenueCents).toBe(5000 - 118);
     expect(days.reduce((s, d) => s + d.registrations, 0)).toBe(2);
   });
 
