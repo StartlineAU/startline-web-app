@@ -66,6 +66,12 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // need to reach it even while the catalogue is closed to the public.
   "/support",
   "/api/support",
+  // iOS and Android fetch these from the apex to decide whether startlineau.com
+  // links open the mobile app. A waitlist rewrite would answer HTML, the check
+  // would fail, and links would open in the browser until the next reinstall.
+  // Public by design: they list the app's identifiers, nothing else.
+  "/.well-known/apple-app-site-association",
+  "/.well-known/assetlinks.json",
 ]);
 
 // Prefixes, matched on a path segment so `/checkin` does not also open
