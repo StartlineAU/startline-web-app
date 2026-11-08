@@ -11,7 +11,7 @@ import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler"
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
-  baselineChanges, diffEventFields, entitledRegistrationsWhere, fullRefundDeadline,
+  baselineChanges, diffEventFields,
   ensureBaseline, materialChanges, recordEventChange,
 } from "@/lib/event-change-log";
 import { notifyEventChange } from "@/lib/notify-event-change";
@@ -77,8 +77,6 @@ export async function PATCH(
   }
   const body = parsedBody.data;
   const { submit, ...data } = body;
-  const acknowledged =
-    !!raw && typeof raw === "object" && (raw as Record<string, unknown>).acknowledgeChangeRefunds === true;
 
   try {
     const existing = await prisma.event.findUnique({
@@ -153,36 +151,19 @@ export async function PATCH(
       photos:            Array.isArray(data.photos) ? data.photos : undefined,
     };
 
-    // Same change log and full-refund rules as an organiser edit
-    // (app/api/organiser/events/[id]/route.ts). An admin moving the date of
-    // an event athletes have paid for is no less a change for those athletes.
+    // Same change log as an organiser edit (app/api/organiser/events/[id]/route.ts).
+    // An admin moving the date of an event athletes have paid for is no less a
+    // change for those athletes: it is recorded and they are emailed.
     const wasDraft = existing.status === "DRAFT";
     const leavingDraft = wasDraft && nextStatus !== "DRAFT";
     const changes = wasDraft
       ? []
       : diffEventFields(existing as unknown as Record<string, unknown>, fields as Record<string, unknown>);
     const material = materialChanges(changes);
-    const refundUntil = fullRefundDeadline(new Date(), times.startsAtUtc);
-    const entitledCount = material.length > 0
-      ? await prisma.registration.count({ where: entitledRegistrationsWhere(id) })
-      : 0;
-
-    if (entitledCount > 0 && !acknowledged) {
-      return NextResponse.json(
-        {
-          error: "This change gives registered athletes a full refund. Confirm to save it.",
-          code: "MATERIAL_CHANGE_CONFIRM_REQUIRED",
-          changes: material,
-          affectedCount: entitledCount,
-          fullRefundUntil: refundUntil.toISOString(),
-        },
-        { status: 409 },
-      );
-    }
 
     const changeId = randomUUID();
     let superseded = 0;
-    const { updated, affectedCount } = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx) => {
       // A direct admin edit is the review. A queued organiser revision would
       // otherwise apply on top of it and overwrite this change.
       superseded = await supersedePendingRevision(tx, id);
@@ -190,15 +171,6 @@ export async function PATCH(
         where: { id },
         data: { ...times, ...fields, status: nextStatus },
       });
-
-      let affectedCount = 0;
-      if (material.length > 0) {
-        const granted = await tx.registration.updateMany({
-          where: entitledRegistrationsWhere(id),
-          data: { fullRefundUntil: refundUntil, fullRefundChangeId: changeId },
-        });
-        affectedCount = granted.count;
-      }
 
       if (!wasDraft && changes.length > 0) {
         await ensureBaseline(tx, existing as unknown as Parameters<typeof ensureBaseline>[1], existing.organiser.verified);
@@ -217,12 +189,10 @@ export async function PATCH(
           changes: leavingDraft
             ? baselineChanges(updated as unknown as Record<string, unknown>)
             : changes,
-          affectedCount,
-          fullRefundUntil: affectedCount > 0 ? refundUntil : null,
         });
       }
 
-      return { updated, affectedCount };
+      return updated;
     });
 
     if (superseded > 0) {
@@ -230,14 +200,10 @@ export async function PATCH(
         .catch((err) => console.error("Revision superseded notify failed:", err));
     }
 
-    if (affectedCount > 0) {
+    if (material.length > 0) {
       await notifyEventChange({
         eventId: updated.id,
-        changeId,
         changes: material,
-        fullRefundUntil: refundUntil,
-        notifyEntrants: true,
-        notifyAdmins: false,
       }).catch((err) => console.error("Event change notify failed:", err));
     }
 
@@ -263,11 +229,7 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json({
-      id: updated.id,
-      status: updated.status,
-      ...(affectedCount > 0 ? { affectedCount, fullRefundUntil: refundUntil.toISOString() } : {}),
-    });
+    return NextResponse.json({ id: updated.id, status: updated.status });
   } catch (err) {
     console.error("Admin event update error:", err);
     return NextResponse.json({ error: "Failed to update event." }, { status: 500 });

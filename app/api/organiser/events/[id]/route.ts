@@ -17,8 +17,8 @@ import {
   isLiveEventStatus, organiserCanEditEvent, organiserEditBlockedMessage,
 } from "@/lib/event-edit-policy";
 import {
-  FULL_REFUND_WINDOW_DAYS, MATERIAL_FIELD_GROUPS, baselineChanges, diffEventFields,
-  ensureBaseline, entitledRegistrationsWhere, fullRefundDeadline, materialChanges, recordEventChange,
+  MATERIAL_FIELD_GROUPS, baselineChanges, diffEventFields,
+  ensureBaseline, materialChanges, recordEventChange,
 } from "@/lib/event-change-log";
 import { notifyEventChange } from "@/lib/notify-event-change";
 import { notifyAdminsEventEditPending } from "@/lib/notify-event-revision";
@@ -44,18 +44,17 @@ export async function GET(
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
     // What the wizard needs to warn before an edit rather than after it: how
-    // many paid entrants a date, time, location or type change would affect.
-    const entitledCount = event.status === "DRAFT"
+    // many athletes have entered and would be emailed about a material change.
+    const enteredCount = event.status === "DRAFT"
       ? 0
-      : await prisma.registration.count({ where: entitledRegistrationsWhere(id) });
+      : await prisma.registration.count({ where: { eventId: id, status: "CONFIRMED" } });
     const revision = event.status === "APPROVED" ? await pendingRevision(id) : null;
 
     return NextResponse.json({
       ...event,
       editContext: {
-        entitledCount,
+        enteredCount,
         materialFields: MATERIAL_FIELD_GROUPS,
-        fullRefundWindowDays: FULL_REFUND_WINDOW_DAYS,
         needsReview: publishedEditNeedsReview(session.verified, event.status),
         pendingRevision: revision,
       },
@@ -71,12 +70,12 @@ const REQUIRED_ON_SUBMIT = ["title", "discipline", "eventDate", "startTime", "ci
 // (see lib/event-edit-policy.ts). Every edit after the event first leaves DRAFT
 // is written to the event change log in the same transaction as the edit.
 //
-// A material change (date, time, location or event type) to an event with paid
-// entrants gives each of them a full-refund entitlement. That costs the
-// organiser money, so the first attempt is refused with
-// MATERIAL_CHANGE_CONFIRM_REQUIRED and the list of what would change; the
-// wizard shows it and resends with `acknowledgeChangeRefunds: true`. Checking
-// on the server means no client can skip the warning.
+// A material change (date, time, location or event type) is recorded and the
+// athletes already entered are emailed. There is no automatic refund: anyone
+// affected raises it through Support, which the organiser and Startline review.
+//
+// An unverified organiser's edit of a live event is stored as a revision and an
+// admin approves it before the listing changes.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -98,8 +97,6 @@ export async function PATCH(
   }
   const body = parsedBody.data;
   const { submit, ...data } = body;
-  const acknowledged =
-    !!raw && typeof raw === "object" && (raw as Record<string, unknown>).acknowledgeChangeRefunds === true;
 
   try {
     const existing = await prisma.event.findUnique({ where: { id } });
@@ -220,25 +217,6 @@ export async function PATCH(
       : diffEventFields(existing as unknown as Record<string, unknown>, fields as Record<string, unknown>);
     const material = materialChanges(changes);
 
-    const refundUntil = fullRefundDeadline(new Date(), times.startsAtUtc);
-    const entitledCount = material.length > 0
-      ? await prisma.registration.count({ where: entitledRegistrationsWhere(id) })
-      : 0;
-
-    if (entitledCount > 0 && !acknowledged) {
-      return NextResponse.json(
-        {
-          error: "This change gives registered athletes a full refund. Confirm to save it.",
-          code: "MATERIAL_CHANGE_CONFIRM_REQUIRED",
-          changes: material,
-          affectedCount: entitledCount,
-          fullRefundUntil: refundUntil.toISOString(),
-          awaitsReview: publishedEditNeedsReview(session.verified, currentStatus),
-        },
-        { status: 409 },
-      );
-    }
-
     // An unverified organiser's edit of a published event does not change the
     // listing. It waits for an admin. Athletes keep seeing the last approved offer.
     if (publishedEditNeedsReview(session.verified, currentStatus) && changes.length > 0) {
@@ -246,7 +224,6 @@ export async function PATCH(
         eventId: id,
         payload: definedPayload(fields as Record<string, unknown>),
         changes,
-        acknowledged: material.length === 0 || acknowledged,
         submittedById: session.sub,
         submittedByEmail: auth.actorEmail ?? session.email,
       });
@@ -265,9 +242,9 @@ export async function PATCH(
     const renamed = data.title !== undefined && data.title !== existing.title;
     const changeId = randomUUID();
 
-    // One transaction per attempt: the edit, the entitlement and the log row
-    // land together or not at all. withUniqueSlug retries a slug clash with a
-    // fresh transaction, so a rolled-back attempt leaves nothing behind.
+    // One transaction per attempt: the edit and the log row land together or not
+    // at all. withUniqueSlug retries a slug clash with a fresh transaction, so a
+    // rolled-back attempt leaves nothing behind.
     const runUpdate = (slug: string | undefined) =>
       prisma.$transaction(async (tx) => {
         const updated = await tx.event.update({
@@ -275,21 +252,10 @@ export async function PATCH(
           data: { slug, ...times, ...fields, status: lifecycleStatus },
         });
 
-        let affectedCount = 0;
-        if (material.length > 0) {
-          // Everyone entered at this moment gains (or, after a second change,
-          // renews) the entitlement. Entries made later never match.
-          const granted = await tx.registration.updateMany({
-            where: entitledRegistrationsWhere(id),
-            data: { fullRefundUntil: refundUntil, fullRefundChangeId: changeId },
-          });
-          affectedCount = granted.count;
-        }
-
         if (!wasDraft && changes.length > 0) {
-        await ensureBaseline(tx, existing as unknown as Parameters<typeof ensureBaseline>[1], session.verified);
-      }
-      if (leavingDraft || changes.length > 0) {
+          await ensureBaseline(tx, existing as unknown as Parameters<typeof ensureBaseline>[1], session.verified);
+        }
+        if (leavingDraft || changes.length > 0) {
           await recordEventChange(tx, {
             id: changeId,
             eventId: id,
@@ -303,15 +269,13 @@ export async function PATCH(
             changes: leavingDraft
               ? baselineChanges(updated as unknown as Record<string, unknown>)
               : changes,
-            affectedCount,
-            fullRefundUntil: affectedCount > 0 ? refundUntil : null,
           });
         }
 
-        return { updated, affectedCount };
+        return updated;
       });
 
-    const { updated, affectedCount } = renamed
+    const updated = renamed
       ? await withUniqueSlug(data.title!, runUpdate, { excludeId: id })
       : await runUpdate(undefined);
 
@@ -346,24 +310,19 @@ export async function PATCH(
         .catch((err) => console.error("Admin review notify failed:", err));
     }
 
-    // Entrants are told what changed and how to claim. An unverified organiser's
-    // edit never reaches here: it is queued for review above, and athletes are
-    // told only once an admin approves it.
-    if (material.length > 0 && (affectedCount > 0 || (live && !session.verified))) {
+    // Entrants are told what changed. There is no automatic refund: anything
+    // they are owed is raised through Support and reviewed. An unverified
+    // organiser's edit never reaches here; it is queued for review above.
+    if (material.length > 0) {
       await notifyEventChange({
         eventId: updated.id,
-        changeId,
         changes: material,
-        fullRefundUntil: refundUntil,
-        notifyEntrants: affectedCount > 0,
-        notifyAdmins: live && !session.verified,
       }).catch((err) => console.error("Event change notify failed:", err));
     }
 
     return NextResponse.json({
       id:     updated.id,
       status: updated.status,
-      ...(affectedCount > 0 ? { affectedCount, fullRefundUntil: refundUntil.toISOString() } : {}),
       ...(submit && !abnOk && !live ? { abnRequired: true, notice: ABN_REQUIRED_MESSAGE } : {}),
     });
   } catch (err) {

@@ -230,56 +230,30 @@ describe("PATCH /api/organiser/events/[id] — change log and full-refund handsh
   };
   const laterDate = format(addDays(new Date(), 45), "yyyy-MM-dd");
 
-  it("refuses a material change with paid entrants until the organiser confirms, and writes nothing", async () => {
+  it("saves a material change without any refund handshake, and emails entrants", async () => {
     mocks.eventFindUnique.mockResolvedValue(liveEvent);
-    mocks.registrationCount.mockResolvedValue(4);
 
     const res = await patch({ eventDate: laterDate });
-    const body = await res.json();
-
-    expect(res.status).toBe(409);
-    expect(body.code).toBe("MATERIAL_CHANGE_CONFIRM_REQUIRED");
-    expect(body.affectedCount).toBe(4);
-    expect(body.changes).toEqual([
-      expect.objectContaining({ field: "eventDate", from: liveEvent.eventDate, to: laterDate, material: true }),
-    ]);
-    expect(new Date(body.fullRefundUntil).getTime()).toBeGreaterThan(Date.now());
-    expect(mocks.eventUpdate).not.toHaveBeenCalled();
-    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
-    expect(mocks.eventChangeCreate).not.toHaveBeenCalled();
-  });
-
-  it("once confirmed, saves the change, grants the entitlement and logs both together", async () => {
-    mocks.eventFindUnique.mockResolvedValue(liveEvent);
-    mocks.registrationCount.mockResolvedValue(4);
-    mocks.registrationUpdateMany.mockResolvedValue({ count: 4 });
-
-    const res = await patch({ eventDate: laterDate, acknowledgeChangeRefunds: true });
 
     expect(res.status).toBe(200);
-    expect((await res.json()).affectedCount).toBe(4);
-
-    const grant = mocks.registrationUpdateMany.mock.calls[0][0];
-    expect(grant.where).toEqual({ eventId: "evt-1", status: "CONFIRMED", amountCents: { gt: 0 } });
-    expect(grant.data.fullRefundUntil).toBeInstanceOf(Date);
+    expect((await res.json()).status).toBe("APPROVED");
 
     const logged = mocks.eventChangeCreate.mock.calls[0][0].data;
     expect(logged).toMatchObject({
-      id: grant.data.fullRefundChangeId,
       eventId: "evt-1",
       source: "ORGANISER",
       kind: "EDIT",
       material: true,
-      affectedCount: 4,
       statusAtChange: "APPROVED",
     });
+    expect(logged).not.toHaveProperty("affectedCount");
+    expect(logged).not.toHaveProperty("fullRefundUntil");
     expect(logged.changes).toEqual([
       expect.objectContaining({ field: "eventDate", from: liveEvent.eventDate, to: laterDate }),
     ]);
-    expect(mocks.notifyEventChange).toHaveBeenCalledWith(expect.objectContaining({
-      notifyEntrants: true,
-      notifyAdmins: false,
-    }));
+    // No entitlement is written to the entries.
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.notifyEventChange).toHaveBeenCalledWith(expect.objectContaining({ eventId: "evt-1" }));
   });
 
   it("queues an unverified organiser's edit of a live event instead of publishing it", async () => {
@@ -306,17 +280,19 @@ describe("PATCH /api/organiser/events/[id] — change log and full-refund handsh
     expect(mocks.notifyEventChange).not.toHaveBeenCalled();
   });
 
-  it("still asks an unverified organiser to confirm a material change before queueing it", async () => {
+  it("queues an unverified organiser's material change without an entitlement", async () => {
     mocks.session.mockResolvedValue({ sub: "org-1", verified: false, role: "OWNER" });
     mocks.eventFindUnique.mockResolvedValue(liveEvent);
-    mocks.registrationCount.mockResolvedValue(4);
 
     const res = await patch({ venue: "Princes Park" });
 
-    expect(res.status).toBe(409);
-    expect((await res.json()).awaitsReview).toBe(true);
-    expect(mocks.eventRevisionCreate).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ pendingReview: true });
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
     expect(mocks.eventUpdate).not.toHaveBeenCalled();
+    expect(mocks.eventRevisionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ material: true }),
+    }));
   });
 
   it("logs a non-material edit without asking for confirmation", async () => {

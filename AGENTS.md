@@ -458,33 +458,20 @@ stays with staff on the admin registrations page.
 
 **Material changes.** A change to the date, times, venue, address, city, state,
 discipline or format is material. Material text is compared ignoring case and
-spacing. When a material change hits an event with paid CONFIRMED entries:
+spacing. A material change is recorded in the change log and the athletes
+already confirmed are told in-app and by email. There is no automatic refund:
+anyone affected asks through Support. That happens when the change becomes the
+public offer: immediately for a verified organiser, and only after an admin
+approves a revision for an unverified one.
 
-1. `PATCH` answers `409 MATERIAL_CHANGE_CONFIRM_REQUIRED` with the diff, writing
-   nothing. The wizard shows the warning and resends with
-   `acknowledgeChangeRefunds: true`. The check is on the server, so no client
-   can skip it.
-2. Every one of those entries gets `fullRefundUntil`, which is 14 days or the
-   event start, whichever is sooner. A later change renews it. Entries made
-   after the change never get it.
-3. Entrants get an in-app notice and an email. This happens when the change
-   becomes the public offer: immediately for a verified organiser, and only
-   after an admin approves a revision for an unverified one.
-
-**Full refunds.** While `fullRefundUntil` is open, the athlete's refund request
-returns everything they paid, booking fee included, and is issued immediately
-(`lib/issue-entry-refund.ts`). If Stripe fails, the request stays frozen as
-`FULL` for an admin to finish. The organiser pays for the whole refund:
-
-- The refund itself moves no transfer.
-- Startline then reverses exact amounts from the event's transfers, starting
-  with the entry's own.
-- `lib/payout.ts` takes the booking fee off the payout whether or not that
-  recovery has finished, so the organiser is never overpaid.
-- Anything not yet recovered is `organiserRecoveryOwedCents -
-  organiserRecoveredCents` on the registration.
-
-NORMAL refunds are unchanged.
+**Refunds are reviewed, never automatic.** `lib/issue-entry-refund.ts` has one
+path: the organisation's policy amount, frozen onto the entry when the request
+was raised, with the booking fee retained and the transfer reversed
+proportionally. Nothing refunds an entry on its own. The request starts as a
+`SupportTicket`, the organiser records approve or decline at
+`/organiser/refunds`, and Startline issues the Stripe refund from the admin
+registrations page. Change-of-mind refunds stop 24 hours before the start
+(`refundWithinCutoff`).
 
 ## Mobile app
 

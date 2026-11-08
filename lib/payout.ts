@@ -1,7 +1,6 @@
 import { PayoutAttemptStatus, PayoutStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { fullRefundPayoutDeductionCents } from "@/lib/stripe-refunds";
 
 const PAYOUT_CURRENCY = "aud";
 
@@ -83,8 +82,6 @@ export interface PayoutRegistration {
   feeStructure: string;
   /** Absent means CONFIRMED, for callers that only ever pass confirmed rows. */
   status?: string;
-  refundType?: string | null;
-  organiserRecoveryOwedCents?: number;
 }
 
 /**
@@ -114,42 +111,19 @@ export function registrationsPayoutCents(registrations: PayoutRegistration[]): n
 }
 
 /**
- * The event's payout: every confirmed entry's share, less what FULL refunds
- * cost the organiser beyond those entries' own shares (#490). A full refund
- * gives the athlete the booking fee back too, and the organiser pays for it,
- * so it comes off here whether or not the transfer reversals that recover it
- * have gone through yet. Never below zero: anything still owed past that stays
- * on the registration (organiserRecoveryOwedCents minus organiserRecoveredCents).
+ * The event's payout: every confirmed entry's share. A refunded entry is no
+ * longer confirmed, so its share simply is not paid out.
  */
 export function eventPayoutCents(registrations: PayoutRegistration[]): number {
   const confirmed = registrations.filter((r) => (r.status ?? "CONFIRMED") === "CONFIRMED");
-  const deductions = registrations
-    .filter((r) => r.status === "REFUNDED" && r.refundType === "FULL")
-    .reduce(
-      (sum, r) =>
-        sum +
-        fullRefundPayoutDeductionCents({
-          organiserRecoveryOwedCents: r.organiserRecoveryOwedCents ?? 0,
-          amountCents: r.amountCents,
-          platformFeeCents: r.platformFeeCents,
-          feeStructure: r.feeStructure,
-        }),
-      0,
-    );
-  return Math.max(0, registrationsPayoutCents(confirmed) - deductions);
+  return Math.max(0, registrationsPayoutCents(confirmed));
 }
 
-/** Entries the payout reads: confirmed ones, and FULL refunds it deducts. */
+/** Entries the payout reads: the confirmed ones. */
 const payoutRegistrationsQuery = {
-  where: {
-    OR: [
-      { status: "CONFIRMED" as const },
-      { status: "REFUNDED" as const, refundType: "FULL" as const },
-    ],
-  },
+  where: { status: "CONFIRMED" as const },
   select: {
-    amountCents: true, platformFeeCents: true, feeStructure: true,
-    status: true, refundType: true, organiserRecoveryOwedCents: true,
+    amountCents: true, platformFeeCents: true, feeStructure: true, status: true,
   },
 };
 

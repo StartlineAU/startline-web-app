@@ -77,20 +77,6 @@ export const EVENT_FIELD_LABELS: Record<LoggedEventField, string> = {
   photos: "Gallery photos",
 };
 
-/** How long after a material change an existing entrant can claim a full refund. */
-export const FULL_REFUND_WINDOW_DAYS = 14;
-
-/**
- * The moment a full-refund entitlement from a change made at `changedAt`
- * expires: 14 days later, or when the (changed) event starts if that is sooner.
- * Once the race is run the spot has been used.
- */
-export function fullRefundDeadline(changedAt: Date, startsAtUtc: Date | null | undefined): Date {
-  const windowEnd = new Date(changedAt.getTime() + FULL_REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  if (!startsAtUtc || startsAtUtc.getTime() > windowEnd.getTime()) return windowEnd;
-  return startsAtUtc;
-}
-
 function isBlank(value: unknown): boolean {
   return (
     value === null ||
@@ -185,15 +171,6 @@ export function materialGroupsChanged(changes: EventFieldChange[]): string[] {
     .map(([name]) => name);
 }
 
-/**
- * Entries that gain a full-refund entitlement when the event changes: paid and
- * still confirmed. A free entry has nothing to refund, and an entry already on
- * its way out (refund requested, refunded, cancelled) is not "registered".
- */
-export function entitledRegistrationsWhere(eventId: string): Prisma.RegistrationWhereInput {
-  return { eventId, status: "CONFIRMED", amountCents: { gt: 0 } };
-}
-
 export interface RecordEventChangeInput {
   /** Preassigned so registrations can point at the row before it is written. */
   id?: string;
@@ -206,8 +183,6 @@ export interface RecordEventChangeInput {
   organiserVerified: boolean;
   statusAtChange: EventStatus;
   changes: EventFieldChange[];
-  affectedCount?: number;
-  fullRefundUntil?: Date | null;
 }
 
 /**
@@ -232,8 +207,6 @@ export async function recordEventChange(
       statusAtChange: input.statusAtChange,
       changes: input.changes as unknown as Prisma.InputJsonValue,
       material: input.changes.some((c) => c.material),
-      affectedCount: input.affectedCount ?? 0,
-      fullRefundUntil: input.fullRefundUntil ?? null,
     },
     select: { id: true },
   });
@@ -301,8 +274,6 @@ export interface EventChangeHistoryEntry {
   createdAt: string;
   statusAtChange: EventStatus;
   material: boolean;
-  affectedCount: number;
-  fullRefundUntil: string | null;
   lines: { field: string; label: string; from: string; to: string; material: boolean }[];
 }
 
@@ -313,8 +284,7 @@ export interface EventChangeHistoryEntry {
 export function serializeEventChange(
   row: {
     id: string; kind: EventChangeKind; source: EventChangeSource; changedByEmail: string | null;
-    createdAt: Date; statusAtChange: EventStatus; material: boolean; affectedCount: number;
-    fullRefundUntil: Date | null; changes: unknown;
+    createdAt: Date; statusAtChange: EventStatus; material: boolean; changes: unknown;
   },
   audience: "organiser" | "admin",
 ): EventChangeHistoryEntry {
@@ -333,8 +303,6 @@ export function serializeEventChange(
     createdAt: row.createdAt.toISOString(),
     statusAtChange: row.statusAtChange,
     material: row.material,
-    affectedCount: row.affectedCount,
-    fullRefundUntil: row.fullRefundUntil?.toISOString() ?? null,
     lines: changes.map((c) => ({
       field: c.field,
       label: c.label,

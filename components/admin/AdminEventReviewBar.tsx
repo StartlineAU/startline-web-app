@@ -27,7 +27,6 @@ export interface AdminEventReviewBarProps {
   rejectionReason: string | null;
   pendingRevision?: {
     material: boolean;
-    acknowledged: boolean;
     lines: { field: string; label: string; from: string; to: string }[];
   } | null;
 }
@@ -168,9 +167,7 @@ export default function AdminEventReviewBar({
             <p className="text-[13px] text-amber-200 mt-1">
               The live listing is unchanged until you approve this.
               {pendingRevision.material
-                ? pendingRevision.acknowledged
-                  ? " Approving a date, time, location or type change gives paid entrants a full refund."
-                  : " The organiser has not confirmed the refund cost, so this cannot be approved until they save again."
+                ? " A date, time, location or type change emails the athletes already entered."
                 : ""}
             </p>
             <dl className="mt-2 grid gap-1">

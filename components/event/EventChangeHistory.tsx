@@ -76,9 +76,9 @@ export default function EventChangeHistory({ eventId, apiBase }: EventChangeHist
                     <div className="text-[12px] text-muted mt-1">
                       {formatWhen(entry.createdAt)} · {entry.changedBy}
                     </div>
-                    {entry.affectedCount > 0 && entry.fullRefundUntil && (
-                      <div className="text-[12px] text-amber-300 mt-1">
-                        {entry.affectedCount} registered athlete{entry.affectedCount === 1 ? "" : "s"} offered a full refund until {formatWhen(entry.fullRefundUntil)}
+                    {entry.material && !isBaseline && (
+                      <div className="text-[12px] text-muted mt-1">
+                        Athletes already entered were emailed. A refund is requested through Support.
                       </div>
                     )}
                   </div>

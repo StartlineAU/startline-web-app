@@ -18,7 +18,6 @@ import { uploadFile, UploadError } from "@/lib/upload-client";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
-import { describeChangeValue } from "@/lib/event-change-log";
 import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
@@ -45,9 +44,8 @@ import {
 import { LivePreview, EventFullPreview } from "./event-form/previews";
 
 interface EditContext {
-  /** Paid, confirmed entrants a material change would entitle to a full refund. */
-  entitledCount: number;
-  fullRefundWindowDays: number;
+  /** Confirmed entrants a material change would email. */
+  enteredCount: number;
   /** Published event owned by an unverified organiser: a save waits for review. */
   needsReview?: boolean;
   pendingRevision?: {
@@ -56,28 +54,12 @@ interface EditContext {
   } | null;
 }
 
-interface PendingChangeConfirm {
-  changes: { field: string; label: string; from: unknown; to: unknown }[];
-  affectedCount: number;
-  fullRefundUntil: string | null;
-  awaitsReview: boolean;
-  payload: Record<string, unknown>;
-  asDraft: boolean;
-  redirectTo?: string;
-}
-
 /** Where the Edit link came from (?from=), so saving returns there. Same-site
  *  paths only, so the parameter can never send anyone off the site. */
 function returnPath(): string | null {
   if (typeof window === "undefined") return null;
   const from = new URLSearchParams(window.location.search).get("from");
   return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
-}
-
-function formatDeadline(iso: string) {
-  return new Date(iso).toLocaleString("en-AU", {
-    weekday: "short", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit",
-  });
 }
 
 interface EventFormWizardProps {
@@ -123,7 +105,6 @@ export default function EventFormWizard({
   const [eventStatus,     setEventStatus]     = useState<string | null>(null);
   const [editContext,     setEditContext]     = useState<EditContext | null>(null);
   const [loadError,       setLoadError]       = useState("");
-  const [changeConfirm,   setChangeConfirm]   = useState<PendingChangeConfirm | null>(null);
   const originalFields = useRef<Record<string, unknown>>({});
 
   const isLive = eventStatus === "APPROVED" || eventStatus === "IN_PROGRESS";
@@ -335,20 +316,6 @@ export default function EventFormWizard({
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      // A date, time, location or type change on an event with paid entrants.
-      // Nothing has been saved: show what it would cost and let them choose.
-      if (res.status === 409 && data.code === "MATERIAL_CHANGE_CONFIRM_REQUIRED") {
-        setChangeConfirm({
-          changes: Array.isArray(data.changes) ? data.changes : [],
-          affectedCount: data.affectedCount ?? 0,
-          fullRefundUntil: data.fullRefundUntil ?? null,
-          awaitsReview: data.awaitsReview === true,
-          payload,
-          asDraft,
-          redirectTo,
-        });
-        return false;
-      }
       setApiError(res.status === 401 ? SESSION_EXPIRED_MESSAGE : (data.error ?? "Something went wrong."));
       return false;
     }
@@ -361,20 +328,6 @@ export default function EventFormWizard({
     }
     router.push(redirectTo ?? returnPath() ?? submitRedirect);
     return true;
-  };
-
-  const confirmMaterialChange = async () => {
-    if (!changeConfirm) return;
-    const { payload, asDraft, redirectTo } = changeConfirm;
-    setSaving(true); setApiError("");
-    try {
-      const saved = await sendPayload({ ...payload, acknowledgeChangeRefunds: true }, asDraft, redirectTo);
-      if (saved) setChangeConfirm(null);
-    } catch {
-      setApiError("Something went wrong. Please check your connection and try again.");
-    } finally {
-      setSaving(false);
-    }
   };
 
   // A link out of the wizard goes through the same prompt as Cancel, so
@@ -509,17 +462,17 @@ export default function EventFormWizard({
                   </div>
                 )}
 
-                {(step === 0 || step === 1) && isEditingPublished && (editContext?.entitledCount ?? 0) > 0 && (
-                  <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 flex items-start gap-3" data-testid="change-refund-notice">
+                {(step === 0 || step === 1) && isEditingPublished && (editContext?.enteredCount ?? 0) > 0 && (
+                  <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 flex items-start gap-3" data-testid="change-notice">
                     <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
                     <p className="text-[13px] text-muted-light leading-relaxed">
                       <span className="font-headline font-bold text-light">
-                        {editContext!.entitledCount} athlete{editContext!.entitledCount === 1 ? " has" : "s have"} paid to enter.
+                        {editContext!.enteredCount} athlete{editContext!.enteredCount === 1 ? " has" : "s have"} entered.
                       </span>{" "}
-                      Changing the {step === 0 ? "discipline or format" : "date, times or location"} lets each of them
-                      withdraw for a full refund, booking fee included, for {editContext!.fullRefundWindowDays} days
-                      or until the event starts. You&apos;ll see exactly what changes before anything is saved.
-                      {awaitsReview && " The listing stays as it is until Startline approves the edit, and the refund starts then."}
+                      Changing the {step === 0 ? "discipline or format" : "date, times or location"} emails each of
+                      them, and the change is kept in this event&apos;s history. Anyone who no longer wants to take
+                      part asks for a refund through Support, which you and Startline review.
+                      {awaitsReview && " The listing stays as it is until Startline approves the edit."}
                     </p>
                   </div>
                 )}
@@ -607,68 +560,6 @@ export default function EventFormWizard({
               <button onClick={closeLeavePrompt}
                 className="font-headline text-[12px] uppercase tracking-widest text-light hover:text-light transition-colors text-center py-1">
                 Keep editing
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* A date, time, location or type change on an event with paid entrants.
-          Nothing is saved until the organiser confirms: the server refused the
-          first attempt and sent back exactly what would change. */}
-      {changeConfirm !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overlay-in">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !saving && setChangeConfirm(null)} />
-          <div role="alertdialog" aria-modal="true" aria-labelledby="change-refund-title" aria-describedby="change-refund-body"
-            className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-lg p-7 modal-in max-h-[calc(100dvh-2rem)] overflow-y-auto">
-            <div className="flex items-start gap-3 mb-3">
-              <AlertTriangle className="w-5 h-5 text-amber-400 mt-1 shrink-0" />
-              <h2 id="change-refund-title" className="font-headline text-[20px] font-black uppercase tracking-wide text-light leading-tight">
-                This change triggers full refunds
-              </h2>
-            </div>
-            <div id="change-refund-body">
-              <p className="font-headline text-light text-[14px] leading-relaxed mb-4">
-                <strong>{changeConfirm.affectedCount} athlete{changeConfirm.affectedCount === 1 ? " has" : "s have"}</strong> already
-                paid to enter. Changing the date, time, location or event type means each of them can withdraw for a
-                <strong> full refund, including the booking fee</strong>
-                {changeConfirm.fullRefundUntil ? <> until <strong>{formatDeadline(changeConfirm.fullRefundUntil)}</strong></> : null}.
-              </p>
-              <dl className="rounded-xl border border-dark-lighter bg-dark-light p-4 mb-4 grid gap-2" data-testid="change-refund-diff">
-                {changeConfirm.changes.map((c) => (
-                  <div key={c.field} className="grid sm:grid-cols-[120px_1fr] gap-1 sm:gap-3 text-[13px]">
-                    <dt className="font-headline text-[11px] uppercase tracking-widest text-amber-300">{c.label}</dt>
-                    <dd className="min-w-0 break-words">
-                      <span className="text-muted line-through">{describeChangeValue(c.field, c.from)}</span>
-                      <span className="text-muted-dark mx-2" aria-hidden>→</span>
-                      <span className="sr-only"> changes to </span>
-                      <span className="text-light">{describeChangeValue(c.field, c.to)}</span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <ul className="text-[13px] text-muted-light leading-relaxed mb-6 list-disc pl-5 grid gap-1">
-                <li>Refunds they claim come out of your payout, booking fee included.</li>
-                <li>Athletes who enter after this change are on your normal refund policy.</li>
-                <li>
-                  {changeConfirm.awaitsReview
-                    ? "Athletes are told, and the refund opens, only once Startline approves. Anyone who pays before then is included."
-                    : "We'll email registered athletes the details of the change."}
-                </li>
-                <li>The change and the original details are kept in this event&apos;s change history.</li>
-              </ul>
-            </div>
-            {apiError && (
-              <div className="mb-4 px-4 py-3 rounded-md bg-red-400/10 border border-red-400/20 text-red-300 font-headline text-[13px]">{apiError}</div>
-            )}
-            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
-              <button onClick={() => setChangeConfirm(null)} disabled={saving}
-                className="font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-3 rounded-md border border-dark-lighter text-light hover:border-primary/40 transition-colors disabled:opacity-50">
-                Keep original details
-              </button>
-              <button onClick={confirmMaterialChange} disabled={saving}
-                className="font-headline text-[13px] font-bold uppercase tracking-widest px-5 py-3 rounded-md border border-red-400/40 bg-red-400/10 text-red-200 hover:bg-red-400/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving ? "Saving…" : "Save and offer refunds"}
               </button>
             </div>
           </div>

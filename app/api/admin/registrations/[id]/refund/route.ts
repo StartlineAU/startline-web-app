@@ -22,7 +22,6 @@ export async function POST(
       where: { id },
       select: {
         ...refundEntrySelect,
-        fullRefundUntil: true,
         event: { select: { id: true, title: true, startsAtUtc: true } },
       },
     });
@@ -31,27 +30,17 @@ export async function POST(
       return NextResponse.json({ error: "Registration not found." }, { status: 404 });
     }
 
-    // A request frozen as FULL stays FULL. So does a confirmed entry the
-    // organiser's change made eligible: the admin refunding it is honouring the
-    // athlete's entitlement, not the event's ordinary tiers.
-    const type =
-      registration.refundType === "FULL" ||
-      (registration.status === "CONFIRMED" &&
-        registration.fullRefundUntil != null &&
-        registration.fullRefundUntil.getTime() > Date.now())
-        ? "FULL"
-        : "NORMAL";
-
-    // Change-of-mind refunds stop 24 hours before the start. A full entitlement
-    // from a material change, or a free cancellation, is not that kind of refund.
-    if (type === "NORMAL" && registration.amountCents + registration.platformFeeCents > 0 && refundWithinCutoff(registration.event.startsAtUtc)) {
+    // Change-of-mind refunds stop 24 hours before the start. A free entry has
+    // nothing to refund, and a cancellation is not a refund.
+    const paid = registration.amountCents + registration.platformFeeCents > 0;
+    if (paid && refundWithinCutoff(registration.event.startsAtUtc)) {
       return NextResponse.json(
         { error: "Refunds are not available within 24 hours of the event start." },
         { status: 409 },
       );
     }
 
-    const result = await issueEntryRefund(registration, type);
+    const result = await issueEntryRefund(registration);
 
     await writeAuditLog({
       adminId: session.sub,
@@ -62,17 +51,15 @@ export async function POST(
         ? { method: "free", athleteName: registration.athleteName }
         : {
             stripeRefundId: result.refundId,
-            refundType: result.type,
             refundCents: result.refundCents,
             amountCents: registration.amountCents,
             athleteName: registration.athleteName,
-            ...(result.type === "FULL" ? { recoveryOutstandingCents: result.recoveryOutstandingCents } : {}),
           },
     });
 
     return result.method === "free"
       ? NextResponse.json({ ok: true, method: "free" })
-      : NextResponse.json({ ok: true, refundId: result.refundId, refundType: result.type });
+      : NextResponse.json({ ok: true, refundId: result.refundId });
   } catch (err) {
     if (err instanceof RefundError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

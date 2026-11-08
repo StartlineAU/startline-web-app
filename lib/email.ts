@@ -297,8 +297,9 @@ export async function sendEventRejectedEmail(email: string | string[], eventTitl
 
 // ── Event changed (athlete) ───────────────────────────────────────────────────
 // The organiser moved the date, time or venue, or changed the type of an event
-// this athlete had already entered. That entitles them to a full refund, booking
-// fee included, for a limited window (lib/event-change-log.ts).
+// this athlete had already entered. There is no automatic refund: anyone
+// affected is told to raise it through Support, where the organiser and
+// Startline review it.
 export interface EventChangeLine {
   label: string;
   from: string;
@@ -311,8 +312,6 @@ export interface EventChangedEmailData {
   eventTitle: string;
   organiserName: string;
   changes: EventChangeLine[];
-  /** Already formatted in the event's timezone. */
-  fullRefundUntil: string;
 }
 
 function changeRowsHtml(changes: EventChangeLine[]): string {
@@ -331,7 +330,7 @@ function changeRowsHtml(changes: EventChangeLine[]): string {
 export function buildEventChangedEmail(data: EventChangedEmailData, { siteUrl = SITE }: { siteUrl?: string } = {}) {
   const greeting = data.athleteName ? `Hi ${escapeHtml(data.athleteName.split(" ")[0])},` : "Hi,";
   return {
-    subject: `${data.eventTitle} has changed: you can claim a full refund`,
+    subject: `${data.eventTitle} has changed`,
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
         <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Event changed</p>
@@ -343,11 +342,11 @@ export function buildEventChangedEmail(data: EventChangedEmailData, { siteUrl = 
         <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
         <p style="font-size:15px;line-height:1.6">
           Your entry still stands and you don't need to do anything to keep it.
-          If the new details don't work for you, you can withdraw for a <strong>full refund,
-          including the booking fee</strong>, until <strong>${escapeHtml(data.fullRefundUntil)}</strong>.
+          If the new details don't work for you, ask for a refund through Support and
+          Startline will review it with the organiser.
         </p>
-        <a href="${siteUrl}/activity" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          View my entry
+        <a href="${siteUrl}/support" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Ask for a refund
         </a>
       </div>
     `,
@@ -439,42 +438,43 @@ export function buildEventEditDecisionEmail(data: {
   };
 }
 
-// ── Event changed by an unverified organiser (admins) ─────────────────────────
-// Kept for a change that is already public. Unpublished edits use the review
-// email above instead.
-export interface EventChangedAdminEmailData {
-  eventId: string;
+// ── Refund request (organiser and admins) ─────────────────────────────────────
+// A refund is reviewed from a support ticket: the organisation whose event it
+// is, and Startline. Nothing is issued from the form.
+export interface RefundRequestEmailData {
+  ticketId: string;
+  athleteName: string;
+  athleteEmail: string;
   eventTitle: string;
-  organiserName: string;
-  changes: EventChangeLine[];
+  eventDate: string | null;
+  reason: string;
+  eventUrl: string;
 }
 
-export function buildEventChangedAdminEmail(
-  data: EventChangedAdminEmailData,
-  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
-) {
-  const tag = environment === "staging" ? "[Staging] " : "";
-  const eventUrl = adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl);
+export function buildRefundRequestEmail(data: RefundRequestEmailData) {
   return {
-    subject: `${tag}Live event changed: ${data.eventTitle}`,
+    subject: `Refund request: ${data.eventTitle}`,
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#8A5A00">${tag}Check after the fact</p>
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Refund requested</p>
         <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
         <p style="font-size:15px;line-height:1.6">
-          <strong>${escapeHtml(data.organiserName)}</strong> is not verified and changed the date, time,
-          location or type of this live event. The change is already public, and registered athletes
-          have been offered a full refund.
+          <strong>${escapeHtml(data.athleteName)}</strong>
+          (${escapeHtml(data.athleteEmail)}) asked for a refund${data.eventDate ? ` for the event on ${escapeHtml(data.eventDate)}` : ""}.
         </p>
-        <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
-        <a href="${eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Open the event and its change history
+        <p style="font-size:15px;line-height:1.6;white-space:pre-wrap">${escapeHtml(data.reason)}</p>
+        <a href="${data.eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Review the request
         </a>
+        <p style="font-size:13px;line-height:1.6;color:#555">Ticket ${escapeHtml(data.ticketId)}.</p>
       </div>
     `,
   };
 }
 
-export async function sendEventChangedAdminEmails(recipients: string[], data: EventChangedAdminEmailData) {
-  await sendToEachAdmin(recipients, buildEventChangedAdminEmail(data), "event change notification");
+export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
+  const resend = getResend();
+  if (!resend) return;
+  const { subject, html } = buildRefundRequestEmail(data);
+  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
 }

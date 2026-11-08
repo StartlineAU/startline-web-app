@@ -470,24 +470,8 @@ model Registration {
   refundAmountCents Int?
   refundRequestedAt DateTime?
   refundOutsidePolicy Boolean @default(false)
-  // NORMAL follows the event's refund tiers; FULL returns everything the athlete
-  // paid, platform fee included, because the organiser changed the event.
-  refundType     RefundType?
+  // Refunds are reviewed from a support ticket, by the organiser and Startline.
   stripeRefundId String?
-
-  // Set on every paid entry that existed when the organiser made a material
-  // change (date, time, location or event type). Until this moment the athlete
-  // can claim a FULL refund. Entries made after the change never get it.
-  fullRefundUntil    DateTime?
-  fullRefundChangeId String?
-  // A FULL refund is paid for by the organiser, booking fee included (#490).
-  // Owed is what the organiser bears for this entry: everything the athlete got
-  // back, when the charge transferred funds to them. Recovered is what has been
-  // reversed from the event's transfers so far, starting with this entry's own.
-  // The event payout is reduced by owed minus this entry's own share either
-  // way, so an unfinished recovery never overpays the organiser.
-  organiserRecoveryOwedCents Int @default(0)
-  organiserRecoveredCents    Int @default(0)
 
   // Set when the athlete confirms attendance via the check-in QR.
   checkedInAt DateTime?
@@ -509,11 +493,6 @@ model Registration {
   @@index([startWaveId])
   @@index([stripePaymentIntentId])
   @@map("registrations")
-}
-
-enum RefundType {
-  NORMAL
-  FULL
 }
 
 enum RegistrationStatus {
@@ -662,9 +641,6 @@ model EventChange {
   changes Json
   // True when a date, time, location or event type field changed.
   material        Boolean   @default(false)
-  // Paid entries that gained a full-refund entitlement from this change.
-  affectedCount   Int       @default(0)
-  fullRefundUntil DateTime?
   createdAt       DateTime  @default(now())
 
   @@index([eventId, createdAt])
@@ -703,9 +679,6 @@ model EventRevision {
   // Diff against the live event at submit time: [{ field, label, from, to, material }]
   changes          Json
   material         Boolean             @default(false)
-  // The organiser accepted the refund cost. Required before a material change
-  // with paid entrants can be applied.
-  acknowledged     Boolean             @default(false)
   submittedById    String?
   submittedByEmail String?
   reviewedById     String?
@@ -718,7 +691,8 @@ model EventRevision {
   @@map("event_revisions")
 }
 
-// An athlete's request to Startline. A refund is not issued from this form.
+// An athlete's request to Startline. A refund is reviewed by the organiser and
+// Startline; nothing is issued from this form.
 model SupportTicket {
   id          String   @id @default(uuid())
   name        String
@@ -728,11 +702,24 @@ model SupportTicket {
   eventName   String?
   eventDate   String?
   eventId     String?
+  organiserId String?
   reason      String
+  status      SupportTicketStatus @default(OPEN)
+  decidedById String?
+  decidedAt   DateTime?
+  decisionNote String?
   createdAt   DateTime @default(now())
 
   @@index([createdAt])
+  @@index([organiserId, status])
   @@map("support_tickets")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  APPROVED
+  DECLINED
+  REFUNDED
 }
 
 model WaitlistSubscriber {

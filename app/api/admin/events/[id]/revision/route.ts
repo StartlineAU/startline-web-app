@@ -74,14 +74,10 @@ export async function POST(
     await syncEventSchedules(applied.updated).catch((err) =>
       console.error("Event lifecycle schedule sync failed:", err),
     );
-    if (applied.affectedCount > 0 && applied.fullRefundUntil) {
+    if (applied.changes.length > 0) {
       await notifyEventChange({
         eventId: applied.eventId,
-        changeId: applied.changeId,
         changes: applied.changes,
-        fullRefundUntil: applied.fullRefundUntil,
-        notifyEntrants: true,
-        notifyAdmins: false,
       }).catch((err) => console.error("Event change notify failed:", err));
     }
     await writeAuditLog({
@@ -89,16 +85,11 @@ export async function POST(
       action: "APPROVE_EVENT_REVISION",
       targetType: "event",
       targetId: id,
-      meta: { title: applied.title, affectedCount: applied.affectedCount },
+      meta: { title: applied.title },
     });
     await notifyOrganiserRevisionDecision({ eventId: id, approved: true })
       .catch((err) => console.error("Revision decision notify failed:", err));
-    return NextResponse.json({
-      status: "APPROVED",
-      ...(applied.affectedCount > 0
-        ? { affectedCount: applied.affectedCount, fullRefundUntil: applied.fullRefundUntil?.toISOString() }
-        : {}),
-    });
+    return NextResponse.json({ status: "APPROVED" });
   } catch (err) {
     if (err instanceof RevisionError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });

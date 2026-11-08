@@ -8,8 +8,6 @@ import {
   describeChangeValue,
   diffEventFields,
   ensureBaseline,
-  entitledRegistrationsWhere,
-  fullRefundDeadline,
   materialChanges,
   recordEventChange,
   type EventFieldChange,
@@ -45,7 +43,6 @@ export interface QueueEventRevisionInput {
   eventId: string;
   payload: Record<string, unknown>;
   changes: EventFieldChange[];
-  acknowledged: boolean;
   submittedById: string;
   submittedByEmail: string;
 }
@@ -63,7 +60,6 @@ export async function queueEventRevision(input: QueueEventRevisionInput) {
         payload: input.payload as Prisma.InputJsonValue,
         changes: input.changes as unknown as Prisma.InputJsonValue,
         material: input.changes.some((change) => change.material),
-        acknowledged: input.acknowledged,
         submittedById: input.submittedById,
         submittedByEmail: input.submittedByEmail,
       },
@@ -95,7 +91,6 @@ export interface SerializedRevision {
   id: string;
   status: EventRevisionStatus;
   material: boolean;
-  acknowledged: boolean;
   submittedAt: string;
   submittedBy: string | null;
   rejectionReason: string | null;
@@ -107,7 +102,6 @@ export function serializeRevision(row: {
   id: string;
   status: EventRevisionStatus;
   material: boolean;
-  acknowledged: boolean;
   createdAt: Date;
   submittedByEmail: string | null;
   rejectionReason: string | null;
@@ -122,7 +116,6 @@ export function serializeRevision(row: {
     id: row.id,
     status: row.status,
     material: row.material,
-    acknowledged: row.acknowledged,
     submittedAt: row.createdAt.toISOString(),
     submittedBy: row.submittedByEmail,
     rejectionReason: row.rejectionReason,
@@ -141,7 +134,6 @@ const revisionSelect = {
   id: true,
   status: true,
   material: true,
-  acknowledged: true,
   createdAt: true,
   submittedByEmail: true,
   submittedById: true,
@@ -172,15 +164,12 @@ export interface ApplyRevisionResult {
   title: string;
   changeId: string;
   changes: EventFieldChange[];
-  affectedCount: number;
-  fullRefundUntil: Date | null;
   updated: { id: string; status: string; startsAtUtc: Date | null; endsAtUtc: Date | null };
 }
 
 /**
  * Apply the open revision onto the live event. The diff is recomputed against
- * the row as it is now, not the snapshot from submit time. Refund entitlements
- * start here, not when the organiser saved.
+ * the row as it is now, not the snapshot from submit time.
  */
 export async function applyPendingRevision(input: {
   eventId: string;
@@ -211,18 +200,6 @@ export async function applyPendingRevision(input: {
   const nextStatus = effectiveEventStatus({ status: "APPROVED", ...times });
   const changes = diffEventFields(existing as unknown as Record<string, unknown>, payload);
   const material = materialChanges(changes);
-  const refundUntil = fullRefundDeadline(new Date(), times.startsAtUtc);
-  const entitledCount = material.length > 0
-    ? await prisma.registration.count({ where: entitledRegistrationsWhere(existing.id) })
-    : 0;
-
-  if (entitledCount > 0 && !pending.acknowledged) {
-    throw new RevisionError(
-      "The organiser has not confirmed the refund cost. They need to save the edit again before it can be approved.",
-      409,
-      "REFUND_CONFIRM_REQUIRED",
-    );
-  }
 
   const renamed = typeof payload.title === "string" && payload.title !== existing.title;
   const changeId = pending.id;
@@ -247,15 +224,6 @@ export async function applyPendingRevision(input: {
       },
     });
 
-    let affectedCount = 0;
-    if (material.length > 0) {
-      const granted = await tx.registration.updateMany({
-        where: entitledRegistrationsWhere(existing.id),
-        data: { fullRefundUntil: refundUntil, fullRefundChangeId: changeId },
-      });
-      affectedCount = granted.count;
-    }
-
     if (changes.length > 0) {
       await ensureBaseline(
         tx,
@@ -273,8 +241,6 @@ export async function applyPendingRevision(input: {
         organiserVerified: false,
         statusAtChange: existing.status,
         changes,
-        affectedCount,
-        fullRefundUntil: affectedCount > 0 ? refundUntil : null,
       });
     }
 
@@ -289,10 +255,10 @@ export async function applyPendingRevision(input: {
       },
     });
 
-    return { updated, affectedCount };
+    return updated;
   });
 
-  const { updated, affectedCount } = renamed
+  const updated = renamed
     ? await withUniqueSlug(String(payload.title), write, { excludeId: existing.id })
     : await write(undefined);
 
@@ -301,8 +267,6 @@ export async function applyPendingRevision(input: {
     title: updated.title,
     changeId,
     changes: material,
-    affectedCount,
-    fullRefundUntil: affectedCount > 0 ? refundUntil : null,
     updated,
   };
 }

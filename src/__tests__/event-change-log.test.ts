@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  FULL_REFUND_WINDOW_DAYS,
   baselineChanges,
   describeChangeValue,
   diffEventFields,
-  fullRefundDeadline,
   materialChanges,
   materialGroupsChanged,
   serializeEventChange,
@@ -82,24 +80,6 @@ describe("baselineChanges", () => {
   });
 });
 
-describe("fullRefundDeadline", () => {
-  const changedAt = new Date("2027-01-01T00:00:00Z");
-
-  it("runs for the window when the event is further away", () => {
-    const deadline = fullRefundDeadline(changedAt, new Date("2027-06-01T00:00:00Z"));
-    expect(deadline.getTime() - changedAt.getTime()).toBe(FULL_REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  });
-
-  it("ends when the event starts if that comes first", () => {
-    const start = new Date("2027-01-05T21:00:00Z");
-    expect(fullRefundDeadline(changedAt, start)).toEqual(start);
-  });
-
-  it("falls back to the window when the start is unknown", () => {
-    expect(fullRefundDeadline(changedAt, null).getTime()).toBeGreaterThan(changedAt.getTime());
-  });
-});
-
 describe("describeChangeValue", () => {
   it("reads ticket tiers and refund rules the way an organiser wrote them", () => {
     expect(describeChangeValue("waves", stored.waves)).toBe("General $45");
@@ -121,8 +101,6 @@ describe("serializeEventChange", () => {
     createdAt: new Date("2027-01-01T00:00:00Z"),
     statusAtChange: "APPROVED" as const,
     material: true,
-    affectedCount: 3,
-    fullRefundUntil: new Date("2027-01-15T00:00:00Z"),
     changes: diffEventFields(stored, { eventDate: "2027-03-21" }),
   };
 
