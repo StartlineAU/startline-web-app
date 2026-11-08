@@ -8,6 +8,7 @@ import Image from "next/image";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
+import EventChangeHistory from "@/components/event/EventChangeHistory";
 import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, XCircle, FileText, Send } from "lucide-react";
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
@@ -337,6 +338,12 @@ export default function EventStatusPage({
               </div>
             </div>
           </div>
+
+          {!isDraft && (
+            <div className="mt-12">
+              <EventChangeHistory eventId={event.id} apiBase="/api/organiser" />
+            </div>
+          )}
 
         </div>
       </main>

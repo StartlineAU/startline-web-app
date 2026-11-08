@@ -10,7 +10,6 @@ import type { PublicEvent } from "@/lib/event-types";
 import { getRegisteredEventIds, fetchSavedEventIds } from "@/lib/client-lists";
 import { toUserEvents } from "@/lib/user-events";
 import { useApiResource } from "@/hooks/useApiResource";
-import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import type { CheckInState } from "@/lib/check-in-window";
 import { useAuthContext } from "@/context/AuthContext";
@@ -49,11 +48,7 @@ type RegMeta = {
   refundAmountCents: number;
   refundPercent: number;
   outsidePolicy: boolean;
-  policyLines: string[];
-  daysUntilEvent: number;
 };
-
-const money = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
 
 type UserNotif = {
   id: string;
@@ -336,13 +331,22 @@ function RegisteredCard({
                   </div>
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <CheckInAction meta={meta} now={now} />
-                    <button
-                      type="button"
-                      onClick={() => onRequestRefund(meta)}
-                      className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
-                    >
-                      Withdraw my entry
-                    </button>
+                    {freeEntry ? (
+                      <button
+                        type="button"
+                        onClick={() => onRequestRefund(meta)}
+                        className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
+                      >
+                        Withdraw my entry
+                      </button>
+                    ) : (
+                      <Link
+                        href="/support"
+                        className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-light transition-colors"
+                      >
+                        Request a refund
+                      </Link>
+                    )}
                   </div>
                 </>
               )}
@@ -470,7 +474,7 @@ export default function ActivityPage() {
           entry.id === refundTarget.meta.id
             ? {
                 ...entry,
-                status: "REFUND_REQUESTED" as const,
+                status: (json.status === "REFUNDED" ? "REFUNDED" : "REFUND_REQUESTED") as RegStatus,
                 refundAmountCents: json.refundAmountCents ?? entry.refundAmountCents ?? 0,
                 refundPercent: json.refundPercent ?? entry.refundPercent ?? 0,
                 outsidePolicy: json.outsidePolicy ?? entry.outsidePolicy ?? false,
@@ -486,8 +490,6 @@ export default function ActivityPage() {
     }
   };
 
-  // The open dialog's entry is free when nothing was paid for it.
-  const freeRefundTarget = !!refundTarget && refundTarget.meta.paidCents === 0;
 
   const markAllRead = () => {
     setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
@@ -561,8 +563,6 @@ export default function ActivityPage() {
               refundAmountCents: r.refundAmountCents ?? 0,
               refundPercent: r.refundPercent ?? 0,
               outsidePolicy: r.outsidePolicy ?? false,
-              policyLines: r.policyLines ?? [],
-              daysUntilEvent: r.daysUntilEvent ?? 0,
             };
             (meta[r.eventId] ??= []).push(entry);
             regIds.push(r.eventId);
@@ -788,59 +788,18 @@ export default function ActivityPage() {
 
           {refundTarget && (
             <div className="space-y-3">
-              {/* The number first. This is what the athlete is actually deciding on. */}
               <div className="rounded-md bg-dark px-4 py-3">
-                {freeRefundTarget ? (
-                  <>
-                    <p className="font-headline text-[13px] font-bold uppercase tracking-widest text-light">
-                      Free entry
-                    </p>
-                    <p className="text-[13px] text-muted leading-relaxed mt-1">
-                      This entry cost nothing, so there is no refund to make. Withdrawing your entry gives
-                      your spot back to the event and takes you out of the start list.
-                    </p>
-                  </>
-                ) : refundTarget.meta.outsidePolicy ? (
-                  <>
-                    <p className="font-headline text-[13px] font-bold uppercase tracking-widest text-amber-300">
-                      No refund at this date
-                    </p>
-                    <p className="text-[13px] text-muted leading-relaxed mt-1">
-                      The event is {refundTarget.meta.daysUntilEvent} day
-                      {refundTarget.meta.daysUntilEvent === 1 ? "" : "s"} away, which falls outside this
-                      event&apos;s policy. You can still ask the organiser to consider it, and they will see
-                      it is a discretionary request.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-headline text-[20px] font-black italic tracking-tighter text-primary">
-                      {money(refundTarget.meta.refundAmountCents)} back
-                    </p>
-                    <p className="text-[13px] text-muted leading-relaxed mt-1">
-                      You paid {money(refundTarget.meta.paidCents)}. The event is{" "}
-                      {refundTarget.meta.daysUntilEvent} day
-                      {refundTarget.meta.daysUntilEvent === 1 ? "" : "s"} away, so this event&apos;s policy
-                      returns {refundTarget.meta.refundPercent}%.
-                    </p>
-                  </>
-                )}
+                <p className="font-headline text-[13px] font-bold uppercase tracking-widest text-light">
+                  Free entry
+                </p>
+                <p className="text-[13px] text-muted leading-relaxed mt-1">
+                  This entry cost nothing, so there is no refund to make. Withdrawing your entry gives
+                  your spot back to the event and takes you out of the start list.
+                </p>
+                <p className="text-[12px] text-muted-dark leading-relaxed mt-2">
+                  Paid an entry fee? Ask for a refund through Support.
+                </p>
               </div>
-
-              {!freeRefundTarget && (
-                <>
-                  <div>
-                    <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark mb-1">
-                      This event&apos;s policy
-                    </p>
-                    {refundTarget.meta.policyLines.map((line, i) => (
-                      <p key={i} className="text-[12px] text-muted leading-relaxed">{line}</p>
-                    ))}
-                  </div>
-
-                  <p className="text-[12px] text-muted-dark leading-relaxed">{REFUND_PROCESS_COPY}</p>
-                </>
-              )}
             </div>
           )}
 

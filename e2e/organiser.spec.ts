@@ -158,7 +158,6 @@ test.describe("new listing wizard", () => {
     await page.getByRole("button", { name: /startline/i }).first().click();
     const price4 = page.locator('input[placeholder="129"]');
     if (await price4.isVisible()) await price4.fill("50");
-    await page.getByRole("button", { name: /no refunds/i }).click();
     await page.getByRole("button", { name: /continue/i }).click();
     // Step 4 only renders after the tickets step settles — wait on the UI
     // state instead of a fixed timeout so the screenshot is never of a
@@ -188,7 +187,6 @@ test.describe("new listing wizard", () => {
     await page.getByRole("button", { name: /startline/i }).first().click();
     const price = page.locator('input[placeholder="129"]');
     if (await price.isVisible()) await price.fill("50");
-    await page.getByRole("button", { name: /no refunds/i }).click();
     await page.getByRole("button", { name: /continue/i }).click();
     await page.waitForTimeout(500);
 

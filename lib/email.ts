@@ -294,3 +294,187 @@ export async function sendEventRejectedEmail(email: string | string[], eventTitl
     `,
   });
 }
+
+// ── Event changed (athlete) ───────────────────────────────────────────────────
+// The organiser moved the date, time or venue, or changed the type of an event
+// this athlete had already entered. There is no automatic refund: anyone
+// affected is told to raise it through Support, where the organiser and
+// Startline review it.
+export interface EventChangeLine {
+  label: string;
+  from: string;
+  to: string;
+}
+
+export interface EventChangedEmailData {
+  athleteName?: string | null;
+  eventId: string;
+  eventTitle: string;
+  organiserName: string;
+  changes: EventChangeLine[];
+}
+
+function changeRowsHtml(changes: EventChangeLine[]): string {
+  return changes
+    .map(
+      (c) => `
+        <tr>
+          <td style="padding:6px 8px 6px 0;font-size:13px;color:#555;vertical-align:top;white-space:nowrap">${escapeHtml(c.label)}</td>
+          <td style="padding:6px 8px;font-size:13px;color:#555;text-decoration:line-through;vertical-align:top">${escapeHtml(c.from)}</td>
+          <td style="padding:6px 0 6px 8px;font-size:14px;font-weight:700;vertical-align:top">${escapeHtml(c.to)}</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+export function buildEventChangedEmail(data: EventChangedEmailData, { siteUrl = SITE }: { siteUrl?: string } = {}) {
+  const greeting = data.athleteName ? `Hi ${escapeHtml(data.athleteName.split(" ")[0])},` : "Hi,";
+  return {
+    subject: `${data.eventTitle} has changed`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Event changed</p>
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
+        <p style="font-size:15px;line-height:1.6">${greeting}</p>
+        <p style="font-size:15px;line-height:1.6">
+          <strong>${escapeHtml(data.organiserName)}</strong> has changed the details of an event you entered:
+        </p>
+        <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
+        <p style="font-size:15px;line-height:1.6">
+          Your entry still stands and you don't need to do anything to keep it.
+          If the new details don't work for you, ask for a refund through Support and
+          Startline will review it with the organiser.
+        </p>
+        <a href="${siteUrl}/support" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Ask for a refund
+        </a>
+      </div>
+    `,
+  };
+}
+
+export async function sendEventChangedEmail(to: string, data: EventChangedEmailData) {
+  const resend = getResend();
+  if (!resend) return;
+  const { subject, html } = buildEventChangedEmail(data);
+  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
+}
+
+// ── Edit of a published event waiting for review (admins) ─────────────────────
+// An unverified organiser cannot change a live listing in place. Admins get
+// this while the approved version stays on sale.
+export interface EventEditPendingReviewEmailData {
+  eventId: string;
+  eventTitle: string;
+  organiserName: string;
+  changes: EventChangeLine[];
+}
+
+export function buildEventEditPendingReviewEmail(
+  data: EventEditPendingReviewEmailData,
+  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
+) {
+  const tag = environment === "staging" ? "[Staging] " : "";
+  const eventUrl = adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl);
+  return {
+    subject: `${tag}Event edit to review: ${data.eventTitle}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">${tag}Needs review</p>
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
+        <p style="font-size:15px;line-height:1.6">
+          <strong>${escapeHtml(data.organiserName)}</strong> is not verified and edited this published event.
+          The listing athletes see is unchanged until you approve it.
+        </p>
+        <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
+        <a href="${eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Review the edit
+        </a>
+      </div>
+    `,
+  };
+}
+
+export async function sendEventEditPendingReviewEmails(
+  recipients: string[],
+  data: EventEditPendingReviewEmailData,
+) {
+  await sendToEachAdmin(recipients, buildEventEditPendingReviewEmail(data), "event edit review notification");
+}
+
+export async function sendEventEditDecisionEmail(
+  to: string,
+  data: { eventTitle: string; approved: boolean; reason?: string; eventUrl: string },
+) {
+  const resend = getResend();
+  if (!resend) return;
+  const { subject, html } = buildEventEditDecisionEmail(data);
+  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
+}
+
+export function buildEventEditDecisionEmail(data: {
+  eventTitle: string;
+  approved: boolean;
+  reason?: string;
+  eventUrl: string;
+}) {
+  return {
+    subject: data.approved
+      ? `Your changes to ${data.eventTitle} are live`
+      : `Changes to ${data.eventTitle} were not approved`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
+        <p style="font-size:15px;line-height:1.6">
+          ${data.approved
+            ? "Startline approved your changes. They are now the live listing. The event was not taken off sale while they waited."
+            : `Startline did not approve your changes, so the live listing is unchanged.${data.reason ? ` Reason: ${escapeHtml(data.reason)}` : ""}`}
+        </p>
+        <a href="${data.eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Open the event
+        </a>
+      </div>
+    `,
+  };
+}
+
+// ── Refund request (organiser and admins) ─────────────────────────────────────
+// A refund is reviewed from a support ticket: the organisation whose event it
+// is, and Startline. Nothing is issued from the form.
+export interface RefundRequestEmailData {
+  ticketId: string;
+  athleteName: string;
+  athleteEmail: string;
+  eventTitle: string;
+  eventDate: string | null;
+  reason: string;
+  eventUrl: string;
+}
+
+export function buildRefundRequestEmail(data: RefundRequestEmailData) {
+  return {
+    subject: `Refund request: ${data.eventTitle}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Refund requested</p>
+        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
+        <p style="font-size:15px;line-height:1.6">
+          <strong>${escapeHtml(data.athleteName)}</strong>
+          (${escapeHtml(data.athleteEmail)}) asked for a refund${data.eventDate ? ` for the event on ${escapeHtml(data.eventDate)}` : ""}.
+        </p>
+        <p style="font-size:15px;line-height:1.6;white-space:pre-wrap">${escapeHtml(data.reason)}</p>
+        <a href="${data.eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
+          Review the request
+        </a>
+        <p style="font-size:13px;line-height:1.6;color:#555">Ticket ${escapeHtml(data.ticketId)}.</p>
+      </div>
+    `,
+  };
+}
+
+export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
+  const resend = getResend();
+  if (!resend) return;
+  const { subject, html } = buildRefundRequestEmail(data);
+  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
+}

@@ -62,6 +62,10 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // checks the password and a one-time code.
   "/auth/recovery",
   "/api/auth/recovery",
+  // Refunds now go through a support ticket, and an athlete who has entered may
+  // need to reach it even while the catalogue is closed to the public.
+  "/support",
+  "/api/support",
   // iOS and Android fetch these from the apex to decide whether startlineau.com
   // links open the mobile app. A waitlist rewrite would answer HTML, the check
   // would fail, and links would open in the browser until the next reinstall.

@@ -141,3 +141,5 @@ export function entryRefundAmountCents(input: EntryRefundInput): number {
   if (snapshot == null) return Math.max(0, paid);
   return Math.max(0, Math.min(snapshot, paid));
 }
+
+

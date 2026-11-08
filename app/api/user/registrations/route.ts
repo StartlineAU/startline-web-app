@@ -9,6 +9,7 @@ import {
   refundPercentFor,
 } from "@/lib/refund-policy";
 import { checkInWindow } from "@/lib/check-in-window";
+import { entryPaidCents } from "@/lib/stripe-refunds";
 
 /** GET — confirmed registrations for the signed-in athlete (wave + bib for Activity). */
 export async function GET() {
@@ -34,10 +35,9 @@ export async function GET() {
       startWaveLabel: true,
       bibNumber: true,
       checkedInAt: true,
-      // Money and policy, so Activity can quote the refund before the athlete
-      // commits rather than asking them to request one blind.
       amountCents: true,
       platformFeeCents: true,
+      feeStructure: true,
       refundPercent: true,
       refundAmountCents: true,
       refundOutsidePolicy: true,
@@ -68,7 +68,8 @@ export async function GET() {
 
   return NextResponse.json({
     registrations: registrations.map((r) => {
-      const paidCents = r.amountCents + r.platformFeeCents;
+      // What this entry's payer handed over; the fee only when they paid it.
+      const paidCents = entryPaidCents(r);
       const tiers = parseTiers(r.event.refundTiers);
       const days = daysUntil(r.event.eventDate, today);
       const window = checkInWindow({
@@ -100,6 +101,8 @@ export async function GET() {
         refundAmountCents: r.refundAmountCents ?? refundAmountCents(tiers, paidCents, days),
         refundPercent: r.refundPercent ?? refundPercentFor(tiers, days),
         outsidePolicy: r.refundOutsidePolicy,
+        ticketCents: r.amountCents,
+        feeCents: paidCents - r.amountCents,
         policyLines: describeTiers(tiers),
         daysUntilEvent: days,
         event: r.event,

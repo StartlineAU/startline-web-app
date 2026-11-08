@@ -185,9 +185,12 @@ describe("getPayoutEligibleEvents", () => {
     expect(events[0].netCents).toBe(19460);
     expect(mocks.event.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
+        // Only confirmed entries are paid out.
         registrations: {
           where: { status: "CONFIRMED" },
-          select: { amountCents: true, platformFeeCents: true, feeStructure: true },
+          select: {
+            amountCents: true, platformFeeCents: true, feeStructure: true, status: true,
+          },
         },
       }),
     }));

@@ -51,21 +51,23 @@ test.afterEach(async () => {
 });
 
 test.describe("organiser event edit policy", () => {
-  test("blocks a published event before the wizard and rejects a direct save", async ({ page }) => {
+  // Published events are editable again (#490). Every edit is logged, and a
+  // material change with paid entrants needs confirming: see event-edit.spec.ts.
+  test("opens a published event in the wizard and keeps it live on save", async ({ page }) => {
     await organiserLogin(page);
-    const title = `E2E Published Lock ${Date.now()}`;
+    const title = `E2E Published Edit ${Date.now()}`;
     const id = await createEvent(page, title, true);
 
     await page.goto(`/organiser/new-listing?id=${id}`);
 
-    await expect(page.getByText("Editing is locked")).toBeVisible();
-    await expect(page.getByText(/Published event details can't be edited directly/)).toBeVisible();
-    await expect(page.getByPlaceholder(/Apex Throwdown/i)).toHaveCount(0);
+    await expect(page.getByPlaceholder(/Apex Throwdown/i)).toHaveValue(title);
+    await expect(page.getByText("Editing is locked")).toHaveCount(0);
 
     const res = await page.request.patch(`/api/organiser/events/${id}`, {
       data: { title: `${title} changed` },
     });
-    expect(res.status()).toBe(409);
+    expect(res.ok()).toBe(true);
+    expect((await res.json()).status).toBe("APPROVED");
   });
 
   test("blocks an in-progress event", async ({ page }) => {

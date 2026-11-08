@@ -409,6 +409,70 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
   (`User.notifyFollowedOrganiserEvents`). Entry emails are always sent.
 - Section fetches must ignore a reply that arrives after cleanup: in development the effect runs twice, and the late reply overwrites what was typed or toggled.
 
+## Editing events
+
+Organisers can edit an event while it is DRAFT, PENDING, REJECTED or live
+(APPROVED). Once it is underway or archived it is locked
+(`lib/event-edit-policy.ts`). A verified organiser's edit of a live event keeps
+it live: it is not sent back to review, and followers are not notified again.
+
+An unverified organiser's edit of a published event does not change the listing.
+It is stored as a pending `EventRevision` and an admin has to approve it
+(`lib/event-revision.ts`). The current offer stays on sale until then. A
+rejection leaves the live event untouched. Refund entitlements are written only
+when the revision is approved, not when the organiser saves.
+
+**Change log.** `EventChange` is an append-only record of what each event said
+and when, kept so that a dispute about the original details can be settled
+from the record. The rules live in `lib/event-change-log.ts`:
+
+| When | Row |
+|---|---|
+| An event first leaves DRAFT (at creation or by a later edit) | `BASELINE`: every populated field |
+| Any later edit, by the organiser or an admin | `EDIT`: each changed field with its from and to values |
+| The first edit to an event published before the log existed | a `SYSTEM` `BASELINE`, written before that edit's own row |
+
+Each row is written in the same transaction as the edit it describes. No route
+updates or deletes a row, and the rows outlive the event (`eventId` is set to
+null and `eventTitle` is kept). Organisers and admins see the log in the Change
+history panel on the event page (`/api/{organiser,admin}/events/[id]/changes`).
+
+**Refund policy is set per organisation, not per event.** Settings → Refunds
+(`OrganisationRefundsSection`, owner only) holds `Organiser.refundTiers` and
+`refundPolicy`. Saving copies them to every event that organisation runs, after
+freezing the tiers an existing entry was sold under into
+`Registration.soldRefundTiers`, so a later policy change cannot rewrite what an
+athlete already paid against. The section always shows `ACL_REFUND_NOTE`: the
+Australian Consumer Law rows apply whatever the preset says. The event wizard
+does not collect a policy.
+
+Change-of-mind refunds stop 24 hours before the start (`refundWithinCutoff`).
+A full entitlement from a material change, and a free cancellation, are not
+change-of-mind refunds.
+
+**Paid refunds are a support ticket.** Activity has no refund button for a paid
+entry; it links to `/support`, which opens a `SupportTicket` and emails
+`admin@startlineau.com`. `POST /api/user/registrations/[id]/refund-request`
+answers 409 for a paid entry and still cancels a free one. Issuing the money
+stays with staff on the admin registrations page.
+
+**Material changes.** A change to the date, times, venue, address, city, state,
+discipline or format is material. Material text is compared ignoring case and
+spacing. A material change is recorded in the change log and the athletes
+already confirmed are told in-app and by email. There is no automatic refund:
+anyone affected asks through Support. That happens when the change becomes the
+public offer: immediately for a verified organiser, and only after an admin
+approves a revision for an unverified one.
+
+**Refunds are reviewed, never automatic.** `lib/issue-entry-refund.ts` has one
+path: the organisation's policy amount, frozen onto the entry when the request
+was raised, with the booking fee retained and the transfer reversed
+proportionally. Nothing refunds an entry on its own. The request starts as a
+`SupportTicket`, the organiser records approve or decline at
+`/organiser/refunds`, and Startline issues the Stripe refund from the admin
+registrations page. Change-of-mind refunds stop 24 hours before the start
+(`refundWithinCutoff`).
+
 ## Mobile app
 
 The iOS and Android apps (`StartlineAU/startline-mobile-app`) are a Capacitor

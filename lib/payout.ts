@@ -80,6 +80,8 @@ export interface PayoutRegistration {
   amountCents: number;
   platformFeeCents: number;
   feeStructure: string;
+  /** Absent means CONFIRMED, for callers that only ever pass confirmed rows. */
+  status?: string;
 }
 
 /**
@@ -107,6 +109,23 @@ export function registrationsPayoutCents(registrations: PayoutRegistration[]): n
     0,
   );
 }
+
+/**
+ * The event's payout: every confirmed entry's share. A refunded entry is no
+ * longer confirmed, so its share simply is not paid out.
+ */
+export function eventPayoutCents(registrations: PayoutRegistration[]): number {
+  const confirmed = registrations.filter((r) => (r.status ?? "CONFIRMED") === "CONFIRMED");
+  return Math.max(0, registrationsPayoutCents(confirmed));
+}
+
+/** Entries the payout reads: the confirmed ones. */
+const payoutRegistrationsQuery = {
+  where: { status: "CONFIRMED" as const },
+  select: {
+    amountCents: true, platformFeeCents: true, feeStructure: true, status: true,
+  },
+};
 
 export type PayoutAttention = {
   eventId: string;
@@ -170,10 +189,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       endDate: true,
       organiser: { select: { id: true, orgName: true, stripeAccountId: true } },
       payoutOperation: { select: { status: true } },
-      registrations: {
-        where: { status: "CONFIRMED" },
-        select: { amountCents: true, platformFeeCents: true, feeStructure: true },
-      },
+      registrations: payoutRegistrationsQuery,
     },
   });
 
@@ -184,7 +200,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       continue;
     }
 
-    const netCents = registrationsPayoutCents(event.registrations);
+    const netCents = eventPayoutCents(event.registrations);
     if (netCents <= 0) continue;
 
     eligible.push({
@@ -271,7 +287,7 @@ export async function runPayoutForEvent(eventId: string): Promise<PayoutResult> 
     throw new PayoutError("Organiser has no Stripe account.", 422, "NO_STRIPE_ACCOUNT");
   }
 
-  const netCents = registrationsPayoutCents(event.registrations);
+  const netCents = eventPayoutCents(event.registrations);
   if (netCents <= 0) {
     throw new PayoutError("No confirmed registrations to pay out.", 422, "NOTHING_TO_PAY");
   }
@@ -292,10 +308,7 @@ async function loadEvent(eventId: string): Promise<PayoutEventRecord> {
       payoutTriggered: true,
       payoutAmountCents: true,
       organiser: { select: { id: true, stripeAccountId: true } },
-      registrations: {
-        where: { status: "CONFIRMED" },
-        select: { amountCents: true, platformFeeCents: true, feeStructure: true },
-      },
+      registrations: payoutRegistrationsQuery,
       payoutOperation: { select: operationSelect },
     },
   });

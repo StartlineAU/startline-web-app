@@ -18,6 +18,9 @@ import {
 } from "@/components/ui/skeleton";
 import RaceManagementPanel from "@/components/organiser/RaceManagementPanel";
 import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
+import EventChangeHistory from "@/components/event/EventChangeHistory";
+import PendingRevisionNotice from "@/components/event/PendingRevisionNotice";
+import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { sanitizeHtml } from "@/lib/sanitize-html";
@@ -386,15 +389,23 @@ function EventDashboardInner({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full opacity-40 pointer-events-none"
-              aria-disabled
-              tabIndex={-1}
-            >
-              <Pencil className="w-4 h-4" /> Editing locked
-            </Button>
+            {organiserCanEditEvent(event.status) && !panelActive ? (
+              <Button variant="outline" asChild className="w-full">
+                <Link href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`}>
+                  <Pencil className="w-4 h-4" /> Edit event
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                type="button"
+                className="w-full opacity-40 pointer-events-none"
+                aria-disabled
+                tabIndex={-1}
+              >
+                <Pencil className="w-4 h-4" /> {organiserCanEditEvent(event.status) ? "Edit event" : "Editing locked"}
+              </Button>
+            )}
             <Button
               variant={managePanel ? "default" : "outline"}
               type="button"
@@ -441,7 +452,7 @@ function EventDashboardInner({
             </Button>
           </div>
 
-          {!panelActive && (
+          {!panelActive && !organiserCanEditEvent(event.status) && (
             <div className="mb-8">
               <EventEditLockedNotice eventId={id} status={event.status} compact />
             </div>
@@ -743,6 +754,13 @@ function EventDashboardInner({
               )}
             </CardContent>
           </Card>
+
+          {/* Live events open here rather than on the event page, so the
+              record of what changed has to be here too. */}
+          <div className="mt-8">
+            <PendingRevisionNotice eventId={id} />
+            <EventChangeHistory eventId={id} apiBase="/api/organiser" />
+          </div>
           </>
           )}
 
