@@ -1,19 +1,7 @@
 import prisma from "@/lib/prisma";
+import { slugify } from "@/lib/slugify";
 
-const MAX_SLUG_LENGTH = 80;
-
-/** Human-readable URL slug derived from an event title. Mirrors the backfill in
- * `prisma/migrations/*_add_event_slug` — keep them in sync. */
-export function slugify(title: string): string {
-  return (
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, MAX_SLUG_LENGTH)
-      .replace(/-+$/g, "") || "event"
-  );
-}
+export { slugify };
 
 /** A unique slug for `title` — appends "-2", "-3", … when the base is taken.
  * `excludeId` skips the event being renamed so its current slug doesn't collide

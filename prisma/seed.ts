@@ -20,7 +20,7 @@ import {
   UserNotFoundException,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { getEventCoords } from "../lib/australia-coords";
-import { uniqueSlug } from "../lib/slugs";
+import { slugify } from "../lib/slugify";
 import { eventTimeData } from "../lib/event-time";
 
 function seedCoords(city: string, state: string, coords?: [number, number]) {
@@ -58,6 +58,30 @@ function isoDaysFromNow(days: number): string {
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
+
+/**
+ * Slug lookup using this seed's Prisma client.
+ *
+ * Do not import uniqueSlug from lib/slugs here: it pulls in lib/prisma, whose
+ * client is constructed while ESM evaluates static imports — before
+ * loadEnvLocal() below has supplied DATABASE_URL. The resulting client tried to
+ * authenticate without a password and broke the seed partway through.
+ */
+async function uniqueSlug(title: string): Promise<string> {
+  const base = slugify(title);
+  const existing = await prisma.event.findMany({
+    where: {
+      OR: [{ slug: base }, { slug: { startsWith: `${base}-` } }],
+    },
+    select: { slug: true },
+  });
+  const taken = new Set(existing.map((event) => event.slug).filter(Boolean));
+  if (!taken.has(base)) return base;
+  for (let i = 2; ; i += 1) {
+    const candidate = `${base}-${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
 
 const PASSWORD = "Password123!";
 

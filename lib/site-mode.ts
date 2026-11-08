@@ -93,6 +93,10 @@ const PUBLIC_PREFIXES = [
   // Ticket scanning runs from a phone at the event, with no athlete session.
   "/checkin",
   "/api/checkin",
+  // The native app opens this hosted Turnstile challenge in the system browser
+  // when production asks it to prove a checkout or support form is human. It
+  // renders no product data and only returns a short-lived challenge token.
+  "/mobile/challenge",
 ];
 
 // Build output, images and the favicon. The matcher already skips most of these

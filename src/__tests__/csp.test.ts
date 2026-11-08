@@ -30,3 +30,18 @@ describe("Cognito in the Content-Security-Policy", () => {
     expect(await contentSecurityPolicy()).not.toContain("https:// ");
   });
 });
+
+describe("Cloudflare Turnstile in the Content-Security-Policy", () => {
+  it("allows the widget script, frame and network requests", async () => {
+    const csp = await contentSecurityPolicy();
+
+    expect(csp).toContain(
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://api.mapbox.com https://challenges.cloudflare.com",
+    );
+    expect(csp).toContain(
+      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
+    );
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain("https://challenges.cloudflare.com");
+  });
+});

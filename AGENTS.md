@@ -495,6 +495,22 @@ shell that loads this site, so product changes ship with a web deploy. Native
 behaviour lives here, behind `isNative()` in `lib/capacitor.ts`, and a browser
 never runs it.
 
+A separate Expo app (`StartlineAU/startline-native-mobile-app`) is being built
+as the native replacement. It calls the JSON APIs directly rather than loading
+the website. Native requests may authenticate with
+`Authorization: Bearer <Cognito access token>` plus `X-Id-Token: <Cognito ID
+token>`. `lib/amplify-server.ts` verifies both, requires the same `sub`, and
+checks the access token's `client_id` and ID token's audience. Cookie auth is
+unchanged. `getRequestAccessToken()` returns the bearer token for routes that
+call Cognito as the signed-in user, falling back to the Amplify cookie.
+
+The native app cannot render Cloudflare Turnstile itself. On production it opens
+`/mobile/challenge` in the system browser, which returns a short-lived token to
+`com.startlineau.app://turnstile`; the app retries the protected request with
+`turnstileToken`. `assertTurnstile()` returns `BOT_CHECK_REQUIRED` or
+`BOT_CHECK_FAILED` so the app knows when to start that flow. Never add a static
+mobile bypass header.
+
 | Concern | Where |
 |---|---|
 | Status bar, splash screen, Android back button, deep links | `setUpNativeShell()` in `lib/capacitor.ts`, called by `components/NativeLinkHandler.tsx` |

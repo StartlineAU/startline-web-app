@@ -82,8 +82,14 @@ export async function assertTurnstile(
     action,
     ip: getClientIp(req),
   });
+  // The native app uses this code to open the hosted challenge and retry with
+  // a token instead of treating the refusal as a permanent form error.
+  const tokenWasSupplied = Boolean(body?.turnstileToken);
   return NextResponse.json(
-    { error: "Could not verify you're human. Please try again." },
+    {
+      error: "Could not verify you're human. Please try again.",
+      code: tokenWasSupplied ? "BOT_CHECK_FAILED" : "BOT_CHECK_REQUIRED",
+    },
     { status: 400 },
   );
 }
