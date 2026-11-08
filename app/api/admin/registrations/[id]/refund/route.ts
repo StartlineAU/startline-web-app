@@ -4,6 +4,7 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { writeAuditLog } from "@/lib/audit";
 import { idParams } from "@/lib/schemas";
 import { RefundError, issueEntryRefund, refundEntrySelect } from "@/lib/issue-entry-refund";
+import { refundWithinCutoff } from "@/lib/refund-policy";
 
 export async function POST(
   _req: NextRequest,
@@ -19,7 +20,11 @@ export async function POST(
   try {
     const registration = await prisma.registration.findUnique({
       where: { id },
-      select: { ...refundEntrySelect, fullRefundUntil: true },
+      select: {
+        ...refundEntrySelect,
+        fullRefundUntil: true,
+        event: { select: { id: true, title: true, startsAtUtc: true } },
+      },
     });
 
     if (!registration) {
@@ -36,6 +41,15 @@ export async function POST(
         registration.fullRefundUntil.getTime() > Date.now())
         ? "FULL"
         : "NORMAL";
+
+    // Change-of-mind refunds stop 24 hours before the start. A full entitlement
+    // from a material change, or a free cancellation, is not that kind of refund.
+    if (type === "NORMAL" && registration.amountCents + registration.platformFeeCents > 0 && refundWithinCutoff(registration.event.startsAtUtc)) {
+      return NextResponse.json(
+        { error: "Refunds are not available within 24 hours of the event start." },
+        { status: 409 },
+      );
+    }
 
     const result = await issueEntryRefund(registration, type);
 

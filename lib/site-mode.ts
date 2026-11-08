@@ -62,6 +62,10 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // checks the password and a one-time code.
   "/auth/recovery",
   "/api/auth/recovery",
+  // Refunds now go through a support ticket, and an athlete who has entered may
+  // need to reach it even while the catalogue is closed to the public.
+  "/support",
+  "/api/support",
 ]);
 
 // Prefixes, matched on a path segment so `/checkin` does not also open

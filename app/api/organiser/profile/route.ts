@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { parseTiers } from "@/lib/refund-policy";
+import { saveOrganisationRefundPolicy } from "@/lib/organisation-refund-policy";
 
 const organiserProfileSchema = z.object({
   orgName: z.string().max(200),
@@ -31,6 +33,11 @@ const settingsPatchSchema = z.object({
   logoPosition:   z.string().max(100).nullable().optional(),
   coverImageUrl:  z.string().max(3000).nullable().optional(),
   coverPosition:  z.string().max(100).nullable().optional(),
+  refundTiers:    z.array(z.object({
+    daysBefore: z.number().int().min(0).max(3650),
+    percent: z.number().int().min(0).max(100),
+  })).max(20).optional(),
+  refundPolicy:   z.string().max(2000).nullable().optional(),
 }).strict().refine(v => Object.keys(v).length > 0);
 
 export async function GET() {
@@ -50,6 +57,7 @@ export async function GET() {
         stripeAccountId: true, stripeOnboardingComplete: true,
         notifyManagers: true,
         notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
+        refundTiers: true, refundPolicy: true,
         _count: { select: { follows: true } },
       },
     });
@@ -138,21 +146,36 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
-  const { notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration } = parsed.data;
+  const { notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration, refundTiers, refundPolicy } = parsed.data;
   const changesNotifications = [notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration]
     .some(v => v !== undefined);
-  if (changesNotifications && session.role !== "OWNER") {
+  const changesRefundPolicy = refundTiers !== undefined || refundPolicy !== undefined;
+  if ((changesNotifications || changesRefundPolicy) && session.role !== "OWNER") {
     return NextResponse.json(
-      { error: "Only an Owner can change who receives notifications." },
+      { error: "Only an Owner can change organisation settings." },
       { status: 403 },
     );
   }
 
   try {
-    await prisma.organiser.update({
-      where: { id: session.sub },
-      data:  parsed.data,
-    });
+    if (changesRefundPolicy) {
+      const current = await prisma.organiser.findUnique({
+        where: { id: session.sub },
+        select: { refundTiers: true, refundPolicy: true },
+      });
+      await saveOrganisationRefundPolicy(
+        session.sub,
+        refundTiers ?? parseTiers(current?.refundTiers),
+        refundPolicy !== undefined ? refundPolicy : (current?.refundPolicy ?? null),
+      );
+    }
+    const { refundTiers: _tiers, refundPolicy: _notes, ...rest } = parsed.data;
+    if (Object.keys(rest).length > 0) {
+      await prisma.organiser.update({
+        where: { id: session.sub },
+        data: rest,
+      });
+    }
     return NextResponse.json({ ok: true, ...parsed.data });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });

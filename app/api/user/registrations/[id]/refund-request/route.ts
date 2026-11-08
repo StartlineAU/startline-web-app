@@ -76,6 +76,16 @@ export async function POST(
     );
   }
 
+  // Paid refunds are a support ticket, not a button. A free entry is a
+  // cancellation and still goes through here.
+  const paidCents = entryPaidCents(registration);
+  if (paidCents > 0) {
+    return NextResponse.json(
+      { error: "Ask for a refund through Support. A paid entry cannot be refunded from here." },
+      { status: 409 },
+    );
+  }
+
   // Once the race has been run there is nothing to refund — the spot was used.
   // eventDate is a plain ISO date, so compare on date alone: a request on race
   // day itself is still allowed.
@@ -94,7 +104,6 @@ export async function POST(
   // paidCents is what this entry's payer actually handed over. Under the
   // "organiser" fee structure that is the ticket price alone; quoting the fee
   // on top promised the athlete money they never paid.
-  const paidCents = entryPaidCents(registration);
 
   // The organiser changed the event after this athlete entered and the
   // entitlement has not run out: everything back, booking fee included.

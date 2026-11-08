@@ -138,6 +138,11 @@ export async function POST(req: NextRequest) {
   // Persist the status the event should have right now, not just the status
   // the review queue implies. Publishing an event whose start has already
   // passed must not briefly make it look bookable.
+  const orgRefund = await prisma.organiser.findUnique({
+    where: { id: organiserId },
+    select: { refundTiers: true, refundPolicy: true },
+  }) ?? { refundTiers: null, refundPolicy: null };
+
   const times = eventTimeData({
     eventDate: body.eventDate ?? "",
     endDate: body.endDate ?? null,
@@ -180,8 +185,8 @@ export async function POST(req: NextRequest) {
         inclusions:       body.inclusions        ?? null,
         extras:           body.extras            ?? null,
         activations:      body.activations       ?? null,
-        refundTiers:      body.refundTiers       ?? [],
-        refundPolicy:     body.refundPolicy      ?? null,
+        refundTiers:      orgRefund.refundTiers ?? body.refundTiers ?? [],
+        refundPolicy:     orgRefund.refundPolicy ?? body.refundPolicy ?? null,
         registrationType,
         feeStructure:     body.feeStructure      ?? "athlete",
         registrationUrl:  body.registrationUrl   ?? null,

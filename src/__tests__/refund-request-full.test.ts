@@ -26,7 +26,6 @@ vi.mock("@/lib/issue-entry-refund", async (importOriginal) => ({
 
 import { POST } from "@/app/api/user/registrations/[id]/refund-request/route";
 
-// Ten days out, inside no refund tier: a normal request would get nothing back.
 const eventDate = format(addDays(new Date(), 10), "yyyy-MM-dd");
 
 const registration = (over: Record<string, unknown> = {}) => ({
@@ -63,61 +62,37 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.session.mockResolvedValue({ sub: "user-1", email: "harper.jones@startline.test" });
   mocks.update.mockResolvedValue({});
-  mocks.members.mockResolvedValue([{ userId: "owner-1" }]);
+  mocks.members.mockResolvedValue([{ ownerId: "owner-1" }]);
   mocks.createMany.mockResolvedValue({ count: 1 });
-  mocks.issueEntryRefund.mockResolvedValue({ method: "stripe", refundId: "re_1", refundCents: 10540, type: "FULL", recoveryOutstandingCents: 0 });
 });
 
-describe("refund request after the organiser changed the event", () => {
-  it("refunds everything, booking fee included, straight away", async () => {
+describe("a paid entry cannot be refunded from the entry itself", () => {
+  it("sends the athlete to Support instead of opening a refund", async () => {
     mocks.findUnique.mockResolvedValue(registration({ fullRefundUntil: addDays(new Date(), 5) }));
 
     const res = await request();
-    const body = await res.json();
 
-    expect(body).toMatchObject({ status: "REFUNDED", refundType: "FULL", refundPercent: 100, refundAmountCents: 10540 });
-    expect(mocks.update.mock.calls[0][0].data).toMatchObject({
-      status: "REFUND_REQUESTED", refundType: "FULL", refundPercent: 100, refundAmountCents: 10540, refundOutsidePolicy: false,
-    });
-    expect(mocks.issueEntryRefund).toHaveBeenCalledWith(expect.objectContaining({ id: "reg-1" }), "FULL");
-    expect(mocks.createMany.mock.calls[0][0].data[0].title).toBe("Full refund claimed");
-  });
-
-  it("leaves the request frozen as FULL for an admin when Stripe fails", async () => {
-    mocks.findUnique.mockResolvedValue(registration({ fullRefundUntil: addDays(new Date(), 5) }));
-    mocks.issueEntryRefund.mockRejectedValue(new Error("Stripe down"));
-
-    const body = await (await request()).json();
-
-    expect(body).toMatchObject({ status: "REFUND_REQUESTED", refundType: "FULL", refundAmountCents: 10540 });
-  });
-
-  it("falls back to the normal policy once the entitlement has run out", async () => {
-    mocks.findUnique.mockResolvedValue(registration({ fullRefundUntil: addDays(new Date(), -1) }));
-
-    const body = await (await request()).json();
-
-    expect(body).toMatchObject({ status: "REFUND_REQUESTED", refundType: "NORMAL", refundPercent: 0, outsidePolicy: true });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/Support/);
+    expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.issueEntryRefund).not.toHaveBeenCalled();
   });
 
-  it("gives an entry made after the change the normal policy", async () => {
+  it("does the same once the change entitlement has run out", async () => {
     mocks.findUnique.mockResolvedValue(registration());
 
-    const body = await (await request()).json();
+    const res = await request();
 
-    expect(body.refundType).toBe("NORMAL");
-    expect(mocks.issueEntryRefund).not.toHaveBeenCalled();
+    expect(res.status).toBe(409);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
-  it("quotes only the ticket price when the organiser absorbed the fee", async () => {
-    mocks.findUnique.mockResolvedValue(registration({
-      feeStructure: "organiser",
-      fullRefundUntil: addDays(new Date(), 5),
-    }));
+  it("still cancels a free entry", async () => {
+    mocks.findUnique.mockResolvedValue(registration({ amountCents: 0, platformFeeCents: 0 }));
 
     const body = await (await request()).json();
 
-    expect(body.refundAmountCents).toBe(10000);
+    expect(body).toMatchObject({ status: "REFUND_REQUESTED", refundPercent: 0, refundAmountCents: 0 });
+    expect(mocks.update.mock.calls[0][0].data).toMatchObject({ status: "REFUND_REQUESTED" });
   });
 });

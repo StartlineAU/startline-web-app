@@ -85,6 +85,12 @@ model Organiser {
   notifyEventRejected   Boolean @default(true)
   notifyNewRegistration Boolean @default(true)
 
+  // Change-of-mind refund policy for every event this organisation runs.
+  // Null means listings still use the policy stored on each event. The ACL
+  // floor is not stored here: it applies whether or not these tiers say so.
+  refundTiers  Json?
+  refundPolicy String?
+
   events        Event[]
   reviews       Review[]
   announcements Announcement[]
@@ -456,6 +462,10 @@ model Registration {
   // amount quoted to the athlete cannot drift as the event draws closer, and so
   // the admin refunds exactly what was promised. outsidePolicy marks a
   // discretionary request the policy returns nothing for.
+  // The change-of-mind policy this entry was sold under. Set when the
+  // organisation later changes its policy, so that change does not rewrite
+  // what an athlete already paid against. Null means the event's tiers.
+  soldRefundTiers   Json?
   refundPercent     Int?
   refundAmountCents Int?
   refundRequestedAt DateTime?
@@ -706,6 +716,23 @@ model EventRevision {
 
   @@index([eventId, status])
   @@map("event_revisions")
+}
+
+// An athlete's request to Startline. A refund is not issued from this form.
+model SupportTicket {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  userId      String?
+  requestType String
+  eventName   String?
+  eventDate   String?
+  eventId     String?
+  reason      String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("support_tickets")
 }
 
 model WaitlistSubscriber {

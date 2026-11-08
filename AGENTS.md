@@ -437,6 +437,25 @@ updates or deletes a row, and the rows outlive the event (`eventId` is set to
 null and `eventTitle` is kept). Organisers and admins see the log in the Change
 history panel on the event page (`/api/{organiser,admin}/events/[id]/changes`).
 
+**Refund policy is set per organisation, not per event.** Settings → Refunds
+(`OrganisationRefundsSection`, owner only) holds `Organiser.refundTiers` and
+`refundPolicy`. Saving copies them to every event that organisation runs, after
+freezing the tiers an existing entry was sold under into
+`Registration.soldRefundTiers`, so a later policy change cannot rewrite what an
+athlete already paid against. The section always shows `ACL_REFUND_NOTE`: the
+Australian Consumer Law rows apply whatever the preset says. The event wizard
+does not collect a policy.
+
+Change-of-mind refunds stop 24 hours before the start (`refundWithinCutoff`).
+A full entitlement from a material change, and a free cancellation, are not
+change-of-mind refunds.
+
+**Paid refunds are a support ticket.** Activity has no refund button for a paid
+entry; it links to `/support`, which opens a `SupportTicket` and emails
+`admin@startlineau.com`. `POST /api/user/registrations/[id]/refund-request`
+answers 409 for a paid entry and still cancels a free one. Issuing the money
+stays with staff on the admin registrations page.
+
 **Material changes.** A change to the date, times, venue, address, city, state,
 discipline or format is material. Material text is compared ignoring case and
 spacing. When a material change hits an event with paid CONFIRMED entries:

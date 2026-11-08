@@ -341,8 +341,8 @@ function RegisteredCard({
                         </p>
                       ))}
                       <p className="text-[12px] text-muted leading-relaxed mt-1">
-                        Your entry still stands. If the new details don&apos;t work for you, withdraw by{" "}
-                        {formatOfferDeadline(meta.fullRefund.until)} for a full refund, booking fee included.
+                        Your entry still stands. If the new details don&apos;t work for you, ask for a refund
+                        through <Link href="/support" className="text-light underline">Support</Link>.
                       </p>
                     </div>
                   )}
@@ -366,13 +366,22 @@ function RegisteredCard({
                   </div>
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <CheckInAction meta={meta} now={now} />
-                    <button
-                      type="button"
-                      onClick={() => onRequestRefund(meta)}
-                      className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
-                    >
-                      {meta.fullRefund ? "Withdraw for a full refund" : "Withdraw my entry"}
-                    </button>
+                    {freeEntry ? (
+                      <button
+                        type="button"
+                        onClick={() => onRequestRefund(meta)}
+                        className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
+                      >
+                        Withdraw my entry
+                      </button>
+                    ) : (
+                      <Link
+                        href="/support"
+                        className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-light transition-colors"
+                      >
+                        Request a refund
+                      </Link>
+                    )}
                   </div>
                 </>
               )}

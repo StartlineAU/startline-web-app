@@ -32,6 +32,20 @@ export const REFUND_PROCESS_COPY =
   "Startline processes approved refunds back to your original payment method. " +
   "Allow 5 to 10 business days for it to appear.";
 
+/** Shown on the organisation refund settings. Not editable. */
+export const ACL_REFUND_NOTE =
+  "You must follow the Australian Consumer Law. If you cancel an event, do not supply it, or change it so it is no longer what the athlete paid for, they are still entitled to a refund of everything they paid. Your own policy cannot take that away, including inside 24 hours of the start.";
+
+/** Change-of-mind refunds are refused once the event starts in under a day. */
+export const REFUND_CUTOFF_HOURS = 24;
+
+export function refundWithinCutoff(startsAtUtc: Date | null | undefined, now = new Date()): boolean {
+  if (!startsAtUtc) return false;
+  const start = startsAtUtc instanceof Date ? startsAtUtc : new Date(startsAtUtc);
+  if (Number.isNaN(start.getTime())) return false;
+  return start.getTime() - now.getTime() <= REFUND_CUTOFF_HOURS * 60 * 60 * 1000;
+}
+
 /** Tiers, most generous window first. Invalid entries are dropped. */
 function normaliseTiers(tiers: RefundTier[]): RefundTier[] {
   return tiers
