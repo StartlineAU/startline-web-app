@@ -109,7 +109,7 @@ test.describe("admin event creation", () => {
     if (await ticketLabel.isVisible()) await ticketLabel.fill("Standard Entry");
     const ticketPrice = page.locator('input[placeholder="129"]');
     if (await ticketPrice.isVisible()) await ticketPrice.fill("50");
-    await page.getByRole("button", { name: /no refunds/i }).click();
+    // The refund policy is organisation-scoped now; the wizard only shows it.
     await page.getByRole("button", { name: /continue/i }).click();
 
     // Step 4 — Media & Description. No cover image is set so the draft save

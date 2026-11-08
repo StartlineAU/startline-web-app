@@ -4,8 +4,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { organiserLogin, adminLogin, ensureDatabaseUrl } from "./helpers";
 
 // Editing a published event (#490): every edit is logged, and changing the
-// date, time, location or type of an event with paid entrants offers those
-// entrants a full refund, which the organiser must confirm first.
+// date, time, location or type of an event emails the athletes already entered.
+// There is no automatic refund: a refund is raised through Support.
 
 ensureDatabaseUrl();
 
