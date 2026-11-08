@@ -1,8 +1,9 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { OrganiserRole } from "@prisma/client";
 import prisma from "./prisma";
 import { pickActiveMembership } from "./active-organiser";
+import { nativeSessionFromClaims } from "./native-api-auth";
 import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
@@ -70,6 +71,97 @@ async function verifyToken(token: string) {
   return payload;
 }
 
+type BearerCredentials = {
+  present: boolean;
+  accessToken?: string;
+  idToken?: string;
+};
+
+/**
+ * Read the native app's credentials without trusting them.
+ *
+ * The mobile app sends the Cognito access token as the bearer credential and
+ * its ID token as a companion header for profile claims. Both are verified
+ * below. A browser request never sets these headers, so cookie authentication
+ * remains the default for every existing web surface.
+ */
+async function readBearerCredentials(): Promise<BearerCredentials> {
+  try {
+    const requestHeaders = await headers();
+    const authorization = requestHeaders.get("authorization");
+    if (!authorization) return { present: false };
+
+    const match = /^Bearer\s+(.+)$/i.exec(authorization);
+    if (!match) return { present: true };
+
+    return {
+      present: true,
+      accessToken: match[1],
+      idToken: requestHeaders.get("x-id-token") ?? undefined,
+    };
+  } catch {
+    // Server components outside a request scope cannot read request headers.
+    return { present: false };
+  }
+}
+
+async function getBearerSession(): Promise<{
+  present: boolean;
+  session: ServerSession | null;
+}> {
+  const credentials = await readBearerCredentials();
+  if (!credentials.present) return { present: false, session: null };
+  if (!credentials.accessToken) return { present: true, session: null };
+
+  try {
+    const accessPayload = await verifyToken(credentials.accessToken);
+    let idPayload = null;
+    if (credentials.idToken) {
+      idPayload = await verifyToken(credentials.idToken);
+    }
+
+    const native = nativeSessionFromClaims(
+      accessPayload as Record<string, unknown>,
+      idPayload as Record<string, unknown> | null,
+      clientId,
+    );
+    if (!native) return { present: true, session: null };
+
+    return {
+      present: true,
+      session: {
+        ...native,
+        // The native client is a real Cognito session, never a dev bypass.
+        bypass: undefined,
+      },
+    };
+  } catch {
+    return { present: true, session: null };
+  }
+}
+
+/**
+ * The access token belonging to this request, from the native bearer header
+ * first and the Amplify cookie second. Callers use this for Cognito operations
+ * performed as the signed-in user; they must authenticate the request through
+ * getServerSession/getUserSession before relying on it.
+ */
+export async function getRequestAccessToken(): Promise<string | null> {
+  const credentials = await readBearerCredentials();
+  if (credentials.present) return credentials.accessToken ?? null;
+
+  const cookieStore = await cookies();
+  const lastAuthUser = cookieStore.get(
+    `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
+  )?.value;
+  if (!lastAuthUser) return null;
+  return (
+    cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`)?.value ??
+    cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`)?.value ??
+    null
+  );
+}
+
 export async function getServerSession(): Promise<ServerSession | null> {
   if (process.env.NODE_ENV === "development") {
     const cookieStore = await cookies().catch(() => null);
@@ -100,6 +192,11 @@ export async function getServerSession(): Promise<ServerSession | null> {
       if (identity) return { ...identity, bypass };
     }
   }
+
+  // A request carrying bearer credentials is native. If those credentials are
+  // invalid, fail it rather than silently falling back to an unrelated cookie.
+  const bearer = await getBearerSession();
+  if (bearer.present) return bearer.session;
 
   try {
     const cookieStore = await cookies();

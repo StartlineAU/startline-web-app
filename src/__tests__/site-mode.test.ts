@@ -58,6 +58,7 @@ describe("servesWhileWaitlisted", () => {
     expect(servesWhileWaitlisted("/api/internal/events/lifecycle")).toBe(true);
     expect(servesWhileWaitlisted("/checkin/evt-1/abc")).toBe(true);
     expect(servesWhileWaitlisted("/api/checkin")).toBe(true);
+    expect(servesWhileWaitlisted("/mobile/challenge")).toBe(true);
   });
 
   it("keeps build output and images reachable", () => {

@@ -15,6 +15,7 @@ declare global {
 type Props = {
   siteKey?: string;
   onTokenChange: (token: string | null) => void;
+  onError?: () => void;
   className?: string;
 };
 
@@ -28,7 +29,7 @@ const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render
  * When no site key is configured (local dev, E2E) the widget renders nothing
  * and onTokenChange(null) is left as-is — the server fails open.
  */
-export default function TurnstileWidget({ siteKey, onTokenChange, className }: Props) {
+export default function TurnstileWidget({ siteKey, onTokenChange, onError, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
 
@@ -45,7 +46,10 @@ export default function TurnstileWidget({ siteKey, onTokenChange, className }: P
         sitekey: siteKey,
         callback: (token: string) => onTokenChange(token),
         "expired-callback": () => onTokenChange(null),
-        "error-callback": () => onTokenChange(null),
+        "error-callback": () => {
+          onTokenChange(null);
+          onError?.();
+        },
         theme: "dark",
       });
     };
