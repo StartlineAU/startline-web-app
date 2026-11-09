@@ -299,6 +299,36 @@ test.describe("organiser pages", () => {
     expect(await editor.innerHTML()).toMatch(/<(b|strong)[\s>]/i);
   });
 
+  test("event dashboard leads with registrations and one primary action", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/events/seed-event-001/dashboard");
+
+    const manage = page.getByRole("button", { name: "Manage registrations" });
+    await expect(manage).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check-in QR" })).toBeVisible();
+    // Announcements are posted from their own card, not a top-level button.
+    await expect(page.getByRole("button", { name: "New announcement" })).toHaveCount(1);
+
+    // Registrations come before announcements in reading order.
+    const regs = page.getByRole("heading", { name: "Registrations" });
+    const anns = page.getByRole("heading", { name: "Announcements" });
+    await expect(regs).toBeVisible();
+    const order = await regs.evaluate(
+      (a, b) => !!(a.compareDocumentPosition(b as Node) & Node.DOCUMENT_POSITION_FOLLOWING),
+      await anns.elementHandle(),
+    );
+    expect(order).toBe(true);
+
+    // The card's New button opens the compose dialog through the URL.
+    await page.getByRole("button", { name: "New announcement" }).click();
+    await page.waitForURL("**panel=announce");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Notify registered athletes")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page).not.toHaveURL(/panel=announce/);
+  });
+
   test("profile settings reposition Done saves and confirms", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/profile");
