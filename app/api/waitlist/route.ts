@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { Resend } from "resend";
-import { render } from "@react-email/render";
+import { renderEmail } from "@/emails/render";
 import { WaitlistConfirmationEmail } from "@/emails/waitlist-confirmation";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
@@ -51,12 +51,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const html = await render(WaitlistConfirmationEmail());
+    const { html, text } = await renderEmail(WaitlistConfirmationEmail());
     const result = await getResend().emails.send({
       from:    "Startline <waitlist@startlineau.com>",
       to:      email,
       subject: "You're on the Startline waitlist",
       html,
+      text,
     });
     if (result.error) {
       console.error("Resend error:", result.error);

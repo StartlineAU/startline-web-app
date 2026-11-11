@@ -1,71 +1,62 @@
 import { Img } from '@react-email/components'
-import { colors, fonts, SITE_URL } from './tokens'
+import { colors, fonts, size, SITE_URL, status, tableReset, type Tone } from './tokens'
+import { iconUrl, type EmailIcon } from './icons'
 
-type NoteIcon = 'shield' | 'alert' | 'clock'
-
-const ICON_FILE: Record<NoteIcon, string> = {
-  shield: 'shield.svg',
-  alert:  'alert.svg',
-  clock:  'clock.svg',
+const ICON: Record<Tone, EmailIcon> = {
+  success: 'shield',
+  info:    'clock',
+  warning: 'alert',
+  danger:  'alert-danger',
 }
 
 interface NoteBoxProps {
-  icon: NoteIcon
+  tone: Tone
   title: string
-  body: string
+  body: React.ReactNode
 }
 
-export function NoteBox({ icon, title, body }: NoteBoxProps) {
+/** A callout in the well colour, its title in the status colour. */
+export function NoteBox({ tone, title, body }: NoteBoxProps) {
   return (
-    <table
-      style={{
-        width: '100%',
-        borderCollapse: 'collapse',
-        background: colors.well,
-        border: `1px solid ${colors.border}`,
-        borderRadius: '10px',
-      }}
-    >
-      <tbody>
-        <tr>
-          <td style={{ padding: '15px 0 15px 20px', verticalAlign: 'top', width: '32px' }}>
-            <Img
-              src={`${SITE_URL}/email/icons/${ICON_FILE[icon]}`}
-              width="16"
-              height="16"
-              alt=""
-              style={{ display: 'block', marginTop: '2px' }}
-            />
-          </td>
-          <td style={{ padding: '15px 20px 15px 8px', verticalAlign: 'top' }}>
-            <p
-              style={{
-                margin: '0 0 4px',
-                fontFamily: fonts.heading,
-                fontSize: '11px',
-                fontWeight: '700',
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: colors.text,
-                lineHeight: '1',
-              }}
-            >
-              {title}
-            </p>
-            <p
-              style={{
-                margin: '0',
-                fontFamily: fonts.body,
-                fontSize: '13px',
-                color: colors.muted,
-                lineHeight: '1.65',
-              }}
-            >
-              {body}
-            </p>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div className="sl-gutter" style={{ padding: '20px 40px 0' }}>
+      <table role="presentation" style={{ ...tableReset, backgroundColor: colors.well, borderRadius: '12px' }}>
+        <tbody>
+          <tr>
+            <td style={{ padding: '18px 0 18px 20px', verticalAlign: 'top', width: '18px' }}>
+              <Img src={iconUrl(ICON[tone], SITE_URL)} width="18" height="18" alt="" style={{ display: 'block' }} />
+            </td>
+            <td style={{ padding: '18px 20px 18px 12px', verticalAlign: 'top' }}>
+              <p
+                style={{
+                  margin: '0 0 6px',
+                  fontFamily: fonts.heading,
+                  fontSize: size.label,
+                  fontWeight: 700,
+                  letterSpacing: '0.15em',
+                  textTransform: 'uppercase',
+                  lineHeight: '18px',
+                  color: status[tone],
+                }}
+              >
+                {title}
+              </p>
+              <p
+                style={{
+                  margin: '0',
+                  fontFamily: fonts.body,
+                  fontSize: size.body,
+                  lineHeight: '1.6',
+                  color: colors.text,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {body}
+              </p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   )
 }

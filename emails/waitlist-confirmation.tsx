@@ -1,41 +1,22 @@
-import { Section, Text } from '@react-email/components'
 import { Shell } from './components/shell'
-import { EmailHeader } from './components/email-header'
-import { EmailFooter } from './components/email-footer'
-import { Headline } from './components/headline'
-import { colors, fonts } from './components/tokens'
+import { Hero } from './components/hero'
+import { Prose } from './components/prose'
 
 export function WaitlistConfirmationEmail() {
   return (
     <Shell preview="You're on the Startline waitlist">
-      <EmailHeader />
-      <Section style={{ padding: '44px', textAlign: 'center' }}>
-        <Headline line1="You're on" line2="the list." />
-        <Text
-          style={{
-            fontFamily: fonts.body,
-            fontSize: '15px',
-            color: colors.muted,
-            lineHeight: '1.65',
-            margin: '0 0 16px',
-          }}
-        >
-          Thanks for joining the Startline waitlist. We&apos;re building the best way to discover fitness
-          racing, CrossFit, running and hybrid fitness events across Australia.
-        </Text>
-        <Text
-          style={{
-            fontFamily: fonts.body,
-            fontSize: '15px',
-            color: colors.muted,
-            lineHeight: '1.65',
-            margin: '0',
-          }}
-        >
-          We&apos;ll let you know the moment we launch. Get ready to find your next start line.
-        </Text>
-      </Section>
-      <EmailFooter />
+      <Hero
+        eyebrow="Waitlist"
+        title="You're on"
+        titleAccent="the list."
+        sub="Thanks for joining the Startline waitlist."
+      />
+      <Prose>
+        We&apos;re building the best way to discover fitness racing, CrossFit, running and hybrid
+        fitness events across Australia.
+      </Prose>
+      <Prose>We&apos;ll let you know the moment we launch. Get ready to find your next start line.</Prose>
+      <div style={{ height: '24px' }} />
     </Shell>
   )
 }

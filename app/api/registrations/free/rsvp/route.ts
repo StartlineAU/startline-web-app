@@ -110,6 +110,8 @@ export async function POST(req: NextRequest) {
         cap: true,
         eventDate: true,
         startTime: true,
+        startsAtUtc: true,
+        endsAtUtc: true,
         venue: true,
         city: true,
         state: true,

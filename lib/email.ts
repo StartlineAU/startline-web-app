@@ -1,7 +1,22 @@
 import { Resend } from "resend";
-import { render } from "@react-email/render";
+import { renderEmail, type RenderedEmail } from "@/emails/render";
 import { RegistrationConfirmationEmail } from "@/emails/registration-confirmation";
+import { EventApprovedEmail } from "@/emails/event-approved";
+import { EventRejectedEmail } from "@/emails/event-rejected";
+import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
+import { ReviewReportedEmail } from "@/emails/review-reported";
+import { WaveUpdateEmail } from "@/emails/wave-update";
+import { FollowedOrganiserEventEmail } from "@/emails/followed-organiser-event";
+import { EventChangedEmail } from "@/emails/event-changed";
+import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
+import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
+import { RefundRequestEmail } from "@/emails/refund-request";
+import { formatEmailDate, formatEmailTime, formatEmailPlace } from "@/lib/email-format";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
+
+// Every email is a React Email template under emails/, rendered to HTML plus
+// a plain-text part. Templates escape whatever they are given, so nothing here
+// builds HTML by hand.
 
 const getResend = () => {
   if (!process.env.RESEND_API_KEY) return null;
@@ -15,57 +30,86 @@ function getEmailFrom(): string {
   return process.env.RESEND_FROM ?? FROM;
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export interface BuiltEmail extends RenderedEmail {
+  subject: string;
+}
+
+const firstNameGreeting = (name?: string | null) => {
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `Hi ${first},` : "Hi,";
+};
+
+async function sendOne(to: string | string[], { subject, html, text }: BuiltEmail) {
+  const resend = getResend();
+  if (!resend) return;
+  await resend.emails.send({ from: getEmailFrom(), to, subject, html, text });
 }
 
 // ── Registration Confirmation ─────────────────────────────────────────────────
 export interface RegistrationEmailData {
+  eventId: string;
   eventName: string;
   eventSeries?: string;
+  /** `yyyy-mm-dd` as stored, or already formatted. */
   eventDate: string;
+  /** `HH:mm` as stored, or already formatted. */
   startTime: string;
   category: string;
+  /** Display-ready; see formatEmailPlace. */
   location: string;
   bib?: string;
   registrationFee: string;
   serviceFee: string;
   total: string;
   userEmail: string;
+  calendarUrl?: string | null;
+}
+
+export async function buildRegistrationConfirmationEmail(data: RegistrationEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    RegistrationConfirmationEmail({
+      ...data,
+      eventDate: formatEmailDate(data.eventDate),
+      startTime: formatEmailTime(data.startTime),
+    }),
+  );
+  return { subject: `You're registered for ${data.eventName}`, ...rendered };
 }
 
 export async function sendRegistrationConfirmationEmail(to: string, data: RegistrationEmailData) {
-  const resend = getResend();
-  if (!resend) return;
-  const html = await render(RegistrationConfirmationEmail(data));
-  await resend.emails.send({
-    from: FROM,
-    to,
-    subject: `You're registered for ${data.eventName}`,
-    html,
-  });
+  if (!getResend()) return;
+  await sendOne(to, await buildRegistrationConfirmationEmail(data));
 }
 
-// ── Event approved ────────────────────────────────────────────────────────────
+// ── Event approved / rejected (organiser) ─────────────────────────────────────
 // `to` is every recipient on one message. They all belong to the same
 // organisation, so seeing each other's address is expected.
+export async function buildEventApprovedEmail(eventTitle: string, { siteUrl = SITE } = {}): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventApprovedEmail({ eventTitle, dashboardUrl: organiserUrl("/organiser/dashboard", siteUrl) }),
+  );
+  return { subject: `Your event "${eventTitle}" is now live`, ...rendered };
+}
+
 export async function sendEventApprovedEmail(email: string | string[], eventTitle: string) {
-  const resend = getResend();
-  if (!resend) return;
-  await resend.emails.send({
-    from: getEmailFrom(),
-    to: email,
-    subject: `Your event "${eventTitle}" is now live`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2 style="color:#B3E153">Event approved!</h2>
-        <p>Your event <strong>${eventTitle}</strong> has been approved and is now live on Startline.</p>
-        <a href="${organiserUrl("/organiser/dashboard", SITE)}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          View dashboard
-        </a>
-      </div>
-    `,
-  });
+  if (!getResend()) return;
+  await sendOne(email, await buildEventApprovedEmail(eventTitle));
+}
+
+export async function buildEventRejectedEmail(
+  eventTitle: string,
+  reason?: string,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventRejectedEmail({ eventTitle, reason, dashboardUrl: organiserUrl("/organiser/dashboard", siteUrl) }),
+  );
+  return { subject: `Update on your event "${eventTitle}"`, ...rendered };
+}
+
+export async function sendEventRejectedEmail(email: string | string[], eventTitle: string, reason?: string) {
+  if (!getResend()) return;
+  await sendOne(email, await buildEventRejectedEmail(eventTitle, reason));
 }
 
 // ── Event submitted for review (admins) ───────────────────────────────────────
@@ -81,42 +125,34 @@ export interface EventSubmittedForReviewEmailData {
   blocker?: string | null;
 }
 
-export function buildEventSubmittedForReviewEmail(
-  data: EventSubmittedForReviewEmailData,
-  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
-) {
-  // Staging shares the Resend key, so without the tag a test submission there
-  // reads exactly like a real organiser waiting on prod.
-  const tag = environment === "staging" ? "[Staging] " : "";
-  const previewUrl = adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl);
-  const queueUrl = adminUrl("/admin/events?status=PENDING", siteUrl);
-  const where = [data.city, data.state?.toUpperCase()].filter(Boolean).join(", ");
-  const meta = [data.eventDate, where, data.discipline].filter(Boolean).join(" · ");
+interface AdminEmailOptions {
+  environment?: string;
+  siteUrl?: string;
+}
 
-  return {
-    subject: `${tag}New event to review: ${data.eventTitle}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">${tag}Needs review</p>
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
-        <p style="font-size:15px;line-height:1.6">
-          <strong>${escapeHtml(data.organiserName)}</strong> has listed a new event and it is waiting for approval.
-        </p>
-        ${meta ? `<p style="font-size:14px;line-height:1.6;color:#555">${escapeHtml(meta)}</p>` : ""}
-        ${data.blocker
-          ? `<p style="font-size:14px;line-height:1.6;color:#8A5A00;background:#FFF4D6;border-radius:6px;padding:10px 12px">
-               Cannot be approved yet: ${escapeHtml(data.blocker)}.
-             </p>`
-          : ""}
-        <a href="${previewUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Preview and review
-        </a>
-        <p style="font-size:13px;line-height:1.6;color:#555">
-          Or open the <a href="${queueUrl}" style="color:#141414">pending queue</a>.
-        </p>
-      </div>
-    `,
-  };
+// Staging shares the Resend key, so without the tag a test submission there
+// reads exactly like a real organiser waiting on prod.
+const stagingTag = (environment: string | undefined) => (environment === "staging" ? "[Staging] " : "");
+
+export async function buildEventSubmittedForReviewEmail(
+  data: EventSubmittedForReviewEmailData,
+  { environment = process.env.ENV, siteUrl = SITE }: AdminEmailOptions = {},
+): Promise<BuiltEmail> {
+  const tag = stagingTag(environment);
+  const rendered = await renderEmail(
+    EventSubmittedForReviewEmail({
+      tag,
+      eventTitle: data.eventTitle,
+      organiserName: data.organiserName,
+      eventDate: formatEmailDate(data.eventDate),
+      location: formatEmailPlace({ city: data.city, state: data.state }) || null,
+      discipline: data.discipline,
+      blocker: data.blocker,
+      previewUrl: adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl),
+      queueUrl: adminUrl("/admin/events?status=PENDING", siteUrl),
+    }),
+  );
+  return { subject: `${tag}New event to review: ${data.eventTitle}`, ...rendered };
 }
 
 /**
@@ -128,14 +164,11 @@ export async function sendEventSubmittedForReviewEmails(
   recipients: string[],
   data: EventSubmittedForReviewEmailData,
 ) {
-  await sendToEachAdmin(recipients, buildEventSubmittedForReviewEmail(data), "admin review notification");
+  if (recipients.length === 0) return;
+  await sendToEachAdmin(recipients, await buildEventSubmittedForReviewEmail(data), "admin review notification");
 }
 
-async function sendToEachAdmin(
-  recipients: string[],
-  { subject, html }: { subject: string; html: string },
-  what: string,
-) {
+async function sendToEachAdmin(recipients: string[], { subject, html, text }: BuiltEmail, what: string) {
   if (recipients.length === 0) return;
   const resend = getResend();
   if (!resend) {
@@ -145,7 +178,7 @@ async function sendToEachAdmin(
   const from = getEmailFrom();
   for (let i = 0; i < recipients.length; i += 100) {
     const chunk = recipients.slice(i, i + 100);
-    const result = await resend.batch.send(chunk.map((to) => ({ from, to, subject, html })));
+    const result = await resend.batch.send(chunk.map((to) => ({ from, to, subject, html, text })));
     if (result.error) throw new Error(`Resend error: ${result.error.message}`);
   }
 }
@@ -162,35 +195,30 @@ export interface ReviewReportedEmailData {
   reportCount: number;
 }
 
-export function buildReviewReportedEmail(
+export async function buildReviewReportedEmail(
   data: ReviewReportedEmailData,
-  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
-) {
-  const tag = environment === "staging" ? "[Staging] " : "";
-  const queueUrl = adminUrl("/admin/reviews?filter=reported", siteUrl);
-  const about = [data.organiserName, data.eventTitle].filter(Boolean).join(" · ");
-  const excerpt = data.reviewBody.length > 300 ? `${data.reviewBody.slice(0, 300)}…` : data.reviewBody;
+  { environment = process.env.ENV, siteUrl = SITE }: AdminEmailOptions = {},
+): Promise<BuiltEmail> {
+  const tag = stagingTag(environment);
   const count = data.reportCount > 1 ? ` (${data.reportCount} reports)` : "";
-
-  return {
-    subject: `${tag}Review reported: ${data.reviewTitle}${count}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#B42318">${tag}Review reported${escapeHtml(count)}</p>
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.reviewTitle)}</h2>
-        <p style="font-size:14px;line-height:1.6;color:#555">By ${escapeHtml(data.reviewerName)} · ${escapeHtml(about)}</p>
-        <p style="font-size:14px;line-height:1.6;background:#F4F4F4;border-radius:6px;padding:10px 12px">${escapeHtml(excerpt)}</p>
-        <p style="font-size:15px;line-height:1.6"><strong>Reason:</strong> ${escapeHtml(data.reason)}</p>
-        <a href="${queueUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Open reported reviews
-        </a>
-      </div>
-    `,
-  };
+  const rendered = await renderEmail(
+    ReviewReportedEmail({
+      tag,
+      count,
+      reviewTitle: data.reviewTitle,
+      reviewerName: data.reviewerName,
+      about: [data.organiserName, data.eventTitle].filter(Boolean).join(" · "),
+      excerpt: data.reviewBody.length > 300 ? `${data.reviewBody.slice(0, 300)}…` : data.reviewBody,
+      reason: data.reason,
+      queueUrl: adminUrl("/admin/reviews?filter=reported", siteUrl),
+    }),
+  );
+  return { subject: `${tag}Review reported: ${data.reviewTitle}${count}`, ...rendered };
 }
 
 export async function sendReviewReportedEmails(recipients: string[], data: ReviewReportedEmailData) {
-  await sendToEachAdmin(recipients, buildReviewReportedEmail(data), "review report notification");
+  if (recipients.length === 0) return;
+  await sendToEachAdmin(recipients, await buildReviewReportedEmail(data), "review report notification");
 }
 
 // ── Wave update (athlete) ─────────────────────────────────────────────────────
@@ -203,33 +231,28 @@ export interface WaveUpdateEmailData {
   eventDate?: string | null;
 }
 
+export async function buildWaveUpdateEmail(
+  to: string,
+  data: WaveUpdateEmailData,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    WaveUpdateEmail({
+      greeting: firstNameGreeting(data.athleteName),
+      eventTitle: data.eventTitle,
+      waveLabel: data.waveLabel,
+      waveTime: formatEmailTime(data.waveTime),
+      eventDate: formatEmailDate(data.eventDate),
+      activityUrl: `${siteUrl}/activity`,
+      sentTo: to,
+    }),
+  );
+  return { subject: `Your start wave for ${data.eventTitle}`, ...rendered };
+}
+
 export async function sendWaveUpdateEmail(to: string, data: WaveUpdateEmailData) {
-  const resend = getResend();
-  if (!resend) return;
-  const greeting = data.athleteName ? `Hi ${escapeHtml(data.athleteName.split(" ")[0])},` : "Hi,";
-  const when = [data.eventDate, data.waveTime].filter(Boolean).join(" · ");
-  await resend.emails.send({
-    from: getEmailFrom(),
-    to,
-    subject: `Your start wave for ${data.eventTitle}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Start wave update</p>
-        <h2 style="margin:4px 0 12px">You're in the ${escapeHtml(data.waveLabel)} wave</h2>
-        <p style="font-size:15px;line-height:1.6">${greeting}</p>
-        <p style="font-size:15px;line-height:1.6">
-          Your start wave for <strong>${escapeHtml(data.eventTitle)}</strong> is
-          <strong>${escapeHtml(data.waveLabel)}</strong>${when ? `, ${escapeHtml(when)}` : ""}.
-        </p>
-        <p style="font-size:14px;line-height:1.6;color:#555">
-          Please arrive in good time for your wave. If anything changes, we'll let you know.
-        </p>
-        <a href="${SITE}/activity" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          View your registration
-        </a>
-      </div>
-    `,
-  });
+  if (!getResend()) return;
+  await sendOne(to, await buildWaveUpdateEmail(to, data));
 }
 
 // ── Followed organiser event live ─────────────────────────────────────────────
@@ -242,57 +265,28 @@ export interface FollowedOrganiserEventEmailData {
   city?: string | null;
 }
 
-export async function sendFollowedOrganiserEventEmail(
+export async function buildFollowedOrganiserEventEmail(
   to: string,
   data: FollowedOrganiserEventEmailData,
-) {
-  const resend = getResend();
-  if (!resend) return;
-  const greeting = data.followerName
-    ? `Hi ${escapeHtml(data.followerName.split(" ")[0])},`
-    : "Hi,";
-  const meta = [data.eventDate, data.city].filter(Boolean).join(" · ");
-  await resend.emails.send({
-    from: getEmailFrom(),
-    to,
-    subject: `${data.organiserName} posted ${data.eventTitle}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">New event</p>
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.organiserName)} just went live</h2>
-        <p style="font-size:15px;line-height:1.6">${greeting}</p>
-        <p style="font-size:15px;line-height:1.6">
-          <strong>${escapeHtml(data.organiserName)}</strong> posted
-          <strong>${escapeHtml(data.eventTitle)}</strong>${meta ? ` — ${escapeHtml(meta)}` : ""}.
-        </p>
-        <a href="${SITE}/events/${encodeURIComponent(data.eventId)}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          View event
-        </a>
-      </div>
-    `,
-  });
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    FollowedOrganiserEventEmail({
+      greeting: firstNameGreeting(data.followerName),
+      organiserName: data.organiserName,
+      eventTitle: data.eventTitle,
+      eventDate: formatEmailDate(data.eventDate),
+      city: data.city,
+      eventUrl: `${siteUrl}/events/${encodeURIComponent(data.eventId)}`,
+      sentTo: to,
+    }),
+  );
+  return { subject: `${data.organiserName} posted ${data.eventTitle}`, ...rendered };
 }
 
-// ── Event rejected ────────────────────────────────────────────────────────────
-export async function sendEventRejectedEmail(email: string | string[], eventTitle: string, reason?: string) {
-  const resend = getResend();
-  if (!resend) return;
-  await resend.emails.send({
-    from: getEmailFrom(),
-    to: email,
-    subject: `Update on your event "${eventTitle}"`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-        <h2 style="color:#141414">Event update</h2>
-        <p>Your event <strong>${eventTitle}</strong> was not approved.</p>
-        ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
-        <p>Please log into your dashboard to make the required changes and resubmit.</p>
-        <a href="${organiserUrl("/organiser/dashboard", SITE)}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Go to dashboard
-        </a>
-      </div>
-    `,
-  });
+export async function sendFollowedOrganiserEventEmail(to: string, data: FollowedOrganiserEventEmailData) {
+  if (!getResend()) return;
+  await sendOne(to, await buildFollowedOrganiserEventEmail(to, data));
 }
 
 // ── Event changed (athlete) ───────────────────────────────────────────────────
@@ -314,50 +308,25 @@ export interface EventChangedEmailData {
   changes: EventChangeLine[];
 }
 
-function changeRowsHtml(changes: EventChangeLine[]): string {
-  return changes
-    .map(
-      (c) => `
-        <tr>
-          <td style="padding:6px 8px 6px 0;font-size:13px;color:#555;vertical-align:top;white-space:nowrap">${escapeHtml(c.label)}</td>
-          <td style="padding:6px 8px;font-size:13px;color:#555;text-decoration:line-through;vertical-align:top">${escapeHtml(c.from)}</td>
-          <td style="padding:6px 0 6px 8px;font-size:14px;font-weight:700;vertical-align:top">${escapeHtml(c.to)}</td>
-        </tr>`,
-    )
-    .join("");
-}
-
-export function buildEventChangedEmail(data: EventChangedEmailData, { siteUrl = SITE }: { siteUrl?: string } = {}) {
-  const greeting = data.athleteName ? `Hi ${escapeHtml(data.athleteName.split(" ")[0])},` : "Hi,";
-  return {
-    subject: `${data.eventTitle} has changed`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Event changed</p>
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
-        <p style="font-size:15px;line-height:1.6">${greeting}</p>
-        <p style="font-size:15px;line-height:1.6">
-          <strong>${escapeHtml(data.organiserName)}</strong> has changed the details of an event you entered:
-        </p>
-        <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
-        <p style="font-size:15px;line-height:1.6">
-          Your entry still stands and you don't need to do anything to keep it.
-          If the new details don't work for you, ask for a refund through Support and
-          Startline will review it with the organiser.
-        </p>
-        <a href="${siteUrl}/support" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Ask for a refund
-        </a>
-      </div>
-    `,
-  };
+export async function buildEventChangedEmail(
+  data: EventChangedEmailData,
+  { siteUrl = SITE }: { siteUrl?: string } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventChangedEmail({
+      greeting: firstNameGreeting(data.athleteName),
+      eventTitle: data.eventTitle,
+      organiserName: data.organiserName,
+      changes: data.changes,
+      supportUrl: `${siteUrl}/support`,
+    }),
+  );
+  return { subject: `${data.eventTitle} has changed`, ...rendered };
 }
 
 export async function sendEventChangedEmail(to: string, data: EventChangedEmailData) {
-  const resend = getResend();
-  if (!resend) return;
-  const { subject, html } = buildEventChangedEmail(data);
-  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
+  if (!getResend()) return;
+  await sendOne(to, await buildEventChangedEmail(data));
 }
 
 // ── Edit of a published event waiting for review (admins) ─────────────────────
@@ -370,72 +339,52 @@ export interface EventEditPendingReviewEmailData {
   changes: EventChangeLine[];
 }
 
-export function buildEventEditPendingReviewEmail(
+export async function buildEventEditPendingReviewEmail(
   data: EventEditPendingReviewEmailData,
-  { environment = process.env.ENV, siteUrl = SITE }: { environment?: string; siteUrl?: string } = {},
-) {
-  const tag = environment === "staging" ? "[Staging] " : "";
-  const eventUrl = adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl);
-  return {
-    subject: `${tag}Event edit to review: ${data.eventTitle}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">${tag}Needs review</p>
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
-        <p style="font-size:15px;line-height:1.6">
-          <strong>${escapeHtml(data.organiserName)}</strong> is not verified and edited this published event.
-          The listing athletes see is unchanged until you approve it.
-        </p>
-        <table style="border-collapse:collapse;margin:8px 0 16px">${changeRowsHtml(data.changes)}</table>
-        <a href="${eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Review the edit
-        </a>
-      </div>
-    `,
-  };
+  { environment = process.env.ENV, siteUrl = SITE }: AdminEmailOptions = {},
+): Promise<BuiltEmail> {
+  const tag = stagingTag(environment);
+  const rendered = await renderEmail(
+    EventEditPendingReviewEmail({
+      tag,
+      eventTitle: data.eventTitle,
+      organiserName: data.organiserName,
+      changes: data.changes,
+      eventUrl: adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl),
+    }),
+  );
+  return { subject: `${tag}Event edit to review: ${data.eventTitle}`, ...rendered };
 }
 
 export async function sendEventEditPendingReviewEmails(
   recipients: string[],
   data: EventEditPendingReviewEmailData,
 ) {
-  await sendToEachAdmin(recipients, buildEventEditPendingReviewEmail(data), "event edit review notification");
+  if (recipients.length === 0) return;
+  await sendToEachAdmin(recipients, await buildEventEditPendingReviewEmail(data), "event edit review notification");
 }
 
-export async function sendEventEditDecisionEmail(
-  to: string,
-  data: { eventTitle: string; approved: boolean; reason?: string; eventUrl: string },
-) {
-  const resend = getResend();
-  if (!resend) return;
-  const { subject, html } = buildEventEditDecisionEmail(data);
-  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
-}
-
-export function buildEventEditDecisionEmail(data: {
+// ── Edit decision (organiser) ─────────────────────────────────────────────────
+export interface EventEditDecisionEmailData {
   eventTitle: string;
   approved: boolean;
   reason?: string;
   eventUrl: string;
-}) {
+}
+
+export async function buildEventEditDecisionEmail(data: EventEditDecisionEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(EventEditDecisionEmail(data));
   return {
     subject: data.approved
       ? `Your changes to ${data.eventTitle} are live`
       : `Changes to ${data.eventTitle} were not approved`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
-        <p style="font-size:15px;line-height:1.6">
-          ${data.approved
-            ? "Startline approved your changes. They are now the live listing. The event was not taken off sale while they waited."
-            : `Startline did not approve your changes, so the live listing is unchanged.${data.reason ? ` Reason: ${escapeHtml(data.reason)}` : ""}`}
-        </p>
-        <a href="${data.eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Open the event
-        </a>
-      </div>
-    `,
+    ...rendered,
   };
+}
+
+export async function sendEventEditDecisionEmail(to: string, data: EventEditDecisionEmailData) {
+  if (!getResend()) return;
+  await sendOne(to, await buildEventEditDecisionEmail(data));
 }
 
 // ── Refund request (organiser and admins) ─────────────────────────────────────
@@ -451,30 +400,14 @@ export interface RefundRequestEmailData {
   eventUrl: string;
 }
 
-export function buildRefundRequestEmail(data: RefundRequestEmailData) {
-  return {
-    subject: `Refund request: ${data.eventTitle}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#141414">
-        <p style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#7AA820">Refund requested</p>
-        <h2 style="margin:4px 0 12px">${escapeHtml(data.eventTitle)}</h2>
-        <p style="font-size:15px;line-height:1.6">
-          <strong>${escapeHtml(data.athleteName)}</strong>
-          (${escapeHtml(data.athleteEmail)}) asked for a refund${data.eventDate ? ` for the event on ${escapeHtml(data.eventDate)}` : ""}.
-        </p>
-        <p style="font-size:15px;line-height:1.6;white-space:pre-wrap">${escapeHtml(data.reason)}</p>
-        <a href="${data.eventUrl}" style="display:inline-block;margin:16px 0;background:#B3E153;color:#141414;font-weight:700;padding:12px 24px;border-radius:6px;text-decoration:none">
-          Review the request
-        </a>
-        <p style="font-size:13px;line-height:1.6;color:#555">Ticket ${escapeHtml(data.ticketId)}.</p>
-      </div>
-    `,
-  };
+export async function buildRefundRequestEmail(data: RefundRequestEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    RefundRequestEmail({ ...data, eventDate: formatEmailDate(data.eventDate) }),
+  );
+  return { subject: `Refund request: ${data.eventTitle}`, ...rendered };
 }
 
 export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
-  const resend = getResend();
-  if (!resend) return;
-  const { subject, html } = buildRefundRequestEmail(data);
-  await resend.emails.send({ from: getEmailFrom(), to, subject, html });
+  if (!getResend()) return;
+  await sendOne(to, await buildRefundRequestEmail(data));
 }

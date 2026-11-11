@@ -4,8 +4,8 @@ import { buildEventChangedEmail, buildRefundRequestEmail } from "@/lib/email";
 const changes = [{ label: "Start date", from: "2027-03-14", to: "2027-03-21" }];
 
 describe("event changed email", () => {
-  it("tells the athlete what changed and sends them to Support for a refund", () => {
-    const { subject, html } = buildEventChangedEmail(
+  it("tells the athlete what changed and sends them to Support for a refund", async () => {
+    const { subject, html } = await buildEventChangedEmail(
       {
         athleteName: "Harper Jones",
         eventId: "evt-1",
@@ -30,8 +30,8 @@ describe("event changed email", () => {
 });
 
 describe("refund request email", () => {
-  it("names the athlete, the event and the reason, and links to the review", () => {
-    const { subject, html } = buildRefundRequestEmail({
+  it("names the athlete, the event and the reason, and links to the review", async () => {
+    const { subject, html } = await buildRefundRequestEmail({
       ticketId: "tkt-1",
       athleteName: "Harper Jones",
       athleteEmail: "harper@example.com",
@@ -44,7 +44,8 @@ describe("refund request email", () => {
     expect(subject).toBe("Refund request: Harbour 10K");
     expect(html).toContain("Harper Jones");
     expect(html).toContain("harper@example.com");
-    expect(html).toContain("2027-03-21");
+    // Stored dates are shown the way the app writes them.
+    expect(html).toContain("Sun, 21 Mar 2027");
     expect(html).toContain("Clash &lt;with&gt; another race");
     expect(html).toContain("/organiser/refunds");
   });

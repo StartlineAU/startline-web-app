@@ -22,6 +22,7 @@
 /build
 
 # misc
+/.email-preview/
 .DS_Store
 *.pem
 
