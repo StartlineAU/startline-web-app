@@ -1,4 +1,4 @@
-import EventFormWizard from "@/components/event/EventFormWizard";
+import EventPageEditor from "@/components/event/EventPageEditor";
 
 export default async function AdminEditEventPage({
   params,
@@ -21,7 +21,7 @@ export default async function AdminEditEventPage({
         </p>
       </div>
 
-      <EventFormWizard
+      <EventPageEditor
         apiBase="/api/admin"
         submitRedirect="/admin/events"
         cancelRedirect="/admin/events"

@@ -175,3 +175,57 @@ export function ensureDatabaseUrl(): void {
     }
   }
 }
+
+/**
+ * Open a row of the listing editor's Event Details card (#528): date, time,
+ * location, format, divisions or intensity. Each row opens in place;
+ * a row that is already open is left as it is.
+ */
+export async function openDetail(page: Page, row: string): Promise<void> {
+  // A finished row opens the next one by itself, so the row may already be
+  // open, or open between looking and clicking. Only ever click it open.
+  const toggle = page.locator(`#region-${row} button[aria-expanded]`).first();
+  await expect(async () => {
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1500 });
+  }).toPass({ timeout: 15000 });
+}
+
+/** Pick the discipline from the pill on the listing editor's banner. */
+export async function chooseDiscipline(page: Page, name: string): Promise<void> {
+  await page.getByRole("button", { name: "Choose discipline" }).click();
+  await page.getByRole("dialog", { name: "Discipline" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
+}
+
+/**
+ * A draft with every field the listing editor requires, so Publish goes
+ * straight to the terms dialog. Created through the organiser API for the
+ * signed-in organiser; returns its id.
+ */
+export async function createCompleteDraft(page: Page, title: string): Promise<string> {
+  const res = await page.request.post("/api/organiser/events", {
+    data: {
+      title,
+      discipline: "running",
+      description: "<p>Flat, fast and friendly.</p>",
+      eventDate: "2027-03-14",
+      startTime: "07:00",
+      endTime: "10:00",
+      venue: "Albert Park",
+      address: "Aughtie Dr, Albert Park VIC 3206",
+      city: "Melbourne",
+      state: "vic",
+      format: "individual",
+      level: "moderate",
+      categories: ["10K"],
+      cap: 500,
+      registrationType: "startline",
+      waves: [{ label: "General", price: "45", closes: "", startTime: "", qty: 500 }],
+      coverImageUrl: "https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=1600&q=80",
+      photos: [],
+      submit: false,
+    },
+  });
+  expect(res.ok()).toBe(true);
+  return (await res.json()).id;
+}

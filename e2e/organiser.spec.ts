@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { organiserLogin, organiserMemberLogin, openOrganiserSettings, pickTime, expectOrganiserDashboard, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, organiserMemberLogin, openOrganiserSettings, pickTime, expectOrganiserDashboard, ensureDatabaseUrl, openDetail } from "./helpers";
 
 ensureDatabaseUrl();
 
@@ -102,109 +102,46 @@ test.describe("organiser login", () => {
   });
 });
 
-test.describe("new listing wizard", () => {
-  test("new listing step 1 visual snapshot", async ({ page }) => {
+test.describe("new listing editor", () => {
+  test("new listing editor visual snapshot", async ({ page }) => {
 
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-    await argosScreenshot(page, "new-listing-step1");
+    await expect(page.getByRole("textbox", { name: "Event title" })).toBeVisible();
+    await argosScreenshot(page, "new-listing-editor");
   });
 
-  test("new listing step 2 visual snapshot", async ({ page }) => {
+  test("new listing editor with details filled visual snapshot", async ({ page }) => {
 
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Visual Test Event");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-    await argosScreenshot(page, "new-listing-step2");
-  });
-
-  test("new listing step 3 visual snapshot", async ({ page }) => {
-
-    await organiserLogin(page);
-    await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Visual Test Event");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
+    await page.getByRole("textbox", { name: "Event title" }).fill("E2E Visual Test Event");
+    await openDetail(page, "date");
     await page.getByText("Pick start date").click();
     await page.getByRole("button", { name: /today/i }).click();
+    await openDetail(page, "time");
     await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
-    const addrInput3 = page.getByPlaceholder(/start typing an address/i);
-    await addrInput3.fill("1 Test St, Sydney NSW 2000");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-    await argosScreenshot(page, "new-listing-step3");
+    await openDetail(page, "location");
+    await page.getByPlaceholder(/start typing an address/i).fill("1 Test St, Sydney NSW 2000");
+    await page.getByLabel("Ticket price").fill("50");
+    await argosScreenshot(page, "new-listing-editor-details");
   });
 
-  test("new listing step 4 visual snapshot", async ({ page }) => {
+  test("new listing checklist visual snapshot", async ({ page }) => {
 
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Visual Test Event");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
-    await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
-    const addrInput4 = page.getByPlaceholder(/start typing an address/i);
-    await addrInput4.fill("1 Test St, Sydney NSW 2000");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-    await page.getByRole("button", { name: /startline/i }).first().click();
-    const price4 = page.locator('input[placeholder="129"]');
-    if (await price4.isVisible()) await price4.fill("50");
-    await page.getByRole("button", { name: /continue/i }).click();
-    // Step 4 only renders after the tickets step settles — wait on the UI
-    // state instead of a fixed timeout so the screenshot is never of a
-    // half-transitioned wizard.
-    await expect(page.getByText(/cover image/i).first()).toBeVisible({ timeout: 15000 });
-    await argosScreenshot(page, "new-listing-step4");
-  });
-
-  test("new listing final review visual snapshot", async ({ page }) => {
-
-    await organiserLogin(page);
-    await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Visual Test Event");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
-    await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
-    const addrInput = page.getByPlaceholder(/start typing an address/i);
-    await addrInput.fill("1 Test St, Sydney NSW 2000");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-
-    await page.getByRole("button", { name: /startline/i }).first().click();
-    const price = page.locator('input[placeholder="129"]');
-    if (await price.isVisible()) await price.fill("50");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.waitForTimeout(500);
-
-    await argosScreenshot(page, "new-listing-review");
+    await page.getByRole("textbox", { name: "Event title" }).fill("E2E Visual Test Event");
+    await page.getByTestId("checklist-toggle").click();
+    await expect(page.getByTestId("checklist")).toBeVisible();
+    await argosScreenshot(page, "new-listing-checklist");
   });
 
   test("location preview map shows empty state before address is selected", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
+    await openDetail(page, "location");
 
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Map Preview Test Event");
-    await page.getByRole("button", { name: /^continue$/i }).click();
-
-    await expect(page.getByText(/when and where/i)).toBeVisible();
     await expect(page.getByTestId("location-preview-empty")).toBeVisible();
     await expect(page.getByText(/select an address above to preview the location/i)).toBeVisible();
   });
@@ -580,13 +517,11 @@ test.describe("organiser pages", () => {
     await expect(page.getByRole("link", { name: /back to payments/i })).toBeVisible();
   });
 
-  test("new listing media step supports multiple info PDFs with labels, reorder and remove", async ({ page }) => {
+  test("new listing information card supports multiple PDFs with labels, reorder and remove", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-    await page.getByRole("button", { name: /Media & Description/i }).click();
-    await expect(page.getByText(/event information pdfs/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Event information", { exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/add pdfs/i)).toBeVisible();
 
     const pdfInput = page.locator('input[type="file"][accept="application/pdf"]');

@@ -554,6 +554,24 @@ write HTML strings by hand: templates escape their values.
 - `pnpm email:preview` renders every email to `.email-preview/` for a look in a
   browser.
 
+## Listing editor
+
+Organisers (and admins) create and edit events on the event page itself
+(#528), not in a step wizard. `components/event/EventPageEditor.tsx` renders
+`EventDetailView`, the same component as `/events/[id]`, with `mode="edit"`
+and `slots` swapping regions for their controls
+(`components/event/event-form/regions.tsx`), so the form is its own preview.
+Change the public layout in `EventDetailView` and the editor follows; never
+copy the layout into the editor.
+
+What is still required comes from `missingRequirements` in
+`event-form/shared.tsx`; each entry names a region (`region-<id>` on the page),
+which the header checklist scrolls to and opens. Publish opens the checklist
+while anything is missing, and otherwise a dialog where the organiser agrees to
+the terms; a live event saves without it. A finished details row opens the
+next unfinished one by itself (it waits while a picker in the row is open).
+Motion lives in `event-form/motion.ts` (anime.js, reduced-motion safe).
+
 ## Design system
 
 **`design/design.md`** is authoritative.

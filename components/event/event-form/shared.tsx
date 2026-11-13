@@ -1,89 +1,80 @@
 "use client";
 
-import { useState, useRef, useEffect, startTransition } from "react";
-import { useRouter } from "next/navigation";
-import { fetchAuthSession } from "aws-amplify/auth";
-import Image from "next/image";
-import Link from "next/link";
-import {
-  ArrowLeft, ArrowRight, Check, Plus, Trash2,
-  Upload, X, MapPin, Calendar, Users,
-  ChevronDown, ChevronUp, Clock, Eye,
-  Ticket, ExternalLink, DollarSign, Bold, Italic, Underline,
-  AlignLeft, Trophy, FileText, AlertTriangle,
-} from "lucide-react";
-import { encodePrizePool, parsePrizePool, normalisePrizeAmount } from "@/lib/prize-pool";
-import { UPLOAD_LIMITS, TYPE_MIMES } from "@/lib/upload-limits";
-import { uploadFile, UploadError } from "@/lib/upload-client";
-import { formatDivisionLabel } from "@/lib/divisions";
-import { DEFAULT_REFUND_TIERS, REFUND_PRESETS, describeTiers, matchRefundPreset, parseTiers, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
+import { useRef, useEffect } from "react";
+import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
+import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
-import { takesPayments } from "@/lib/event-approval";
-import { customerHref } from "@/lib/portal-domains";
-import { usePortalHost } from "@/lib/use-portal-host";
-import AddressAutocomplete  from "@/components/ui/AddressAutocomplete";
-import SuburbAutocomplete   from "@/components/ui/SuburbAutocomplete";
-import LocationPreviewMap   from "@/components/organiser/LocationPreviewMap";
-import DatePicker           from "@/components/ui/DatePicker";
-import SelectMenu           from "@/components/ui/SelectMenu";
-import TimePicker           from "@/components/ui/TimePicker";
-
-/* ── Step definitions ───────────────────────────────────────── */
-
-export const STEPS = [
-  { k: "basics",   n: "01", label: "The Basics",          sub: "Name & Discipline"      },
-  { k: "when",     n: "02", label: "Date & Location",     sub: "When & Where"           },
-  { k: "tickets",  n: "03", label: "Tickets & Pricing",   sub: "Cost & Entry Options"   },
-  { k: "media",    n: "04", label: "Media & Description", sub: "Images & Event Details" },
-  { k: "review",   n: "05", label: "Final Review",        sub: "Review & Publish"       },
-] as const;
 
 /**
- * One required thing the organiser has not finished: the review-table row it
- * belongs to, the step that fixes it, and what to tell them.
+ * The parts of the listing page an organiser fills in. Each is an element id
+ * (`region-<id>`) on the editor, so the checklist can take them straight to it.
  */
-export type Requirement = { row: string; step: number; message: string };
+export type RegionId =
+  | "cover" | "discipline" | "title"
+  | "description" | "tickets"
+  | "registration" | "date" | "time" | "location"
+  | "format" | "divisions" | "intensity" | "refund";
 
 /**
- * Everything still standing between this form and publishing. The one source
- * for both the step rail's error marks and the review table, so the two cannot
- * disagree about what is missing.
+ * One required thing the organiser has not finished: a short name for it, the
+ * region of the page that fixes it, and what to tell them.
+ */
+export type Requirement = { row: string; region: RegionId; message: string };
+
+/**
+ * A ticket category needs a name and a price before the event can be published.
+ * The free toggle writes "0", and a hand-typed "0.00" means the same thing, so
+ * anything that parses to a number at or above zero counts as priced. A bare "."
+ * or an empty box does not.
  */
 export function waveIsComplete(w: { label: string; price: string }): boolean {
   const price = parseFloat(w.price);
   return w.label.trim().length > 0 && Number.isFinite(price) && price >= 0;
 }
 
+/** One required check on the listing, and whether it is met. */
+export type RequirementCheck = Requirement & { done: boolean };
+
+/**
+ * Every check that applies to this listing, met or not, in the order the page
+ * reads. The editor's progress count and checklist come from here, and
+ * `missingRequirements` is the unmet ones, so none of them can disagree.
+ */
+export function requirementChecks(form: FormState): RequirementCheck[] {
+  const checks: RequirementCheck[] = [];
+  const check = (row: string, region: RegionId, done: boolean, message: string) =>
+    checks.push({ row, region, done, message });
+  const timeOrderBad = !!(form.startTime && form.endTime && form.endTime <= form.startTime);
+
+  check("Cover image", "cover", !!(form.coverImage || form.coverImageUrl), "Upload a cover image");
+  check("Discipline", "discipline", !!form.discipline, "Choose a discipline");
+  check("Event title", "title", form.title.trim().length > 2, "Add an event name of at least 3 characters");
+  check("Description", "description", stripHtml(form.description).length > 0, "Write the event description");
+  check("Tickets & prices", "tickets", form.waves.length > 0 && form.waves.every(waveIsComplete),
+    "Every ticket category needs a name and a price");
+  if (form.registrationType !== "startline") {
+    check("Registration link", "registration", !!form.registrationUrl.trim(), "Add your registration link");
+  }
+  check("Date", "date", !!form.date, "Choose the event date");
+  check("Start time", "time", !!form.startTime && !timeOrderBad,
+    timeOrderBad ? "Cut-off time must be after the start time" : "Set a start time");
+  check("Venue address", "location", !!(form.address.trim() && form.city.trim() && form.state),
+    "Add the street address, city and state");
+  check("Format", "format", !!form.format, "Choose a format");
+  if (DISCIPLINE_CATS[form.discipline as Discipline]) {
+    check("Divisions", "divisions", form.categories.length > 0, "Choose at least one division");
+  }
+  check("Intensity", "intensity", !!form.level, "Choose an intensity level");
+  // A free event takes no money, so it has no refund policy to finish.
+  if (!isFreeEvent(form.waves)) {
+    check("Refund policy", "refund", tiersAreValid(form.refundTiers), "Finish the refund policy");
+  }
+  return checks;
+}
+
+/** Everything still standing between this form and publishing. */
 export function missingRequirements(form: FormState): Requirement[] {
-  const missing: Requirement[] = [];
-  const need = (row: string, step: number, message: string) => missing.push({ row, step, message });
-
-  if (form.title.trim().length <= 2) need("Title", 0, "Add an event name of at least 3 characters");
-  if (!form.discipline) need("Discipline", 0, "Choose a discipline");
-  if (!form.format) need("Format", 0, "Choose a format");
-  if (!form.level) need("Intensity", 0, "Choose an intensity level");
-  if (form.cap === "" || form.minAge === "") need("Cap / Min age", 0, "Set a participant cap and a minimum age");
-  if (DISCIPLINE_CATS[form.discipline as Discipline] && form.categories.length === 0) {
-    need("Categories", 0, "Choose at least one category");
-  }
-
-  if (!form.date) need("Date", 1, "Choose the event date");
-  if (!form.startTime) need("Start / End", 1, "Set a start time");
-  else if (form.endTime && form.endTime <= form.startTime) need("Start / End", 1, "Cut-off time must be after the start time");
-  if (!(form.address.trim() && form.city.trim() && form.state)) need("Venue", 1, "Add the street address, city and state");
-
-  if (form.waves.length === 0 || !form.waves.every(waveIsComplete)) {
-    need("Tickets", 2, "Every ticket category needs a name and a price");
-  }
-  if (form.registrationType !== "startline" && !form.registrationUrl.trim()) {
-    need("Registration", 2, "Add your registration link");
-  }
-  if (!tiersAreValid(form.refundTiers)) need("Refund policy", 2, "Finish the refund policy");
-
-  if (!(form.coverImage || form.coverImageUrl)) need("Cover image", 3, "Upload a cover image");
-  if (stripHtml(form.description).length === 0) need("Description", 3, "Write the event description");
-
-  return missing;
+  return requirementChecks(form).filter((c) => !c.done).map(({ row, region, message }) => ({ row, region, message }));
 }
 
 export type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "other" | "";
@@ -91,7 +82,35 @@ export type Format     = "individual" | "team" | "both" | "";
 export type Intensity  = "low" | "moderate" | "high" | "extreme" | "";
 export type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
 
-export interface Wave { label: string; price: string; closes: string; startTime: string; }
+/**
+ * One ticket category. `qty` is how many tickets it has ("" for no limit). The
+ * organiser sets it and athletes never see it: checkout stops selling at it and
+ * the register page shows the tier as sold out (#528).
+ */
+export interface Wave { label: string; price: string; closes: string; startTime: string; qty: string; }
+
+export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "" };
+
+/** A ticket category's quantity as a number, or null when it has no limit. */
+export function waveQty(w: Pick<Wave, "qty">): number | null {
+  const n = parseInt(w.qty, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * The event's overall cap, which checkout, the register page and the
+ * organiser dashboards read. When every ticket category has a quantity it is
+ * their total; otherwise it is whatever overall limit the event carried from
+ * before ticket quantities (`cap`), which the organiser can remove.
+ */
+export function eventCap(form: Pick<FormState, "waves" | "cap">): number | null {
+  const quantities = form.waves.map(waveQty);
+  if (quantities.length > 0 && quantities.every((q): q is number => q !== null)) {
+    return quantities.reduce((sum, q) => sum + q, 0);
+  }
+  const legacy = parseInt(form.cap, 10);
+  return Number.isFinite(legacy) && legacy > 0 ? legacy : null;
+}
 
 export interface InfoPdf {
   file: File | null;
@@ -107,8 +126,8 @@ export interface FormState {
   format: Format;
   level: Intensity;
   categories: string[];
+  /** An overall entry limit from before ticket quantities; "" for none. See `eventCap`. */
   cap: string;
-  minAge: string;
   date: string;
   endDate: string;
   startTime: string;
@@ -137,10 +156,10 @@ export interface FormState {
 
 export const INITIAL: FormState = {
   title: "", discipline: "", description: "",
-  format: "", level: "", categories: [], cap: "", minAge: "",
+  format: "", level: "", categories: [], cap: "",
   date: "", endDate: "", startTime: "", endTime: "",
   venue: "", address: "", city: "", state: "", latitude: null, longitude: null,
-  waves: [{ label: "", price: "", closes: "", startTime: "" }],
+  waves: [EMPTY_WAVE],
   prizeMoney: false, prizeMoneyAmount: "", prizeMoneyDetails: "",
   refundTiers: DEFAULT_REFUND_TIERS, refundPolicy: "",
   registrationType: "startline", feeStructure: "athlete", registrationUrl: "",
@@ -183,7 +202,7 @@ export function fmt24to12(t: string): string {
 /* ═══════════════════════════════════════════════════════════════
    RICH TEXT EDITOR
    ══════════════════════════════════════════════════════════════ */
-export function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+export function RichTextEditor({ value, onChange, invalid = false }: { value: string; onChange: (html: string) => void; invalid?: boolean }) {
   const editorRef     = useRef<HTMLDivElement>(null);
   const userHasTyped  = useRef(false);
 
@@ -206,7 +225,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
   const toolbarBtn = "w-8 h-8 rounded flex items-center justify-center text-light hover:bg-white/5 hover:text-light transition-colors font-headline font-bold text-[13px]";
 
   return (
-    <div className="border border-dark-lighter rounded-md overflow-hidden focus-within:border-primary transition-colors">
+    <div className={`border rounded-md overflow-hidden focus-within:border-primary transition-colors ${invalid ? "border-orange-400/50" : "border-dark-lighter"}`}>
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-dark-lighter bg-white/[0.02] flex-wrap">
         <button type="button" title="Bold (Ctrl+B)"      onClick={() => exec("bold")}      className={toolbarBtn}><Bold      className="w-3.5 h-3.5" /></button>
@@ -224,6 +243,9 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Event description"
         onInput={() => {
           userHasTyped.current = true;
           if (editorRef.current) onChange(editorRef.current.innerHTML);
@@ -246,9 +268,7 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   STEP 1 — THE BASICS
-   ══════════════════════════════════════════════════════════════ */
+/* ── Option lists ───────────────────────────────────────────── */
 export const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
   { v: "crossfit",  l: "CrossFit",  d: "Functional fitness comp"    },
   { v: "running",   l: "Running",   d: "5km · 10km · Half · Marathon" },

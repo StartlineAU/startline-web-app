@@ -2,32 +2,28 @@ import Link from "next/link";
 import { ArrowRight, Clock, Layers, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Mirrors the real wizard's steps in app/organiser/new-listing/page.tsx (STEPS).
-const STEPS = [
+// Mirrors the regions of the listing editor (components/event/EventPageEditor.tsx),
+// top to bottom, in the order an athlete reads the finished page.
+const PARTS = [
   {
-    title: "The Basics",
-    desc: "Give your event a name, pick the discipline and format, and set how many athletes you can fit.",
-    need: "event name · discipline · participant cap",
+    title: "The banner",
+    desc: "Click the banner to add a cover photo, pick the discipline, and type the event name straight onto it.",
+    need: "one cover photo · event name",
   },
   {
-    title: "Date & Location",
-    desc: "Tell athletes where and when it's happening — venue address, date and start time.",
+    title: "Overview & pricing",
+    desc: "Describe the event, then add each ticket category with its price. A prize pool and gallery are optional.",
+    need: "short description · prices",
+  },
+  {
+    title: "Event details",
+    desc: "Fill in the details card beside it: date, start time, venue, format, intensity, cap and minimum age.",
     need: "venue address · date & time",
   },
   {
-    title: "Tickets & Pricing",
-    desc: "Set up at least one ticket category and price so athletes can register. You can add more — like early bird — later.",
-    need: "price · entry categories",
-  },
-  {
-    title: "Media & Description",
-    desc: "Add a cover photo and describe your event so athletes know exactly what to expect.",
-    need: "one photo · short description",
-  },
-  {
-    title: "Final Review",
-    desc: "Check everything over on one screen, then publish when you're happy with it.",
-    need: "nothing — just a once-over",
+    title: "Preview & publish",
+    desc: "The checklist shows anything still missing. Preview the page exactly as athletes will see it, then publish.",
+    need: "nothing, just a once-over",
   },
 ];
 
@@ -44,7 +40,7 @@ export default function WizardGuidePage() {
             Let&apos;s build<br />your <span className="text-primary">first event.</span>
           </h1>
           <p className="text-[16px] text-muted max-w-[480px] leading-relaxed mb-5">
-            Five short steps — that&apos;s all it takes to get an event live. You can save a
+            You fill in your event page itself, exactly where athletes will read it. Save a
             draft and come back anytime, so nothing needs to be perfect on the first pass.
           </p>
 
@@ -52,12 +48,12 @@ export default function WizardGuidePage() {
             <Clock className="w-3.5 h-3.5 text-primary" strokeWidth={2.2} /> About 10 minutes
           </div>
 
-          {/* Steps */}
+          {/* Parts of the page */}
           <div className="mb-9">
-            {STEPS.map((step, i) => (
+            {PARTS.map((step, i) => (
               <div
                 key={step.title}
-                className={`flex gap-3.5 sm:gap-5 py-6 first:pt-0 ${i < STEPS.length - 1 ? "border-b border-white/[0.06]" : ""}`}
+                className={`flex gap-3.5 sm:gap-5 py-6 first:pt-0 ${i < PARTS.length - 1 ? "border-b border-white/[0.06]" : ""}`}
               >
                 <div className="shrink-0 w-10 h-10 sm:w-[46px] sm:h-[46px] rounded-xl bg-dark border border-dark-lighter flex items-center justify-center font-headline font-bold italic text-[17px] sm:text-[20px] text-primary tracking-tight">
                   {i + 1}
@@ -78,7 +74,7 @@ export default function WizardGuidePage() {
             <ShieldCheck className="shrink-0 w-[18px] h-[18px] text-primary mt-0.5" strokeWidth={2.2} />
             <p className="text-[13.5px] text-light leading-relaxed">
               Nothing goes live until you hit <strong className="text-primary font-semibold">Publish</strong>.
-              You can save a draft at any step and pick it back up whenever suits.
+              You can save a draft at any point and pick it back up whenever suits.
             </p>
           </div>
 

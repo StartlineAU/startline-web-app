@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import EventFormWizard from "@/components/event/EventFormWizard";
+import EventPageEditor from "@/components/event/EventPageEditor";
 import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
 import { getOrganiserSession } from "@/lib/amplify-server";
 import prisma from "@/lib/prisma";
@@ -62,7 +62,7 @@ export default async function NewListingPage({
   });
 
   return (
-    <EventFormWizard
+    <EventPageEditor
       apiBase="/api/organiser"
       submitRedirect="/organiser/dashboard"
       cancelRedirect="/organiser/dashboard"
