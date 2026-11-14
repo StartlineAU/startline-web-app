@@ -52,11 +52,13 @@ export async function PATCH(
 
   const registrations = await prisma.registration.findMany({
     where: { eventId: id },
-    select: { id: true, athleteEmail: true },
+    select: { id: true, athleteEmail: true, detailsPending: true },
   });
   const byId = new Map(registrations.map((r) => [r.id, r]));
+  // A team place still waiting for its member's details carries the buyer's
+  // email, so it is matched by id only.
   const byEmail = new Map(
-    registrations.map((r) => [r.athleteEmail.toLowerCase(), r])
+    registrations.filter((r) => !r.detailsPending).map((r) => [r.athleteEmail.toLowerCase(), r])
   );
 
   const updates: { id: string; data: Prisma.RegistrationUpdateInput }[] = [];

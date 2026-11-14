@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   userUpsert: vi.fn(),
   notificationCreate: vi.fn(),
   paymentIntentCreate: vi.fn(),
+  registrationFindUnique: vi.fn(),
+  userNotificationCreate: vi.fn(),
   queryRaw: vi.fn(async (_sql: TemplateStringsArray, ..._values: unknown[]) => []),
 }));
 
@@ -26,7 +28,9 @@ const prismaMock = vi.hoisted(() => {
       findFirst: mocks.registrationFindFirst,
       findMany: mocks.registrationFindMany,
       createMany: mocks.registrationCreateMany,
+      findUnique: mocks.registrationFindUnique,
     },
+    userNotification: { create: mocks.userNotificationCreate },
     team: { findMany: mocks.teamFindMany, create: mocks.teamCreate },
     user: { upsert: mocks.userUpsert },
     organiser: { findUnique: async () => ({ notifyNewRegistration: true }) },
@@ -42,7 +46,10 @@ vi.mock("@/lib/turnstile", () => ({ assertTurnstile: async () => null }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: async () => null }));
 vi.mock("@/lib/amplify-server", () => ({ getUserSession: async () => mocks.session() }));
 vi.mock("@/lib/athlete-accounts", () => ({ ensureAthleteCognitoUser: async () => "cognito-sub-1" }));
-vi.mock("@/lib/email", () => ({ sendRegistrationConfirmationEmail: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/email", () => ({
+  sendRegistrationConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+  sendTeamDetailsNeededEmail: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/stripe", () => ({
   getStripe: () => ({ paymentIntents: { create: mocks.paymentIntentCreate } }),
 }));
@@ -50,7 +57,7 @@ vi.mock("@/lib/stripe", () => ({
 import { POST as registerFree } from "@/app/api/registrations/free/route";
 import { POST as registerFreeRsvp } from "@/app/api/registrations/free/rsvp/route";
 import { POST as checkout } from "@/app/api/checkout/route";
-import { sendRegistrationConfirmationEmail } from "@/lib/email";
+import { sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
 
 const person = (n: number, over: Record<string, unknown> = {}) => ({
   firstName: `Member${n}`,
@@ -113,6 +120,8 @@ beforeEach(() => {
   mocks.userUpsert.mockResolvedValue({ id: "user-1" });
   mocks.notificationCreate.mockResolvedValue({});
   mocks.paymentIntentCreate.mockResolvedValue({ id: "pi_1", client_secret: "cs_1" });
+  mocks.registrationFindUnique.mockResolvedValue({ userId: "user-1" });
+  mocks.userNotificationCreate.mockResolvedValue({});
 });
 
 describe("team checkout (#541)", () => {
@@ -227,5 +236,89 @@ describe("free team registration (#541)", () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/standard registration/);
+  });
+});
+
+describe("team members added later (#541)", () => {
+  /** A blank teammate the buyer will name from Activity. */
+  const later = { ...person(0), firstName: "", lastName: "", email: "", dateOfBirth: "", mobile: "", emergencyContactName: "", emergencyContactPhone: "", detailsLater: true };
+
+  it("writes the teammate as a pending place on the buyer's email", async () => {
+    mocks.eventFindUnique.mockResolvedValue(teamEvent({ waves: [{ label: "Pairs", price: "0", teamSize: 2 }] }));
+    const res = await post(registerFree, "/api/registrations/free", pairOrder({
+      participants: [
+        { ...person(1), waveLabel: "Pairs", team: 0 },
+        { ...later, waveLabel: "Pairs", team: 0 },
+      ],
+    }));
+    expect(res.status).toBe(200);
+
+    const rows = mocks.registrationCreateMany.mock.calls[0][0].data;
+    expect(rows[0]).toMatchObject({ athleteName: "Member1 Smith", athleteEmail: "member1@example.com" });
+    expect(rows[1]).toMatchObject({
+      athleteName: "Team member 2",
+      athleteEmail: "member1@example.com",
+      detailsPending: true,
+    });
+    expect(rows[1].firstName).toBeUndefined();
+    expect(rows[1].dateOfBirth).toBeUndefined();
+  });
+
+  it("confirms only the named member and asks the buyer for the rest", async () => {
+    mocks.eventFindUnique.mockResolvedValue(teamEvent({ waves: [{ label: "Pairs", price: "0", teamSize: 2 }] }));
+    await post(registerFree, "/api/registrations/free", pairOrder({
+      participants: [
+        { ...person(1), waveLabel: "Pairs", team: 0 },
+        { ...later, waveLabel: "Pairs", team: 0 },
+      ],
+    }));
+
+    expect(vi.mocked(sendRegistrationConfirmationEmail)).toHaveBeenCalledTimes(1);
+    const [to, data] = vi.mocked(sendTeamDetailsNeededEmail).mock.calls[0];
+    expect(to).toBe("member1@example.com");
+    expect(data.teams).toEqual([{ name: "Fast Feet", size: 2, missing: 1 }]);
+    expect(mocks.userNotificationCreate.mock.calls[0][0].data).toMatchObject({
+      userId: "user-1",
+      type: "TEAM_DETAILS_NEEDED",
+    });
+  });
+
+  it("refuses to leave a team's first member for later", async () => {
+    mocks.eventFindUnique.mockResolvedValue(teamEvent());
+    const res = await post(checkout, "/api/checkout", pairOrder({
+      participants: [
+        { ...person(1), waveLabel: "Solo" },
+        { ...later, waveLabel: "Pairs", team: 0 },
+        { ...person(2), waveLabel: "Pairs", team: 0 },
+      ],
+    }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/first member/);
+  });
+
+  it("refuses an individual ticket with no details", async () => {
+    mocks.eventFindUnique.mockResolvedValue(teamEvent());
+    const res = await post(checkout, "/api/checkout", pairOrder({
+      teams: [],
+      participants: [
+        { ...person(1), waveLabel: "Solo" },
+        { ...later, waveLabel: "Solo" },
+      ],
+    }));
+    expect(res.status).toBe(400);
+  });
+
+  it("marks a later teammate in the PaymentIntent metadata without their details", async () => {
+    mocks.eventFindUnique.mockResolvedValue(teamEvent());
+    const res = await post(checkout, "/api/checkout", pairOrder({
+      participants: [
+        { ...person(1), waveLabel: "Pairs", team: 0 },
+        { ...later, waveLabel: "Pairs", team: 0, firstName: "Typed" },
+      ],
+    }));
+    expect(res.status).toBe(200);
+    const metadata = mocks.paymentIntentCreate.mock.calls[0][0].metadata;
+    const second = JSON.parse(metadata.participant1);
+    expect(second).toMatchObject({ pnd: 1, tm: 0, em: "member1@example.com", fn: "" });
   });
 });

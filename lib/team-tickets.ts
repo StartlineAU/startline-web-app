@@ -55,6 +55,12 @@ export interface TeamOrderEntry {
   waveLabel: string | null;
   /** Index into the order's team names. Set only on team-ticket members. */
   team?: number;
+  /**
+   * Bought without this member's details, to be added later. Only a team
+   * member other than the team's first may be; the first is the one person
+   * the order always names.
+   */
+  pending?: boolean;
 }
 
 /** A team in an order: its name, tier and the order indexes of its members. */
@@ -90,10 +96,11 @@ export function groupOrderTeams(
   const teams = new Map<number, OrderTeam>();
 
   for (let i = 0; i < entries.length; i++) {
-    const { waveLabel, team } = entries[i];
+    const { waveLabel, team, pending } = entries[i];
     const size = waveLabel ? sizeByLabel.get(waveLabel) ?? null : null;
     if (size == null) {
       if (team != null) return { error: "An individual ticket cannot belong to a team." };
+      if (pending) return { error: "Every individual ticket needs the athlete's details." };
       continue;
     }
     if (team == null || !Number.isInteger(team) || team < 0 || team >= teamNames.length) {
@@ -106,6 +113,7 @@ export function groupOrderTeams(
       }
       existing.members.push(i);
     } else {
+      if (pending) return { error: "Each team's first member needs their details at checkout." };
       teams.set(team, {
         index: team,
         name: normaliseTeamName(teamNames[team]),
@@ -226,4 +234,24 @@ export function teamTierChangeError(opts: {
     return "An individual event cannot sell team tickets. Change the format to Team or Individual & Team, or remove the team size.";
   }
   return null;
+}
+
+/**
+ * Each pending member's number within its team (2 for the second member, and
+ * so on), keyed by order index. Gives a placeholder entry its "Team member N"
+ * name.
+ */
+export function pendingMemberNumbers(teams: OrderTeam[], pending: (index: number) => boolean): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const team of teams) {
+    team.members.forEach((index, position) => {
+      if (pending(index)) out.set(index, position + 1);
+    });
+  }
+  return out;
+}
+
+/** The name a team place carries until its member's details are added. */
+export function pendingMemberName(memberNumber: number): string {
+  return `Team member ${memberNumber}`;
 }

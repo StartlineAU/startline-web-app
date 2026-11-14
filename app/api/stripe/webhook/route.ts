@@ -173,7 +173,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   // Team structure is re-checked against the DB tiers too: the grouping came
   // from metadata.
   const grouped = groupOrderTeams(
-    participants.map((p) => ({ waveLabel: waveOf(p), team: p.tm })),
+    participants.map((p) => ({ waveLabel: waveOf(p), team: p.tm, pending: p.pnd === 1 })),
     waves,
     parseTeamNamesFromMetadata(meta),
   );
@@ -232,7 +232,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  await announceRegistrations(event, organiserId, entries, grouped.teams);
+  await announceRegistrations(event, organiserId, entries, grouped.teams, outcome.registrationIds);
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

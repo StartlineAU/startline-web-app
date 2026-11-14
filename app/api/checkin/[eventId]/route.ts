@@ -104,6 +104,9 @@ async function findRegistration(
     where: {
       eventId,
       status: "CONFIRMED",
+      // A team place still waiting for its member's details carries the
+      // buyer's email; it is not the buyer's own entry.
+      detailsPending: false,
       athleteEmail: { equals: session.email, mode: "insensitive" },
     },
     select: REGISTRATION_SELECT,
@@ -112,7 +115,7 @@ async function findRegistration(
 
   // Guests whose account email differs from the one they registered with.
   return prisma.registration.findFirst({
-    where: { eventId, status: "CONFIRMED", userId: session.sub },
+    where: { eventId, status: "CONFIRMED", userId: session.sub, detailsPending: false },
     select: REGISTRATION_SELECT,
   });
 }

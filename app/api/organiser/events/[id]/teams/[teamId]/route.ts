@@ -6,7 +6,6 @@ import prisma from "@/lib/prisma";
 import { MAX_TEAM_NAME_LENGTH, normaliseTeamName } from "@/lib/team-tickets";
 import { findTakenTeamNames, holdsTeamPlace, TEAM_HELD_STATUSES } from "@/lib/team-entries";
 import {
-  getRegistrationFormErrors,
   createEmptyParticipant,
   compactParticipant,
   type RegistrationFormData,
@@ -16,6 +15,7 @@ import {
   entryIdentityKey,
   sendEntryConfirmation,
 } from "@/lib/registration-confirm";
+import { findHeldEntryFor, memberDetailsData, memberDetailsError } from "@/lib/team-members";
 
 const paramsSchema = z.object({
   id: z.string().min(1).max(255),
@@ -59,6 +59,7 @@ const holderSelect = {
   emergencyContactName: true,
   emergencyContactPhone: true,
   userId: true,
+  detailsPending: true,
   waveLabel: true,
   amountCents: true,
   platformFeeCents: true,
@@ -93,7 +94,7 @@ export async function PATCH(
       size: true,
       event: {
         select: {
-          id: true, organiserId: true, title: true, feeStructure: true, waves: true, cap: true,
+          id: true, organiserId: true, title: true, feeStructure: true, waves: true, cap: true, minAge: true,
           eventDate: true, startTime: true, venue: true, city: true, state: true,
           startsAtUtc: true, endsAtUtc: true,
         },
@@ -140,8 +141,7 @@ export async function PATCH(
       gender: member.gender ?? "",
       waiverAccepted: true,
     };
-    const errors = getRegistrationFormErrors(incoming, { includeEmergencyContact: true, includeWaiver: false });
-    const firstError = Object.values(errors)[0];
+    const firstError = memberDetailsError(incoming, team.event.minAge);
     if (firstError) return NextResponse.json({ error: firstError }, { status: 400 });
 
     const incomingKey = entryIdentityKey(incoming.email, incoming.firstName, incoming.lastName, incoming.dateOfBirth);
@@ -206,24 +206,14 @@ export async function PATCH(
         throw new Conflict("That person already holds an entry for this event.");
       }
 
-      const email = incoming.email.trim().toLowerCase();
-      const firstName = incoming.firstName.trim();
-      const lastName = incoming.lastName.trim();
-      const after = {
-        athleteName: `${firstName} ${lastName}`.trim(),
-        athleteEmail: email,
-        firstName,
-        lastName,
-        dateOfBirth: incoming.dateOfBirth,
-        gender: incoming.gender.trim() || null,
-        mobile: incoming.mobile.trim(),
-        emergencyContactName: incoming.emergencyContactName.trim(),
-        emergencyContactPhone: incoming.emergencyContactPhone.trim(),
-      };
+      const after = memberDetailsData(incoming);
+      const email = after.athleteEmail;
       await tx.registration.update({
         where: { id: entry.id },
         data: {
           ...after,
+          // A place bought "details later" is named now.
+          detailsPending: false,
           // The entry now belongs to the new member's account.
           userId: userIdByEmail[email] ?? null,
           // The previous holder's details and estimate no longer apply.
@@ -247,7 +237,8 @@ export async function PATCH(
         data: {
           teamId,
           registrationId: entry.id,
-          kind: "SWAP",
+          // Naming a place left for later is not a swap: nobody was in it.
+          kind: entry.detailsPending ? "DETAILS_ADDED" : "SWAP",
           before: before as Prisma.InputJsonValue,
           after: after as Prisma.InputJsonValue,
           changedByEmail: auth.actorEmail ?? null,
@@ -280,31 +271,3 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-/**
- * Another entry in this event, still holding a place, for the same person
- * (email, name and date of birth, matched as checkout matches them).
- */
-async function findHeldEntryFor(
-  eventId: string,
-  excludeId: string,
-  person: RegistrationFormData,
-  db: Pick<typeof prisma, "registration"> = prisma,
-): Promise<{ athleteName: string; teamName: string | null } | null> {
-  const rows = await db.registration.findMany({
-    where: {
-      eventId,
-      id: { not: excludeId },
-      status: { in: TEAM_HELD_STATUSES },
-      athleteEmail: { equals: person.email.trim(), mode: "insensitive" },
-    },
-    select: {
-      athleteName: true, athleteEmail: true, firstName: true, lastName: true, dateOfBirth: true,
-      team: { select: { name: true } },
-    },
-  });
-  const key = entryIdentityKey(person.email, person.firstName, person.lastName, person.dateOfBirth);
-  const match = rows.find(
-    (r) => entryIdentityKey(r.athleteEmail, r.firstName ?? "", r.lastName ?? "", r.dateOfBirth ?? "") === key,
-  );
-  return match ? { athleteName: match.athleteName, teamName: match.team?.name ?? null } : null;
-}

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
 import { assertMetadataBudget, STRIPE_METADATA_MAX_VALUE_CHARS } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
+  compactOrderParticipant,
   isOrderFailure,
   resolveCheckoutOrder,
 } from "@/lib/checkout-order";
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     };
     participants.forEach((participant, index) => {
       participantMetadata[`participant${index}`] = JSON.stringify({
-        ...compactParticipant(participant),
+        ...compactOrderParticipant(participant),
         wav: waveLabels[index],
         ...(participant.team != null ? { tm: participant.team } : {}),
       });

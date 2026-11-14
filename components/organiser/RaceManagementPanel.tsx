@@ -524,6 +524,9 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   for (const r of registrations) {
     if (r.team && holdsTeamPlace(r.status)) heldByTeam.set(r.team.id, (heldByTeam.get(r.team.id) ?? 0) + 1);
   }
+  // A team place the buyer has not named yet shows as "Team member 2 ·
+  // details pending"; its email is the buyer's until then.
+  const displayName = (r: Registration) => (r.detailsPending ? `${r.name} · details pending` : r.name);
   const teamLabel = (r: Registration): string | null => {
     if (!r.team) return null;
     const held = heldByTeam.get(r.team.id) ?? 0;
@@ -681,7 +684,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                   };
                   return {
                     id: r.id,
-                    name: r.name,
+                    name: displayName(r),
                     email: r.email,
                     waveId: r.waveId,
                     bibNumber: r.bibNumber,
@@ -719,7 +722,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 }))}
                 athletes={confirmed.map((r) => ({
                   id: r.id,
-                  name: r.name,
+                  name: displayName(r),
                   email: r.email,
                   waveId: r.waveId,
                   bibNumber: r.bibNumber,
@@ -854,7 +857,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     onClick={() => setSwapOpen(true)}
                     className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
                   >
-                    Swap {editReg.name} for someone else
+                    {editReg.detailsPending ? `Add the member for ${editReg.name}` : `Swap ${editReg.name} for someone else`}
                   </button>
                 ) : (
                   <div className="space-y-2" data-testid="swap-member">

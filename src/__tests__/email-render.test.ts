@@ -12,6 +12,7 @@ import {
   buildEventSubmittedForReviewEmail,
   buildReviewReportedEmail,
   buildWaveUpdateEmail,
+  buildTeamDetailsNeededEmail,
   buildFollowedOrganiserEventEmail,
   buildEventChangedEmail,
   buildEventEditPendingReviewEmail,
@@ -139,6 +140,7 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
     { reviewTitle: "Great", reviewBody: "Loved it", reviewerName: "Harper", organiserName: "Apex", reason: "Spam", reportCount: 1 },
     opts,
   )],
+  ["team details", () => buildTeamDetailsNeededEmail("harper@example.com", { buyerName: "Harper Jones", eventTitle: "Harbour Relay", eventDate: "2027-03-21", teams: [{ name: "Fast Feet", size: 4, missing: 3 }] }, opts)],
   ["wave", () => buildWaveUpdateEmail("harper@example.com", { athleteName: "Harper Jones", eventTitle: "Harbour 10K", eventId: "evt-1", waveLabel: "Elite", waveTime: "06:30", eventDate: "2027-03-21" }, opts)],
   ["followed", () => buildFollowedOrganiserEventEmail("harper@example.com", { followerName: "Harper", organiserName: "Apex", eventTitle: "Harbour 10K", eventId: "evt-1", eventDate: "2027-03-21", city: "Sydney" }, opts)],
   ["changed", () => buildEventChangedEmail(

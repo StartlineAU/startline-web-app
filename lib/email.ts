@@ -6,6 +6,7 @@ import { EventRejectedEmail } from "@/emails/event-rejected";
 import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
 import { ReviewReportedEmail } from "@/emails/review-reported";
 import { WaveUpdateEmail } from "@/emails/wave-update";
+import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
 import { FollowedOrganiserEventEmail } from "@/emails/followed-organiser-event";
 import { EventChangedEmail } from "@/emails/event-changed";
 import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
@@ -255,6 +256,37 @@ export async function buildWaveUpdateEmail(
 export async function sendWaveUpdateEmail(to: string, data: WaveUpdateEmailData) {
   if (!getResend()) return;
   await sendOne(to, await buildWaveUpdateEmail(to, data));
+}
+
+// ── Team details needed (buyer) ───────────────────────────────────────────────
+export interface TeamDetailsNeededEmailData {
+  buyerName?: string | null;
+  eventTitle: string;
+  eventDate?: string | null;
+  teams: { name: string; size: number; missing: number }[];
+}
+
+export async function buildTeamDetailsNeededEmail(
+  to: string,
+  data: TeamDetailsNeededEmailData,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    TeamDetailsNeededEmail({
+      greeting: firstNameGreeting(data.buyerName),
+      eventTitle: data.eventTitle,
+      eventDate: formatEmailDate(data.eventDate),
+      teams: data.teams,
+      activityUrl: `${siteUrl}/activity`,
+      sentTo: to,
+    }),
+  );
+  return { subject: `Add your team's details for ${data.eventTitle}`, ...rendered };
+}
+
+export async function sendTeamDetailsNeededEmail(to: string, data: TeamDetailsNeededEmailData) {
+  if (!getResend()) return;
+  await sendOne(to, await buildTeamDetailsNeededEmail(to, data));
 }
 
 // ── Followed organiser event live ─────────────────────────────────────────────

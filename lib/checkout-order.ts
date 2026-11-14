@@ -11,6 +11,9 @@ import {
   athleteNameFromParticipant,
   MAX_REGISTRATION_PARTICIPANTS,
   applySharedEmergencyContact,
+  compactParticipant,
+  createEmptyParticipant,
+  type CompactParticipant,
   type RegistrationFormData,
   type EmergencyContact,
 } from "@/lib/registration-form";
@@ -30,6 +33,11 @@ export type CheckoutParticipant = RegistrationFormData & {
   waveLabel?: string;
   /** Index into the order's `teams`, for a member of a team ticket. */
   team?: number;
+  /**
+   * A team member whose details the buyer will add later. The resolved order
+   * carries a placeholder for them: blank details and the buyer's email.
+   */
+  detailsLater?: boolean;
 };
 
 export type CheckoutWave = {
@@ -56,6 +64,7 @@ const participantSchema = z.object({
   waiverAccepted: z.boolean(),
   waveLabel: z.string().max(255).optional(),
   team: z.number().int().min(0).max(MAX_REGISTRATION_PARTICIPANTS).optional(),
+  detailsLater: z.boolean().optional(),
 });
 
 export const checkoutSchema = z.object({
@@ -201,7 +210,10 @@ export async function resolveCheckoutOrder(
     ? normalizeSharedEmergencyContact(body)
     : undefined;
 
-  const { firstMessage } = validateParticipants(participants, {
+  // A member left for later has no details to check; everyone else does.
+  const named = participants.filter((p) => !p.detailsLater);
+  if (named.length === 0) return { error: "Enter your own details to register.", status: 400 };
+  const { firstMessage } = validateParticipants(named, {
     groupRegistration,
     sharedEmergencyContact,
     // Waiver/terms acceptance is gated client-side by the terms checkbox on the
@@ -269,7 +281,7 @@ export async function resolveCheckoutOrder(
 
   // Team tickets: every member names a team of exactly the tier's size.
   const grouped = groupOrderTeams(
-    participants.map((p, i) => ({ waveLabel: waveLabels[i], team: p.team })),
+    participants.map((p, i) => ({ waveLabel: waveLabels[i], team: p.team, pending: p.detailsLater === true })),
     waves,
     (body.teams ?? []).map((t) => t.name),
   );
@@ -339,12 +351,25 @@ export async function resolveCheckoutOrder(
 
   const userSession = await getUserSession();
 
-  const resolvedParticipants =
+  const withContact =
     groupRegistration && sharedEmergencyContact
       ? applySharedEmergencyContact(participants, sharedEmergencyContact)
       : participants;
 
-  const primary = resolvedParticipants[0];
+  // The first participant is always named: an individual ticket, or the
+  // first member of a team, neither of which can be left for later.
+  const primary = withContact[0];
+  const buyerEmail = primary.email.trim().toLowerCase();
+
+  // A member left for later becomes a placeholder: no details of their own,
+  // and the buyer's email, so the place sits with the buyer (and shows in
+  // their Activity) until someone adds the member's details.
+  const resolvedParticipants: CheckoutParticipant[] = withContact.map((p, i) => {
+    const { waveLabel: label, team, detailsLater } = participants[i];
+    return detailsLater
+      ? { ...createEmptyParticipant(), email: buyerEmail, waiverAccepted: true, waveLabel: label, team, detailsLater: true }
+      : { ...p, waveLabel: label, team };
+  });
 
   return {
     event,
@@ -360,7 +385,18 @@ export async function resolveCheckoutOrder(
     groupRegistration,
     userSession: userSession ? { sub: userSession.sub, email: userSession.email } : null,
     athleteName: athleteNameFromParticipant(primary),
-    athleteEmail: primary.email.trim().toLowerCase(),
+    athleteEmail: buyerEmail,
   };
 }
 
+/**
+ * A resolved participant in the compact form the confirm step reads: as
+ * stored in PaymentIntent metadata, or handed straight over on the free path.
+ * A member left for later carries `pnd` so the entry is written as pending.
+ */
+export function compactOrderParticipant(participant: CheckoutParticipant): CompactParticipant {
+  return {
+    ...compactParticipant(participant),
+    ...(participant.detailsLater ? { pnd: 1 as const } : {}),
+  };
+}

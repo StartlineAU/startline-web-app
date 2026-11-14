@@ -13,6 +13,9 @@ ensureDatabaseUrl();
 // this spec and removed again.
 const FREE_TEAM_ID = "e2e-team-free-pairs";
 const PAID_TEAM_ID = "e2e-team-paid-squads";
+// The teammate added from Activity gets an account; removed again on clean-up.
+const LATER_MEMBER_EMAIL = "e2e-team-later-member@example.com";
+const ATHLETE_EMAIL = "harper.jones@startline.test";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -104,6 +107,7 @@ async function seedQuadSquad(statuses: ("CONFIRMED" | "CANCELLED" | "REFUNDED")[
 
 async function cleanUp() {
   const ids = [FREE_TEAM_ID, PAID_TEAM_ID];
+  await prisma.user.deleteMany({ where: { email: LATER_MEMBER_EMAIL } });
   await prisma.registration.deleteMany({ where: { eventId: { in: ids } } });
   await prisma.team.deleteMany({ where: { eventId: { in: ids } } });
   await prisma.event.deleteMany({ where: { id: { in: ids } } });
@@ -162,7 +166,11 @@ test.describe("team registration", () => {
     await page.locator("#team-name-0").fill("Harbour Hustlers");
     const stamp = Date.now();
     for (const [i, first] of [[0, "Alex"], [1, "Blair"]] as const) {
-      if (i > 0) await page.getByText(/member 2 of 2/i).click();
+      if (i > 0) {
+        await page.getByText(/member 2 of 2/i).click();
+        // A teammate starts as "add later"; this test names them at checkout.
+        await page.getByRole("radio", { name: "Enter details now" }).click();
+      }
       await page.locator(`#p${i}-firstName`).fill(first);
       await page.locator(`#p${i}-lastName`).fill("Rivers");
       await page.locator(`#p${i}-email`).fill(`team-${i}-${stamp}@example.com`);
@@ -183,6 +191,104 @@ test.describe("team registration", () => {
       });
       return team && { name: team.name, size: team.size, members: team.members.length };
     }).toEqual({ name: "Harbour Hustlers", size: 2, members: 2 });
+  });
+
+  test("a buyer names only themselves and leaves a teammate for later", async ({ page }) => {
+    await page.goto(`/events/${FREE_TEAM_ID}/register`);
+    await page.getByRole("button", { name: /add one pairs team/i }).click();
+    await page.getByRole("button", { name: /^Continue/ }).click();
+
+    // Checkout says up front that teammates can be added afterwards.
+    await expect(page.getByTestId("team-details-later-copy")).toContainText(/added later from your Activity page/i);
+    await page.locator("#team-name-0").fill("Later Larks");
+
+    const stamp = Date.now();
+    const buyerEmail = `team-buyer-${stamp}@example.com`;
+    await page.locator("#p0-firstName").fill("Robin");
+    await page.locator("#p0-lastName").fill("Lark");
+    await page.locator("#p0-email").fill(buyerEmail);
+    await pickDateOfBirth(page, "1991-02-03", "#p0-dob");
+
+    // Member 2 is "add later" without the buyer doing anything.
+    await page.getByText(/member 2 of 2/i).click();
+    await expect(page.getByRole("radio", { name: "Add details later" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("details-later-note")).toBeVisible();
+
+    await page.locator("#shared-ecName").fill("Sam Lark");
+    await page.locator("#shared-ecPhone").fill("0498 111 222");
+    await page.getByRole("button", { name: /^Continue/ }).click();
+    await expect(page.getByText("Details to add later")).toBeVisible();
+
+    await page.locator('[role="checkbox"][aria-describedby="registration-terms-copy"]').click();
+    await page.getByRole("button", { name: /confirm registration/i }).click();
+    await expect(page.getByText(/you're in/i)).toBeVisible();
+    await expect(page.getByTestId("team-details-later-note")).toContainText(/1 team member to add/i);
+
+    // Both places are written; the second is the buyer's until it is named.
+    await expect.poll(async () => {
+      const rows = await prisma.registration.findMany({
+        where: { eventId: FREE_TEAM_ID },
+        select: { athleteName: true, athleteEmail: true, detailsPending: true, firstName: true },
+        orderBy: { detailsPending: "asc" },
+      });
+      return rows;
+    }).toEqual([
+      { athleteName: "Robin Lark", athleteEmail: buyerEmail, detailsPending: false, firstName: "Robin" },
+      { athleteName: "Team member 2", athleteEmail: buyerEmail, detailsPending: true, firstName: null },
+    ]);
+  });
+
+  test("Activity warns about a teammate without details and adds them", async ({ page }) => {
+    const { organiserId } = await prisma.event.findUniqueOrThrow({
+      where: { id: FREE_TEAM_ID },
+      select: { organiserId: true },
+    });
+    const team = await prisma.team.create({
+      data: { eventId: FREE_TEAM_ID, name: "Harper Pair", ticketLabel: "Pairs", size: 2 },
+    });
+    const base = {
+      eventId: FREE_TEAM_ID,
+      organiserId,
+      athleteEmail: ATHLETE_EMAIL,
+      waveLabel: "Pairs",
+      status: "CONFIRMED" as const,
+      teamId: team.id,
+    };
+    await prisma.registration.create({
+      data: { ...base, athleteName: "Harper Jones", firstName: "Harper", lastName: "Jones", dateOfBirth: "1994-04-04" },
+    });
+    const place = await prisma.registration.create({
+      data: { ...base, athleteName: "Team member 2", detailsPending: true },
+      select: { id: true },
+    });
+
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    await page.goto("/activity");
+
+    const card = page.locator(`[data-testid="registration-entry"][data-event-id="${FREE_TEAM_ID}"]`);
+    await expect(card.getByTestId("team-details-warning")).toContainText(/1 team member needs their details/i);
+    await card.getByRole("button", { name: /add details/i }).click();
+
+    const dialog = page.getByTestId("team-member-details-dialog");
+    await dialog.locator("#p0-firstName").fill("Casey");
+    await dialog.locator("#p0-lastName").fill("Jones");
+    await dialog.locator("#p0-email").fill(LATER_MEMBER_EMAIL);
+    await pickDateOfBirth(page, "1993-08-09", "#p0-dob");
+    await dialog.locator("#p0-ecName").fill("Harper Jones");
+    await dialog.locator("#p0-ecPhone").fill("0498 111 333");
+    await dialog.getByRole("button", { name: /save details/i }).click();
+
+    await expect(card.getByTestId("team-details-warning")).toHaveCount(0);
+    const entry = await prisma.registration.findUniqueOrThrow({
+      where: { id: place.id },
+      select: { athleteName: true, athleteEmail: true, detailsPending: true },
+    });
+    expect(entry).toEqual({ athleteName: "Casey Jones", athleteEmail: LATER_MEMBER_EMAIL, detailsPending: false });
+    await expect(
+      prisma.teamMemberChange.count({ where: { teamId: team.id, kind: "DETAILS_ADDED" } }),
+    ).resolves.toBe(1);
   });
 
   test("race management shows the team on every member and edits them together", async ({ page }) => {

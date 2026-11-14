@@ -80,6 +80,7 @@ export async function GET(
       isPersonalBest: true,
       isTopResult: true,
       teamId: true,
+      detailsPending: true,
       team: { select: { id: true, name: true, size: true, bibNumber: true, captainRegistrationId: true } },
     },
   });
@@ -105,6 +106,8 @@ export async function GET(
       waveNotified: r.waveNotifiedLabel,
       // A team member carries the team's bib.
       bibNumber: entryBib(r),
+      // A team place bought "details later": the buyer has not named its member yet.
+      detailsPending: r.detailsPending,
       team: r.team
         ? {
             id: r.team.id,

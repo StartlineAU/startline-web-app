@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { sendRegistrationConfirmationEmail } from "@/lib/email";
+import { sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
 import { formatEmailPlace, googleCalendarUrl } from "@/lib/email-format";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import {
@@ -13,7 +13,13 @@ import {
   type RegistrationFormData,
 } from "@/lib/registration-form";
 import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
-import { confirmedUnitsByWave, requestedUnitsByWave, type OrderTeam } from "@/lib/team-tickets";
+import {
+  confirmedUnitsByWave,
+  pendingMemberName,
+  pendingMemberNumbers,
+  requestedUnitsByWave,
+  type OrderTeam,
+} from "@/lib/team-tickets";
 import { findTakenTeamNames } from "@/lib/team-entries";
 
 /** One ticket, priced from the database rather than from the client. */
@@ -145,6 +151,9 @@ export async function ensureParticipantUsers(
 ): Promise<Record<string, string>> {
   const userIdByEmail: Record<string, string> = {};
   for (const { participant } of entries) {
+    // A place left for later is the buyer's, whose account the buyer's own
+    // entry already covers.
+    if (participant.pnd) continue;
     const email = normalizeEmail(participant.em);
     if (!email || userIdByEmail[email]) continue;
 
@@ -240,7 +249,9 @@ export async function insertConfirmedRegistrations(opts: {
     }
 
     if (opts.rejectExistingEntries) {
-      const emails = [...new Set(entries.map((e) => normalizeEmail(e.participant.em)).filter(Boolean))];
+      // A place left for later names nobody yet, so it cannot duplicate anyone.
+      const named = entries.filter((e) => !e.participant.pnd);
+      const emails = [...new Set(named.map((e) => normalizeEmail(e.participant.em)).filter(Boolean))];
       const existing = await tx.registration.findMany({
         where: { eventId: event.id, status: duplicateStatus, athleteEmail: { in: emails, mode: "insensitive" } },
         select: { athleteEmail: true, firstName: true, lastName: true, dateOfBirth: true },
@@ -252,7 +263,7 @@ export async function insertConfirmedRegistrations(opts: {
           entryIdentityKey(r.athleteEmail, r.firstName ?? "", r.lastName ?? "", r.dateOfBirth ?? ""),
         ),
       );
-      for (const { participant } of entries) {
+      for (const { participant } of named) {
         const key = entryIdentityKey(participant.em, participant.fn, participant.ln, participant.dob);
         if (taken.has(key)) {
           return {
@@ -324,10 +335,35 @@ export async function insertConfirmedRegistrations(opts: {
       });
     }
 
+    // "Team member N" for each place left for later.
+    const memberNumbers = pendingMemberNumbers(teams, (i) => entries[i]?.participant.pnd === 1);
+
     await tx.registration.createMany({
       data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, stripeFeeCents, team }, index) => {
-        const expanded = expandCompactParticipant(participant);
         const email = normalizeEmail(participant.em);
+        if (participant.pnd) {
+          // A team place with nobody named yet: it holds the buyer's email and
+          // account until the member's details are added.
+          return {
+            id: registrationIds[index],
+            eventId: event.id,
+            organiserId,
+            userId: buyerUserId || userIdByEmail[email] || null,
+            athleteName: pendingMemberName(memberNumbers.get(index) ?? index + 1),
+            athleteEmail: email,
+            detailsPending: true,
+            waiverAccepted: true,
+            waveLabel,
+            amountCents: priceCents,
+            platformFeeCents,
+            stripeFeeCents: stripeFeeCents ?? 0,
+            feeStructure: event.feeStructure,
+            status: "CONFIRMED" as const,
+            stripePaymentIntentId,
+            teamId: team != null ? teamIdByIndex.get(team) ?? null : null,
+          };
+        }
+        const expanded = expandCompactParticipant(participant);
         return {
           id: registrationIds[index],
           eventId: event.id,
@@ -371,11 +407,16 @@ export async function announceRegistrations(
   organiserId: string,
   entries: PricedEntry[],
   teams: OrderTeam[] = [],
+  /** The written entries' ids, aligned with `entries`, from the confirm step. */
+  registrationIds: string[] = [],
 ): Promise<void> {
-  const names = entries.map(({ participant }) => athleteNameFromParticipant(participant));
+  const named = entries.filter(({ participant }) => !participant.pnd);
+  const pendingCount = entries.length - named.length;
+  const names = named.map(({ participant }) => athleteNameFromParticipant(participant));
   const teamByIndex = new Map(teams.map((t) => [t.index, t]));
+  const nameList = names.join(", ") + (pendingCount > 0 ? ` (+${pendingCount} to name later)` : "");
   const notificationBody = teams.length > 0
-    ? `${teams.length === 1 ? `Team ${teams[0].name}` : `${teams.length} teams (${teams.map((t) => t.name).join(", ")})`} registered for ${event.title}: ${names.join(", ")}`
+    ? `${teams.length === 1 ? `Team ${teams[0].name}` : `${teams.length} teams (${teams.map((t) => t.name).join(", ")})`} registered for ${event.title}: ${nameList}`
     : entries.length === 1
       ? `${names[0]} registered for ${event.title}`
       : `${entries.length} participants registered for ${event.title}: ${names.join(", ")}`;
@@ -409,7 +450,9 @@ export async function announceRegistrations(
 
   entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }) => {
     const entryTeam = team != null ? teamByIndex.get(team) : undefined;
-    if (!participant.em) return;
+    // A place left for later has nobody to confirm to yet: its member gets
+    // this email when their details are added.
+    if (!participant.em || participant.pnd) return;
     void sendEntryConfirmation(event, {
       email: participant.em,
       waveLabel,
@@ -418,6 +461,64 @@ export async function announceRegistrations(
       team: entryTeam ? { name: entryTeam.name, size: entryTeam.size } : null,
     });
   });
+
+  if (pendingCount > 0) await askBuyerForTeamDetails(event, entries, teams, registrationIds);
+}
+
+/**
+ * Tell the buyer which team places still need a member's details: by email,
+ * and in their Activity notifications when the places sit on an account.
+ * Best-effort: logs and never throws.
+ */
+async function askBuyerForTeamDetails(
+  event: ConfirmEvent,
+  entries: PricedEntry[],
+  teams: OrderTeam[],
+  registrationIds: string[],
+): Promise<void> {
+  const firstPending = entries.findIndex(({ participant }) => participant.pnd);
+  const buyerEmail = normalizeEmail(entries[firstPending]?.participant.em);
+  if (!buyerEmail) return;
+  const summary = teams
+    .map((t) => ({
+      name: t.name,
+      size: t.size,
+      missing: t.members.filter((i) => entries[i]?.participant.pnd).length,
+    }))
+    .filter((t) => t.missing > 0);
+  const missing = summary.reduce((sum, t) => sum + t.missing, 0);
+  const buyer = entries.find(({ participant }) => !participant.pnd && normalizeEmail(participant.em) === buyerEmail);
+
+  try {
+    await sendTeamDetailsNeededEmail(buyerEmail, {
+      buyerName: buyer ? athleteNameFromParticipant(buyer.participant) : null,
+      eventTitle: event.title,
+      eventDate: event.eventDate,
+      teams: summary,
+    });
+  } catch (err) {
+    console.error("Failed to send team details email:", err);
+  }
+
+  try {
+    const placeId = registrationIds[firstPending];
+    const place = placeId
+      ? await prisma.registration.findUnique({ where: { id: placeId }, select: { userId: true } })
+      : null;
+    if (place?.userId) {
+      await prisma.userNotification.create({
+        data: {
+          userId: place.userId,
+          type: "TEAM_DETAILS_NEEDED",
+          eventId: event.id,
+          title: "Add your team's details",
+          body: `${missing === 1 ? "One team member still needs" : `${missing} team members still need`} their details for ${event.title}. Add them from Activity.`,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Failed to create team details notification:", err);
+  }
 }
 
 /**

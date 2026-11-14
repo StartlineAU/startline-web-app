@@ -46,13 +46,15 @@ export async function GET(
     where: {
       eventId,
       status: "CONFIRMED",
+      // A team place waiting for its member's details carries the buyer's email.
+      detailsPending: false,
       athleteEmail: { equals: session.email, mode: "insensitive" },
     },
     select: registrationSelect,
   });
   if (!registration) {
     registration = await prisma.registration.findFirst({
-      where: { eventId, status: "CONFIRMED", userId: session.sub },
+      where: { eventId, status: "CONFIRMED", userId: session.sub, detailsPending: false },
       select: registrationSelect,
     });
   }

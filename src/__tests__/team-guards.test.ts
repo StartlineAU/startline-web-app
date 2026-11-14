@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { holdsTeamPlace, teamTierChangeError } from "@/lib/team-tickets";
+import {
+  groupOrderTeams,
+  holdsTeamPlace,
+  pendingMemberName,
+  pendingMemberNumbers,
+  teamTierChangeError,
+} from "@/lib/team-tickets";
 import { findTeamResultConflict, pickTeamResult } from "@/lib/team-results";
 
 describe("teamTierChangeError (#541)", () => {
@@ -113,5 +119,48 @@ describe("team results", () => {
       ],
       teammates,
     )).toBeNull();
+  });
+});
+
+describe("members left for later (#541)", () => {
+  const waves = [{ label: "Solo" }, { label: "Squad", teamSize: 3 }];
+
+  it("lets any member but the first be left for later", () => {
+    const result = groupOrderTeams(
+      [
+        { waveLabel: "Squad", team: 0 },
+        { waveLabel: "Squad", team: 0, pending: true },
+        { waveLabel: "Squad", team: 0, pending: true },
+      ],
+      waves,
+      ["Trio"],
+    );
+    expect("teams" in result).toBe(true);
+  });
+
+  it("refuses a team whose first member is left for later", () => {
+    const result = groupOrderTeams(
+      [
+        { waveLabel: "Squad", team: 0, pending: true },
+        { waveLabel: "Squad", team: 0 },
+        { waveLabel: "Squad", team: 0 },
+      ],
+      waves,
+      ["Trio"],
+    );
+    expect(result).toEqual({ error: "Each team's first member needs their details at checkout." });
+  });
+
+  it("refuses an individual ticket left for later", () => {
+    expect(groupOrderTeams([{ waveLabel: "Solo", pending: true }], waves, [])).toEqual({
+      error: "Every individual ticket needs the athlete's details.",
+    });
+  });
+
+  it("numbers each pending place by its position in the team", () => {
+    const teams = [{ index: 0, name: "Trio", waveLabel: "Squad", size: 3, members: [2, 3, 4] }];
+    const numbers = pendingMemberNumbers(teams, (i) => i === 3 || i === 4);
+    expect([...numbers]).toEqual([[3, 2], [4, 3]]);
+    expect(pendingMemberName(2)).toBe("Team member 2");
   });
 });

@@ -136,6 +136,15 @@ function tierLineLabel(t: { label: string; qty: number; teamSize: number | null 
 }
 
 /**
+ * Whether ticket slot `index` is a team member other than its team's first:
+ * the only slots whose details can be added after checkout.
+ */
+function isTeammateSlot(teams: (number | undefined)[], index: number): boolean {
+  const team = teams[index];
+  return team != null && teams.indexOf(team) !== index;
+}
+
+/**
  * Keep already-entered details attached to the right ticket when the buyer
  * goes back and changes quantities: match previous participants to the new
  * ticket list by tier first, then fill remaining slots positionally.
@@ -197,6 +206,9 @@ function RegisterContent() {
   const [ticketTeams, setTicketTeams] = useState<(number | undefined)[]>([]);
   const [teamNames, setTeamNames] = useState<string[]>([]);
   const [teamNameErrors, setTeamNameErrors] = useState<Record<number, string>>({});
+  // Team members whose details the buyer will add later from Activity,
+  // aligned with `participants`. Only a member other than a team's first can be.
+  const [detailsLater, setDetailsLater] = useState<boolean[]>([]);
   const [participants, setParticipants] = useState<RegistrationFormData[]>(() => [createEmptyParticipant()]);
   const [openTicket, setOpenTicket] = useState(0);
   const [useSharedContact, setUseSharedContact] = useState(true);
@@ -208,7 +220,7 @@ function RegisterContent() {
   // The authoritative total, returned by /api/checkout. Null until it answers.
   const [serverTotal, setServerTotal] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean } | null>(null);
+  const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean; later: number } | null>(null);
   // A duplicate can still lose the race against another tab. If the confirm
   // request says so, move to the same gate the precheck would have shown.
   const [rsvpBlockedAfterSubmit, setRsvpBlockedAfterSubmit] = useState(false);
@@ -539,6 +551,20 @@ function RegisterContent() {
     return (quantities[label] ?? 0) < tierLeft;
   };
 
+  const isLater = (index: number) => detailsLater[index] === true && isTeammateSlot(ticketTeams, index);
+  const laterCount = participants.filter((_, i) => isLater(i)).length;
+  const setLater = (index: number, later: boolean) => {
+    setDetailsLater((prev) => prev.map((v, i) => (i === index ? later : v)));
+    if (later) {
+      setFieldErrors((prev) => {
+        if (!prev[index]) return prev;
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    }
+  };
+
   const ticketComplete = useCallback(
     (index: number) =>
       Object.keys(
@@ -584,15 +610,20 @@ function RegisterContent() {
       eventId,
       waveLabel: ticketWaves[0],
       turnstileToken: turnstileToken ?? undefined,
-      participants: participants.map((p, i) => ({
-        ...p,
-        waveLabel: ticketWaves[i],
-        ...(ticketTeams[i] != null ? { team: ticketTeams[i] } : {}),
-      })),
+      participants: participants.map((p, i) =>
+        // A member left for later sends no details: whatever was half-typed
+        // into their form stays on this device.
+        detailsLater[i] === true && isTeammateSlot(ticketTeams, i)
+          ? { ...createEmptyParticipant(), waveLabel: ticketWaves[i], team: ticketTeams[i], detailsLater: true }
+          : {
+              ...p,
+              waveLabel: ticketWaves[i],
+              ...(ticketTeams[i] != null ? { team: ticketTeams[i] } : {}),
+            }),
       ...(teamNames.length > 0 && { teams: teamNames.map((name) => ({ name: normaliseTeamName(name) })) }),
       ...(sharedContactActive && { groupRegistration: true, emergencyContact: sharedEmergencyContact }),
     }),
-    [eventId, ticketWaves, ticketTeams, teamNames, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
+    [eventId, ticketWaves, ticketTeams, teamNames, detailsLater, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
   );
 
   // ── Checkout (create PaymentIntent) ──
@@ -723,6 +754,13 @@ function RegisterContent() {
     setTicketTeams(nextTeams);
     const kept = matchPreviousTickets(participants.length, ticketWaves, nextWaves);
     setParticipants((prev) => reconcileParticipants(prev, ticketWaves, nextWaves));
+    // A teammate starts as "add details later": the buyer only has to name
+    // themselves. A slot that keeps its earlier choice keeps it.
+    setDetailsLater(nextWaves.map((_, i) => {
+      if (!isTeammateSlot(nextTeams, i)) return false;
+      const from = kept[i];
+      return from != null ? detailsLater[from] ?? true : true;
+    }));
     // The buyer's own ticket follows its details; if it was dropped, none is theirs.
     if (selfIndex != null) {
       const moved = kept.indexOf(selfIndex);
@@ -750,11 +788,18 @@ function RegisterContent() {
       seenNames.add(name.toLowerCase());
     });
     setTeamNameErrors(nameErrors);
-    const { errors, emergencyContactErrors: ecErrors, firstMessage } = validateParticipants(participants, {
-      groupRegistration: sharedContactActive,
-      sharedEmergencyContact: sharedContactActive ? sharedEmergencyContact : undefined,
-      includeWaiver: false,
-    });
+    // Members left for later have nothing to check yet.
+    const namedIndexes = participants.map((_, i) => i).filter((i) => !isLater(i));
+    const { errors: namedErrors, emergencyContactErrors: ecErrors, firstMessage } = validateParticipants(
+      namedIndexes.map((i) => participants[i]),
+      {
+        groupRegistration: sharedContactActive,
+        sharedEmergencyContact: sharedContactActive ? sharedEmergencyContact : undefined,
+        includeWaiver: false,
+      },
+    );
+    const errors: typeof namedErrors = {};
+    for (const [k, v] of Object.entries(namedErrors)) errors[namedIndexes[Number(k)]] = v;
     setFieldErrors(errors);
     setEmergencyContactErrors(ecErrors);
     if (firstMessage || Object.keys(nameErrors).length > 0) {
@@ -774,6 +819,10 @@ function RegisterContent() {
     if (!freeOrder) startCheckout();
   };
   const goToNextTicket = (index: number) => {
+    if (isLater(index)) {
+      setOpenTicket(index + 1);
+      return;
+    }
     const errors = getRegistrationFormErrors(participants[index], {
       includeEmergencyContact: !sharedContactActive,
       includeWaiver: false,
@@ -801,6 +850,7 @@ function RegisterContent() {
       // disagree with what the card was charged.
       amount: freeRsvp ? "Free" : serverTotal != null ? priceLabel(serverTotal) : totalLabel,
       free: freeRsvp || freeOrder,
+      later: freeRsvp ? 0 : laterCount,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -839,7 +889,9 @@ function RegisterContent() {
           label: ticketTeams[i] != null
             ? `Team ${normaliseTeamName(teamNames[ticketTeams[i] as number])} · ${ticketWaves[i]}`
             : `Ticket ${i + 1} · ${ticketWaves[i]}`,
-          value: `${p.firstName} ${p.lastName}`.trim() + ` · ${p.email}`,
+          value: detailsLater[i] === true && isTeammateSlot(ticketTeams, i)
+            ? "Details to add later"
+            : `${p.firstName} ${p.lastName}`.trim() + ` · ${p.email}`,
         })
       );
       if (sharedContactActive) {
@@ -847,7 +899,7 @@ function RegisterContent() {
       }
     }
     return rows;
-  }, [participants, tierLines, ticketWaves, ticketTeams, teamNames, sharedContactActive, sharedEmergencyContact]);
+  }, [participants, tierLines, ticketWaves, ticketTeams, teamNames, detailsLater, sharedContactActive, sharedEmergencyContact]);
 
   // ── Loading / not-found ──
   if (loading || status === "loading" || rsvpCheckPending) {
@@ -967,6 +1019,18 @@ function RegisterContent() {
               <>Your <strong className="text-light">{confirmed.count} tickets</strong> to <strong className="text-light">{event.title}</strong> are locked in.</>
             )}
           </p>
+          {confirmed.later > 0 && (
+            <div className="mb-[22px] rounded-[14px] border border-amber-400/30 bg-amber-400/10 px-[18px] py-[14px] text-left" data-testid="team-details-later-note">
+              <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.13em] text-amber-300">
+                {confirmed.later === 1 ? "1 team member to add" : `${confirmed.later} team members to add`}
+              </div>
+              <p className="text-[13px] text-muted leading-relaxed mt-1.5">
+                Their places are booked. Add their details from{" "}
+                <Link href="/activity" className="text-primary hover:underline">your Activity page</Link>{" "}
+                before race day. We&apos;ve emailed you a link too.
+              </p>
+            </div>
+          )}
           <div className="bg-dark-light border border-dark-lighter rounded-[14px] px-[22px] py-[18px] mb-[26px] text-left">
             {[
               ["Reference", confirmed.ref],
@@ -1390,8 +1454,10 @@ function RegisterContent() {
                           </div>
                         );
                       })}
-                      <p className="text-[12.5px] text-muted leading-relaxed">
-                        Fill in every member below. Each member gets their own confirmation email.
+                      <p className="text-[12.5px] text-muted leading-relaxed" data-testid="team-details-later-copy">
+                        Only the first member of each team has to be filled in now. Everyone else can be
+                        added later from your Activity page, or entered below if you have their details.
+                        Each member gets their own confirmation email once their details are in.
                       </p>
                     </div>
                   )}
@@ -1409,7 +1475,9 @@ function RegisterContent() {
                   ) : (
                     participants.map((participant, index) => {
                       const isOpen = openTicket === index;
-                      const complete = ticketComplete(index);
+                      const later = isLater(index);
+                      const teammate = isTeammateSlot(ticketTeams, index);
+                      const complete = !later && ticketComplete(index);
                       const hasErrors = !!fieldErrors[index];
                       const name = `${participant.firstName} ${participant.lastName}`.trim();
                       return (
@@ -1454,8 +1522,8 @@ function RegisterContent() {
                                   )}
                                 </div>
                                 {!isOpen && (
-                                  <div className={cn("text-[12px] truncate mt-0.5", complete ? "text-muted" : "text-muted-dark")}>
-                                    {complete ? `${name} · ${participant.email}` : "Not completed yet"}
+                                  <div className={cn("text-[12px] truncate mt-0.5", complete ? "text-muted" : later ? "text-amber-300/80" : "text-muted-dark")}>
+                                    {later ? "Details to add later" : complete ? `${name} · ${participant.email}` : "Not completed yet"}
                                   </div>
                                 )}
                               </div>
@@ -1464,15 +1532,50 @@ function RegisterContent() {
                           </button>
                           {isOpen && (
                             <div className="px-6 pb-6">
-                              <ParticipantFormSection
-                                frameless
-                                index={index}
-                                intro={renderTicketHolder(index)}
-                                participant={participant}
-                                errors={fieldErrors[index]}
-                                hideEmergencyContact={sharedContactActive}
-                                onChange={(field, value) => updateParticipant(index, field, value)}
-                              />
+                              {teammate && (
+                                <div
+                                  role="radiogroup"
+                                  aria-label="When to add this member's details"
+                                  className="inline-flex rounded-md border border-dark-lighter p-0.5 mb-4"
+                                  data-testid="details-later-toggle"
+                                >
+                                  {([[true, "Add details later"], [false, "Enter details now"]] as const).map(([value, label]) => {
+                                    const on = later === value;
+                                    return (
+                                      <button
+                                        key={label}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={on}
+                                        onClick={() => setLater(index, value)}
+                                        className={cn(
+                                          "rounded px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                          on ? "bg-primary text-dark" : "text-muted hover:text-primary"
+                                        )}
+                                      >
+                                        {label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {later ? (
+                                <p className="text-[13px] text-muted leading-relaxed" data-testid="details-later-note">
+                                  This place is booked and paid for with your order. Add who is taking it any
+                                  time before race day from your Activity page. We&apos;ll email you a link, and
+                                  they get their own confirmation once their details are in.
+                                </p>
+                              ) : (
+                                <ParticipantFormSection
+                                  frameless
+                                  index={index}
+                                  intro={renderTicketHolder(index)}
+                                  participant={participant}
+                                  errors={fieldErrors[index]}
+                                  hideEmergencyContact={sharedContactActive}
+                                  onChange={(field, value) => updateParticipant(index, field, value)}
+                                />
+                              )}
                               {index < participants.length - 1 && (
                                 <div className="flex justify-end mt-5">
                                   <button

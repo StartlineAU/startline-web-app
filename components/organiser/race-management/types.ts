@@ -28,6 +28,8 @@ export interface Registration {
   isTopResult: boolean;
   /** Set for a team entry. Bib, start wave, check-in and result are the team's. */
   team: { id: string; name: string; size: number; captain: boolean } | null;
+  /** Team place whose member the buyer has not named yet ("Team member 2"). */
+  detailsPending?: boolean;
 }
 
 export interface StartWave extends WaveDef {
