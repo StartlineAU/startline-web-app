@@ -10,6 +10,8 @@ import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted"
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserEventPayloadSchema } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
@@ -113,6 +115,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // A real place, not spaces or symbols (#530).
+  const locationError = await checkEventLocation(body, { submit });
+  if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
+
   // A missing ABN no longer blocks the organiser from finishing their event.
   // It used to reject the whole submission at the last step, after five steps
   // and an image upload, which read as losing the work. It now costs the event
@@ -171,9 +177,9 @@ export async function POST(req: NextRequest) {
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
         endTime:          body.endTime           || "",
-        venue:            body.venue             ?? "",
-        address:          body.address           ?? null,
-        city:             body.city              ?? "",
+        venue:            tidyLocationText(body.venue),
+        address:          tidyLocationText(body.address) || null,
+        city:             tidyLocationText(body.city),
         state:            body.state             ?? "",
         latitude:         body.latitude          ?? (body.city && body.state ? getEventCoords(body.city, body.state)[0] : null),
         longitude:        body.longitude         ?? (body.city && body.state ? getEventCoords(body.city, body.state)[1] : null),

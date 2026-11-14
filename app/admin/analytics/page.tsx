@@ -6,6 +6,7 @@ import {
   TrendingUp, DollarSign, Users, CalendarDays,
   CheckCircle, Clock, XCircle, Archive,
 } from "lucide-react";
+import { formatEventArea } from "@/lib/event-place";
 
 export const dynamic = "force-dynamic";
 
@@ -284,7 +285,7 @@ export default async function AdminAnalyticsPage() {
                                 {e.title}
                               </div>
                               <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">
-                                {e.city}, {e.state.toUpperCase()} · {formatDate(e.eventDate)}
+                                {formatEventArea(e.city, e.state.toUpperCase())} · {formatDate(e.eventDate)}
                               </div>
                             </div>
                           </div>

@@ -185,6 +185,9 @@ export default function ParticipantFormSection({
                   value={participant.emergencyContactName}
                   onChange={(e) => onChange("emergencyContactName", e.target.value)}
                   placeholder="Full name"
+                  // Its own autofill section, so filling the participant's
+                  // details never copies their name in here (#532).
+                  autoComplete="section-emergency-contact name"
                   className={registerInputCls(!!errors.emergencyContactName)}
                 />
               </RegisterField>
@@ -195,6 +198,7 @@ export default function ParticipantFormSection({
                   value={participant.emergencyContactPhone}
                   onChange={(e) => onChange("emergencyContactPhone", e.target.value)}
                   placeholder="e.g. 0412 000 111"
+                  autoComplete="section-emergency-contact tel"
                   className={registerInputCls(!!errors.emergencyContactPhone)}
                 />
               </RegisterField>

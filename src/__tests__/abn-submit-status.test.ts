@@ -13,6 +13,8 @@ vi.mock("@/lib/organiser-api-auth", () => ({
   requireOrganiser: async () => ({ error: null, session: await mocks.session() }),
 }));
 vi.mock("@/lib/amplify-server", () => ({ getServerSession: vi.fn() }));
+// The real-place check (#530) has its own tests; here the geocoder is out of reach.
+vi.mock("@/lib/geocode", () => ({ geocodeLookup: async () => ({ status: "unavailable" }) }));
 vi.mock("@/lib/prisma", () => {
   const client: Record<string, unknown> = {
     organiser:   { findUnique: mocks.organiserFindUnique },
@@ -43,7 +45,7 @@ const upcoming = () => format(addDays(new Date(), 30), "yyyy-MM-dd");
 // A payload complete enough to pass the submit-time required-field check.
 const payload = (over: Record<string, unknown> = {}) => ({
   title: "Trail Half", discipline: "running", eventDate: upcoming(),
-  startTime: "07:00", city: "Melbourne", state: "VIC",
+  startTime: "07:00", address: "Aughtie Dr, Albert Park", city: "Melbourne", state: "VIC",
   format: "Road", level: "All levels",
   registrationType: "startline", submit: true,
   ...over,

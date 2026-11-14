@@ -26,12 +26,13 @@ import {
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
 } from "../lib/email";
-import { formatEmailPlace, googleCalendarUrl } from "../lib/email-format";
+import { googleCalendarUrl } from "../lib/email-format";
+import { formatEventPlace } from "../lib/event-place";
 
 const opts = { environment: "staging", siteUrl: "https://startlineau.com" };
 
 // The issue #512 case: no venue, lower-case state, a long category.
-const place = formatEmailPlace({ venue: "", city: "Melbourne", state: "vic" });
+const place = formatEventPlace({ venue: "", city: "Melbourne", state: "vic" });
 
 const emails: Record<string, () => Promise<{ html: string }>> = {
   "registration-confirmation": () =>
@@ -61,7 +62,7 @@ const emails: Record<string, () => Promise<{ html: string }>> = {
       eventDate: "2026-11-15",
       startTime: "06:30",
       category: "Half marathon (21.1km) — open men and women",
-      location: formatEmailPlace({ venue: "Green Valley Reserve", city: "Green Valley", state: "NSW" }),
+      location: formatEventPlace({ venue: "Green Valley Reserve", city: "Green Valley", state: "NSW" }),
       bib: "1042",
       registrationFee: "$95.00",
       serviceFee: "$4.75",

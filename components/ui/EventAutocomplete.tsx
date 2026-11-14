@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDivisionLabel, selectionLabel } from "@/lib/divisions";
+import { formatEventArea } from "@/lib/event-place";
 
 interface EventResult {
   id: string;
@@ -251,7 +252,7 @@ export default function EventAutocomplete({
                         {row.item.title}
                       </span>
                       <span className="block font-headline text-[11px] uppercase tracking-widest text-muted truncate">
-                        {row.item.discipline} · {row.item.city}, {row.item.state}
+                        {row.item.discipline} · {formatEventArea(row.item.city, row.item.state)}
                       </span>
                     </>
                   )}

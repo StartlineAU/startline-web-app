@@ -11,6 +11,8 @@ const client = new GeoPlacesClient({ region: "ap-southeast-2" });
 export interface GeocodeResult {
   label: string;
   city: string;
+  /** The suburb when `city` is the metro city around it (St Kilda in Melbourne). */
+  district: string;
   stateCode: string;
   stateName: string;
   postalCode: string;
@@ -66,6 +68,7 @@ function toGeocodeResult(item: GeocodeItem): GeocodeResult {
   return {
     label: item.Address?.Label ?? "",
     city: item.Address?.Locality ?? item.Address?.District ?? "",
+    district: item.Address?.District ?? "",
     stateCode,
     stateName: item.Address?.Region?.Name ?? STATE_NAMES[stateCode] ?? "",
     postalCode: item.Address?.PostalCode ?? "",
@@ -161,8 +164,23 @@ export async function resolvePlace(q: string): Promise<ResolvedPlace> {
  * use it directly instead of making an HTTP round trip to /api/places/geocode.
  */
 export async function geocodePlace(q: string): Promise<GeocodeResult | null> {
+  const lookup = await geocodeLookup(q);
+  return lookup.status === "found" ? lookup.result : null;
+}
+
+/**
+ * As `geocodePlace`, but says whether nothing matched or the geocoder could
+ * not be asked at all. Checking that a place is real needs the difference:
+ * "no such place" refuses it, "no geocoder" (local dev, CI) cannot.
+ */
+export type GeocodeLookup =
+  | { status: "found"; result: GeocodeResult }
+  | { status: "none" }
+  | { status: "unavailable" };
+
+export async function geocodeLookup(q: string): Promise<GeocodeLookup> {
   const query = q.trim();
-  if (!query) return null;
+  if (!query) return { status: "none" };
 
   try {
     // Australia only, as autocomplete is. Unfiltered, "St Kilda" resolves to
@@ -172,11 +190,11 @@ export async function geocodePlace(q: string): Promise<GeocodeResult | null> {
       Filter: { IncludeCountries: ["AUS"] },
     }));
     const item = res.ResultItems?.[0];
-    if (!item?.Address) return null;
+    if (!item?.Address) return { status: "none" };
 
-    return toGeocodeResult(item);
+    return { status: "found", result: toGeocodeResult(item) };
   } catch (err) {
     console.error("[geocode] AWS Location Service lookup failed:", err);
-    return null;
+    return { status: "unavailable" };
   }
 }

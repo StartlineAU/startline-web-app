@@ -33,6 +33,7 @@ export default function SharedEmergencyContactSection({
             value={name}
             onChange={(e) => onChange("name", e.target.value)}
             placeholder="Full name"
+            autoComplete="section-emergency-contact name"
             className={registerInputCls(!!errors.emergencyContactName)}
           />
         </RegisterField>
@@ -43,6 +44,7 @@ export default function SharedEmergencyContactSection({
             value={phone}
             onChange={(e) => onChange("phone", e.target.value)}
             placeholder="e.g. 0412 000 111"
+            autoComplete="section-emergency-contact tel"
             className={registerInputCls(!!errors.emergencyContactPhone)}
           />
         </RegisterField>

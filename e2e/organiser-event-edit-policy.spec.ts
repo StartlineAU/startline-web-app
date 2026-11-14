@@ -18,6 +18,7 @@ const listing = (title: string) => ({
   startTime: "07:00",
   endTime: "10:00",
   venue: "Albert Park",
+  address: "Aughtie Dr, Albert Park VIC 3206",
   city: "Melbourne",
   state: "VIC",
   format: "Individual",
