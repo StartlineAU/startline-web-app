@@ -45,3 +45,34 @@ describe("Cloudflare Turnstile in the Content-Security-Policy", () => {
     expect(csp).toContain("https://challenges.cloudflare.com");
   });
 });
+
+describe("framing and baseline security headers", () => {
+  async function headers(): Promise<Map<string, string>> {
+    const rules = await nextConfig.headers!();
+    return new Map(rules[0].headers.map((header) => [header.key, header.value]));
+  }
+
+  it("refuses to be framed, so no page can be overlaid to trick a click", async () => {
+    const all = await headers();
+    expect(all.get("X-Frame-Options")).toBe("DENY");
+    expect(all.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
+  });
+
+  it("locks down the fallback, plugins, base URL and form targets", async () => {
+    const csp = (await headers()).get("Content-Security-Policy")!;
+    for (const directive of ["default-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"]) {
+      expect(csp).toContain(directive);
+    }
+  });
+
+  it("sends nosniff, a referrer policy and a permissions policy", async () => {
+    const all = await headers();
+    expect(all.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(all.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    expect(all.get("Permissions-Policy")).toContain("microphone=()");
+  });
+
+  it("does not advertise the framework", () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+});
