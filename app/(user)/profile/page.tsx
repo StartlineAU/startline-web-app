@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "@/lib/amplify-server";
+import { getUserSession } from "@/lib/amplify-server";
 import prisma from "@/lib/prisma";
 import ProfileServerView, {
   PROFILE_USER_SELECT,
@@ -7,7 +7,7 @@ import ProfileServerView, {
 } from "@/components/profile/ProfileServerView";
 
 export default async function ProfilePage() {
-  const session = await getServerSession();
+  const session = await getUserSession();
 
   if (!session) {
     return (
@@ -24,21 +24,13 @@ export default async function ProfilePage() {
     );
   }
 
-  const user = await prisma.user.findUnique({
+  // `session.sub` is a Prisma User id resolved from the verified Cognito
+  // subject. Never look the row up by email: that would show whichever
+  // account owns the address to anyone who can present it.
+  const resolved = (await prisma.user.findUnique({
     where: { id: session.sub },
     select: PROFILE_USER_SELECT,
-  });
-
-  // Fallback: resolve by email (covers dev bypass + accounts without a
-  // stable Cognito sub in the local DB).
-  const userByEmail = !user && session.email
-    ? await prisma.user.findUnique({
-        where: { email: session.email },
-        select: PROFILE_USER_SELECT,
-      })
-    : null;
-
-  const resolved = (user ?? userByEmail) as ProfileUser | null;
+  })) as ProfileUser | null;
   if (!resolved) return null;
 
   // Users without a handle can't reach /profile/{username}, so render their
