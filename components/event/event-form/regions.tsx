@@ -6,7 +6,8 @@ import {
   ArrowRight, Calendar, Check, ChevronDown, ChevronUp, Clock, ExternalLink, EyeOff, FileText,
   MapPin, Pencil, Plus, Ticket, Trash2, Upload, X,
 } from "lucide-react";
-import { keepInView, popIn, revealPanel, settleIn } from "./motion";
+import { collapsePanel, keepInView, popIn, revealPanel, settleIn } from "./motion";
+import { InfoTip } from "./info-tip";
 import { Button } from "@/components/ui/button";
 import AddressAutocomplete from "@/components/ui/AddressAutocomplete";
 import SuburbAutocomplete  from "@/components/ui/SuburbAutocomplete";
@@ -50,9 +51,13 @@ const oversizedMessage = (rejected: File[], maxBytes: number, kind: string) => {
   return `"${first.name}" is ${formatMb(first.size)}${others}. ${kind} must be ${formatMb(maxBytes)} or smaller.`;
 };
 
-/** An inline input that reads as the text it will become: no box, a dashed rule. */
+/**
+ * A text box that sits where its text will appear on the page, so the
+ * organiser can see at a glance where to type: a translucent fill with a
+ * full border, in the same size and style as the text it becomes.
+ */
 const ghostInput =
-  "bg-transparent border-0 border-b border-dashed border-light/25 hover:border-light/50 focus:border-primary focus:outline-none placeholder:text-placeholder transition-colors";
+  "bg-dark/60 backdrop-blur-sm border border-light/20 rounded-md px-3 py-1.5 hover:border-light/40 focus:border-primary focus:outline-none placeholder:text-placeholder transition-colors";
 
 const chip = (on: boolean) =>
   `font-headline text-[11px] font-bold uppercase tracking-widest px-3 py-2 rounded-md border transition-colors ${
@@ -69,8 +74,8 @@ const optionCard = (on: boolean) =>
 /** The one line under a field that still needs filling in. Quiet on purpose. */
 export function MissingHint({ message }: { message: string }) {
   return (
-    <p className="mt-2 flex items-center gap-2 font-headline text-[10px] font-bold uppercase tracking-widest text-orange-300/90">
-      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" aria-hidden="true" /> {message}
+    <p className="mt-2 flex items-start gap-2 font-headline text-[10px] font-bold uppercase tracking-widest leading-snug text-orange-300/90">
+      <span className="w-1.5 h-1.5 mt-[3px] rounded-full bg-orange-400 shrink-0" aria-hidden="true" /> {message}
     </p>
   );
 }
@@ -103,6 +108,18 @@ export function EditableDetail({ id, label, value, placeholder, open, onToggle, 
   const rowRef = useRef<HTMLDivElement>(null);
   const hasValue = value != null;
   const hadValue = useRef(hasValue);
+  // The panel stays mounted while it folds away, so closing animates like
+  // opening does. Adjusted during render, so the closing frame never drops it.
+  const [wasOpen, setWasOpen] = useState(open);
+  const [closing, setClosing] = useState(false);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    setClosing(!open);
+  }
+  useLayoutEffect(() => {
+    if (!closing) return;
+    return collapsePanel(panelRef.current, () => setClosing(false));
+  }, [closing]);
   useEffect(() => {
     if (!open) return;
     // Measure before the panel collapses for its opening animation: React has
@@ -142,8 +159,10 @@ export function EditableDetail({ id, label, value, placeholder, open, onToggle, 
             {open ? <><Check className="w-3 h-3" /> Done</> : <><Pencil className="w-3 h-3" /> {value ? "Edit" : "Add"}</>}
           </span>
         </button>
-        {open && (
-          <div ref={panelRef} className="pt-4 pb-1 space-y-4">
+        {(open || closing) && (
+          <div ref={panelRef} className="pt-4 pb-1 space-y-4"
+            // Folding away: out of reach, so nothing in it can be clicked or focused.
+            inert={!open || undefined} aria-hidden={!open || undefined}>
             {children}
             <div className="flex justify-end pt-1">
               <button type="button" onClick={onNext}
@@ -158,11 +177,15 @@ export function EditableDetail({ id, label, value, placeholder, open, onToggle, 
   );
 }
 
-function MiniField({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+/** A labelled field in a details row. `hint` is a short tag on the right ("Optional"); `info` is guidance in a bubble. */
+function MiniField({ label, hint, info, children }: { label: string; hint?: string; info?: ReactNode; children: ReactNode }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-2 mb-1.5">
-        <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-light">{label}</span>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-light">
+          {label}
+          {info && <InfoTip label={label}>{info}</InfoTip>}
+        </span>
         {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{hint}</span>}
       </div>
       {children}
@@ -231,7 +254,10 @@ export function CoverControls({ form, update, missing }: Props & { missing?: str
   );
 }
 
-/** The discipline pill. Picking one opens a sheet, since the banner clips popovers. */
+/**
+ * The category pill (stored as `discipline`). Picking one opens a sheet, since
+ * the banner clips popovers. Organisers see it called "Category".
+ */
 export function DisciplinePill({ form, update, missing }: Props & { missing?: string }) {
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -245,22 +271,22 @@ export function DisciplinePill({ form, update, missing }: Props & { missing?: st
 
   return (
     <span id="region-discipline" data-region="discipline" data-missing={missing ? "true" : undefined} className="inline-block scroll-mt-48">
-      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Choose discipline"
+      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Choose category"
         className={form.discipline
           ? `${DISCIPLINE_PILL_CLASS} inline-flex items-center gap-1.5 hover:brightness-110`
-          : `inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-dashed ${
-              missing ? "border-orange-400/80 text-orange-300" : "border-primary/70 text-primary"
-            } bg-dark/60 hover:bg-primary/10 transition-colors`}>
-        {form.discipline ? formatDiscipline(form.discipline) : <><Plus className="w-3 h-3" /> Discipline<RequiredMark /></>}
+          : `inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest px-3.5 py-1.5 rounded-full border-2 border-dashed shadow-lg ${
+              missing ? "border-orange-400/80 text-orange-300" : "border-primary text-primary"
+            } bg-darker/90 backdrop-blur-sm hover:bg-primary/15 transition-colors`}>
+        {form.discipline ? formatDiscipline(form.discipline) : <><Plus className="w-3.5 h-3.5" /> Category<RequiredMark /></>}
         <ChevronDown className="w-3 h-3" />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 overlay-in" role="dialog" aria-modal="true" aria-label="Discipline">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 overlay-in" role="dialog" aria-modal="true" aria-label="Category">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <div ref={sheetRef} className="relative w-full sm:max-w-lg bg-dark border border-dark-lighter rounded-t-2xl sm:rounded-2xl p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-headline text-[18px] font-black italic tracking-tight text-light">Discipline</h2>
+              <h2 className="font-headline text-[18px] font-black italic tracking-tight text-light">Category</h2>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close"
                 className="w-8 h-8 rounded-full text-light hover:text-primary flex items-center justify-center"><X className="w-4 h-4" /></button>
             </div>
@@ -304,7 +330,7 @@ export function TitleInput({ form, update, missing }: Props & { missing?: string
   return (
     // The size sits on the wrapper too: globals.css lifts phone inputs to
     // max(16px, 1em) against iOS zoom, and 1em is the parent's size.
-    <div id="region-title" data-region="title" data-missing={missing ? "true" : undefined} className="scroll-mt-48 mb-2 text-[28px] sm:text-4xl lg:text-5xl">
+    <div id="region-title" data-region="title" data-missing={missing ? "true" : undefined} className="scroll-mt-48 mb-4 sm:mb-3 text-[28px] sm:text-4xl lg:text-5xl">
       <textarea
         ref={ref}
         rows={1}
@@ -325,11 +351,13 @@ export function TitleInput({ form, update, missing }: Props & { missing?: string
           missing ? "!border-orange-400" : ""
         }`}
       />
-      <div className="flex items-center justify-between mt-1">
-        {missing ? <MissingHint message={missing} /> : (
-          <span className="font-headline text-[10px] uppercase tracking-widest text-muted">Event title<RequiredMark /></span>
-        )}
-        <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{form.title.length}/80</span>
+      <div className="flex items-start justify-between gap-4 mt-2 text-[10px] leading-snug">
+        <div className="min-w-0 flex-1 flex [&>p]:mt-0">
+          {missing ? <MissingHint message={missing} /> : (
+            <span className="font-headline text-[10px] uppercase tracking-widest text-muted">Event title<RequiredMark /></span>
+          )}
+        </div>
+        <span className="shrink-0 font-headline text-[10px] uppercase tracking-widest text-muted mt-px">{form.title.length}/80</span>
       </div>
     </div>
   );
@@ -372,30 +400,36 @@ export function DescriptionEditor({ form, update, missing }: Props & { missing?:
 export function PrizePoolEditor({ form, update }: Props) {
   if (!form.prizeMoney) {
     return (
-      <button type="button" onClick={() => update({ prizeMoney: true })}
-        className="w-full rounded-xl border border-dashed border-dark-lighter hover:border-primary/40 px-5 py-4 flex items-center gap-3 text-left transition-colors group">
-        <Plus className="w-4 h-4 text-primary shrink-0" />
-        <span>
-          <span className="block font-headline text-[12px] font-bold uppercase tracking-widest text-light group-hover:text-primary transition-colors">Add a prize pool</span>
-          <span className="block font-headline text-[10px] uppercase tracking-widest text-muted mt-0.5">Optional. Shown when the event offers cash prizes</span>
+      <div className="relative">
+        <button type="button" onClick={() => update({ prizeMoney: true })}
+          className="w-full rounded-xl border border-dashed border-dark-lighter hover:border-primary/40 pl-5 pr-12 py-4 flex items-center gap-3 text-left transition-colors group">
+          <Plus className="w-4 h-4 text-primary shrink-0" />
+          <span className="font-headline text-[12px] font-bold uppercase tracking-widest text-light group-hover:text-primary transition-colors">
+            Add a prize pool <span className="text-muted-dark font-medium">· Optional</span>
+          </span>
+        </button>
+        <span className="absolute right-4 top-1/2 -translate-y-1/2 flex">
+          <InfoTip label="Prize pool">
+            Only add one if the event offers cash prizes. Athletes see the total near the top of the page.
+          </InfoTip>
         </span>
-      </button>
+      </div>
     );
   }
   return (
     <PrizePoolCard amount={normalisePrizeAmount(form.prizeMoneyAmount)}>
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-baseline gap-1 font-headline text-xl font-black text-primary leading-tight">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-headline text-xl font-black text-primary leading-tight">
             <span>$</span>
             <input value={form.prizeMoneyAmount} onChange={e => update({ prizeMoneyAmount: e.target.value })}
               placeholder="2,000" aria-label="Total prize pool"
-              className={`${ghostInput} w-28 text-primary font-black`} />
+              className={`${ghostInput} w-32 text-primary font-black`} />
             <span className="whitespace-nowrap">prize pool</span>
           </div>
           <input value={form.prizeMoneyDetails} onChange={e => update({ prizeMoneyDetails: e.target.value })}
-            placeholder="How it's awarded, e.g. podium finishers per division" aria-label="How the prize pool is awarded"
-            className={`${ghostInput} w-full font-headline text-[11px] font-medium uppercase tracking-widest text-muted`} />
+            placeholder="How it's awarded, e.g. top 3 per division" aria-label="How the prize pool is awarded"
+            className={`${ghostInput} w-full !py-2 font-headline text-[11px] font-medium uppercase tracking-widest text-muted`} />
         </div>
         <button type="button" onClick={() => update({ prizeMoney: false })} aria-label="Remove prize pool"
           className="w-8 h-8 rounded-full text-muted hover:text-primary hover:bg-white/5 flex items-center justify-center transition-colors shrink-0">
@@ -435,18 +469,20 @@ function FeeBreakdown({ price, feeStructure }: { price: string; feeStructure: Fo
   );
 }
 
-/** A labelled field in a ticket card: the label above, a hint under it. */
-function TicketField({ label, htmlFor, required, hint, className = "", children }: {
-  label: string; htmlFor?: string; required?: boolean; hint?: string; className?: string; children: ReactNode;
+/** A labelled field in a ticket card: the label above, with its guidance in an info bubble beside it. */
+function TicketField({ label, htmlFor, required, info, className = "", children }: {
+  label: string; htmlFor?: string; required?: boolean; info?: ReactNode; className?: string; children: ReactNode;
 }) {
   const Label = htmlFor ? "label" : "p";
   return (
     <div className={`min-w-0 ${className}`}>
-      <Label htmlFor={htmlFor} className="block font-headline text-[10px] font-bold uppercase tracking-widest text-light mb-1.5">
-        {label}{required && <RequiredMark />}
-      </Label>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Label htmlFor={htmlFor} className="block font-headline text-[10px] font-bold uppercase tracking-widest text-light">
+          {label}{required && <RequiredMark />}
+        </Label>
+        {info && <InfoTip label={label}>{info}</InfoTip>}
+      </div>
       {children}
-      {hint && <p className="font-headline text-[10px] tracking-wide text-muted mt-1.5 leading-snug">{hint}</p>}
     </div>
   );
 }
@@ -477,10 +513,11 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
 
   return (
     <Region id="tickets" missing={missing}>
-      <SectionHeading required>Pricing</SectionHeading>
-      <p className="text-[13px] text-muted leading-relaxed -mt-1 mb-4">
-        Add each ticket athletes can buy, such as General entry or Early bird. Athletes see the name and price.
-      </p>
+      <SectionHeading required info={
+        <InfoTip label="Pricing">
+          Add each ticket athletes can buy, such as General entry or Early bird. Athletes see the name and price.
+        </InfoTip>
+      }>Pricing</SectionHeading>
 
       <div className="space-y-3">
         {form.waves.map((w, i) => {
@@ -504,29 +541,27 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_200px] gap-4">
-                <TicketField label="Ticket name" htmlFor={`${id}-name`} required hint="What athletes choose at checkout.">
+                <TicketField label="Ticket name" htmlFor={`${id}-name`} required
+                  info="What athletes choose at checkout, such as General entry or Early bird.">
                   <input id={`${id}-name`} value={w.label} onChange={e => updateWave(i, { label: e.target.value })}
                     placeholder="e.g. General entry" aria-label="Ticket category name"
                     className={`${ticketInput} ${labelMissing ? "!border-orange-400/70" : ""}`} />
                 </TicketField>
 
-                <TicketField label="Price" htmlFor={`${id}-price`} required>
+                <TicketField label="Price" htmlFor={`${id}-price`} required
+                  info="What athletes pay for this ticket, in Australian dollars. Tap Free if it costs nothing.">
                   <div className="flex items-stretch gap-2">
-                    {free ? (
-                      <div className="flex-1 flex items-center rounded-md border border-primary/30 bg-primary/10 px-4 font-headline text-[13px] font-bold uppercase tracking-widest text-primary">
-                        Free
-                      </div>
-                    ) : (
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-headline text-[13px] text-muted pointer-events-none">A$</span>
-                        <input id={`${id}-price`} value={w.price} inputMode="decimal" placeholder="0.00" aria-label="Ticket price"
-                          onChange={e => updateWave(i, { price: e.target.value.replace(/[^\d.]/g, "") })}
-                          className={`${ticketInput} !pl-10 tabular-nums ${priceMissing ? "!border-orange-400/70" : ""}`} />
-                      </div>
-                    )}
+                    {/* The price field stays put when the ticket is free, blanked out, so the row never changes shape. */}
+                    <div className={`relative flex-1 transition-opacity ${free ? "opacity-40" : ""}`}>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-headline text-[13px] text-muted pointer-events-none">A$</span>
+                      <input id={`${id}-price`} value={free ? "" : w.price} inputMode="decimal" placeholder="0.00" aria-label="Ticket price"
+                        disabled={free}
+                        onChange={e => updateWave(i, { price: e.target.value.replace(/[^\d.]/g, "") })}
+                        className={`${ticketInput} !pl-10 tabular-nums disabled:cursor-not-allowed ${priceMissing ? "!border-orange-400/70" : ""}`} />
+                    </div>
                     <button type="button" aria-pressed={free} onClick={() => updateWave(i, { price: free ? "" : "0" })}
                       className={`shrink-0 rounded-md border px-3 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                        free ? "border-primary bg-primary/10 text-primary" : "border-dark-lighter text-muted hover:text-primary hover:border-primary/40"
+                        free ? "border-primary bg-primary text-darker" : "border-dark-lighter text-muted hover:text-primary hover:border-primary/40"
                       }`}>
                       Free
                     </button>
@@ -535,7 +570,7 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
               </div>
 
               <TicketField label="Tickets available" htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
-                hint="Leave blank for no limit. Only you see this. Sales stop when it runs out.">
+                info="How many of this ticket you will sell. Leave blank for no limit. Only you see this number, and sales stop when it runs out.">
                 <div className="relative">
                   <input id={`${id}-qty`} value={w.qty} inputMode="numeric" placeholder="No limit" aria-label="Tickets available"
                     onChange={e => updateWave(i, { qty: e.target.value.replace(/\D/g, "").slice(0, 6) })}
@@ -546,10 +581,10 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
 
               {open ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                  <TicketField label="Wave start time" hint="Optional. Leave blank to use the event start.">
+                  <TicketField label="Wave start time" info="Optional. When athletes on this ticket start. Leave blank to use the event start time.">
                     <TimePicker value={w.startTime} onChange={v => updateWave(i, { startTime: v })} placeholder="Same as event start" ariaLabel="Wave start time" />
                   </TicketField>
-                  <TicketField label="Sales close" hint="Optional. The last day this ticket can be bought.">
+                  <TicketField label="Sales close" info="Optional. The last day this ticket can be bought. Leave blank to sell it until the event.">
                     <DatePicker value={w.closes} onChange={v => updateWave(i, { closes: v })} placeholder="Open until the event" disablePast={false} maxDate={form.endDate || form.date} />
                   </TicketField>
                   {!(w.startTime || w.closes) && (
@@ -628,7 +663,11 @@ export function GalleryEditor({ form, update, photoSrcs }: Props & { photoSrcs: 
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <SectionHeading>Gallery</SectionHeading>
+        <SectionHeading info={
+          <InfoTip label="Gallery">
+            Photos of the venue, the atmosphere or past editions. Up to {MAX_GALLERY_PHOTOS}, as JPG, PNG or WebP.
+          </InfoTip>
+        }>Gallery</SectionHeading>
         <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{count}/{MAX_GALLERY_PHOTOS} · Optional</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
@@ -643,7 +682,6 @@ export function GalleryEditor({ form, update, photoSrcs }: Props & { photoSrcs: 
           <label className="aspect-video rounded-xl border-2 border-dashed border-dark-lighter hover:border-primary/40 flex flex-col items-center justify-center cursor-pointer transition-colors">
             <Plus className="w-5 h-5 text-primary mb-1" />
             <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-light">Add photos</span>
-            <span className="font-headline text-[9px] uppercase tracking-widest text-muted mt-0.5">Venue, atmosphere, past editions</span>
             <input type="file" accept={TYPE_MIMES.photo.join(",")} multiple className="sr-only" aria-label="Gallery photos"
               onChange={e => { add(e.target.files); e.target.value = ""; }} />
           </label>
@@ -682,8 +720,15 @@ export function RegistrationEditor({ form, update, missing }: Props & { missing?
 
       <Region id="registration" missing={missing}>
         <div className="rounded-xl border border-dashed border-dark-lighter p-4">
-          <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-light mb-2.5">How athletes register</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-light">How athletes register</p>
+            <InfoTip label="How athletes register">
+              {external
+                ? "The Register button sends athletes to your own page. Paste its full address below."
+                : "Athletes register and pay on Startline, and pay the fee at checkout. Startline fee: 3.95% + A$1.45 per ticket."}
+            </InfoTip>
+          </div>
+          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
             {([
               { value: "startline", title: "Startline",        sub: "Managed here"     },
               { value: "external",  title: "External website", sub: "Your own page"    },
@@ -702,11 +747,7 @@ export function RegistrationEditor({ form, update, missing }: Props & { missing?
             <input value={form.registrationUrl} onChange={e => update({ registrationUrl: e.target.value })} required
               placeholder="https://yourorg.com/events/sydney-2026" aria-label="Registration URL"
               className={`${inputCls} mt-3 !py-2.5 text-[13px] ${missing ? "!border-orange-400/60" : ""}`} />
-          ) : (
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted mt-2.5 leading-relaxed">
-              Athlete pays the fee at checkout. Startline fee: 3.95% + A$1.45 per ticket
-            </p>
-          )}
+          ) : null}
           {missing && <MissingHint message={missing} />}
         </div>
       </Region>
@@ -745,7 +786,7 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
     <div className="space-y-2.5">
       <EditableDetail {...row("date")} label="Date" placeholder="Add the event date"
         value={form.date ? <DetailValue>{dateLabel(form)}</DetailValue> : null}>
-        <MiniField label="Event date(s)" hint="Tap start then end for multi-day">
+        <MiniField label="Event date(s)" info="Pick one day for a single-day event. For a multi-day event, tap the start date and then the end date.">
           <DatePicker
             value={form.date} onChange={v => update({ date: v })}
             rangeEnd={form.endDate} onChangeEnd={v => update({ endDate: v })}
@@ -762,16 +803,15 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
 
       <EditableDetail {...row("time")} label="Time" placeholder="Add the start time"
         value={form.startTime ? <DetailValue>{fmt24to12(form.startTime)}{form.endTime && ` — ${fmt24to12(form.endTime)}`}</DetailValue> : null}>
-        <MiniField label="Start time">
+        <MiniField label="Start time" info="When the first wave starts. A ticket can have its own start time, set under Pricing.">
           <TimePicker value={form.startTime} onChange={v => update({ startTime: v })} ariaLabel="Start time" />
         </MiniField>
-        <MiniField label="Cut-off time" hint="If required">
+        <MiniField label="Cut-off time" hint="Optional" info="When the course closes. Leave it blank if there is no cut-off.">
           <TimePicker value={form.endTime} onChange={v => update({ endTime: v })} placeholder="Select end time" ariaLabel="Cut-off time" />
           {timeInvalid && (
             <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">End time must be after start time.</p>
           )}
         </MiniField>
-        <p className="font-headline text-[10px] uppercase tracking-widest text-muted">Per-wave start times are set on each ticket under Pricing.</p>
       </EditableDetail>
 
       <EditableDetail {...row("location")} label="Location" placeholder="Add the venue"
@@ -803,7 +843,7 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
           longitude={form.longitude}
           label={[form.venue, form.city, form.state?.toUpperCase()].filter(Boolean).join(", ") || undefined}
         />
-        <MiniField label="Venue name" hint="Optional">
+        <MiniField label="Venue name" hint="Optional" info="The name athletes know the place by, such as a park or stadium. It replaces the city on the banner.">
           <input value={form.venue} onChange={e => update({ venue: e.target.value })}
             placeholder="Sydney Olympic Park" className={inputCls} />
         </MiniField>
@@ -946,10 +986,11 @@ export function InformationEditor({ form, update }: Props) {
   );
 
   return (
-    <SidebarCard title="Event information">
-      {pdfs.length === 0 && (
-        <p className="font-headline text-[10px] uppercase tracking-widest text-muted mb-3">Optional. Course maps, info packs, athlete guides, up to 15 MB each</p>
-      )}
+    <SidebarCard title="Event information" info={
+      <InfoTip label="Event information">
+        Optional. Course maps, info packs or athlete guides as PDFs, up to 15 MB each. Athletes can open them from the event page.
+      </InfoTip>
+    }>
       <ul className="space-y-2.5">
         {pdfs.map((pdf, i) => (
           <li key={pdf.file ? `${pdf.file.name}-${pdf.file.lastModified}-${i}` : `${pdf.url}-${i}`} className="flex items-start gap-2">
@@ -957,7 +998,7 @@ export function InformationEditor({ form, update }: Props) {
             <div className="min-w-0 flex-1">
               <input type="text" value={pdf.label} placeholder="Label (e.g. Course Map)" aria-label={`Label for ${pdf.file?.name ?? pdf.name ?? "PDF"}`}
                 onChange={e => update({ informationPdfs: pdfs.map((p, j) => (j === i ? { ...p, label: e.target.value } : p)) })}
-                className={`${ghostInput} w-full py-1 font-headline text-[12px] font-bold uppercase tracking-widest text-primary`} />
+                className={`${ghostInput} w-full !py-1 !px-2 font-headline text-[12px] font-bold uppercase tracking-widest text-primary`} />
               <p className="font-headline text-[10px] uppercase tracking-widest text-muted truncate mt-0.5">{pdf.file?.name ?? pdf.name ?? "Event information PDF"}</p>
             </div>
             <div className="flex items-center shrink-0">
@@ -981,7 +1022,11 @@ export function InformationEditor({ form, update }: Props) {
 export function RefundCard({ form, missing }: { form: FormState; missing?: string }) {
   return (
     <Region id="refund" missing={missing}>
-      <SidebarCard title="Refund & Transfer Policy">
+      <SidebarCard title="Refund & Transfer Policy" info={
+        <InfoTip label="Refund policy">
+          Set once for your organisation in Settings, under Refunds. Every event you list uses it.
+        </InfoTip>
+      }>
         {isFreeEvent(form.waves) ? (
           <p className="text-sm font-medium text-muted leading-relaxed">
             Not shown: every ticket is free, so there is nothing to refund.
@@ -994,9 +1039,6 @@ export function RefundCard({ form, missing }: { form: FormState; missing?: strin
               ))}
             </ul>
             {form.refundPolicy.trim() && <p className="text-sm font-medium text-muted leading-relaxed mt-2">{form.refundPolicy}</p>}
-            <p className="font-headline text-[10px] uppercase tracking-widest text-muted-dark leading-relaxed mt-3">
-              Set once for your organisation in Settings → Refunds.
-            </p>
           </>
         )}
         {missing && <MissingHint message={missing} />}

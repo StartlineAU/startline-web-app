@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 const PARTS = [
   {
     title: "The banner",
-    desc: "Click the banner to add a cover photo, pick the discipline, and type the event name straight onto it.",
+    desc: "Click the banner to add a cover photo, pick the category, and type the event name straight onto it.",
     need: "one cover photo · event name",
   },
   {

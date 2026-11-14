@@ -48,18 +48,25 @@ export function RequiredMark() {
   return <span className="text-primary font-black ml-1" title="Required" aria-hidden="true">*</span>;
 }
 
-export function SectionHeading({ children, required }: { children: ReactNode; required?: boolean }) {
+/** `info` is the editor's info bubble beside the heading; the public page passes none. */
+export function SectionHeading({ children, required, info }: { children: ReactNode; required?: boolean; info?: ReactNode }) {
   return (
-    <h2 className="font-headline text-lg font-black uppercase tracking-widest text-primary mb-3">
-      {children}{required && <RequiredMark />}
+    <h2 className="font-headline text-lg font-black uppercase tracking-widest text-primary mb-3 flex items-center gap-2">
+      <span>{children}{required && <RequiredMark />}</span>
+      {info}
     </h2>
   );
 }
 
-export function SidebarCard({ title, children, className = "" }: { title: string; children: ReactNode; className?: string }) {
+export function SidebarCard({ title, info, children, className = "" }: {
+  title: string; info?: ReactNode; children: ReactNode; className?: string;
+}) {
   return (
     <div className={`bg-dark rounded-xl p-5 sm:p-6 ${className}`}>
-      <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4">{title}</h3>
+      <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4 flex items-center gap-2">
+        <span>{title}</span>
+        {info}
+      </h3>
       {children}
     </div>
   );
@@ -103,7 +110,9 @@ export function PrizePoolCard({ amount, details, children }: { amount: string; d
 export type EventDetailSlots = Partial<Record<
   | "bannerMedia" | "bannerOverlay" | "discipline" | "title" | "meta" | "topLink"
   | "overview" | "prizePool" | "pricing" | "gallery" | "reviews"
-  | "actions" | "details" | "information" | "refund" | "footer",
+  | "actions" | "details" | "information" | "refund" | "footer"
+  /** The editor's info bubbles beside headings that stay in this file. */
+  | "overviewInfo" | "detailsInfo",
   ReactNode
 >>;
 
@@ -170,12 +179,13 @@ export default function EventDetailView({
 
       {/* ── Banner ── */}
       <div
-        className="relative overflow-hidden w-full"
+        // The editor stacks an upload prompt above the title fields, which a
+        // phone-width 4:3 banner has no room for: a phone gets the most height,
+        // since the title wraps there. min-height wins over max-height.
+        className={`relative overflow-hidden w-full ${mode === "edit" && !isPanel ? "min-h-[440px] sm:min-h-[400px]" : ""}`}
         style={isPanel
           ? { aspectRatio: "16/7", maxHeight: "260px" }
-          // The editor stacks an upload prompt above the title fields, which a
-          // phone-width 4:3 banner has no room for.
-          : { aspectRatio: "4/3", maxHeight: "420px", ...(mode === "edit" ? { minHeight: "380px" } : {}) }}
+          : { aspectRatio: "4/3", maxHeight: "420px" }}
       >
         {slot(slots, "bannerMedia", () => event.image ? (
           <Image
@@ -250,7 +260,7 @@ export default function EventDetailView({
           }`}>
 
             <div>
-              <SectionHeading required={inert}>Event Overview</SectionHeading>
+              <SectionHeading required={inert} info={slots?.overviewInfo}>Event Overview</SectionHeading>
               {slot(slots, "overview", () => (
                 <div
                   className={RICH_TEXT_CLASS}
@@ -382,7 +392,7 @@ export default function EventDetailView({
               </div>
             ))}
 
-            <SidebarCard title="Event Details">
+            <SidebarCard title="Event Details" info={slots?.detailsInfo}>
               {slot(slots, "details", () => (
                 <div className="space-y-3 sm:space-y-4">
                   <div>

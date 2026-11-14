@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { pickTime, openDetail, chooseDiscipline } from "./helpers";
+import { pickTime, openDetail, pickSingleDayToday, chooseDiscipline } from "./helpers";
 import { adminLogin } from "./helpers";
 
 const ts = () => Date.now().toString().slice(-6);
@@ -93,9 +93,7 @@ test.describe("admin event creation", () => {
     await page.getByLabel("Tickets available").fill("1000");
 
     // Event Details card
-    await openDetail(page, "date");
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
+    await pickSingleDayToday(page);
     await openDetail(page, "time");
     await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
     await openDetail(page, "location");

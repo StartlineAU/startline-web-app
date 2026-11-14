@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { organiserLogin, organiserMemberLogin, openOrganiserSettings, pickTime, expectOrganiserDashboard, ensureDatabaseUrl, openDetail } from "./helpers";
+import { organiserLogin, organiserMemberLogin, openOrganiserSettings, pickTime, expectOrganiserDashboard, ensureDatabaseUrl, openDetail, pickSingleDayToday } from "./helpers";
 
 ensureDatabaseUrl();
 
@@ -116,9 +116,7 @@ test.describe("new listing editor", () => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
     await page.getByRole("textbox", { name: "Event title" }).fill("E2E Visual Test Event");
-    await openDetail(page, "date");
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
+    await pickSingleDayToday(page);
     await openDetail(page, "time");
     await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
     await openDetail(page, "location");

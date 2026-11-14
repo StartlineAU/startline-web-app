@@ -19,6 +19,7 @@ import {
 } from "./event-form/shared";
 import { popIn, revealWords, spotlight, staggerIn } from "./event-form/motion";
 import { formToDetailData } from "./event-form/to-detail";
+import { InfoTip } from "./event-form/info-tip";
 import {
   BannerMeta, CoverControls, CoverMedia, DescriptionEditor, DetailsEditor, DisciplinePill,
   GalleryEditor, InformationEditor, PrizePoolEditor, RefundCard, RegistrationEditor,
@@ -38,9 +39,11 @@ const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
 };
 /**
  * Rows that one answer finishes move on by themselves once it is given (#528).
- * Divisions take several picks, so they wait for Next.
+ * The rest wait for Next: divisions take several picks, and time and location
+ * are complete before their optional fields (cut-off time, venue name) are
+ * reached, so moving on would cut those off.
  */
-const AUTO_ADVANCE = new Set<RegionId>(["date", "time", "location", "format", "intensity"]);
+const AUTO_ADVANCE = new Set<RegionId>(["date", "format", "intensity"]);
 /** A picker or suggestion list still open inside a row: the organiser is mid-choice. */
 const OPEN_PICKER = '[aria-haspopup][aria-expanded="true"], [role="combobox"][aria-expanded="true"]';
 
@@ -510,7 +513,7 @@ export default function EventPageEditor({
 
           {/* Checklist */}
           <div ref={checklistRef} className="relative ml-auto sm:ml-2">
-            <button ref={chipRef} type="button" onClick={() => { setShowChecklist(v => !v); setRevealMissing(true); }}
+            <button ref={chipRef} type="button" onClick={() => setShowChecklist(v => !v)}
               aria-expanded={showChecklist} aria-haspopup="true" data-testid="checklist-toggle"
               aria-label={remaining === 0 ? "Ready to publish. Show checklist" : `${doneCount} of ${checks.length} required fields done. Show checklist`}
               className={`inline-flex items-center gap-2.5 rounded-full border px-3 py-1.5 font-headline text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors ${
@@ -543,7 +546,7 @@ export default function EventPageEditor({
                 <ul>
                   {checks.map(c => (
                     <li key={c.region}>
-                      <button type="button" onClick={() => goToRegion(c.region)} title={c.done ? undefined : c.message} data-done={c.done}
+                      <button type="button" onClick={() => goToRegion(c.region, { reveal: false })} title={c.done ? undefined : c.message} data-done={c.done}
                         className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-white/5 transition-colors group">
                         {c.done
                           ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
@@ -608,7 +611,7 @@ export default function EventPageEditor({
                 <span className="font-headline font-bold text-light">
                   {editContext!.enteredCount} athlete{editContext!.enteredCount === 1 ? " has" : "s have"} entered.
                 </span>{" "}
-                Changing the discipline, format, date, times or location emails each of them, and the change is
+                Changing the category, format, date, times or location emails each of them, and the change is
                 kept in this event&apos;s history. Anyone who no longer wants to take part asks for a refund
                 through Support, which you and Startline review.
                 {awaitsReview && " The listing stays as it is until Startline approves the edit."}
@@ -628,6 +631,16 @@ export default function EventPageEditor({
             title:         <TitleInput form={form} update={update} missing={missingFor("title")} />,
             meta:          <BannerMeta form={form} onOpen={id => goToRegion(id, { reveal: false })} />,
             topLink:       null,
+            overviewInfo: (
+              <InfoTip label="Event overview">
+                What athletes read first. Cover the course, the atmosphere, the divisions and what to bring.
+              </InfoTip>
+            ),
+            detailsInfo: (
+              <InfoTip label="Event details">
+                Tap a row to fill it in. Finishing one moves you on to the next unfinished row.
+              </InfoTip>
+            ),
             overview:      <DescriptionEditor form={form} update={update} missing={missingFor("description")} />,
             prizePool:     <PrizePoolEditor form={form} update={update} />,
             pricing:       <TicketsEditor form={form} update={update} missing={missingFor("tickets")} />,

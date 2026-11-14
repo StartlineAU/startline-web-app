@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { organiserLogin, pickTime, ensureDatabaseUrl, openDetail, chooseDiscipline, createCompleteDraft } from "./helpers";
+import { organiserLogin, pickTime, ensureDatabaseUrl, openDetail, pickSingleDayToday, chooseDiscipline, createCompleteDraft } from "./helpers";
 
 ensureDatabaseUrl();
 
@@ -50,7 +50,10 @@ test.describe("new listing editor", () => {
     await expect(page.getByRole("button", { name: "Done editing date", exact: true })).toBeVisible();
     await expect(page.getByText("Pick start date")).toBeVisible();
 
-    // Opening the checklist outlines what is unfinished on the page itself.
+    // The checklist only lists what is left: the page is marked up only once
+    // the organiser tries to publish.
+    await expect(page.locator('[data-missing="true"]')).toHaveCount(0);
+    await page.getByRole("button", { name: /publish listing/i }).first().click();
     await expect(page.locator('[data-region="title"][data-missing="true"]')).toBeVisible();
     await page.getByRole("textbox", { name: "Event title" }).fill("Checklist Classic");
     await expect(page.locator('[data-region="title"][data-missing="true"]')).toHaveCount(0);
@@ -77,6 +80,14 @@ test.describe("new listing editor", () => {
     await expect(page.locator("#region-date button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
     await page.getByRole("heading", { name: /Event Overview/ }).click();
     await expect(page.locator("#region-time button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+
+    // Time stays open after the start time, so the optional cut-off can follow.
+    await pickTime(page, "Start time", { hour: "7", minute: "00", period: "AM" });
+    await page.waitForTimeout(1500);
+    await expect(page.locator("#region-time button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+    await pickTime(page, "Cut-off time", { hour: "11", minute: "00", period: "AM" });
+    await page.getByRole("button", { name: /next: location/i }).click();
+    await expect(page.locator("#region-location button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
   });
 
   // A long title used to widen the page past the screen, and the
@@ -104,6 +115,64 @@ test.describe("new listing editor", () => {
 
   // #352: the old test passed when AWS was unavailable, so it never proved the
   // selection filled the form. Stub both lookups and assert the whole handoff.
+  // Field guidance lives in info bubbles, not small print on the page.
+  test("info bubbles explain a field on hover, focus and tap", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+    const tip = page.getByRole("button", { name: "About tickets available" });
+    const bubble = page.getByRole("tooltip");
+    await expect(tip).toBeVisible();
+    await expect(page.getByText(/Leave blank for no limit/)).toHaveCount(0);
+
+    // Hover opens it and names the field; moving away closes it.
+    await tip.hover();
+    await expect(bubble).toContainText("Tickets available");
+    await expect(bubble).toContainText(/Leave blank for no limit/);
+    await expect(tip).toHaveAttribute("aria-describedby", await bubble.getAttribute("id") ?? "");
+    await page.mouse.move(0, 0);
+    await expect(bubble).toHaveCount(0);
+
+    // Keyboard: focus opens it, Escape closes it.
+    // Tabbing out of the ticket name lands on the price's icon.
+    await page.getByLabel("Ticket category name").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "About price" })).toBeFocused();
+    await expect(page.getByRole("tooltip")).toContainText(/athletes pay/i);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "About price" })).toBeFocused();
+
+    // A click pins it open, and opening another closes the first.
+    await tip.click();
+    await page.mouse.move(0, 0);
+    await expect(bubble).toContainText(/Leave blank for no limit/);
+    await page.getByRole("button", { name: "About pricing" }).click();
+    await expect(page.getByRole("tooltip")).toHaveCount(1);
+    await expect(page.getByRole("tooltip")).toContainText(/Early bird/);
+    // A click anywhere else closes it.
+    await page.getByRole("heading", { name: /Event Overview/ }).click();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  });
+
+  test("an info bubble opens on tap and stays on a phone screen", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const page = await context.newPage();
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+    const tip = page.getByRole("button", { name: "About tickets available" });
+    await tip.scrollIntoViewIfNeeded();
+    await tip.tap();
+    const bubble = page.getByRole("tooltip");
+    await expect(bubble).toContainText(/Leave blank for no limit/);
+    const box = (await bubble.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    // A second tap closes it.
+    await tip.tap();
+    await expect(bubble).toHaveCount(0);
+    await context.close();
+  });
+
   test("address autocomplete fills city, state and location preview", async ({ page }) => {
     const label = "123 Test St, Sydney NSW 2000";
     await page.route("**/api/places/autocomplete**", (route) =>
@@ -146,7 +215,7 @@ test.describe("new listing editor", () => {
 
     // The banner reads the place the way athletes will.
     await page.getByRole("button", { name: "Done editing location", exact: true }).click();
-    await expect(page.getByRole("button", { name: /Sydney, New South Wales/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sydney, NSW", exact: true })).toBeVisible();
   });
 
   test("blocks an end time at or before the start time", async ({ page }) => {
@@ -182,9 +251,7 @@ test.describe("new listing editor", () => {
     await expect(page.getByTestId("ticket-total")).toContainText("1,000 tickets");
 
     // Event Details card
-    await openDetail(page, "date");
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
+    await pickSingleDayToday(page);
     await openDetail(page, "time");
     await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
     await openDetail(page, "location");

@@ -191,10 +191,24 @@ export async function openDetail(page: Page, row: string): Promise<void> {
   }).toPass({ timeout: 15000 });
 }
 
-/** Pick the discipline from the pill on the listing editor's banner. */
+/**
+ * Set a single-day event on today's date in the listing editor, then close
+ * the calendar. After a start date the calendar stays open for an end date,
+ * and it can drop down over the Time row and swallow a click on it, so close
+ * it by clicking away, as an organiser would.
+ */
+export async function pickSingleDayToday(page: Page): Promise<void> {
+  await openDetail(page, "date");
+  await page.getByText("Pick start date").click();
+  await page.getByRole("button", { name: /today/i }).click();
+  await page.getByRole("heading", { name: /Event Overview/ }).click();
+  await expect(page.locator('#region-date [aria-haspopup="dialog"]')).toHaveAttribute("aria-expanded", "false");
+}
+
+/** Pick the category (stored as discipline) from the pill on the listing editor's banner. */
 export async function chooseDiscipline(page: Page, name: string): Promise<void> {
-  await page.getByRole("button", { name: "Choose discipline" }).click();
-  await page.getByRole("dialog", { name: "Discipline" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
+  await page.getByRole("button", { name: "Choose category" }).click();
+  await page.getByRole("dialog", { name: "Category" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
 }
 
 /**

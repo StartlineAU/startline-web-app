@@ -47,7 +47,7 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   const timeOrderBad = !!(form.startTime && form.endTime && form.endTime <= form.startTime);
 
   check("Cover image", "cover", !!(form.coverImage || form.coverImageUrl), "Upload a cover image");
-  check("Discipline", "discipline", !!form.discipline, "Choose a discipline");
+  check("Category", "discipline", !!form.discipline, "Choose a category");
   check("Event title", "title", form.title.trim().length > 2, "Add an event name of at least 3 characters");
   check("Description", "description", stripHtml(form.description).length > 0, "Write the event description");
   check("Tickets & prices", "tickets", form.waves.length > 0 && form.waves.every(waveIsComplete),

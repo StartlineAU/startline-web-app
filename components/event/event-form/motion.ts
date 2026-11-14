@@ -46,6 +46,35 @@ export function revealPanel(el: HTMLElement | null) {
 }
 
 /**
+ * The same panel closing: its children fade first, then the height folds
+ * away. `done` runs once it has gone (straight away for reduced motion), so
+ * the caller can unmount it. Returns a stop function that cancels the
+ * animation and clears what it set, for a panel reopened mid-close.
+ */
+export function collapsePanel(el: HTMLElement | null, done: () => void): () => void {
+  if (!el || reducedMotion()) { done(); return () => {}; }
+  const children = Array.from(el.children) as HTMLElement[];
+  el.style.overflow = "hidden";
+  const fade = children.length
+    ? animate(children, { opacity: [1, 0], translateY: [0, -4], duration: 140, ease: "in(2)" })
+    : null;
+  const fold = animate(el, {
+    height: [el.offsetHeight, 0],
+    opacity: [1, 0],
+    duration: 260,
+    delay: 60,
+    ease: "inOut(3)",
+    onComplete: done,
+  });
+  return () => {
+    fade?.cancel();
+    fold.cancel();
+    clear(children, ["transform", "opacity"]);
+    clear([el], ["height", "overflow", "opacity"]);
+  };
+}
+
+/**
  * Scroll just enough that `el`, at its current (full) size, is on screen,
  * moving with it as it opens rather than leaving it hanging off the bottom.
  * The top stays clear of the sticky header, the bottom of the phone save bar.
@@ -88,6 +117,31 @@ export function popIn(el: HTMLElement | null, from = 0.94) {
   animate(el, {
     scale: [from, 1], opacity: [0, 1], duration: 300, ease: "out(4)",
     onComplete: () => clear([el], ["transform", "opacity"]),
+  });
+}
+
+/**
+ * An info bubble rising out of its icon. `below` when it opens under the icon,
+ * so it grows downwards instead. Returns the animation so a quick close can
+ * cancel it.
+ */
+export function bubbleIn(el: HTMLElement | null, below: boolean) {
+  if (!el || reducedMotion()) return null;
+  el.style.transformOrigin = below ? "top center" : "bottom center";
+  return animate(el, {
+    opacity: [0, 1], scale: [0.9, 1], translateY: [below ? -6 : 6, 0],
+    duration: 260, ease: "out(4)",
+    onComplete: () => clear([el], ["transform", "opacity", "transform-origin"]),
+  });
+}
+
+/** The same bubble going away. `done` runs once it has (straight away for reduced motion). */
+export function bubbleOut(el: HTMLElement | null, below: boolean, done: () => void) {
+  if (!el || reducedMotion()) { done(); return null; }
+  return animate(el, {
+    opacity: 0, scale: 0.94, translateY: below ? -4 : 4,
+    duration: 140, ease: "in(2)",
+    onComplete: done,
   });
 }
 
