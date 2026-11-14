@@ -7,6 +7,8 @@ import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import { SignInMethodError, verifyAuthenticatorStepUp } from "@/lib/cognito-sign-in-methods";
 import { clearRecoveryCodes, issueRecoveryCodes } from "@/lib/authenticator-recovery";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
+import { forgetAdminAuthenticator } from "@/lib/admin-mfa";
+import { sendAccountSecurityNotice } from "@/lib/email";
 import { z } from "zod";
 
 const mfaActionSchema = z.discriminatedUnion("action", [
@@ -43,6 +45,8 @@ function stepUpError(error: unknown) {
 export async function POST(req: Request) {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  // Any change here may change the admin MFA answer; ask Cognito afresh.
+  forgetAdminAuthenticator(session.sub);
 
   const parsed = mfaActionSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -59,6 +63,14 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "disable") {
+    // Admin access requires the authenticator app (lib/admin-mfa.ts), so an
+    // admin cannot turn it off here.
+    if (session.groups.includes("admins") && methods.mfaRequired) {
+      return NextResponse.json(
+        { error: "Admin accounts must keep an authenticator app." },
+        { status: 403 },
+      );
+    }
     if (methods.mfaRequired) {
       if (!methods.hasPassword) {
         return NextResponse.json(
@@ -99,21 +111,28 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
   try {
-    return await handleAction(body, user.id);
+    return await handleAction(body, user.id, methods.mfaRequired, user.email);
   } catch (err) {
     const { status, error } = describeCognitoError(err);
     return NextResponse.json({ error }, { status });
   }
 }
 
-async function handleAction(body: z.infer<typeof mfaActionSchema>, userId: string) {
+async function handleAction(
+  body: z.infer<typeof mfaActionSchema>,
+  userId: string,
+  cognitoMfaOn: boolean,
+  email: string,
+) {
   switch (body.action) {
+    // Brings the app's label in line with Cognito after a setup that happened
+    // during sign-in. It records what Cognito says, never more.
     case "enable": {
       await prisma.user.update({
         where: { id: userId },
-        data: { mfaEnabled: true },
+        data: { mfaEnabled: cognitoMfaOn },
       });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mfaEnabled: cognitoMfaOn });
     }
 
     case "disable": {
@@ -131,6 +150,7 @@ async function handleAction(body: z.infer<typeof mfaActionSchema>, userId: strin
       });
       // The codes only open the door this just removed.
       await clearRecoveryCodes(userId);
+      await sendAccountSecurityNotice(email, "The authenticator app was turned off for your account.");
       return NextResponse.json({ ok: true });
     }
 
@@ -173,6 +193,7 @@ async function handleAction(body: z.infer<typeof mfaActionSchema>, userId: strin
         PreviousPassword: currentPassword,
         ProposedPassword: newPassword,
       }));
+      await sendAccountSecurityNotice(email, "Your password was changed.");
       return NextResponse.json({ ok: true });
     }
 

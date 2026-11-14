@@ -19,6 +19,8 @@ export interface NativeApiSession {
   birthdate?: string;
   name?: string;
   emailTrusted: boolean;
+  /** When the person last actually signed in (seconds since epoch), from the access token. */
+  authTime?: number;
 }
 
 type Claims = Record<string, unknown>;
@@ -93,5 +95,6 @@ export function nativeSessionFromClaims(
     birthdate,
     name,
     emailTrusted,
+    authTime: typeof accessPayload.auth_time === "number" ? accessPayload.auth_time : undefined,
   };
 }

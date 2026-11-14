@@ -5,6 +5,7 @@ import prisma from "./prisma";
 import { pickActiveMembership } from "./active-organiser";
 import { nativeSessionFromClaims } from "./native-api-auth";
 import { resolveUserRow } from "./user-session";
+import { adminHasAuthenticator } from "./admin-mfa";
 
 export type ServerSession = {
   sub:          string;
@@ -20,6 +21,8 @@ export type ServerSession = {
   // only for a Google or Apple sign-in whose provider did not verify the email.
   name?:         string;
   emailTrusted?: boolean;
+  // Seconds since epoch of the last real sign-in. Refreshing tokens keeps it.
+  authTime?:     number;
   // The dev/E2E identity that produced this session, if any. Used by the
   // settings screen to model provider-only and linked accounts without Cognito.
   bypass?: string;
@@ -381,6 +384,9 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
   if (!cognitoSession.groups.includes("admins")) return null;
+  // Admin access needs an authenticator app, not just the group: see
+  // lib/admin-mfa.ts.
+  if (!(await adminHasAuthenticator(cognitoSession))) return null;
 
   try {
     return await resolveAdminRow(cognitoSession);

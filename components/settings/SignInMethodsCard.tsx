@@ -19,7 +19,7 @@ type Message = { kind: "error" | "success"; text: string } | null;
 
 // The password and a code from the authenticator app, sent only when the account
 // has one (see requireStepUp in the sign-in-methods route).
-type Proof = { password: string; code: string };
+type Proof = { password: string; code?: string };
 
 async function send(body: unknown): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const response = await fetch("/api/user/sign-in-methods", {
@@ -44,7 +44,7 @@ function flashFromQuery(query: URLSearchParams): Message {
 }
 
 function ProofFields({
-  id, password, code, onPassword, onCode, disabled,
+  id, password, code, onPassword, onCode, disabled, needsCode = true,
 }: {
   id: string;
   password: string;
@@ -52,6 +52,8 @@ function ProofFields({
   onPassword: (value: string) => void;
   onCode: (value: string) => void;
   disabled: boolean;
+  /** False for an account without an authenticator app: the password alone. */
+  needsCode?: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -68,6 +70,7 @@ function ProofFields({
           className={inputCls}
         />
       </div>
+      {needsCode && (
       <div>
         <label htmlFor={`${id}-code`} className={labelCls}>Authenticator code</label>
         <input
@@ -83,6 +86,7 @@ function ProofFields({
           className={`${inputCls} tracking-[0.5em] text-center font-bold`}
         />
       </div>
+      )}
     </div>
   );
 }
@@ -304,7 +308,9 @@ export default function SignInMethodsCard({
                   ) : method.enabled ? (
                     <button
                       type="button"
-                      onClick={() => (methods.mfaRequired ? openProof("connect", method.provider) : connect(method.provider))}
+                      // Connecting adds a way in, so it is confirmed with the
+                      // password (and the code, with an authenticator app).
+                      onClick={() => (methods.hasPassword ? openProof("connect", method.provider) : connect(method.provider))}
                       disabled={busy !== null}
                       className={primaryBtn + " shrink-0"}
                     >
@@ -315,12 +321,15 @@ export default function SignInMethodsCard({
 
                 {connectingWith === method.provider && (
                   <form
-                    onSubmit={(e) => { e.preventDefault(); connect(method.provider, { password, code }); }}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      connect(method.provider, methods.mfaRequired ? { password, code } : { password });
+                    }}
                     className="border-t border-dark-lighter pt-3 space-y-3"
                   >
                     <p className="text-[13px] text-muted leading-relaxed">
-                      Confirm it&apos;s you, then connect {name}. After this, signing in with {name} won&apos;t ask for
-                      your authenticator code.
+                      Confirm it&apos;s you, then connect {name}.
+                      {methods.mfaRequired && <> After this, signing in with {name} won&apos;t ask for your authenticator code.</>}
                     </p>
                     <ProofFields
                       id={`connect-${method.provider}`}
@@ -329,12 +338,13 @@ export default function SignInMethodsCard({
                       onPassword={setPassword}
                       onCode={setCode}
                       disabled={busy !== null}
+                      needsCode={methods.mfaRequired}
                     />
                     {proofError && <ErrorNote>{proofError}</ErrorNote>}
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="submit"
-                        disabled={busy !== null || !password || code.length !== 6}
+                        disabled={busy !== null || !password || (methods.mfaRequired && code.length !== 6)}
                         className={primaryBtn}
                       >
                         {busy === method.provider ? "Connecting…" : `Connect ${name}`}

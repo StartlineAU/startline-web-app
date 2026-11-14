@@ -11,6 +11,8 @@ import { EventChangedEmail } from "@/emails/event-changed";
 import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
+import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
+import { SUPPORT_EMAIL } from "@/lib/contact";
 import { formatEmailDate, formatEmailTime, formatEmailPlace } from "@/lib/email-format";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
 
@@ -410,4 +412,22 @@ export async function buildRefundRequestEmail(data: RefundRequestEmailData): Pro
 export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
   if (!getResend()) return;
   await sendOne(to, await buildRefundRequestEmail(data));
+}
+
+// ── Account security notice ──────────────────────────────────────────────────
+// Something that controls access to the account changed. Sent so that a change
+// made with a stolen session reaches the owner. Never throws: the change has
+// already happened and must not be reported as failed over an email.
+export async function buildAccountSecurityNoticeEmail(change: string): Promise<BuiltEmail> {
+  const rendered = await renderEmail(AccountSecurityNoticeEmail({ change, supportEmail: SUPPORT_EMAIL }));
+  return { subject: "A security change was made to your Startline account", ...rendered };
+}
+
+export async function sendAccountSecurityNotice(to: string | null | undefined, change: string): Promise<void> {
+  if (!to || !to.includes("@") || !getResend()) return;
+  try {
+    await sendOne(to, await buildAccountSecurityNoticeEmail(change));
+  } catch (err) {
+    console.error("Account security notice failed:", err);
+  }
 }
