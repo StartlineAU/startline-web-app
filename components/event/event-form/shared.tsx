@@ -78,7 +78,7 @@ export function missingRequirements(form: FormState): Requirement[] {
   return requirementChecks(form).filter((c) => !c.done).map(({ row, region, message }) => ({ row, region, message }));
 }
 
-export type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "other" | "";
+export type Discipline = "running" | "run_club" | "other" | "";
 export type Format     = "individual" | "team" | "both" | "";
 export type Intensity  = "low" | "moderate" | "high" | "extreme" | "";
 export type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
@@ -273,18 +273,13 @@ export function RichTextEditor({ value, onChange, invalid = false }: { value: st
 
 /* ── Option lists ───────────────────────────────────────────── */
 export const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
-  { v: "crossfit",  l: "CrossFit",  d: "Functional fitness comp"    },
   { v: "running",   l: "Running",   d: "5km · 10km · Half · Marathon" },
-  { v: "hybrid",    l: "Hybrid",    d: "Multi-discipline / OCR"     },
-  { v: "cycling",   l: "Cycling",   d: "Road · Criterium · Gravel"  },
-  { v: "swimming",  l: "Swimming",  d: "Pool · Open water events"   },
-  { v: "other",     l: "Other",     d: "Another discipline"         },
+  { v: "run_club",  l: "Run Club",  d: "Group runs & club sessions"   },
+  { v: "other",     l: "Other",     d: "Another discipline"           },
 ];
 
 export const DISCIPLINE_CATS: Partial<Record<Discipline, string[]>> = {
   running:  ["5K", "10K", "Half Marathon", "Marathon", "Ultra"],
-  cycling:  ["Road Race", "Criterium", "Time Trial", "Gran Fondo", "Mountain Bike", "Gravel"],
-  swimming: ["50m", "100m", "200m", "400m", "800m", "1500m", "Open Water"],
 };
 
 export const FORMATS: { v: Format; l: string; d: string }[] = [

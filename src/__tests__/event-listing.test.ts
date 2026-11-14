@@ -95,7 +95,7 @@ describe("buildEventListPage", () => {
     const events = [
       ...Array.from({ length: 12 }, (_, i) => event(i + 1)),
       ...Array.from({ length: 12 }, (_, i) =>
-        event(i + 100, { discipline: "cycling", city: "Melbourne", state: "vic" })),
+        event(i + 100, { discipline: "run_club", city: "Melbourne", state: "vic" })),
     ];
 
     const page = buildEventListPage(events, {
@@ -133,7 +133,7 @@ describe("buildEventListPage", () => {
     const page = buildEventListPage(events, {
       page: 1,
       pageSize: EVENT_PAGE_SIZE,
-      filters: filters({ types: ["crossfit"] }),
+      filters: filters({ types: ["other"] }),
     });
 
     expect(page.total).toBe(0);
@@ -147,7 +147,7 @@ describe("buildEventListPage", () => {
       event(1, { city: "Sydney" }),
       event(2, { city: "Sydney" }),
       event(3, { city: "Sydney" }),
-      event(4, { discipline: "cycling", city: "Melbourne", state: "vic" }),
+      event(4, { discipline: "run_club", city: "Melbourne", state: "vic" }),
     ];
 
     const page = buildEventListPage(events, {
@@ -167,7 +167,7 @@ describe("buildEventListPage", () => {
     const events = [
       event(1, { discipline: "running" }),
       ...Array.from({ length: OTHER_EVENTS_LIMIT + 4 }, (_, i) =>
-        event(i + 10, { discipline: "cycling", city: "Melbourne", state: "vic" })),
+        event(i + 10, { discipline: "run_club", city: "Melbourne", state: "vic" })),
     ];
 
     const page = buildEventListPage(events, {

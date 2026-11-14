@@ -10,11 +10,8 @@ const LINK_GROUPS: { heading: string; links: FooterLink[] }[] = [
     links: [
       { href: "/events", label: "All Events" },
       { href: "/events?type=running", label: "Running" },
-      { href: "/events?type=cycling", label: "Cycling" },
-      { href: "/events?type=swimming", label: "Swimming" },
-      { href: "/events?type=triathlon", label: "Triathlon" },
-      { href: "/events?type=crossfit", label: "CrossFit" },
-      { href: "/events?type=hybrid", label: "Hybrid" },
+      { href: "/events?type=run_club", label: "Run Clubs" },
+      { href: "/events?type=other", label: "Other" },
     ],
   },
   {

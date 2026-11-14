@@ -389,10 +389,10 @@ test.describe("new listing editor", () => {
     }
   });
 
-  // A saved event whose discipline has no picker (crossfit, hybrid, triathlon)
+  // A saved event whose discipline has no picker (run_club, other)
   // still carries categories on the record, and the details card must show
   // them rather than drop them because the picker list does not apply.
-  // seed-event-002 is a pending hybrid event owned by Apex.
+  // seed-event-002 is a pending "other" event owned by Apex.
   test("an existing event loads into the page, divisions included", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);

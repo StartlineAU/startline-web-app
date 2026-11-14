@@ -35,15 +35,14 @@ export const metadata: Metadata = {
     template: "%s | Startline",
   },
   description:
-    "Discover fitness racing, CrossFit, running and hybrid fitness events across Australia. Find, compare and register for competitions near you.",
+    "Discover running races, fun runs and run clubs across Australia. Find, compare and register for your next event.",
   keywords: [
-    "fitness events Australia",
-    "fitness racing Australia",
-    "CrossFit competition",
+    "running events Australia",
     "running races",
-    "hybrid fitness",
-    "obstacle course",
-    "fitness competition NSW VIC QLD",
+    "fun runs",
+    "run clubs",
+    "marathon Australia",
+    "running events NSW VIC QLD",
   ],
 
   alternates: {
@@ -55,7 +54,7 @@ export const metadata: Metadata = {
     siteName:    "Startline",
     title:       "Startline - Find Your Next Race",
     description:
-      "Discover fitness racing, CrossFit, running and hybrid fitness events across Australia.",
+      "Discover running races, fun runs and run clubs across Australia.",
     url:         SITE_URL,
     images: [
       {
@@ -70,7 +69,7 @@ export const metadata: Metadata = {
   twitter: {
     card:        "summary_large_image",
     title:       "Startline - Find Your Next Race",
-    description: "Discover fitness racing, CrossFit, running and hybrid fitness events across Australia.",
+    description: "Discover running races, fun runs and run clubs across Australia.",
     images:      ["/site-preview.png"],
   },
 

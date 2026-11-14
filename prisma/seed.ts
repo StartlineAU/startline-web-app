@@ -140,9 +140,15 @@ const PROFILE_PICS: Record<string, string> = {
   "lucas.tan@startline.test":        "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&q=80",
 };
 
+// Disciplines the site lists (#536). Seed events keep their original sport for
+// photos and copy, but are stored under a supported discipline.
+const SUPPORTED_DISCIPLINES = new Set(["running", "run_club", "other"]);
+const seedDiscipline = (d: string) => (SUPPORTED_DISCIPLINES.has(d) ? d : "other");
+
 // Discipline-appropriate cover photos for events that don't have one set.
 const DISCIPLINE_COVERS: Record<string, string> = {
   running:   "https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=1200&q=80",
+  run_club:  "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=80",
   cycling:   "https://images.unsplash.com/photo-1541625602330-2277a4c46182?w=1200&q=80",
   swimming:  "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=1200&q=80",
   triathlon: "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=1200&q=80",
@@ -560,7 +566,7 @@ async function main() {
   const apexThrowdown = {
     status: "APPROVED" as const,
     title: "The Apex Throwdown 2026",
-    discipline: "crossfit",
+    discipline: seedDiscipline("crossfit"),
     description: [
       "<p>Victoria's premier functional fitness competition returns for its fourth year. Six scored events across two days, programmed to test every energy system — raw strength, engine, and skill under fatigue. Whether you're chasing a podium or your first competition floor, there's a division for you.</p>",
       "<h3>The Format</h3>",
@@ -648,7 +654,7 @@ async function main() {
     where: { id: "seed-event-002" }, update: {},
     create: {
       id: "seed-event-002", slug: await uniqueSlug("Hybrid Hustle Series — Round 3"), organiserId: org.id, status: "PENDING", photos: DISCIPLINE_PHOTOS.hybrid,
-      title: "Hybrid Hustle Series — Round 3", discipline: "hybrid",
+      title: "Hybrid Hustle Series — Round 3", discipline: seedDiscipline("hybrid"),
       description: "Trail running, loaded carries, obstacle crawls, and a surprise finale.",
       eventDate: seedDate("2026-09-06"), startTime: "08:00", endTime: "14:00",
       venue: "Kokoda Track Memorial Walkway", city: "Scoresby", state: "vic", ...seedCoords("Scoresby", "vic"),
@@ -666,7 +672,7 @@ async function main() {
     where: { id: "seed-event-003" }, update: {},
     create: {
       id: "seed-event-003", slug: await uniqueSlug("Team Throwdown Summer Series"), organiserId: org.id, status: "DRAFT", photos: DISCIPLINE_PHOTOS.functional_fitness,
-      title: "Team Throwdown Summer Series", discipline: "functional_fitness", description: "Draft — details TBC",
+      title: "Team Throwdown Summer Series", discipline: seedDiscipline("functional_fitness"), description: "Draft — details TBC",
       eventDate: seedDate("2026-12-05"), startTime: "09:00", endTime: "15:00",
       venue: "TBC", city: "Sydney", state: "nsw", ...seedCoords("Sydney", "nsw"), format: "team", level: "open",
       ...eventTimeData({ eventDate: seedDate("2026-12-05"), startTime: "09:00", endTime: "15:00", state: "nsw" }),
@@ -698,6 +704,7 @@ async function main() {
     { id: "seed-event-006", status: "APPROVED" as const, title: "Gold Coast Marathon Weekend", discipline: "running",   eventDate: seedDate("2026-07-05"), startTime: "06:00", endTime: "14:00", venue: "Gold Coast Highway",             city: "Gold Coast", state: "qld", org: "coastal", format: "individual", level: "open",  categories: ["Marathon", "Half Marathon", "10K", "5K"], cap: 5000, waves: [{ label: "Marathon Entry", price: "120" }, { label: "Half Marathon", price: "85" }, { label: "10K Entry", price: "50" }], description: "Australia's premier marathon along the Gold Coast beachfront." },
     { id: "seed-event-007", status: "APPROVED" as const, title: "Uluru Sunset Run",            discipline: "running",   eventDate: seedDate("2026-10-12"), startTime: "16:00", endTime: "19:00", venue: "Uluru-Kata Tjuta National Park",  city: "Uluru",   state: "nt",  format: "individual", level: "open",  categories: ["5K Fun Run", "10K Trail"], cap: 500, waves: [{ label: "General", price: "65" }], description: "A once-in-a-lifetime trail run around the base of Uluru at sunset." },
     { id: "seed-event-008", status: "APPROVED" as const, title: "Melbourne Marathon Festival",  discipline: "running",   eventDate: seedDate("2026-10-12"), startTime: "07:00", endTime: "15:00", venue: "MCG",                             city: "Melbourne", state: "vic", coords: [-37.8199, 144.9834] as [number, number], format: "individual", level: "open",  categories: ["Marathon", "Half Marathon", "10K", "5K"], cap: 8000, waves: [{ label: "Marathon", price: "110" }, { label: "Half", price: "75" }], description: "Iconic marathon finishing inside the Melbourne Cricket Ground." },
+    { id: "seed-event-009", status: "APPROVED" as const, title: "Apex Saturday Run Club",       discipline: "run_club",  eventDate: seedDate("2026-12-19"), startTime: "06:30", endTime: "08:00", venue: "Princes Bridge",                 city: "Melbourne", state: "vic", coords: [-37.8197, 144.9673] as [number, number], format: "individual", level: "open",  categories: [], cap: 60, waves: [{ label: "Run Entry", price: "5" }], description: "A social 5K loop of the Tan every Saturday morning. All paces welcome, coffee after." },
     { id: "seed-event-010", status: "APPROVED" as const, title: "Around the Bay 2026",          discipline: "cycling",   eventDate: seedDate("2026-10-11"), startTime: "06:30", endTime: "15:00", venue: "Albert Park Circuit",             city: "Melbourne", state: "vic", coords: [-37.8479, 144.9670] as [number, number], format: "individual", level: "open",  categories: ["210K", "100K", "50K", "35K"], cap: 10000, waves: [{ label: "210K Entry", price: "110" }, { label: "100K Entry", price: "75" }], description: "Australia's biggest bike ride." },
     { id: "seed-event-011", status: "APPROVED" as const, title: "Tour de Brisbane Gran Fondo",  discipline: "cycling",   eventDate: seedDate("2026-08-30"), startTime: "06:00", endTime: "14:00", venue: "Brisbane City Hall",              city: "Brisbane", state: "qld", format: "individual", level: "open",  categories: ["160K Gran Fondo", "100K Medio", "50K Corto"], cap: 3000, waves: [{ label: "Gran Fondo", price: "95" }, { label: "Medio", price: "75" }], description: "Gran fondo through Brisbane's scenic hinterland." },
     { id: "seed-event-012", status: "APPROVED" as const, title: "Perth Twilight Criterium",    discipline: "cycling",   eventDate: seedDate("2026-12-12"), startTime: "17:00", endTime: "21:00", venue: "Perth CBD Circuit",               city: "Perth",   state: "wa",  format: "individual", level: "open",  categories: ["Elite Men", "Elite Women", "B Grade", "C Grade"], cap: 200, waves: [{ label: "Elite Entry", price: "35" }, { label: "Grade Entry", price: "25" }], description: "Fast twilight criterium racing through the streets of Perth CBD." },
@@ -732,7 +739,7 @@ async function main() {
     const ownerId = e.org === "coastal" ? (coastalOrg?.id ?? org.id) : org.id;
     await prisma.event.upsert({
       where: { id: e.id }, update: {},
-      create: { id: e.id, slug: await uniqueSlug(e.title), organiserId: ownerId, status: e.status, title: e.title, discipline: e.discipline,
+      create: { id: e.id, slug: await uniqueSlug(e.title), organiserId: ownerId, status: e.status, title: e.title, discipline: seedDiscipline(e.discipline),
         photos: DISCIPLINE_PHOTOS[e.discipline] ?? [], description: e.description, eventDate: e.eventDate, startTime: e.startTime, endTime: e.endTime,
         ...eventTimeData({ eventDate: e.eventDate, startTime: e.startTime, endTime: e.endTime, state: e.state }),
         venue: e.venue, city: e.city, state: e.state, ...seedCoords(e.city, e.state, "coords" in e ? e.coords : undefined), format: e.format, level: e.level, categories: e.categories,
