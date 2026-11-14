@@ -1,3 +1,4 @@
+import { escapeCsvCell } from "@/lib/csv-cell";
 /** Flat results template shared by the organiser download and import flow. */
 
 export const RESULTS_TEMPLATE_HEADERS = [
@@ -26,10 +27,7 @@ export type ResultsTemplateRow = {
   isTopResult: boolean;
 };
 
-export function escapeCsvCell(value: string): string {
-  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
+export { escapeCsvCell } from "@/lib/csv-cell";
 
 export function resultsTemplateValues(row: ResultsTemplateRow): string[] {
   return [

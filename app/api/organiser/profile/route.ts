@@ -8,7 +8,7 @@ import { saveOrganisationRefundPolicy } from "@/lib/organisation-refund-policy";
 const organiserProfileSchema = z.object({
   orgName: z.string().max(200),
   contactName: z.string().max(200),
-  contactEmail: z.string().max(255),
+  contactEmail: z.string().trim().max(255).email("Enter a valid contact email."),
   phone: z.string().max(50),
   abn: z.string().max(20).nullable().optional(),
   bio: z.string().max(5000).nullable().optional(),
@@ -110,6 +110,22 @@ export async function PUT(req: NextRequest) {
       { error: "Only an Owner can update legal identity details." },
       { status: 403 },
     );
+  }
+
+  // Event review emails go to the contact address, so changing it decides who
+  // hears from Startline on the organisation's behalf. Owner only, like the
+  // other settings that decide who is told what.
+  if (session.role !== "OWNER") {
+    const current = await prisma.organiser.findUnique({
+      where: { id: session.sub },
+      select: { contactEmail: true },
+    });
+    if ((current?.contactEmail ?? "").toLowerCase() !== contactEmail.toLowerCase()) {
+      return NextResponse.json(
+        { error: "Only an Owner can change the contact email." },
+        { status: 403 },
+      );
+    }
   }
 
   try {

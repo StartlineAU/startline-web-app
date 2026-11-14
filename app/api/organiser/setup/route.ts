@@ -6,7 +6,7 @@ import { z } from "zod";
 const setupSchema = z.object({
   orgName: z.string().max(200),
   contactName: z.string().max(200),
-  contactEmail: z.string().max(255),
+  contactEmail: z.string().trim().max(255).email("Enter a valid contact email."),
   phone: z.string().max(50),
 });
 

@@ -47,3 +47,13 @@ describe("image uploads", () => {
     for (const mimes of Object.values(TYPE_MIMES)) expect(mimes).not.toContain("image/gif");
   });
 });
+
+describe("isUploadType", () => {
+  it("accepts only the defined upload types, not inherited object keys", async () => {
+    const { isUploadType } = await import("@/lib/upload-limits");
+    expect(isUploadType("photo")).toBe(true);
+    for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(isUploadType(name)).toBe(false);
+    }
+  });
+});

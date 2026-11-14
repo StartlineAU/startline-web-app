@@ -42,6 +42,7 @@ import {
   SESSION_EXPIRED_MESSAGE,
 } from "./event-form/steps";
 import { LivePreview, EventFullPreview } from "./event-form/previews";
+import { safeReturnPath } from "@/lib/safe-return-path";
 
 interface EditContext {
   /** Confirmed entrants a material change would email. */
@@ -59,7 +60,9 @@ interface EditContext {
 function returnPath(): string | null {
   if (typeof window === "undefined") return null;
   const from = new URLSearchParams(window.location.search).get("from");
-  return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
+  if (!from) return null;
+  const safe = safeReturnPath(from, { fallback: "" });
+  return safe || null;
 }
 
 interface EventFormWizardProps {

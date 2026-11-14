@@ -45,7 +45,7 @@ export async function getAllEvents() {
         feeStructure: true,
         organiserId: true,
         organiser: {
-          select: { id: true, orgName: true, logoUrl: true, stripeAccountId: true, stripeOnboardingComplete: true },
+          select: { id: true, orgName: true, logoUrl: true, stripeOnboardingComplete: true },
         },
         _count: {
           select: { registrations: true },
@@ -106,7 +106,7 @@ const publicEventSelect = {
   feeStructure: true,
   organiserId: true,
   organiser: {
-    select: { id: true, orgName: true, logoUrl: true, stripeAccountId: true, stripeOnboardingComplete: true },
+    select: { id: true, orgName: true, logoUrl: true, stripeOnboardingComplete: true },
   },
   _count: {
     select: { registrations: true },

@@ -57,5 +57,6 @@ export const MIME_EXT: Record<string, string> = {
 export const UPLOAD_TYPES = Object.keys(TYPE_MIMES) as UploadType[];
 
 export function isUploadType(value: unknown): value is UploadType {
-  return typeof value === "string" && value in TYPE_MIMES;
+  // Own keys only: `in` also accepts inherited names such as "constructor".
+  return typeof value === "string" && Object.hasOwn(TYPE_MIMES, value);
 }
