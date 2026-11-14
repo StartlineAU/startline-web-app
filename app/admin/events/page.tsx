@@ -420,6 +420,7 @@ function BulkActionBar({
   const [bulkReason,    setBulkReason]    = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [skipped,       setSkipped]       = useState<{ id: string; title: string; reason: string }[]>([]);
+  const [skippedAction, setSkippedAction] = useState("approve");
 
   const ids = Array.from(selectedIds);
 
@@ -442,6 +443,7 @@ function BulkActionBar({
         const blockedIds = new Set(blocked.map((e) => e.id));
         onBulkDone(ids.filter((id) => !blockedIds.has(id)), action);
         setSkipped(blocked);
+        setSkippedAction(action);
         if (blocked.length === 0) onClearSelection();
         setRejectOpen(false);
         setConfirmDelete(false);
@@ -463,7 +465,7 @@ function BulkActionBar({
           <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="text-[13px] text-amber-200">
             <span className="font-bold">
-              {skipped.length} event{skipped.length === 1 ? "" : "s"} not approved.
+              {skipped.length} event{skipped.length === 1 ? "" : "s"} not {skippedAction === "delete" ? "deleted" : "approved"}.
             </span>{" "}
             {skipped.map((e) => `${e.title} (${e.reason})`).join("; ")}
           </div>

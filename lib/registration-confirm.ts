@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
 import { formatEmailPlace, googleCalendarUrl } from "@/lib/email-format";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
+import { lockEventEntries } from "@/lib/event-entry-lock";
 import {
   createEmptyParticipant,
   expandCompactParticipant,
@@ -204,6 +205,10 @@ export async function insertConfirmedRegistrations(opts: {
     : { not: "CANCELLED" as const };
 
   return prisma.$transaction(async (tx) => {
+    // Without this, concurrent confirmations both pass the capacity count below
+    // and oversell the event.
+    await lockEventEntries(tx, event.id);
+
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({
         where: { eventId: event.id, userId: buyerUserId, status: duplicateStatus },

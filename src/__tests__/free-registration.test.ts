@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
+  executeRaw: vi.fn(async () => 0),
   session: vi.fn(),
   eventFindUnique: vi.fn(),
   registrationCount: vi.fn(),
@@ -29,6 +30,8 @@ const prismaMock = vi.hoisted(() => {
     // The capacity check and the insert share one transaction; the mock hands
     // the callback the same client so both are observed by the spies above.
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
+    // The per-event advisory lock taken before the capacity count.
+    $executeRaw: mocks.executeRaw,
   };
   return client;
 });
@@ -190,6 +193,11 @@ describe("POST /api/registrations/free", () => {
 
     expect(res.status).toBe(409);
     expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+    // The count only means something if concurrent confirmations are
+    // serialised on the event first.
+    expect(mocks.executeRaw).toHaveBeenCalledTimes(1);
+    expect(mocks.executeRaw.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.registrationCount.mock.invocationCallOrder[1]);
   });
 
   it("refuses a second entry for someone already registered", async () => {

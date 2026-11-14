@@ -264,7 +264,7 @@ enum PayoutAttemptStatus {
 model PayoutOperation {
   id              String       @id @default(uuid())
   eventId         String       @unique
-  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
   stripeAccountId String
   amountCents     Int
   currency        String       @default("aud")
@@ -415,9 +415,9 @@ model Announcement {
 model Registration {
   id          String    @id @default(uuid())
   eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
   organiserId String
-  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Restrict)
   userId      String?
   user        User?     @relation(fields: [userId], references: [id])
 

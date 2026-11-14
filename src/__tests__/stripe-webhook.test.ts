@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 
 const tx = {
   registration: mocks.registration,
+  // The per-event advisory lock taken before the capacity count.
+  $executeRaw: vi.fn(async () => 0),
 };
 
 vi.mock("@/lib/stripe", () => ({

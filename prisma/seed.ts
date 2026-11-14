@@ -391,6 +391,9 @@ async function main() {
 
   await prisma.adminAuditLog.deleteMany();
   await prisma.registration.deleteMany();
+  // Payout records no longer cascade from their event (RESTRICT), so they go
+  // before the events. Attempts cascade from their operation.
+  await prisma.payoutOperation.deleteMany();
   await prisma.savedEvent.deleteMany();
   await prisma.organiserFollow.deleteMany();
   await prisma.review.deleteMany();

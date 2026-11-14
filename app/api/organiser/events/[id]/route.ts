@@ -13,6 +13,7 @@ import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { effectiveEventStatus, type PersistedEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
 import { takesPayments } from "@/lib/event-approval";
 import {
   isLiveEventStatus, organiserCanEditEvent, organiserEditBlockedMessage,
@@ -356,6 +357,9 @@ export async function DELETE(
 
     if (!existing) return NextResponse.json({ error: "Not found." }, { status: 404 });
     if (existing.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    if ((await eventIdsWithEntries([id])).has(id)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
 
     await prisma.event.delete({ where: { id } });
     await cancelEventSchedules(id).catch((err) =>
@@ -363,6 +367,9 @@ export async function DELETE(
     );
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
     console.error("Event delete error:", err);
     return NextResponse.json({ error: "Failed to delete event." }, { status: 500 });
   }
