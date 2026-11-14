@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { organiserLogin, adminLogin, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, adminLogin, ensureDatabaseUrl, openDetail } from "./helpers";
 
 // Editing a published event (#490): every edit is logged, and changing the
 // date, time, location or type of an event emails the athletes already entered.
@@ -98,19 +98,15 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
-/** Open the wizard on the fixture, with the hydration retry new-listing.spec uses. */
-async function openWizardAt(page: Page, stepPrefix: string, expectVisible: () => Promise<void>) {
-  await expect(async () => {
-    await page.goto(`/organiser/new-listing?id=${EVENT_ID}&from=${encodeURIComponent(`/organiser/events/${EVENT_ID}`)}`);
-    await page.locator("button", { hasText: new RegExp(`^${stepPrefix}`) }).first().click();
-    await expectVisible();
-  }).toPass({ timeout: 30000 });
+/** Open the listing editor on the fixture, once its details have loaded. */
+async function openEditor(page: Page) {
+  await page.goto(`/organiser/new-listing?id=${EVENT_ID}&from=${encodeURIComponent(`/organiser/events/${EVENT_ID}`)}`);
+  await expect(page.getByRole("textbox", { name: "Event title" })).not.toHaveValue("", { timeout: 30000 });
 }
 
-async function saveFromReview(page: Page) {
-  await page.locator("button", { hasText: /^05/ }).first().click();
-  await page.getByRole("checkbox").last().check();
-  await page.getByRole("button", { name: /Save changes/ }).click();
+/** A live event saves its changes straight away; it agreed to the terms when published. */
+async function saveChanges(page: Page) {
+  await page.getByRole("button", { name: /Save changes/ }).first().click();
 }
 
 test.describe("editing a published event", () => {
@@ -131,13 +127,13 @@ test.describe("editing a published event", () => {
 
   test("a venue change saves and is logged, and offers no automatic refund", async ({ page }) => {
     await organiserLogin(page);
-    await openWizardAt(page, "02", async () => {
-      await expect(page.getByPlaceholder("Sydney Olympic Park")).toHaveValue("Albert Park", { timeout: 3000 });
-    });
+    await openEditor(page);
+    await openDetail(page, "location");
+    await expect(page.getByPlaceholder("Sydney Olympic Park")).toHaveValue("Albert Park");
 
     await expect(page.getByTestId("change-notice")).toContainText("2 athletes have entered");
     await page.getByPlaceholder("Sydney Olympic Park").fill("Princes Park");
-    await saveFromReview(page);
+    await saveChanges(page);
 
     await expect(page).toHaveURL(new RegExp(`/organiser/events/${EVENT_ID}(/dashboard)?$`));
     expect((await prisma.event.findUnique({ where: { id: EVENT_ID } }))?.venue).toBe("Princes Park");

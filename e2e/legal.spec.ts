@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { goToHomepage, organiserLogin } from "./helpers";
+import { goToHomepage, organiserLogin, createCompleteDraft } from "./helpers";
 
 // The legal pages, and every place that asks someone to agree to them. Each
 // link opens in a new tab so a half-filled form is not lost, so the checks
@@ -128,18 +128,16 @@ test.describe("agreeing to the legal pages", () => {
     await expect(page.getByText("Please agree to the Terms of Service to continue.")).toBeVisible();
   });
 
-  test("the event wizard's final review links to the organiser terms", async ({ page }) => {
+  test("the listing editor's publish dialog links to the organiser terms", async ({ page }) => {
     await organiserLogin(page);
-    await page.goto("/organiser/new-listing");
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Legal Link Event");
+    const title = `E2E Legal Link Event ${Date.now()}`;
+    const id = await createCompleteDraft(page, title);
+    await page.goto(`/organiser/new-listing?id=${id}`);
+    await expect(page.getByRole("textbox", { name: "Event title" })).toHaveValue(title, { timeout: 30000 });
 
-    // Continue does not block on incomplete steps (drafts are allowed), so
-    // stepping through reaches the review without filling every field.
-    for (let i = 0; i < 4; i++) {
-      await page.getByRole("button", { name: /continue/i }).click();
-    }
-
-    const link = page.getByRole("link", { name: "Terms of Service" });
+    // A finished listing asks for the terms when it is published.
+    await page.getByRole("button", { name: /publish listing/i }).first().click();
+    const link = page.getByTestId("publish-dialog").getByRole("link", { name: "Terms of Service" });
     await expect(page.getByText(/I agree to the organiser terms in the/)).toBeVisible();
     await expect(page.getByText(/Event Listing Policy/)).toHaveCount(0);
     await expectOpensInNewTab(page, link, "/terms#organisers", PAGES[0].heading);

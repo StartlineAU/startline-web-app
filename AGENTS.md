@@ -554,6 +554,34 @@ write HTML strings by hand: templates escape their values.
 - `pnpm email:preview` renders every email to `.email-preview/` for a look in a
   browser.
 
+## Listing editor
+
+Organisers (and admins) create and edit events on the event page itself
+(#528), not in a step wizard. `components/event/EventPageEditor.tsx` renders
+`EventDetailView`, the same component as `/events/[id]`, with `mode="edit"`
+and `slots` swapping regions for their controls
+(`components/event/event-form/regions.tsx`), so the form is its own preview.
+Change the public layout in `EventDetailView` and the editor follows; never
+copy the layout into the editor.
+
+What is still required comes from `missingRequirements` in
+`event-form/shared.tsx`; each entry names a region (`region-<id>` on the page),
+which the header checklist scrolls to and opens. Publish opens the checklist
+while anything is missing, and otherwise a dialog where the organiser agrees to
+the terms; a live event saves without it. Date, format and intensity open the
+next unfinished row by themselves once answered (date waits while its picker is
+open). Time, location and divisions wait for Next, because each is complete
+before its optional fields are filled in.
+Motion lives in `event-form/motion.ts` (anime.js, reduced-motion safe).
+
+Guidance on what to enter goes in an info bubble (`InfoTip`,
+`event-form/info-tip.tsx`) beside the label, not as small print under the
+field. It opens on hover, keyboard focus or tap, and is portalled to `<body>`
+so an animating panel cannot clip it. It is a button, so never put one inside
+another button or a `<label>`; headings take one through `info` on
+`SectionHeading` and `SidebarCard`. Short status tags ("Optional") stay on the
+page.
+
 ## Design system
 
 **`design/design.md`** is authoritative.
