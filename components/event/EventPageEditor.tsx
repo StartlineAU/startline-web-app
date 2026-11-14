@@ -66,6 +66,9 @@ function returnPath(): string | null {
   return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
 }
 
+/** `leaveTo` when the leave prompt was opened by the browser's Back button. */
+const LEAVE_BACK = "__back__";
+
 interface EventPageEditorProps {
   apiBase: string;             // "/api/organiser" | "/api/admin"
   submitRedirect: string;      // where to go after save
@@ -136,7 +139,51 @@ export default function EventPageEditor({
   const saveLabel = awaitsReview ? "Submit for review" : "Save changes";
   const finalLabel = awaitsReview ? "Submit for review" : isLive ? "Save changes" : eventStatus === "REJECTED" ? "Resubmit" : eventStatus === "PENDING" ? "Save & keep in review" : "Publish listing";
 
-  const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
+  // Anything typed since the page opened or last saved. Every save that
+  // succeeds also leaves the editor, so nothing clears it but leaving.
+  const [dirty, setDirty] = useState(false);
+  const update = (patch: Partial<FormState>) => { setForm(f => ({ ...f, ...patch })); setDirty(true); };
+
+  // The browser's Back button skipped the leave prompt and dropped the event
+  // without a word (#529). While there are unsaved edits, an extra history
+  // entry for this same page sits on top, so Back lands on this page again
+  // and opens the prompt instead. Closing or reloading the tab gets the
+  // browser's own "leave site?" check.
+  const backGuarded = useRef(false);
+  const leaving = useRef(false);
+  useEffect(() => {
+    if (!dirty) return;
+    if (!backGuarded.current) {
+      window.history.pushState(window.history.state, "", window.location.href);
+      backGuarded.current = true;
+    }
+    const onPopState = () => {
+      if (leaving.current || !backGuarded.current) return;
+      backGuarded.current = false;
+      setLeaveTo(LEAVE_BACK);
+      setShowCancelModal(true);
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (leaving.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("popstate", onPopState);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirty]);
+
+  /** Leave the editor. Replaces the Back guard entry, if there is one, so the
+   *  history does not keep a second copy of the editor behind the new page. */
+  const leave = (destination: string) => {
+    leaving.current = true;
+    if (destination === LEAVE_BACK) { window.history.back(); return; }
+    if (backGuarded.current) { backGuarded.current = false; router.replace(destination); return; }
+    router.push(destination);
+  };
   const { coverSrc, photoSrcs } = useObjectUrls(form.coverImage, form.coverImageUrl, form.photos);
 
   useEffect(() => {
@@ -427,14 +474,22 @@ export default function EventPageEditor({
       setAbnNotice(data.notice ?? "");
       return true;
     }
-    router.push(redirectTo ?? returnPath() ?? submitRedirect);
+    leave(redirectTo ?? returnPath() ?? submitRedirect);
     return true;
   };
 
   // A link out of the editor goes through the same prompt as Cancel, so
   // following it cannot silently throw away an unsaved event.
   const askToLeave = (destination: string) => { setLeaveTo(destination); setShowCancelModal(true); };
-  const closeLeavePrompt = () => { setShowCancelModal(false); setLeaveTo(null); };
+  const closeLeavePrompt = () => {
+    // Staying after Back used up the guard entry: put it back.
+    if (leaveTo === LEAVE_BACK && !leaving.current && !backGuarded.current) {
+      window.history.pushState(window.history.state, "", window.location.href);
+      backGuarded.current = true;
+    }
+    setShowCancelModal(false);
+    setLeaveTo(null);
+  };
 
   const saveDraft = () => submitToApi(true, form.title.trim() || "Untitled draft");
   // A live event saves its changes and stays live: the organiser agreed to
@@ -733,7 +788,7 @@ export default function EventPageEditor({
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                 {saving ? "Saving…" : <><Check className="w-4 h-4" /> {isEditingPublished ? <>{saveLabel} &amp; leave</> : <>Save draft &amp; leave</>}</>}
               </button>
-              <button onClick={() => router.push(leaveTo ?? returnPath() ?? cancelRedirect)}
+              <button onClick={() => leave(leaveTo ?? returnPath() ?? cancelRedirect)}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:border-primary/40 transition-colors">
                 Discard &amp; leave
               </button>
@@ -766,11 +821,11 @@ export default function EventPageEditor({
               Add your ABN and our team can approve the listing. Nothing you entered has been lost.
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={() => router.push("/organiser/payments")}
+              <button onClick={() => leave("/organiser/payments")}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center justify-center gap-2">
                 <ArrowRight className="w-4 h-4" /> Add my ABN
               </button>
-              <button onClick={() => { setAbnNotice(null); router.push(submitRedirect); }}
+              <button onClick={() => { setAbnNotice(null); leave(submitRedirect); }}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:border-primary/40 transition-colors">
                 I&apos;ll do it later
               </button>

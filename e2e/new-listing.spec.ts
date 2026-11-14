@@ -493,6 +493,7 @@ test.describe("new listing editor: leaving for Payments without an ABN", () => {
     startTime: "07:00",
     endTime: "10:00",
     venue: "Albert Park",
+    address: "Aughtie Dr, Albert Park VIC 3206",
     city: "Melbourne",
     state: "VIC",
     format: "Individual",
@@ -531,5 +532,93 @@ test.describe("new listing editor: leaving for Payments without an ABN", () => {
     await expect(page.getByRole("textbox", { name: "Event title" })).toHaveValue("Free Draft E2E", { timeout: 30000 });
     await expect(page.getByText("Create new listing").or(page.getByText("Edit listing"))).toBeVisible();
     await expect(page.getByTestId("abn-notice")).toHaveCount(0);
+  });
+});
+
+// #529: the browser's Back button skipped the leave prompt and threw away an
+// unsaved event. With unsaved edits it now opens the same prompt.
+test.describe("new listing editor: browser Back", () => {
+  const TITLE = "Back Button Guard E2E";
+
+  test.afterAll(async () => {
+    await prisma.event.deleteMany({ where: { title: TITLE } });
+  });
+
+  test("Back with unsaved edits asks first, and Save draft & leave keeps the event", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/listings");
+    await page.goto("/organiser/new-listing");
+    await page.getByRole("textbox", { name: "Event title" }).fill(TITLE);
+
+    // Back stays on the editor and asks.
+    await page.goBack();
+    await expect(page.getByText(/leave without saving/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+
+    // Keep editing keeps what was typed, and Back still asks afterwards.
+    await page.getByRole("button", { name: /keep editing/i }).click();
+    await expect(page.getByRole("textbox", { name: "Event title" })).toHaveValue(TITLE);
+    await page.goBack();
+    await expect(page.getByText(/leave without saving/i)).toBeVisible();
+
+    await page.getByRole("button", { name: /save draft & leave/i }).click();
+    await expect(page).toHaveURL(/\/organiser\/listings/, { timeout: 30000 });
+    await expect.poll(() => prisma.event.count({ where: { title: TITLE, status: "DRAFT" } })).toBe(1);
+  });
+
+  test("Back with nothing typed leaves straight away", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/listings");
+    await page.goto("/organiser/new-listing");
+    await expect(page.getByRole("textbox", { name: "Event title" })).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/organiser\/listings/);
+    await expect(page.getByText(/leave without saving/i)).toHaveCount(0);
+  });
+});
+
+// #530: a listing reached review with a city of spaces, and showed as ", VIC".
+// Spaces and symbols are refused by the API, and the editor says why.
+test.describe("new listing editor: a real location", () => {
+  const base = {
+    title: "Junk Location E2E",
+    discipline: "Running",
+    eventDate: "2027-03-14",
+    startTime: "07:00",
+    venue: "Albert Park",
+    address: "Aughtie Dr, Albert Park VIC 3206",
+    city: "Melbourne",
+    state: "VIC",
+    format: "Individual",
+    level: "All levels",
+    registrationType: "startline",
+    waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
+    submit: true,
+  };
+
+  test.afterAll(async () => {
+    await prisma.event.deleteMany({ where: { title: base.title } });
+  });
+
+  for (const [what, patch] of [
+    ["a city of spaces", { city: "   " }],
+    ["a city of symbols", { city: "!!!" }],
+    ["a street address of symbols", { address: "#### ####" }],
+    ["a venue of symbols", { venue: "???" }],
+  ] as const) {
+    test(`the API refuses ${what}`, async ({ page }) => {
+      await organiserLogin(page);
+      const res = await page.request.post("/api/organiser/events", { data: { ...base, ...patch } });
+      expect(res.status()).toBe(400);
+    });
+  }
+
+  test("the editor flags a city of symbols", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+    await openDetail(page, "location");
+    await page.getByPlaceholder("e.g. Melbourne").fill("!!!");
+    await expect(page.getByText(/enter a real city or suburb/i)).toBeVisible();
   });
 });

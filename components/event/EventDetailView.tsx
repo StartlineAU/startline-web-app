@@ -24,6 +24,7 @@ import {
   formatLevel,
   formatDiscipline,
 } from "@/lib/utils";
+import { formatEventArea } from "@/lib/event-place";
 
 /* ── Shared building blocks ────────────────────────────────────
    Exported so the listing editor (EventPageEditor) dresses its
@@ -233,7 +234,9 @@ export default function EventDetailView({
               <div className="flex flex-wrap items-center gap-3">
                 <span className={BANNER_META_CLASS}>
                   <MapPin className="w-3.5 h-3.5 text-primary" />
-                  {[event.location, STATE_LABELS[event.state]].filter(Boolean).join(", ")}
+                  {/* The venue name is optional: fall back to the city, as the
+                      listing editor's preview does (#530). */}
+                  {formatEventArea(event.location || event.city, STATE_LABELS[event.state])}
                 </span>
                 <span className={BANNER_META_CLASS}>
                   <Calendar className="w-3.5 h-3.5 text-primary" />
@@ -413,10 +416,10 @@ export default function EventDetailView({
                   </div>
                   <div>
                     <DetailLabel>Location</DetailLabel>
-                    <DetailValue>{event.location}</DetailValue>
+                    <DetailValue>{event.location?.trim() || event.city || "Venue TBC"}</DetailValue>
                     {event.address && <DetailSub>{event.address}</DetailSub>}
                     {(event.city || event.state) && (
-                      <DetailSub>{[event.city, STATE_LABELS[event.state]].filter(Boolean).join(", ")}</DetailSub>
+                      <DetailSub>{formatEventArea(event.city, STATE_LABELS[event.state])}</DetailSub>
                     )}
                   </div>
                   <div>

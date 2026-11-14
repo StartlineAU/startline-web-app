@@ -13,6 +13,7 @@ import { ArrowLeft, MapPin, Calendar, Pencil, AlertCircle, Clock, CheckCircle, X
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
+import { formatEventPlace } from "@/lib/event-place";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
@@ -246,7 +247,7 @@ export default function EventStatusPage({
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-                  {event.venue}, {event.city} {event.state.toUpperCase()}
+                  {formatEventPlace(event)}
                 </span>
               </div>
             </div>

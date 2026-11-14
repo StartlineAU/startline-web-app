@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import RejectPanel from "@/components/admin/RejectPanel";
 import { approvalBlocker } from "@/lib/event-approval";
 import { useApiResource } from "@/hooks/useApiResource";
+import { formatEventArea } from "@/lib/event-place";
 
 export const dynamic = "force-dynamic";
 
@@ -222,7 +223,7 @@ function EventRow({
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-headline text-[11px] uppercase tracking-widest text-muted mb-1">
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3 text-primary" />
-              {event.city}, {event.state.toUpperCase()}
+              {formatEventArea(event.city, event.state.toUpperCase())}
             </span>
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3 text-muted-dark" />

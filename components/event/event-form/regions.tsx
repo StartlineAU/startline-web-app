@@ -21,6 +21,7 @@ import {
 } from "@/components/event/EventDetailView";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { isFreeEvent } from "@/lib/event-types";
+import { locationFieldErrors } from "@/lib/event-location";
 import { ticketFeeBreakdown } from "@/lib/platform-fee";
 import { normalisePrizeAmount } from "@/lib/prize-pool";
 import { describeTiers } from "@/lib/refund-policy";
@@ -179,7 +180,7 @@ export function EditableDetail({ id, label, value, placeholder, open, onToggle, 
 }
 
 /** A labelled field in a details row. `hint` is a short tag on the right ("Optional"); `info` is guidance in a bubble. */
-function MiniField({ label, hint, info, children }: { label: string; hint?: string; info?: ReactNode; children: ReactNode }) {
+function MiniField({ label, hint, info, error, children }: { label: string; hint?: string; info?: ReactNode; error?: string; children: ReactNode }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -190,6 +191,7 @@ function MiniField({ label, hint, info, children }: { label: string; hint?: stri
         {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{hint}</span>}
       </div>
       {children}
+      {error && <p role="alert" className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">{error}</p>}
     </div>
   );
 }
@@ -776,6 +778,13 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
     onNext: () => onNext(id), nextLabel: nextLabel(id),
   });
   const timeInvalid = !!(form.startTime && form.endTime && form.endTime <= form.startTime);
+  // Inline, only once there is enough typed to judge: the first few letters
+  // of an address are not yet an error. The checklist still holds the rest.
+  const locationErrors = locationFieldErrors({
+    ...form,
+    address: form.address.trim().length >= 5 ? form.address : "",
+    city: form.city.trim().length >= 2 ? form.city : "",
+  });
   const disciplineCats = DISCIPLINE_CATS[form.discipline as Discipline];
   const showDivisions = !!disciplineCats || form.categories.length > 0;
 
@@ -811,6 +820,7 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
         </MiniField>
       </EditableDetail>
 
+      {/* Shown as they type: only what is filled in and does not look like a place. */}
       <EditableDetail {...row("location")} label="Location" placeholder="Add the venue"
         value={form.address || form.venue || form.city ? (
           <>
@@ -819,7 +829,7 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
             {(form.city || form.state) && <DetailSub>{[form.city, form.state ? STATE_LABELS[form.state] : ""].filter(Boolean).join(", ")}</DetailSub>}
           </>
         ) : null}>
-        <MiniField label="Street address">
+        <MiniField label="Street address" error={locationErrors.address}>
           <AddressAutocomplete
             value={form.address} onChange={raw => update({ address: raw })}
             onSelect={({ address, city, state, venue, latitude, longitude }) => {
@@ -840,12 +850,12 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
           longitude={form.longitude}
           label={[form.venue, form.city, form.state?.toUpperCase()].filter(Boolean).join(", ") || undefined}
         />
-        <MiniField label="Venue name" hint="Optional" info="The name athletes know the place by, such as a park or stadium. It replaces the city on the banner.">
+        <MiniField label="Venue name" hint="Optional" error={locationErrors.venue} info="The name athletes know the place by, such as a park or stadium. It replaces the city on the banner.">
           <input value={form.venue} onChange={e => update({ venue: e.target.value })}
             placeholder="Sydney Olympic Park" className={inputCls} />
         </MiniField>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
-          <MiniField label="City">
+          <MiniField label="City" error={locationErrors.city}>
             <SuburbAutocomplete
               value={form.city}
               onChange={city => update({ city })}

@@ -72,6 +72,7 @@ test.describe("verified organiser publish", () => {
         eventDate: futureDate(30),
         startTime: "06:30",
         endTime: "08:00",
+        address: "Grand Dr, Centennial Park NSW 2021",
         city: "Sydney",
         state: "nsw",
         venue: "Centennial Park",

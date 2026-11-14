@@ -5,6 +5,7 @@ import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { firstLocationError } from "@/lib/event-location";
 
 /**
  * The parts of the listing page an organiser fills in. Each is an element id
@@ -59,8 +60,10 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   check("Date", "date", !!form.date, "Choose the event date");
   check("Start time", "time", !!form.startTime && !timeOrderBad,
     timeOrderBad ? "Cut-off time must be after the start time" : "Set a start time");
-  check("Venue address", "location", !!(form.address.trim() && form.city.trim() && form.state),
-    "Add the street address, city and state");
+  // The same rules the server applies (#530): spaces or symbols are not a place.
+  const locationError = firstLocationError(form, { required: true });
+  check("Venue address", "location", !locationError,
+    locationError ?? "Add the street address, city and state");
   check("Format", "format", !!form.format, "Choose a format");
   if (DISCIPLINE_CATS[form.discipline as Discipline]) {
     check("Divisions", "divisions", form.categories.length > 0, "Choose at least one division");

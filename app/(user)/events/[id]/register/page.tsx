@@ -29,6 +29,7 @@ import {
   splitFullName,
   validateParticipants,
   getRegistrationFormErrors,
+  getEmergencyContactErrors,
   formatPhoneForDisplay,
   createEmptyParticipant,
   MAX_REGISTRATION_PARTICIPANTS,
@@ -38,6 +39,7 @@ import {
   type EmergencyContact,
   type EmergencyContactErrors,
 } from "@/lib/registration-form";
+import { formatEventPlace } from "@/lib/event-place";
 
 interface Wave {
   label: string;
@@ -83,6 +85,15 @@ const PROFILE_FIELDS = [
   "firstName", "lastName", "mobile", "dateOfBirth", "gender", "emergencyContactName", "emergencyContactPhone",
 ] as const;
 type ProfileField = (typeof PROFILE_FIELDS)[number];
+
+function savedContactIsSelf(p: ProfilePrefill): boolean {
+  if (!p.emergencyContactName.trim() || !p.emergencyContactPhone.trim()) return false;
+  const errors = getEmergencyContactErrors(
+    { name: p.emergencyContactName, phone: p.emergencyContactPhone },
+    [{ ...createEmptyParticipant(), ...p }]
+  );
+  return Object.keys(errors).length > 0;
+}
 
 interface WaveAvailability {
   label: string;
@@ -287,6 +298,13 @@ function RegisterContent() {
             ? formatPhoneForDisplay(profile.emergencyContactPhone)
             : "",
         };
+        // A saved emergency contact that is the account holder themselves
+        // (older profiles could store one) must not be prefilled: it would
+        // only fail validation as "someone other than a participant" (#532).
+        if (savedContactIsSelf(prefill)) {
+          prefill.emergencyContactName = "";
+          prefill.emergencyContactPhone = "";
+        }
         setProfile(prefill);
         setParticipants((prev) => {
           const first = prev[0];
@@ -880,7 +898,7 @@ function RegisterContent() {
   }
 
   const dateLabel = formatEventDate(event.eventDate, event.startTime);
-  const locationLabel = [event.venue, event.city].filter(Boolean).join(", ") + ` ${event.state.toUpperCase()}`;
+  const locationLabel = formatEventPlace(event);
 
   // ── Confirmation screen ──
   if (confirmed) {

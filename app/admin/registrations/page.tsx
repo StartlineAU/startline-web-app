@@ -6,6 +6,7 @@ import { Search, RefreshCw, RotateCcw, DollarSign } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { useApiResource } from "@/hooks/useApiResource";
+import { formatEventArea } from "@/lib/event-place";
 
 export const dynamic = "force-dynamic";
 
@@ -136,7 +137,7 @@ function RegistrationRow({
 
           <div className="font-headline text-[11px] uppercase tracking-widest text-muted">
             <span className="text-light/80">{reg.event.title}</span>
-            {" · "}{reg.event.city}, {reg.event.state.toUpperCase()}
+            {" · "}{formatEventArea(reg.event.city, reg.event.state.toUpperCase())}
             {" · "}{formatDate(reg.event.eventDate)}
           </div>
 

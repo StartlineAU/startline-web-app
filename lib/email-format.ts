@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 import { formatTime } from "@/lib/utils";
+import { formatEventPlace } from "@/lib/event-place";
 
 // Events store dates as `yyyy-mm-dd` and times as `HH:mm`. Emails show them
 // the way design.md writes them (`Sat, 21 Nov 2026`, `7:00 AM`). Anything
@@ -26,15 +27,7 @@ export function formatEmailTime(value: string | null | undefined): string | null
 }
 
 /** `Olympic Park, Melbourne VIC`, skipping whatever is blank. */
-export function formatEmailPlace(place: {
-  venue?: string | null;
-  city?: string | null;
-  state?: string | null;
-}): string {
-  const venue = place.venue?.trim();
-  const area = [place.city?.trim(), place.state?.trim().toUpperCase()].filter(Boolean).join(" ");
-  return [venue, area].filter(Boolean).join(", ");
-}
+export const formatEmailPlace = formatEventPlace;
 
 const calendarStamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 

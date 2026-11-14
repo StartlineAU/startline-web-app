@@ -8,6 +8,7 @@ import type { AustralianState } from "@/types";
 import { formatDiscipline, formatShortDate, cn } from "@/lib/utils";
 import OrganiserIdentity from "@/components/OrganiserIdentity";
 import type { OrganiserRating } from "@/lib/reviews";
+import { formatEventArea } from "@/lib/event-place";
 
 export type ProfileRaceHistory = {
   completed: number;
@@ -65,7 +66,7 @@ function groupHistoryByYear(registrations: HistoryRegistration[]) {
 
 function RaceHistoryCard({ reg }: { reg: HistoryRegistration }) {
   const [day, month] = formatShortDate(reg.event.eventDate).split(" ");
-  const location = `${reg.event.city}, ${STATE_LABELS[reg.event.state as AustralianState]}`;
+  const location = formatEventArea(reg.event.city, STATE_LABELS[reg.event.state as AustralianState]);
   const hasResult = Boolean(reg.resultPlacement || reg.resultTime);
 
   return (
