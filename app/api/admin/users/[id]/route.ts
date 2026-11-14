@@ -5,6 +5,7 @@ import { validateUsername } from "@/lib/username-validation";
 import { writeAuditLog } from "@/lib/audit";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
+import { assetUrl } from "@/lib/asset-url";
 import {
   CognitoIdentityProviderClient,
   AdminUpdateUserAttributesCommand,
@@ -23,7 +24,7 @@ const adminUserUpdateSchema = z.object({
   username: z.string().max(50).optional(),
   email: z.string().max(255).optional(),
   bio: z.string().max(2000).nullable().optional(),
-  profilePicUrl: z.string().max(3000).nullable().optional(),
+  profilePicUrl: assetUrl().nullable().optional(),
   isPublic: z.boolean().optional(),
   city: z.string().max(100).nullable().optional(),
   state: z.string().max(100).nullable().optional(),

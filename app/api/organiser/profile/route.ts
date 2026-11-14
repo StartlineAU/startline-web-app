@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { assetUrl } from "@/lib/asset-url";
 import { parseTiers } from "@/lib/refund-policy";
 import { saveOrganisationRefundPolicy } from "@/lib/organisation-refund-policy";
 
@@ -12,11 +13,11 @@ const organiserProfileSchema = z.object({
   phone: z.string().max(50),
   abn: z.string().max(20).nullable().optional(),
   bio: z.string().max(5000).nullable().optional(),
-  logoUrl: z.string().max(3000).nullable().optional(),
+  logoUrl: assetUrl().nullable().optional(),
   logoPosition: z.string().max(100).nullable().optional(),
-  coverImageUrl: z.string().max(3000).nullable().optional(),
+  coverImageUrl: assetUrl().nullable().optional(),
   coverPosition: z.string().max(100).nullable().optional(),
-  photos: z.array(z.string().max(3000)).optional(),
+  photos: z.array(assetUrl()).max(50).optional(),
   legalName: z.string().max(300).nullable().optional(),
   dob: z.string().max(20).nullable().optional(),
 });
@@ -29,9 +30,9 @@ const settingsPatchSchema = z.object({
   notifyEventApproved:   z.boolean().optional(),
   notifyEventRejected:   z.boolean().optional(),
   notifyNewRegistration: z.boolean().optional(),
-  logoUrl:        z.string().max(3000).nullable().optional(),
+  logoUrl:        assetUrl().nullable().optional(),
   logoPosition:   z.string().max(100).nullable().optional(),
-  coverImageUrl:  z.string().max(3000).nullable().optional(),
+  coverImageUrl:  assetUrl().nullable().optional(),
   coverPosition:  z.string().max(100).nullable().optional(),
   refundTiers:    z.array(z.object({
     daysBefore: z.number().int().min(0).max(3650),
