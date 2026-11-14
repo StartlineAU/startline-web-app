@@ -90,7 +90,7 @@ test.describe("admin event creation", () => {
     await page.getByRole("textbox", { name: "Event description" }).fill(`E2E description for ${title}`);
     await page.getByLabel("Ticket category name").fill("Standard Entry");
     await page.getByLabel("Ticket price").fill("50");
-    await page.getByLabel("Tickets available").fill("1000");
+    await page.getByLabel("Tickets available", { exact: true }).fill("1000");
 
     // Event Details card
     await pickSingleDayToday(page);

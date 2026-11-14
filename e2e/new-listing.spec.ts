@@ -247,7 +247,7 @@ test.describe("new listing editor", () => {
     await page.getByLabel("Ticket price").fill("50");
     await expect(page.getByText(/athlete pays/i).first()).toBeVisible();
     // The organiser's own number: never shown to athletes, read by checkout.
-    await page.getByLabel("Tickets available").fill("1000");
+    await page.getByLabel("Tickets available", { exact: true }).fill("1000");
     await expect(page.getByTestId("ticket-total")).toContainText("1,000 tickets");
 
     // Event Details card

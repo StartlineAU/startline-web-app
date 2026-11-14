@@ -48,14 +48,19 @@ export function RequiredMark() {
   return <span className="text-primary font-black ml-1" title="Required" aria-hidden="true">*</span>;
 }
 
-/** `info` is the editor's info bubble beside the heading; the public page passes none. */
+/**
+ * `info` is the editor's info bubble beside the heading; the public page
+ * passes none. It sits next to the heading, not inside it, so the heading's
+ * accessible name stays just its text.
+ */
 export function SectionHeading({ children, required, info }: { children: ReactNode; required?: boolean; info?: ReactNode }) {
-  return (
-    <h2 className="font-headline text-lg font-black uppercase tracking-widest text-primary mb-3 flex items-center gap-2">
-      <span>{children}{required && <RequiredMark />}</span>
-      {info}
+  const heading = (
+    <h2 className={`font-headline text-lg font-black uppercase tracking-widest text-primary ${info ? "" : "mb-3"}`}>
+      {children}{required && <RequiredMark />}
     </h2>
   );
+  if (!info) return heading;
+  return <div className="flex items-center gap-2 mb-3">{heading}{info}</div>;
 }
 
 export function SidebarCard({ title, info, children, className = "" }: {
@@ -63,10 +68,10 @@ export function SidebarCard({ title, info, children, className = "" }: {
 }) {
   return (
     <div className={`bg-dark rounded-xl p-5 sm:p-6 ${className}`}>
-      <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted mb-4 flex items-center gap-2">
-        <span>{title}</span>
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="font-headline text-xs font-medium uppercase tracking-widest text-muted">{title}</h3>
         {info}
-      </h3>
+      </div>
       {children}
     </div>
   );
