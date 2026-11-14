@@ -9,9 +9,30 @@ import {
   parseTiers,
   refundAmountCents,
   refundPercentFor,
+  refundWithinCutoff,
   tiersAreValid,
   type RefundTier,
 } from "@/lib/refund-policy";
+
+describe("refundWithinCutoff", () => {
+  const now = new Date("2027-03-01T00:00:00Z");
+
+  it("blocks a refund inside the last 24 hours", () => {
+    expect(refundWithinCutoff(new Date("2027-03-01T12:00:00Z"), now)).toBe(true);
+  });
+
+  it("allows one more than 24 hours out", () => {
+    expect(refundWithinCutoff(new Date("2027-03-02T01:00:00Z"), now)).toBe(false);
+  });
+
+  it("treats a start already passed as inside the cutoff", () => {
+    expect(refundWithinCutoff(new Date("2027-02-28T00:00:00Z"), now)).toBe(true);
+  });
+
+  it("does not block an entry with no start time", () => {
+    expect(refundWithinCutoff(null, now)).toBe(false);
+  });
+});
 
 const TIERS: RefundTier[] = [
   { daysBefore: 30, percent: 100 },

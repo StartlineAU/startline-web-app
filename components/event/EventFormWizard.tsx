@@ -43,6 +43,25 @@ import {
 } from "./event-form/steps";
 import { LivePreview, EventFullPreview } from "./event-form/previews";
 
+interface EditContext {
+  /** Confirmed entrants a material change would email. */
+  enteredCount: number;
+  /** Published event owned by an unverified organiser: a save waits for review. */
+  needsReview?: boolean;
+  pendingRevision?: {
+    lines: { label: string; from: string; to: string }[];
+    payload: Record<string, unknown>;
+  } | null;
+}
+
+/** Where the Edit link came from (?from=), so saving returns there. Same-site
+ *  paths only, so the parameter can never send anyone off the site. */
+function returnPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const from = new URLSearchParams(window.location.search).get("from");
+  return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
+}
+
 interface EventFormWizardProps {
   apiBase: string;             // "/api/organiser" | "/api/admin"
   submitRedirect: string;      // where to go after save
@@ -81,7 +100,17 @@ export default function EventFormWizard({
   const [direction,       setDirection]       = useState<"forward" | "back">("forward");
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const [eventId,         setEventId]         = useState<string | null>(null);
+  // Edit mode: the status the event had when it loaded, and how many paid
+  // entrants a date/time/location/type change would give a full refund.
+  const [eventStatus,     setEventStatus]     = useState<string | null>(null);
+  const [editContext,     setEditContext]     = useState<EditContext | null>(null);
+  const [loadError,       setLoadError]       = useState("");
   const originalFields = useRef<Record<string, unknown>>({});
+
+  const isLive = eventStatus === "APPROVED" || eventStatus === "IN_PROGRESS";
+  const isEditingPublished = !!eventId && eventStatus !== null && eventStatus !== "DRAFT";
+  const awaitsReview = isLive && editContext?.needsReview === true;
+  const saveLabel = awaitsReview ? "Submit for review" : "Save changes";
 
   const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
 
@@ -100,10 +129,20 @@ export default function EventFormWizard({
     const id = eventIdProp ?? new URLSearchParams(window.location.search).get("id");
     if (!id) return;
     fetch(`${apiBase}/events/${id}`)
-      .then(r => r.json())
-      .then(e => {
-        if (e.error) return;
+      .then(async r => ({ ok: r.ok, e: await r.json().catch(() => ({})) }))
+      .then(({ ok, e }) => {
+        // Failing silently here left an empty wizard that, saved, would have
+        // created a second event instead of editing this one.
+        if (!ok || e.error) {
+          setLoadError(e.error ?? "This event could not be loaded. Go back and try again.");
+          return;
+        }
         setEventId(id);
+        setEventStatus(typeof e.status === "string" ? e.status : null);
+        setEditContext(e.editContext ?? null);
+        // The form edits the queued revision, not the live row, so a later save
+        // does not drop changes that are still waiting for review.
+        if (e.editContext?.pendingRevision?.payload) Object.assign(e, e.editContext.pendingRevision.payload);
         originalFields.current = { inclusions: e.inclusions, activations: e.activations, accessibilityInfo: e.accessibilityInfo };
         setForm({
           title:             e.title          ?? "",
@@ -146,7 +185,7 @@ export default function EventFormWizard({
           photoUrls:         Array.isArray(e.photos) ? e.photos.filter((p: unknown): p is string => typeof p === "string") : [],
         });
       })
-      .catch(() => {})
+      .catch(() => setLoadError("This event could not be loaded. Check your connection and try again."))
       .finally(() => setLoadingEvent(false));
   }, [apiBase, eventIdProp]);
 
@@ -256,33 +295,39 @@ export default function EventFormWizard({
         ...(!eventId && organiserId ? { organiserId } : {}),
       };
 
-      let res: Response;
-      if (eventId) {
-        res = await fetch(`${apiBase}/events/${eventId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      } else {
-        res = await fetch(`${apiBase}/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setApiError(res.status === 401 ? SESSION_EXPIRED_MESSAGE : (data.error ?? "Something went wrong."));
-        return false;
-      }
-      if (asDraft && !eventId && data.id) setEventId(data.id);
-      // The event is saved. Hold the redirect so the organiser is told what the
-      // missing ABN cost them, rather than being refused before anything saved.
-      if (!asDraft && data.abnRequired) {
-        setAbnNotice(data.notice ?? "");
-        return true;
-      }
-      router.push(redirectTo ?? submitRedirect);
-      return true;
+      return await sendPayload(payload, asDraft, redirectTo);
     } catch {
       setApiError("Something went wrong. Please check your connection and try again.");
       return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  // The request half of a save, kept apart from the uploads so confirming the
+  // full-refund warning resends the same payload rather than uploading twice.
+  const sendPayload = async (payload: Record<string, unknown>, asDraft: boolean, redirectTo?: string): Promise<boolean> => {
+    let res: Response;
+    if (eventId) {
+      res = await fetch(`${apiBase}/events/${eventId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    } else {
+      res = await fetch(`${apiBase}/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setApiError(res.status === 401 ? SESSION_EXPIRED_MESSAGE : (data.error ?? "Something went wrong."));
+      return false;
+    }
+    if (asDraft && !eventId && data.id) setEventId(data.id);
+    // The event is saved. Hold the redirect so the organiser is told what the
+    // missing ABN cost them, rather than being refused before anything saved.
+    if (!asDraft && data.abnRequired) {
+      setAbnNotice(data.notice ?? "");
+      return true;
+    }
+    router.push(redirectTo ?? returnPath() ?? submitRedirect);
+    return true;
   };
 
   // A link out of the wizard goes through the same prompt as Cancel, so
@@ -309,8 +354,36 @@ export default function EventFormWizard({
     { h: <>When and where <span className="text-primary">do athletes race?</span></>, sub: "Athletes search by city, state and date." },
     { h: <>Tickets, pricing <span className="text-primary">and registration.</span></>, sub: "Add ticket categories, pricing and per-category wave start times." },
     { h: <>Images and <span className="text-primary">event description.</span></>, sub: "Upload your cover image and write the event description." },
-    { h: <>Review, then <span className="text-primary">hit publish.</span></>, sub: "Nothing is live yet. You can edit anytime after publishing." },
+    awaitsReview
+      ? { h: <>Review, then <span className="text-primary">submit for review.</span></>, sub: "The live listing stays as it is until Startline approves these changes." }
+      : isLive
+      ? { h: <>Review, then <span className="text-primary">save changes.</span></>, sub: "Changes go live as soon as you save, and every change is kept in the event's change history." }
+      : eventStatus === "REJECTED"
+        ? { h: <>Review, then <span className="text-primary">resubmit.</span></>, sub: "Your event goes back to Startline for review." }
+        : { h: <>Review, then <span className="text-primary">hit publish.</span></>, sub: "Nothing is live yet. You can still edit after publishing, and every change is recorded." },
   ];
+
+  const finalLabel = awaitsReview ? "Submit for review" : isLive ? "Save changes" : eventStatus === "REJECTED" ? "Resubmit" : eventStatus === "PENDING" ? "Save & keep in review" : "Publish listing";
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-dark-darker pt-14">
+        <main className="max-w-[720px] mx-auto px-6 py-12">
+          <div className="rounded-xl border border-red-400/20 bg-red-400/10 p-6 flex items-start gap-3" role="alert">
+            <AlertTriangle className="w-5 h-5 text-red-300 shrink-0 mt-0.5" />
+            <div>
+              <h1 className="font-headline text-[18px] font-black italic tracking-tight text-light">Couldn&apos;t open this event</h1>
+              <p className="text-[13px] text-muted-light mt-1">{loadError}</p>
+              <button onClick={() => router.push(returnPath() ?? cancelRedirect)}
+                className="mt-4 inline-flex items-center gap-2 font-headline text-[11px] font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-3.5 py-2 rounded-full transition-colors">
+                <ArrowLeft className="w-3.5 h-3.5" /> Go back
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark-darker pt-14">
@@ -380,6 +453,29 @@ export default function EventFormWizard({
                   <p className="font-headline text-light mt-3 max-w-2xl text-[14px]">{STEP_HEADINGS[step].sub}</p>
                 </div>
 
+                {editContext?.pendingRevision && (
+                  <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4" data-testid="pending-revision-notice">
+                    <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-amber-300">Changes awaiting review</p>
+                    <p className="text-[13px] text-muted-light leading-relaxed mt-1">
+                      The live listing is unchanged. Saving again replaces what is waiting.
+                    </p>
+                  </div>
+                )}
+
+                {(step === 0 || step === 1) && isEditingPublished && (editContext?.enteredCount ?? 0) > 0 && (
+                  <div className="mb-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 flex items-start gap-3" data-testid="change-notice">
+                    <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
+                    <p className="text-[13px] text-muted-light leading-relaxed">
+                      <span className="font-headline font-bold text-light">
+                        {editContext!.enteredCount} athlete{editContext!.enteredCount === 1 ? " has" : "s have"} entered.
+                      </span>{" "}
+                      Changing the {step === 0 ? "discipline or format" : "date, times or location"} emails each of
+                      them, and the change is kept in this event&apos;s history. Anyone who no longer wants to take
+                      part asks for a refund through Support, which you and Startline review.
+                      {awaitsReview && " The listing stays as it is until Startline approves the edit."}
+                    </p>
+                  </div>
+                )}
                 {step === 0 && <BasicsStep  form={form} update={update} />}
                 {step === 1 && <WhenStep    form={form} update={update} />}
                 {step === 2 && <TicketsStep form={form} update={update} />}
@@ -411,16 +507,21 @@ export default function EventFormWizard({
                   <ArrowLeft className="w-4 h-4" /> {step === 0 ? "Cancel" : "Back"}
                 </button>
                 <div className="flex items-center gap-1 sm:gap-3">
-                  <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
-                    className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
-                    Save draft
-                  </button>
+                  {/* Quick save from any step. A published event has no draft to
+                      fall back to, so there it saves changes and keeps its
+                      status; on the last step the primary button does that. */}
+                  {!(isEditingPublished && step === STEPS.length - 1) && (
+                    <button onClick={() => submitToApi(true, form.title.trim() || "Untitled draft")} disabled={saving}
+                      className="font-headline text-[13px] font-bold uppercase tracking-widest text-light hover:text-light px-3 sm:px-5 py-3 transition-colors disabled:opacity-40">
+                      {isEditingPublished ? saveLabel : "Save draft"}
+                    </button>
+                  )}
                   <button onClick={next} disabled={saving || (step === STEPS.length - 1 && (!confirmed || missing.length > 0))}
                     className="bg-machined shadow-machined disabled:opacity-40 disabled:cursor-not-allowed text-dark font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md flex items-center gap-2 hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-transform">
                     {saving
                       ? <><span className="w-2 h-2 bg-dark rounded-full animate-pulse-dot" /> Saving…</>
                       : step === STEPS.length - 1
-                        ? <><Check className="w-4 h-4" /> Publish listing</>
+                        ? <><Check className="w-4 h-4" /> {finalLabel}</>
                         : <>Continue <ArrowRight className="w-4 h-4" /></>}
                   </button>
                 </div>
@@ -442,15 +543,17 @@ export default function EventFormWizard({
           <div className="relative bg-dark border border-dark-lighter rounded-2xl shadow-2xl w-full max-w-sm p-7 modal-in">
             <h2 className="font-headline text-[22px] font-black italic tracking-tight text-light mb-2">Leave without saving?</h2>
             <p className="font-headline text-light text-[14px] leading-relaxed mb-7">
-              Your event details haven&apos;t been saved yet. Save as a draft so you can come back and finish it later.
+              {isEditingPublished
+                ? "Your changes haven't been saved yet. Save them now, or leave and keep the event as it is."
+                : "Your event details haven't been saved yet. Save as a draft so you can come back and finish it later."}
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={async () => { await submitToApi(true, form.title.trim() || "Untitled draft", leaveTo ?? undefined); closeLeavePrompt(); }}
                 disabled={saving}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                {saving ? "Saving…" : <><Check className="w-4 h-4" /> Save draft &amp; leave</>}
+                {saving ? "Saving…" : <><Check className="w-4 h-4" /> {isEditingPublished ? <>{saveLabel} &amp; leave</> : <>Save draft &amp; leave</>}</>}
               </button>
-              <button onClick={() => router.push(leaveTo ?? cancelRedirect)}
+              <button onClick={() => router.push(leaveTo ?? returnPath() ?? cancelRedirect)}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:text-light hover:border-primary/40 transition-colors">
                 Discard &amp; leave
               </button>

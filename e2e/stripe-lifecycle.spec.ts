@@ -188,12 +188,13 @@ test.describe("stripe lifecycle (real test-mode Stripe)", () => {
     expect(registration!.stripeFeeCents).toBe(processingFee);
     expect(registration!.feeStructure).toBe("athlete");
 
-    // 5. Athlete refund-request (ownership: registration.userId links to the
-    //    jade.nguyen bypass session) → admin refund → REFUNDED + Stripe refund.
+    // 5. A paid entry cannot be refunded from the entry itself: the athlete is
+    //    sent to Support, where the organiser and Startline review it. Staff
+    //    then issue the refund from the registrations page.
     const reqRes = await request.post(`/api/user/registrations/${registration!.id}/refund-request`, {
       headers: { Cookie: "__e2e_bypass=user" },
     });
-    expect(reqRes.status()).toBe(200);
+    expect(reqRes.status()).toBe(409);
 
     const refundRes = await request.post(`/api/admin/registrations/${registration!.id}/refund`, {
       headers: { Cookie: "__e2e_bypass=admin" },

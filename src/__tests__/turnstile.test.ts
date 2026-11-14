@@ -97,11 +97,22 @@ describe("assertTurnstile", () => {
     }));
     const res = await assertTurnstile(makeRequest(), { turnstileToken: "bad" }, "contact");
     expect(res?.status).toBe(400);
+    expect(await res?.json()).toMatchObject({ code: "BOT_CHECK_FAILED" });
     expect(recordMock).toHaveBeenCalledWith(expect.objectContaining({
       type: "bot_check_failed",
       action: "contact",
       ip: "203.0.113.9",
     }));
+  });
+
+  it("tells a native client where to start when no token was supplied", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "secret";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: async () => ({ success: false }),
+    }));
+    const res = await assertTurnstile(makeRequest(), {}, "checkout");
+    expect(res?.status).toBe(400);
+    expect(await res?.json()).toMatchObject({ code: "BOT_CHECK_REQUIRED" });
   });
 
   it("passes through when Turnstile is unconfigured", async () => {

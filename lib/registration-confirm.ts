@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
+import { formatEmailPlace, googleCalendarUrl } from "@/lib/email-format";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import {
   createEmptyParticipant,
@@ -38,6 +39,9 @@ export interface ConfirmEvent {
   venue: string;
   city: string;
   state: string;
+  /** For the "Add to calendar" link; the email leaves it out when absent. */
+  startsAtUtc?: Date | string | null;
+  endsAtUtc?: Date | string | null;
 }
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -362,16 +366,25 @@ export async function announceRegistrations(
   // only and the service fee shown to them is $0. A free entry is $0 across
   // the board.
   const athletePaysFee = event.feeStructure === "athlete";
+  const location = formatEmailPlace(event);
+  const calendarUrl = googleCalendarUrl({
+    title: event.title,
+    startsAtUtc: event.startsAtUtc,
+    endsAtUtc: event.endsAtUtc,
+    location,
+  });
   entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents }) => {
     if (!participant.em) return;
     const feeCents = athletePaysFee ? platformFeeCents : 0;
 
     sendRegistrationConfirmationEmail(participant.em, {
+      eventId:          event.id,
       eventName:        event.title,
       eventDate:        event.eventDate,
       startTime:        event.startTime,
       category:         waveLabel || "General",
-      location:         `${event.venue}, ${event.city} ${event.state}`,
+      location,
+      calendarUrl,
       registrationFee:  formatCents(priceCents),
       serviceFee:       formatCents(feeCents),
       total:            formatCents(priceCents + feeCents),

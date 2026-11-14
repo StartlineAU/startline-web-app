@@ -158,7 +158,6 @@ test.describe("new listing wizard", () => {
     await page.getByRole("button", { name: /startline/i }).first().click();
     const price4 = page.locator('input[placeholder="129"]');
     if (await price4.isVisible()) await price4.fill("50");
-    await page.getByRole("button", { name: /no refunds/i }).click();
     await page.getByRole("button", { name: /continue/i }).click();
     // Step 4 only renders after the tickets step settles — wait on the UI
     // state instead of a fixed timeout so the screenshot is never of a
@@ -188,7 +187,6 @@ test.describe("new listing wizard", () => {
     await page.getByRole("button", { name: /startline/i }).first().click();
     const price = page.locator('input[placeholder="129"]');
     if (await price.isVisible()) await price.fill("50");
-    await page.getByRole("button", { name: /no refunds/i }).click();
     await page.getByRole("button", { name: /continue/i }).click();
     await page.waitForTimeout(500);
 
@@ -299,6 +297,36 @@ test.describe("organiser pages", () => {
     await editor.pressSequentially("Hello bold");
 
     expect(await editor.innerHTML()).toMatch(/<(b|strong)[\s>]/i);
+  });
+
+  test("event dashboard leads with registrations and one primary action", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/events/seed-event-001/dashboard");
+
+    const manage = page.getByRole("button", { name: "Manage registrations" });
+    await expect(manage).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check-in QR" })).toBeVisible();
+    // Announcements are posted from their own card, not a top-level button.
+    await expect(page.getByRole("button", { name: "New announcement" })).toHaveCount(1);
+
+    // Registrations come before announcements in reading order.
+    const regs = page.getByRole("heading", { name: "Registrations" });
+    const anns = page.getByRole("heading", { name: "Announcements" });
+    await expect(regs).toBeVisible();
+    const order = await regs.evaluate(
+      (a, b) => !!(a.compareDocumentPosition(b as Node) & Node.DOCUMENT_POSITION_FOLLOWING),
+      await anns.elementHandle(),
+    );
+    expect(order).toBe(true);
+
+    // The card's New button opens the compose dialog through the URL.
+    await page.getByRole("button", { name: "New announcement" }).click();
+    await page.waitForURL("**panel=announce");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Notify registered athletes")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page).not.toHaveURL(/panel=announce/);
   });
 
   test("profile settings reposition Done saves and confirms", async ({ page }) => {

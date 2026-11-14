@@ -1,26 +1,18 @@
-import { cookies } from "next/headers";
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
+import { getRequestAccessToken } from "./amplify-server";
 
-const region   = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
-const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ?? "";
+const region = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
 
 /** For calls made as the signed-in user, authorised by their own access token. */
 export const cognito = new CognitoIdentityProviderClient({ region });
 
 /**
- * The signed-in user's Cognito access token, read from the cookies Amplify
- * writes. Null when there is no real Cognito session, which includes the e2e
- * bypass identities.
+ * The signed-in user's Cognito access token. The native app sends it as a
+ * bearer token; the web app stores it in Amplify's cookies. Null when there is
+ * no real Cognito session, which includes the e2e bypass identities.
  */
 export async function getAccessToken(): Promise<string | null> {
-  const store = await cookies();
-  const lastAuthUser = store.get(`CognitoIdentityServiceProvider.${clientId}.LastAuthUser`)?.value;
-  if (!lastAuthUser) return null;
-  return (
-    store.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`)?.value ??
-    store.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`)?.value ??
-    null
-  );
+  return getRequestAccessToken();
 }
 
 /**

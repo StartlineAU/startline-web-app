@@ -122,10 +122,11 @@ file**, well below the 10 MB `lib/upload-limits.ts` allows. Anything in between
 is rejected by the platform before the handler runs, and the reply is a **413
 with a zero-length body**, so the client cannot even read a reason off it.
 
-`pnpm upload:probe [base-url]` measures this against a deployed environment
-(staging by default). It needs no credentials: an unauthenticated POST that
-reaches the handler answers `401` with JSON, so the status says which layer
-replied. Measured on staging:
+`pnpm upload:probe <base-url>` measures this against a deployed environment,
+and the URL is required: this repo is public, so no environment is committed as
+a default. It needs no credentials: an unauthenticated POST that reaches the
+handler answers `401` with JSON, so the status says which layer replied.
+Measured on staging:
 
 ```
  4.30 MB -> 401  reached our handler
@@ -176,6 +177,20 @@ Production splits the three portals across `startlineau.com`,
 Cross-portal links must go through `lib/portal-domains.ts` so they stay relative
 on single-host deployments and absolute in production; hardcoding either shape
 breaks one of the two (issue #302).
+
+Staging is the Amplify branch domain (`<branch>.<app-id>.amplifyapp.com`). No
+`staging.` subdomain has ever been delegated, so do not add one to code, tests
+or docs. Terraform resolves the staging `site_url` from the branch domain.
+Tests never name a deployed host: use `localhost` so a unit test cannot depend
+on, or point at, a real environment. Treating a `staging.` host as production is
+what silently disabled bot checks there.
+
+This repository is public, so the staging host is never committed: the upload
+probe requires its base URL, and the deploy workflow publishes an environment
+URL only for prod. Staging and PR previews answer with
+`X-Robots-Tag: noindex, nofollow` and a `Disallow: /` robots.txt
+(`middleware.ts`, `app/robots.ts`), because a branch deployment serves a
+crawlable copy of the product against the staging database.
 
 Cognito cookies are scoped to `.startlineau.com` in `components/AmplifyProvider.tsx`
 so a single sign-in covers all three portals. Host-only cookies left the
@@ -409,12 +424,92 @@ One menu for the whole account, `components/settings/SettingsModal.tsx`, mounted
   (`User.notifyFollowedOrganiserEvents`). Entry emails are always sent.
 - Section fetches must ignore a reply that arrives after cleanup: in development the effect runs twice, and the late reply overwrites what was typed or toggled.
 
+## Editing events
+
+Organisers can edit an event while it is DRAFT, PENDING, REJECTED or live
+(APPROVED). Once it is underway or archived it is locked
+(`lib/event-edit-policy.ts`). A verified organiser's edit of a live event keeps
+it live: it is not sent back to review, and followers are not notified again.
+
+An unverified organiser's edit of a published event does not change the listing.
+It is stored as a pending `EventRevision` and an admin has to approve it
+(`lib/event-revision.ts`). The current offer stays on sale until then. A
+rejection leaves the live event untouched. Refund entitlements are written only
+when the revision is approved, not when the organiser saves.
+
+**Change log.** `EventChange` is an append-only record of what each event said
+and when, kept so that a dispute about the original details can be settled
+from the record. The rules live in `lib/event-change-log.ts`:
+
+| When | Row |
+|---|---|
+| An event first leaves DRAFT (at creation or by a later edit) | `BASELINE`: every populated field |
+| Any later edit, by the organiser or an admin | `EDIT`: each changed field with its from and to values |
+| The first edit to an event published before the log existed | a `SYSTEM` `BASELINE`, written before that edit's own row |
+
+Each row is written in the same transaction as the edit it describes. No route
+updates or deletes a row, and the rows outlive the event (`eventId` is set to
+null and `eventTitle` is kept). Organisers and admins see the log in the Change
+history panel on the event page (`/api/{organiser,admin}/events/[id]/changes`).
+
+**Refund policy is set per organisation, not per event.** Settings → Refunds
+(`OrganisationRefundsSection`, owner only) holds `Organiser.refundTiers` and
+`refundPolicy`. Saving copies them to every event that organisation runs, after
+freezing the tiers an existing entry was sold under into
+`Registration.soldRefundTiers`, so a later policy change cannot rewrite what an
+athlete already paid against. The section always shows `ACL_REFUND_NOTE`: the
+Australian Consumer Law rows apply whatever the preset says. The event wizard
+does not collect a policy.
+
+Change-of-mind refunds stop 24 hours before the start (`refundWithinCutoff`).
+A full entitlement from a material change, and a free cancellation, are not
+change-of-mind refunds.
+
+**Paid refunds are a support ticket.** Activity has no refund button for a paid
+entry; it links to `/support`, which opens a `SupportTicket` and emails
+`admin@startlineau.com`. `POST /api/user/registrations/[id]/refund-request`
+answers 409 for a paid entry and still cancels a free one. Issuing the money
+stays with staff on the admin registrations page.
+
+**Material changes.** A change to the date, times, venue, address, city, state,
+discipline or format is material. Material text is compared ignoring case and
+spacing. A material change is recorded in the change log and the athletes
+already confirmed are told in-app and by email. There is no automatic refund:
+anyone affected asks through Support. That happens when the change becomes the
+public offer: immediately for a verified organiser, and only after an admin
+approves a revision for an unverified one.
+
+**Refunds are reviewed, never automatic.** `lib/issue-entry-refund.ts` has one
+path: the organisation's policy amount, frozen onto the entry when the request
+was raised, with the booking fee retained and the transfer reversed
+proportionally. Nothing refunds an entry on its own. The request starts as a
+`SupportTicket`, the organiser records approve or decline at
+`/organiser/refunds`, and Startline issues the Stripe refund from the admin
+registrations page. Change-of-mind refunds stop 24 hours before the start
+(`refundWithinCutoff`).
+
 ## Mobile app
 
 The iOS and Android apps (`StartlineAU/startline-mobile-app`) are a Capacitor
 shell that loads this site, so product changes ship with a web deploy. Native
 behaviour lives here, behind `isNative()` in `lib/capacitor.ts`, and a browser
 never runs it.
+
+A separate Expo app (`StartlineAU/startline-native-mobile-app`) is being built
+as the native replacement. It calls the JSON APIs directly rather than loading
+the website. Native requests may authenticate with
+`Authorization: Bearer <Cognito access token>` plus `X-Id-Token: <Cognito ID
+token>`. `lib/amplify-server.ts` verifies both, requires the same `sub`, and
+checks the access token's `client_id` and ID token's audience. Cookie auth is
+unchanged. `getRequestAccessToken()` returns the bearer token for routes that
+call Cognito as the signed-in user, falling back to the Amplify cookie.
+
+The native app cannot render Cloudflare Turnstile itself. On production it opens
+`/mobile/challenge` in the system browser, which returns a short-lived token to
+`com.startlineau.app://turnstile`; the app retries the protected request with
+`turnstileToken`. `assertTurnstile()` returns `BOT_CHECK_REQUIRED` or
+`BOT_CHECK_FAILED` so the app knows when to start that flow. Never add a static
+mobile bypass header.
 
 | Concern | Where |
 |---|---|
@@ -440,6 +535,24 @@ never runs it.
 - **Sign-out in the app is local.** It clears the tokens without visiting
   Cognito's logout page. The system browser keeps its own Cognito session, so
   the next Google sign-in may not ask which account to use.
+
+## Emails
+
+Every transactional email is a React Email template in `emails/`, built on
+`emails/components/shell.tsx` (logo header, card, footer, legal line) and
+rendered through `emails/render.ts`, which also produces the plain-text part.
+`lib/email.ts` holds the `build*` (subject + html + text) and `send*` pairs;
+the contact, feedback and waitlist routes render their own templates. Do not
+write HTML strings by hand: templates escape their values.
+
+- **Tokens** come from `design/design.md` via `emails/components/tokens.ts`.
+- **No SVG images.** Gmail and Outlook drop them. The logo and icons are PNGs in
+  `public/email`, generated by `pnpm email:icons`.
+- **No gradients** on the CTA: Outlook paints nothing. Solid `#B3E153`, ink text.
+- **Dates and places** go through `lib/email-format.ts` (`Sat, 21 Nov 2026`,
+  `7:00 AM`, `Melbourne VIC`), never the stored `yyyy-mm-dd` / `HH:mm`.
+- `pnpm email:preview` renders every email to `.email-preview/` for a look in a
+  browser.
 
 ## Design system
 

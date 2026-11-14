@@ -73,7 +73,7 @@ describe("athlete host in waitlist mode", () => {
 
   it("lets an admin through and forbids caching that response", async () => {
     jwtVerify.mockResolvedValue({
-      payload: { sub: "admin-sub", "cognito:groups": ["admins"] },
+      payload: { token_use: "access", client_id: CLIENT_ID, sub: "admin-sub", "cognito:groups": ["admins"] },
     });
 
     const res = await middleware(request("/", { signedIn: true }));
@@ -87,7 +87,7 @@ describe("athlete host in waitlist mode", () => {
 
   it("keeps an ordinary signed-in athlete on the waitlist", async () => {
     jwtVerify.mockResolvedValue({
-      payload: { sub: "user-sub", "cognito:groups": ["organisers"] },
+      payload: { token_use: "access", client_id: CLIENT_ID, sub: "user-sub", "cognito:groups": ["organisers"] },
     });
 
     const res = await middleware(request("/", { signedIn: true }));
@@ -96,9 +96,29 @@ describe("athlete host in waitlist mode", () => {
   });
 
   it("keeps a token with no groups on the waitlist", async () => {
-    jwtVerify.mockResolvedValue({ payload: { sub: "user-sub" } });
+    jwtVerify.mockResolvedValue({ payload: { token_use: "access", client_id: CLIENT_ID, sub: "user-sub" } });
 
     const res = await middleware(request("/events", { signedIn: true }));
+
+    expect(rewriteTarget(res)).toMatch(/\/waitlist$/);
+  });
+
+  it("does not treat an admin token issued to another app client as a session", async () => {
+    jwtVerify.mockResolvedValue({
+      payload: { token_use: "access", client_id: "some-other-client", sub: "admin-sub", "cognito:groups": ["admins"] },
+    });
+
+    const res = await middleware(request("/", { signedIn: true }));
+
+    expect(rewriteTarget(res)).toMatch(/\/waitlist$/);
+  });
+
+  it("does not accept an id token in place of the access token", async () => {
+    jwtVerify.mockResolvedValue({
+      payload: { token_use: "id", aud: CLIENT_ID, sub: "admin-sub", "cognito:groups": ["admins"] },
+    });
+
+    const res = await middleware(request("/", { signedIn: true }));
 
     expect(rewriteTarget(res)).toMatch(/\/waitlist$/);
   });
@@ -113,7 +133,7 @@ describe("athlete host in waitlist mode", () => {
 
   it("lets an admin reach the legal pages as the real documents", async () => {
     jwtVerify.mockResolvedValue({
-      payload: { sub: "admin-sub", "cognito:groups": ["admins"] },
+      payload: { token_use: "access", client_id: CLIENT_ID, sub: "admin-sub", "cognito:groups": ["admins"] },
     });
 
     const res = await middleware(request("/terms", { signedIn: true }));
@@ -155,7 +175,7 @@ describe("admin host in waitlist mode", () => {
 
   it("shows the waitlist to a signed-in non-admin", async () => {
     jwtVerify.mockResolvedValue({
-      payload: { sub: "user-sub", "cognito:groups": ["organisers"] },
+      payload: { token_use: "access", client_id: CLIENT_ID, sub: "user-sub", "cognito:groups": ["organisers"] },
     });
 
     const res = await middleware(request("/admin/dashboard", { host, signedIn: true }));
@@ -165,7 +185,7 @@ describe("admin host in waitlist mode", () => {
 
   it("lets an admin into the portal", async () => {
     jwtVerify.mockResolvedValue({
-      payload: { sub: "admin-sub", "cognito:groups": ["admins"] },
+      payload: { token_use: "access", client_id: CLIENT_ID, sub: "admin-sub", "cognito:groups": ["admins"] },
     });
 
     const res = await middleware(request("/admin/dashboard", { host, signedIn: true }));
@@ -205,7 +225,7 @@ describe("organiser host in waitlist mode", () => {
   });
 
   it("lets a signed-in organiser into the portal", async () => {
-    jwtVerify.mockResolvedValue({ payload: { sub: "organiser-sub" } });
+    jwtVerify.mockResolvedValue({ payload: { token_use: "access", client_id: CLIENT_ID, sub: "organiser-sub" } });
 
     const res = await middleware(request("/organiser/dashboard", { host, signedIn: true }));
 
@@ -270,8 +290,10 @@ describe("athlete host in live mode", () => {
 });
 
 describe("other hosts", () => {
-  it("does not gate the staging host", async () => {
-    const res = await middleware(request("/events", { host: "staging.startlineau.com" }));
+  it("does not gate the staging branch domain", async () => {
+    const res = await middleware(
+      request("/events", { host: "127.0.0.1:3000" }),
+    );
     expect(passedThrough(res)).toBe(true);
   });
 

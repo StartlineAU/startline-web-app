@@ -9,7 +9,9 @@ import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import type { Prisma } from "@prisma/client";
 import { syncEventSchedules } from "@/lib/event-scheduler";
+import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 import { z } from "zod";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
@@ -167,7 +169,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const event = await withUniqueSlug(body.title ?? "", (slug) =>
-      prisma.event.create({
+      // The event and its baseline change-log row commit together, so an event
+      // published at creation has its original details on record from the start.
+      prisma.$transaction(async (tx) => {
+      const created = await tx.event.create({
       data: {
         organiserId:      organiserId,
         status:           lifecycleStatus,
@@ -175,7 +180,7 @@ export async function POST(req: NextRequest) {
         slug,
         title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
-        description:      body.description       ?? null,
+        description:      body.description != null ? sanitizeHtml(body.description) : null,
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
@@ -205,6 +210,21 @@ export async function POST(req: NextRequest) {
         informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
         photos:           Array.isArray(body.photos) ? body.photos : [],
       },
+      });
+      if (created.status !== "DRAFT") {
+        await recordEventChange(tx, {
+          eventId: created.id,
+          eventTitle: created.title,
+          source: "ADMIN",
+          kind: "BASELINE",
+          changedById: session.sub,
+          changedByEmail: session.email,
+          organiserVerified: organiser.verified,
+          statusAtChange: created.status,
+          changes: baselineChanges(created as unknown as Record<string, unknown>),
+        });
+      }
+      return created;
       }),
     );
 

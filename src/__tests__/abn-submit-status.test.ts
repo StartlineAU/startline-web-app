@@ -6,18 +6,22 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   organiserFindUnique: vi.fn(),
   eventCreate: vi.fn(),
+  eventChangeCreate: vi.fn(),
 }));
 
 vi.mock("@/lib/organiser-api-auth", () => ({
   requireOrganiser: async () => ({ error: null, session: await mocks.session() }),
 }));
 vi.mock("@/lib/amplify-server", () => ({ getServerSession: vi.fn() }));
-vi.mock("@/lib/prisma", () => ({
-  default: {
-    organiser: { findUnique: mocks.organiserFindUnique },
-    event:     { create: mocks.eventCreate },
-  },
-}));
+vi.mock("@/lib/prisma", () => {
+  const client: Record<string, unknown> = {
+    organiser:   { findUnique: mocks.organiserFindUnique },
+    event:       { create: mocks.eventCreate },
+    eventChange: { create: mocks.eventChangeCreate },
+  };
+  client.$transaction = (fn: (tx: unknown) => unknown) => fn(client);
+  return { default: client };
+});
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: async () => null }));
 vi.mock("@/lib/event-scheduler", () => ({ syncEventSchedules: async () => {} }));
 vi.mock("@/lib/slugs", () => ({

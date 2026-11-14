@@ -13,9 +13,9 @@ describe("checkInUrl", () => {
   });
 
   it("builds the public athlete check-in link without a double slash", () => {
-    process.env.NEXT_PUBLIC_SITE_URL = "https://staging.startlineau.com/";
+    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000/";
     expect(checkInUrl("event-1", "code-1")).toBe(
-      "https://staging.startlineau.com/checkin/event-1/code-1",
+      "http://localhost:3000/checkin/event-1/code-1",
     );
   });
 

@@ -62,12 +62,20 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // checks the password and a one-time code.
   "/auth/recovery",
   "/api/auth/recovery",
+  // Refunds now go through a support ticket, and an athlete who has entered may
+  // need to reach it even while the catalogue is closed to the public.
+  "/support",
+  "/api/support",
   // iOS and Android fetch these from the apex to decide whether startlineau.com
   // links open the mobile app. A waitlist rewrite would answer HTML, the check
   // would fail, and links would open in the browser until the next reinstall.
   // Public by design: they list the app's identifiers, nothing else.
   "/.well-known/apple-app-site-association",
   "/.well-known/assetlinks.json",
+  // A crawler asks for this before it asks for anything else. A waitlist rewrite
+  // answered it with HTML, which is not a valid robots.txt, and the file is
+  // public by definition. The route itself tells a branch deployment to stay out.
+  "/robots.txt",
 ]);
 
 // Prefixes, matched on a path segment so `/checkin` does not also open
@@ -85,6 +93,10 @@ const PUBLIC_PREFIXES = [
   // Ticket scanning runs from a phone at the event, with no athlete session.
   "/checkin",
   "/api/checkin",
+  // The native app opens this hosted Turnstile challenge in the system browser
+  // when production asks it to prove a checkout or support form is human. It
+  // renders no product data and only returns a short-lived challenge token.
+  "/mobile/challenge",
 ];
 
 // Build output, images and the favicon. The matcher already skips most of these

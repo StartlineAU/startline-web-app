@@ -560,8 +560,14 @@ export function TicketsStep({ form, update }: { form: FormState; update: (p: Par
           </div>
         </Field>
       ) : (
-      <Field label="Refund & transfer policy" required>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Field label="Refund & transfer policy">
+        <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-5 py-4 mb-4">
+          <p className="text-[12.5px] text-muted-light leading-relaxed">
+            Refund policy is set once for your organisation, not on each event. Change it in Settings → Refunds.
+            You must still follow the Australian Consumer Law if you cancel or significantly change an event.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 opacity-60 pointer-events-none" aria-hidden>
           {REFUND_PRESETS.map(preset => {
             const active = activePreset?.id === preset.id;
             return (
@@ -587,8 +593,8 @@ export function TicketsStep({ form, update }: { form: FormState; update: (p: Par
           )}
         </div>
 
-        <textarea rows={2} value={form.refundPolicy} onChange={e => update({ refundPolicy: e.target.value })}
-          placeholder="Exceptions or extra notes, e.g. transfers to another athlete…" className={`${textareaCls} mt-4`} />
+        <textarea rows={2} value={form.refundPolicy} readOnly
+          placeholder="Exceptions or extra notes are set with the organisation policy." className={`${textareaCls} mt-4 opacity-60`} />
       </Field>
       )}
     </div>

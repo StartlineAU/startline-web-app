@@ -11,19 +11,36 @@ const mocks = vi.hoisted(() => ({
   notifyFollowers: vi.fn(),
   notifyAdmins: vi.fn(),
   withUniqueSlug: vi.fn(),
+  eventChangeCreate: vi.fn(),
+  eventChangeFindFirst: vi.fn(),
+  registrationCount: vi.fn(),
+  registrationUpdateMany: vi.fn(),
+  notifyEventChange: vi.fn(),
+  notifyAdminsEventEditPending: vi.fn(),
+  eventRevisionUpdateMany: vi.fn(),
+  eventRevisionCreate: vi.fn(),
 }));
 
 vi.mock("@/lib/organiser-api-auth", () => ({
   requireOrganiser: async () => ({ error: null, session: await mocks.session() }),
 }));
-vi.mock("@/lib/prisma", () => ({
-  default: {
+vi.mock("@/lib/prisma", () => {
+  const client: Record<string, unknown> = {
     event: {
       findUnique: mocks.eventFindUnique,
       update: mocks.eventUpdate,
     },
     organiser: { findUnique: mocks.organiserFindUnique },
-  },
+    eventChange: { create: mocks.eventChangeCreate, findFirst: mocks.eventChangeFindFirst },
+    registration: { count: mocks.registrationCount, updateMany: mocks.registrationUpdateMany },
+    eventRevision: { updateMany: mocks.eventRevisionUpdateMany, create: mocks.eventRevisionCreate },
+  };
+  client.$transaction = (fn: (tx: unknown) => unknown) => fn(client);
+  return { default: client };
+});
+vi.mock("@/lib/notify-event-change", () => ({ notifyEventChange: mocks.notifyEventChange }));
+vi.mock("@/lib/notify-event-revision", () => ({
+  notifyAdminsEventEditPending: mocks.notifyAdminsEventEditPending,
 }));
 vi.mock("@/lib/event-scheduler", () => ({
   syncEventSchedules: mocks.syncEventSchedules,
@@ -89,6 +106,14 @@ beforeEach(() => {
   mocks.syncEventSchedules.mockResolvedValue(undefined);
   mocks.notifyFollowers.mockResolvedValue(undefined);
   mocks.notifyAdmins.mockResolvedValue({ emailed: 0 });
+  mocks.eventChangeCreate.mockResolvedValue({ id: "chg-1" });
+  mocks.eventChangeFindFirst.mockResolvedValue({ id: "baseline" });
+  mocks.registrationCount.mockResolvedValue(0);
+  mocks.registrationUpdateMany.mockResolvedValue({ count: 0 });
+  mocks.notifyEventChange.mockResolvedValue(undefined);
+  mocks.notifyAdminsEventEditPending.mockResolvedValue(undefined);
+  mocks.eventRevisionUpdateMany.mockResolvedValue({ count: 0 });
+  mocks.eventRevisionCreate.mockResolvedValue({ id: "rev-1" });
   mocks.withUniqueSlug.mockImplementation(async (_title: string, write: (slug: string) => unknown) => write("updated-title"));
   mocks.eventUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
     ...baseEvent,
@@ -101,16 +126,16 @@ beforeEach(() => {
 });
 
 describe("PATCH /api/organiser/events/[id] — edit policy", () => {
-  it("refuses a published event before writing anything", async () => {
+  it("lets a published event be edited and keeps it live", async () => {
     mocks.eventFindUnique.mockResolvedValue({ ...baseEvent, status: "APPROVED" });
 
-    const res = await patch({ title: "Changed" });
+    const res = await patch({ ...submitPayload, title: "Changed" });
 
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({
-      error: expect.stringContaining("Published event details can't be edited directly"),
-    });
-    expect(mocks.eventUpdate).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mocks.eventUpdate.mock.calls[0][0].data.status).toBe("APPROVED");
+    // Followers heard about it when it was published, not again on an edit.
+    expect(mocks.notifyFollowers).not.toHaveBeenCalled();
+    expect(mocks.notifyAdmins).not.toHaveBeenCalled();
   });
 
   it("refuses an in-progress event", async () => {
@@ -186,5 +211,154 @@ describe("PATCH /api/organiser/events/[id] — edit policy", () => {
 
     expect(res.status).toBe(200);
     expect(mocks.eventUpdate.mock.calls[0][0].data.status).toBe("DRAFT");
+  });
+});
+
+describe("PATCH /api/organiser/events/[id] — change log and full-refund handshake", () => {
+  const liveEvent = {
+    ...baseEvent,
+    status: "APPROVED",
+    discipline: "running",
+    format: "Road",
+    level: "All levels",
+    venue: "Albert Park",
+    city: "Melbourne",
+    title: "Original title",
+    cap: 300,
+    latitude: -37.84,
+    longitude: 144.95,
+  };
+  const laterDate = format(addDays(new Date(), 45), "yyyy-MM-dd");
+
+  it("saves a material change without any refund handshake, and emails entrants", async () => {
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+
+    const res = await patch({ eventDate: laterDate });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).status).toBe("APPROVED");
+
+    const logged = mocks.eventChangeCreate.mock.calls[0][0].data;
+    expect(logged).toMatchObject({
+      eventId: "evt-1",
+      source: "ORGANISER",
+      kind: "EDIT",
+      material: true,
+      statusAtChange: "APPROVED",
+    });
+    expect(logged).not.toHaveProperty("affectedCount");
+    expect(logged).not.toHaveProperty("fullRefundUntil");
+    expect(logged.changes).toEqual([
+      expect.objectContaining({ field: "eventDate", from: liveEvent.eventDate, to: laterDate }),
+    ]);
+    // No entitlement is written to the entries.
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.notifyEventChange).toHaveBeenCalledWith(expect.objectContaining({ eventId: "evt-1" }));
+  });
+
+  it("queues an unverified organiser's edit of a live event instead of publishing it", async () => {
+    mocks.session.mockResolvedValue({ sub: "org-1", verified: false, role: "OWNER", email: "jade@example.com" });
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+
+    const res = await patch({ venue: "Princes Park" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ pendingReview: true, status: "APPROVED" });
+    expect(mocks.eventUpdate).not.toHaveBeenCalled();
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.eventChangeCreate).not.toHaveBeenCalled();
+    expect(mocks.eventRevisionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        eventId: "evt-1",
+        material: true,
+        payload: expect.objectContaining({ venue: "Princes Park" }),
+      }),
+    }));
+    expect(mocks.notifyAdminsEventEditPending).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: "evt-1",
+    }));
+    expect(mocks.notifyEventChange).not.toHaveBeenCalled();
+  });
+
+  it("queues an unverified organiser's material change without an entitlement", async () => {
+    mocks.session.mockResolvedValue({ sub: "org-1", verified: false, role: "OWNER" });
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+
+    const res = await patch({ venue: "Princes Park" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ pendingReview: true });
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.eventUpdate).not.toHaveBeenCalled();
+    expect(mocks.eventRevisionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ material: true }),
+    }));
+  });
+
+  it("logs a non-material edit without asking for confirmation", async () => {
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+    mocks.registrationCount.mockResolvedValue(4);
+
+    const res = await patch({ description: "Now with a pace group." });
+
+    expect(res.status).toBe(200);
+    expect(mocks.registrationCount).not.toHaveBeenCalled();
+    expect(mocks.registrationUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.eventChangeCreate.mock.calls[0][0].data).toMatchObject({ kind: "EDIT", material: false });
+    expect(mocks.notifyEventChange).not.toHaveBeenCalled();
+  });
+
+  it("writes a baseline first for an event published before change logging existed", async () => {
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+    mocks.eventChangeFindFirst.mockResolvedValue(null);
+
+    await patch({ description: "Updated" });
+
+    const [baseline, edit] = mocks.eventChangeCreate.mock.calls.map((call) => call[0].data);
+    expect(baseline).toMatchObject({ source: "SYSTEM", kind: "BASELINE" });
+    expect(baseline.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "title", to: "Original title" }),
+    ]));
+    expect(edit).toMatchObject({ source: "ORGANISER", kind: "EDIT" });
+  });
+
+  it("does not log edits to a draft", async () => {
+    mocks.eventFindUnique.mockResolvedValue({ ...baseEvent, status: "DRAFT" });
+
+    await patch({ title: "Still drafting" });
+
+    expect(mocks.eventChangeCreate).not.toHaveBeenCalled();
+  });
+
+  it("logs the baseline when a draft is published", async () => {
+    mocks.eventFindUnique.mockResolvedValue({ ...baseEvent, status: "DRAFT" });
+
+    await patch(submitPayload);
+
+    expect(mocks.eventChangeCreate.mock.calls[0][0].data).toMatchObject({
+      kind: "BASELINE",
+      source: "ORGANISER",
+      statusAtChange: "DRAFT",
+    });
+  });
+
+  it("judges required fields on the saved event, so a bare submit works", async () => {
+    mocks.eventFindUnique.mockResolvedValue({ ...liveEvent, status: "DRAFT" });
+
+    const res = await patch({ submit: true });
+
+    expect(res.status).toBe(200);
+    expect(mocks.eventUpdate.mock.calls[0][0].data.status).toBe("APPROVED");
+  });
+
+  it("keeps the cap and map pin when a save leaves them out", async () => {
+    mocks.eventFindUnique.mockResolvedValue(liveEvent);
+
+    await patch({ description: "Updated" });
+
+    const data = mocks.eventUpdate.mock.calls[0][0].data;
+    expect(data.cap).toBeUndefined();
+    expect(data.latitude).toBeUndefined();
+    expect(data.longitude).toBeUndefined();
   });
 });

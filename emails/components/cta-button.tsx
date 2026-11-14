@@ -1,30 +1,75 @@
 import { Link } from '@react-email/components'
+import { colors, fonts, size, tableReset } from './tokens'
 
 interface CtaButtonProps {
   href: string
   label: string
+  /** Optional quiet link under the button, e.g. "Add to calendar". */
+  secondary?: { href: string; label: string }
 }
 
-export function CtaButton({ href, label }: CtaButtonProps) {
+/**
+ * The single primary action. A solid fill on the table cell, not a gradient,
+ * so Outlook and Gmail still paint it; the link inside carries the same fill
+ * so the whole face is clickable. Machined shadow (design.md §5) where the
+ * client supports box-shadow; dark ink on green, always.
+ */
+export function CtaButton({ href, label, secondary }: CtaButtonProps) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: 'inline-block',
-        background: 'linear-gradient(135deg, #C2EC77 0%, #B3E153 55%, #A4D62F 100%)',
-        color: '#141414',
-        fontFamily: "'Chakra Petch', Arial, sans-serif",
-        fontSize: '13px',
-        fontWeight: '700',
-        letterSpacing: '0.12em',
-        textTransform: 'uppercase',
-        padding: '13px 30px',
-        borderRadius: '12px',
-        boxShadow: '3px 3px 0 rgba(90,140,0,0.6)',
-        textDecoration: 'none',
-      }}
-    >
-      {label}
-    </Link>
+    <div className="sl-gutter" style={{ padding: '32px 40px 36px' }}>
+      <table role="presentation" style={tableReset}>
+        <tbody>
+          <tr>
+            <td
+              align="center"
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: '12px',
+                boxShadow: `2px 2px 0 ${colors.primary}`,
+              }}
+            >
+              <Link
+                href={href}
+                style={{
+                  display: 'block',
+                  padding: '16px 24px',
+                  backgroundColor: colors.primary,
+                  borderRadius: '12px',
+                  color: colors.ink,
+                  fontFamily: fonts.heading,
+                  fontSize: size.body,
+                  fontWeight: 700,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  textAlign: 'center',
+                  textDecoration: 'none',
+                  lineHeight: '1.2',
+                }}
+              >
+                {label}
+              </Link>
+            </td>
+          </tr>
+          {secondary && (
+            <tr>
+              <td align="center" style={{ paddingTop: '16px' }}>
+                <Link
+                  href={secondary.href}
+                  style={{
+                    fontFamily: fonts.body,
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    color: colors.primary,
+                    textDecoration: 'none',
+                  }}
+                >
+                  {secondary.label}
+                </Link>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }

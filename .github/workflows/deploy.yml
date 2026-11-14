@@ -36,6 +36,11 @@ jobs:
       - name: Resolve Amplify app ID
         id: amplify-app
         shell: bash
+        # list-apps rather than get-app on purpose. This role holds
+        # amplify:ListApps but not amplify:GetApp, so a get-app call here fails
+        # the whole workflow with AccessDenied before any build starts (#516).
+        # The app's defaultDomain is deliberately not read: the branch domain is
+        # the staging host, and this repository is public.
         run: |
           APP_ID=$(aws amplify list-apps --query "apps[?name=='startline'].appId" --output text)
           echo "app_id=$APP_ID" >> "$GITHUB_OUTPUT"
@@ -105,7 +110,11 @@ jobs:
           script: |
             const state = '${{ job.status }}' === 'success' ? 'success' : 'failure'
             const env = process.env.ENV
-            const url = env === 'prod' ? 'https://startlineau.com' : `https://${env}.startlineau.com`
+            // Production has the apex domain. Staging is served from the
+            // Amplify branch domain, and that URL is deliberately not published
+            // here: this repository is public, so the deployment API would hand
+            // out a host that serves the staging database.
+            const url = env === 'prod' ? 'https://startlineau.com' : undefined
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,

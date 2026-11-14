@@ -204,8 +204,7 @@ test.describe("new listing wizard", () => {
       await ticketPrice.fill("50");
     }
 
-    await page.getByRole("button", { name: /no refunds/i }).click();
-
+    // The refund policy is organisation-scoped now; the wizard only shows it.
     await page.getByRole("button", { name: /continue/i }).click();
 
     // === Step 4: Media & Description ===

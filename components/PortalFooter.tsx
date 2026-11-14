@@ -25,6 +25,7 @@ export default function PortalFooter({ organiserLoginHref }: { organiserLoginHre
               { href: "/privacy", label: "Privacy" },
               { href: "/terms", label: "Terms" },
               { href: "/contact", label: "Contact" },
+              { href: "/support", label: "Support" },
               // Athlete site only; the portals are already inside one.
               ...(organiserLoginHref ? [{ href: organiserLoginHref, label: "Organiser Login" }] : []),
             ].map((link) => (

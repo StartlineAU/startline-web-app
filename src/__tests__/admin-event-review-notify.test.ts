@@ -71,8 +71,8 @@ describe("approvalBlocker", () => {
 });
 
 describe("buildEventSubmittedForReviewEmail", () => {
-  it("links to the admin portal preview in production", () => {
-    const { subject, html } = buildEventSubmittedForReviewEmail(
+  it("links to the admin portal preview in production", async () => {
+    const { subject, html } = await buildEventSubmittedForReviewEmail(
       { eventId: "evt-1", eventTitle: "Hugos", organiserName: "Hugo Publications" },
       { environment: "prod", siteUrl: "https://startlineau.com" },
     );
@@ -81,17 +81,17 @@ describe("buildEventSubmittedForReviewEmail", () => {
     expect(html).toContain("https://admin.startlineau.com/admin/events?status=PENDING");
   });
 
-  it("tags staging so a test listing is not mistaken for a real one", () => {
-    const { subject, html } = buildEventSubmittedForReviewEmail(
+  it("tags staging so a test listing is not mistaken for a real one", async () => {
+    const { subject, html } = await buildEventSubmittedForReviewEmail(
       { eventId: "evt-1", eventTitle: "Hugos", organiserName: "Hugo Publications" },
-      { environment: "staging", siteUrl: "https://main.d2tvgx9pzd2e81.amplifyapp.com" },
+      { environment: "staging", siteUrl: "http://localhost:3000" },
     );
     expect(subject).toBe("[Staging] New event to review: Hugos");
-    expect(html).toContain('href="https://main.d2tvgx9pzd2e81.amplifyapp.com/admin/events/evt-1"');
+    expect(html).toContain('href="http://localhost:3000/admin/events/evt-1"');
   });
 
-  it("escapes organiser-supplied text and surfaces an approval blocker", () => {
-    const { html } = buildEventSubmittedForReviewEmail(
+  it("escapes organiser-supplied text and surfaces an approval blocker", async () => {
+    const { html } = await buildEventSubmittedForReviewEmail(
       { eventId: "evt-1", eventTitle: "<script>x</script>", organiserName: "A & B", blocker: "No ABN on file" },
       { environment: "prod", siteUrl: "https://startlineau.com" },
     );

@@ -1,8 +1,9 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { OrganiserRole } from "@prisma/client";
 import prisma from "./prisma";
 import { pickActiveMembership } from "./active-organiser";
+import { nativeSessionFromClaims } from "./native-api-auth";
 import { resolveUserRow } from "./user-session";
 
 export type ServerSession = {
@@ -63,11 +64,104 @@ const JWKS = createRemoteJWKSet(
 );
 
 async function verifyToken(token: string) {
+  // Audience and token_use are checked by nativeSessionFromClaims, because
+  // Cognito access tokens carry `client_id` rather than `aud`.
   const { payload } = await jwtVerify(token, JWKS, {
     issuer: cognitoDomain,
-    audience: undefined,
+    algorithms: ["RS256"],
   });
   return payload;
+}
+
+type BearerCredentials = {
+  present: boolean;
+  accessToken?: string;
+  idToken?: string;
+};
+
+/**
+ * Read the native app's credentials without trusting them.
+ *
+ * The mobile app sends the Cognito access token as the bearer credential and
+ * its ID token as a companion header for profile claims. Both are verified
+ * below. A browser request never sets these headers, so cookie authentication
+ * remains the default for every existing web surface.
+ */
+async function readBearerCredentials(): Promise<BearerCredentials> {
+  try {
+    const requestHeaders = await headers();
+    const authorization = requestHeaders.get("authorization");
+    if (!authorization) return { present: false };
+
+    const match = /^Bearer\s+(.+)$/i.exec(authorization);
+    if (!match) return { present: true };
+
+    return {
+      present: true,
+      accessToken: match[1],
+      idToken: requestHeaders.get("x-id-token") ?? undefined,
+    };
+  } catch {
+    // Server components outside a request scope cannot read request headers.
+    return { present: false };
+  }
+}
+
+async function getBearerSession(): Promise<{
+  present: boolean;
+  session: ServerSession | null;
+}> {
+  const credentials = await readBearerCredentials();
+  if (!credentials.present) return { present: false, session: null };
+  if (!credentials.accessToken) return { present: true, session: null };
+
+  try {
+    const accessPayload = await verifyToken(credentials.accessToken);
+    let idPayload = null;
+    if (credentials.idToken) {
+      idPayload = await verifyToken(credentials.idToken);
+    }
+
+    const native = nativeSessionFromClaims(
+      accessPayload as Record<string, unknown>,
+      idPayload as Record<string, unknown> | null,
+      clientId,
+    );
+    if (!native) return { present: true, session: null };
+
+    return {
+      present: true,
+      session: {
+        ...native,
+        // The native client is a real Cognito session, never a dev bypass.
+        bypass: undefined,
+      },
+    };
+  } catch {
+    return { present: true, session: null };
+  }
+}
+
+/**
+ * The access token belonging to this request, from the native bearer header
+ * first and the Amplify cookie second. Callers use this for Cognito operations
+ * performed as the signed-in user; they must authenticate the request through
+ * getServerSession/getUserSession before relying on it.
+ */
+export async function getRequestAccessToken(): Promise<string | null> {
+  const credentials = await readBearerCredentials();
+  if (credentials.present) return credentials.accessToken ?? null;
+
+  const cookieStore = await cookies();
+  const lastAuthUser = cookieStore.get(
+    `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`
+  )?.value;
+  if (!lastAuthUser) return null;
+  return (
+    cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.accessToken`)?.value ??
+    cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.accessToken`)?.value ??
+    null
+  );
 }
 
 export async function getServerSession(): Promise<ServerSession | null> {
@@ -101,6 +195,11 @@ export async function getServerSession(): Promise<ServerSession | null> {
     }
   }
 
+  // A request carrying bearer credentials is native. If those credentials are
+  // invalid, fail it rather than silently falling back to an unrelated cookie.
+  const bearer = await getBearerSession();
+  if (bearer.present) return bearer.session;
+
   try {
     const cookieStore = await cookies();
 
@@ -115,45 +214,31 @@ export async function getServerSession(): Promise<ServerSession | null> {
     );
     if (!accessToken) return null;
 
-    const payload = await verifyToken(accessToken);
-
-    const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
-    const sub   = payload.sub as string;
-    const username = typeof payload.username === "string" ? payload.username : undefined;
-    const phoneNumber = payload.phone_number as string | undefined;
-    const birthdate   = payload.birthdate as string | undefined;
-
-    // The email must come from the verified id-token `email` claim: access
-    // tokens carry no email, and for this pool `LastAuthUser` is the Cognito
-    // sub (a UUID), not an address. Fall back to LastAuthUser only if it is
-    // itself an email (pools where the username is the email).
-    let email = lastAuthUser.includes("@") ? lastAuthUser : "";
-    let name: string | undefined;
-    let emailTrusted = true;
     const idToken = (
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.idToken`)?.value ??
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.idToken`)?.value
     );
-    if (idToken) {
-      try {
-        const idPayload = await verifyToken(idToken);
-        if (typeof idPayload.email === "string" && idPayload.email) {
-          email = idPayload.email;
-        }
-        if (typeof idPayload.name === "string" && idPayload.name.trim()) {
-          name = idPayload.name.trim();
-        }
-        // Only Google and Apple users carry `identities`. Password users are
-        // left alone: seeded accounts are not marked email_verified.
-        if (idPayload.identities && String(idPayload.email_verified) !== "true") {
-          emailTrusted = false;
-        }
-      } catch {
-        // Keep the fallback if the id token can't be verified.
-      }
-    }
+    // Amplify always stores both tokens. A request with only an access token
+    // is not a browser session, and without the id token there is no email we
+    // can trust: the cookie names, LastAuthUser included, are chosen by the
+    // client, so nothing about identity may be read from them.
+    if (!idToken) return null;
 
-    return { sub, username, email, groups, phoneNumber, birthdate, name, emailTrusted };
+    const accessPayload = await verifyToken(accessToken);
+    const idPayload = await verifyToken(idToken);
+
+    // Same checks as the native path: an access token issued to this client,
+    // and an id token for the same client and the same subject. Without the
+    // subject check, someone could pair their own access token with another
+    // person's id token.
+    const session = nativeSessionFromClaims(
+      accessPayload as Record<string, unknown>,
+      idPayload as Record<string, unknown>,
+      clientId,
+    );
+    if (!session) return null;
+
+    return { ...session, bypass: undefined };
   } catch {
     return null;
   }

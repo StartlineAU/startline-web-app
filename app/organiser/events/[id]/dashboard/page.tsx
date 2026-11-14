@@ -1,26 +1,27 @@
 "use client";
 
-import { useState, useEffect, use, useCallback, Suspense } from "react";
+import { useState, use, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
-  MapPin, Calendar, ChevronRight, ChevronDown, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
+  MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
   Download, ImageDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
 import RaceManagementPanel from "@/components/organiser/RaceManagementPanel";
 import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
+import EventChangeHistory from "@/components/event/EventChangeHistory";
+import PendingRevisionNotice from "@/components/event/PendingRevisionNotice";
+import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
-import { sanitizeHtml } from "@/lib/sanitize-html";
 import { buildCheckInQrImage, checkInQrImageFilename } from "@/lib/check-in-qr-image";
 import { stripHtml } from "@/lib/utils";
 import { useApiResource } from "@/hooks/useApiResource";
@@ -38,12 +39,6 @@ interface DashboardData {
     checkedInCount: number;
     coverImageUrl?: string | null; waves: Wave[];
     feeStructure: string; categories: string[];
-  };
-  payout: {
-    registrationCount: number; lowestTicketPrice: number;
-    grossRevenue: number; platformFees: number; stripeFees: number;
-    estimatedPayout: number; feeStructure: string; note: string;
-    isEstimate: boolean;
   };
   recentRegistrations: Registration[];
   announcements: Announcement[];
@@ -66,6 +61,9 @@ interface Announcement {
   id: string; title: string; body: string; createdAt: string;
 }
 
+/** Phones show a short list so tiers and announcements stay within reach. */
+const PHONE_REGISTRATIONS = 5;
+
 function formatDate(dateStr: string, timeStr?: string) {
   try {
     const d    = new Date(dateStr + "T00:00:00");
@@ -85,10 +83,11 @@ function timeAgo(dateStr: string) {
   const mins  = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
+  const ago = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"} ago`;
   if (mins < 2)  return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+  if (mins < 60) return ago(mins, "minute");
+  if (hours < 24) return ago(hours, "hour");
+  return ago(days, "day");
 }
 
 export default function EventDashboardPage({
@@ -118,7 +117,6 @@ function EventDashboardInner({
   const panel = searchParams.get("panel");
   const managePanel = panel === "manage";
   const announcePanel = panel === "announce";
-  const panelActive = managePanel || announcePanel;
 
   const setPanel = (next: "manage" | "announce" | null) => {
     router.replace(
@@ -153,9 +151,6 @@ function EventDashboardInner({
   const [delAnn,    setDelAnn]    = useState<Announcement | null>(null);
   const [deleting,  setDeleting]  = useState(false);
 
-  const [tiersOpen, setTiersOpen] = useState(true);
-  const [regsOpen, setRegsOpen] = useState(true);
-  const [announcementsOpen, setAnnouncementsOpen] = useState(true);
 
   const [qrOpen,    setQrOpen]    = useState(false);
   const [qr,        setQr]        = useState<{ url: string; qrDataUrl: string } | null>(null);
@@ -246,7 +241,6 @@ function EventDashboardInner({
       setData(d => d ? { ...d, announcements: [ann, ...d.announcements] } : d);
       setAnnTitle("");
       setAnnBody("");
-      setAnnouncementsOpen(true);
       setPanel(null);
     } finally {
       setPosting(false);
@@ -269,17 +263,17 @@ function EventDashboardInner({
 
   if (loading) {
     return (
-      <PageShellSkeleton maxWidth="max-w-[1100px]" className="pt-14 px-6">
+      <PageShellSkeleton maxWidth="max-w-[1240px]" className="pt-14 px-4 sm:px-6">
         <Skeleton className="h-3 w-28 mb-6" />
         <PageHeaderSkeleton actions={2} />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="h-20 rounded-2xl" />
           ))}
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-48 rounded-2xl" />
-          <Skeleton className="h-48 rounded-2xl" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Skeleton className="h-72 rounded-2xl lg:col-span-2" />
+          <Skeleton className="h-72 rounded-2xl" />
         </div>
       </PageShellSkeleton>
     );
@@ -304,7 +298,27 @@ function EventDashboardInner({
     );
   }
 
-  const { event, payout, announcements, recentRegistrations } = data;
+  const { event, announcements, recentRegistrations } = data;
+  const canEdit = organiserCanEditEvent(event.status);
+  const location = [event.venue, event.city].map((s) => s?.trim()).filter(Boolean).join(", ");
+
+  const stats = [
+    {
+      label: "Registered",
+      value: (
+        <>
+          {event.registrationCount.toLocaleString()}
+          {event.cap != null && (
+            <span className="text-muted-dark font-normal"> / {event.cap.toLocaleString()}</span>
+          )}
+        </>
+      ),
+      shortLabel: "Registered",
+      accent: false,
+      title: undefined as string | undefined,
+    },
+    { label: "Checked in", shortLabel: "Checked in", value: event.checkedInCount.toLocaleString(), accent: true, title: undefined },
+  ];
 
   return (
       <div className="min-h-screen bg-dark-darker">
@@ -321,433 +335,381 @@ function EventDashboardInner({
             <span className="text-primary">Dashboard</span>
           </div>
 
-          {/* Event header */}
-          <div className="flex flex-col lg:flex-row lg:items-start gap-6 mb-8">
+          {/* Event header: identity on the left, the two actions on the right */}
+          <div className="flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-6 mb-6">
             {event.coverImageUrl && (
-              <div className="relative w-full lg:w-48 h-32 lg:h-32 rounded-xl overflow-hidden shrink-0">
-                <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover brightness-[.62] saturate-110" sizes="(max-width: 1024px) 100vw, 192px" />
+              <div className="relative w-full sm:w-40 h-28 rounded-xl overflow-hidden shrink-0">
+                <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover brightness-[.62] saturate-110" sizes="(max-width: 640px) 100vw, 160px" />
               </div>
             )}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <Badge className="bg-primary/10 text-primary border-0">
+                <span className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-light">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" aria-hidden />
                   Live
-                </Badge>
+                </span>
+                <span className="text-muted-dark" aria-hidden>·</span>
                 <span className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">
                   {event.discipline.replace(/_/g, " ")}
                 </span>
               </div>
-              <h1 className="font-headline text-[36px] lg:text-[44px] font-black italic tracking-tighter leading-none text-white mb-3">
+              <h1 className="font-headline text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-none text-white mb-3">
                 {event.title}
               </h1>
-              <div className="flex flex-col gap-1 text-[13px] text-muted">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted">
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-primary shrink-0" />
                   {formatDate(event.eventDate, event.startTime)}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-                  {event.venue}, {event.city} {event.state.toUpperCase()}
+                  {location ? `${location} ` : ""}{event.state.toUpperCase()}
                 </span>
               </div>
             </div>
-            <div className="flex items-end gap-6 sm:gap-8 shrink-0 self-start lg:self-center">
-              <div className="text-center">
-                <div className="font-headline text-xl sm:text-2xl font-black tracking-tighter text-light leading-none">
-                  {event.registrationCount.toLocaleString()}
-                  {event.cap != null && (
-                    <span className="text-muted-dark font-normal"> / {event.cap.toLocaleString()}</span>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row shrink-0">
+              {managePanel ? (
+                <Button variant="outline" type="button" className="col-span-2" onClick={() => setManagePanel(false)}>
+                  <ArrowLeft className="w-4 h-4" /> Back to overview
+                </Button>
+              ) : (
+                <>
+                  <Button type="button" className="col-span-2" onClick={() => setManagePanel(true)}>
+                    <Users className="w-4 h-4" /> Manage registrations
+                  </Button>
+                  <Button variant="outline" type="button" className={canEdit ? "" : "col-span-2"} onClick={openCheckInQr}>
+                    <QrCode className="w-4 h-4" /> Check-in QR
+                  </Button>
+                  {canEdit && (
+                    <Button variant="outline" asChild>
+                      <Link href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`}>
+                        <Pencil className="w-4 h-4" /> Edit event
+                      </Link>
+                    </Button>
                   )}
-                </div>
-                <div className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted mt-1">
-                  Registered
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="font-headline text-xl sm:text-2xl font-black tracking-tighter text-primary leading-none">
-                  {event.checkedInCount.toLocaleString()}
-                </div>
-                <div className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted mt-1">
-                  Checked in
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="font-headline text-xl sm:text-2xl font-black tracking-tighter text-light leading-none">
-                  {fmt(payout.estimatedPayout)}
-                </div>
-                <div
-                  className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted mt-1"
-                  title={payout.note}
-                >
-                  {payout.isEstimate ? "Est. payout (after fees)" : "Payout (after fees)"}
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-8">
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full opacity-40 pointer-events-none"
-              aria-disabled
-              tabIndex={-1}
-            >
-              <Pencil className="w-4 h-4" /> Editing locked
-            </Button>
-            <Button
-              variant={managePanel ? "default" : "outline"}
-              type="button"
-              className={`w-full ${announcePanel ? "opacity-40 pointer-events-none" : ""}`}
-              aria-disabled={announcePanel || undefined}
-              tabIndex={announcePanel ? -1 : undefined}
-              onClick={() => { if (!announcePanel) setManagePanel(!managePanel); }}
-            >
-              {managePanel ? (
-                <>
-                  <ArrowLeft className="w-4 h-4" /> Back to overview
-                </>
-              ) : (
-                <>
-                  <Users className="w-4 h-4" /> Manage registrations
-                </>
-              )}
-            </Button>
-            <Button
-              variant={announcePanel ? "default" : "outline"}
-              type="button"
-              className={`w-full ${managePanel ? "opacity-40 pointer-events-none" : ""}`}
-              aria-disabled={managePanel || undefined}
-              tabIndex={managePanel ? -1 : undefined}
-              onClick={() => { if (!managePanel) setPanel(announcePanel ? null : "announce"); }}
-            >
-              {announcePanel ? (
-                <>
-                  <ArrowLeft className="w-4 h-4" /> Back to overview
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" /> New announcement
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full"
-              onClick={openCheckInQr}
-            >
-              <QrCode className="w-4 h-4" /> Check-in QR
-            </Button>
+          {/* Stat strip */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-6 sm:mb-8">
+            {stats.map((s) => (
+              <div key={s.label} className="min-w-0 bg-dark border border-dark-lighter rounded-2xl px-3 sm:px-5 py-3 sm:py-4" title={s.title ?? s.label}>
+                <div className={`font-headline text-lg sm:text-[28px] truncate font-black tracking-tighter leading-none ${s.accent ? "text-primary" : "text-light"}`}>
+                  {s.value}
+                </div>
+                <div className="font-headline text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted mt-2 truncate">
+                  <span className="sm:hidden">{s.shortLabel}</span>
+                  <span className="hidden sm:inline">{s.label}</span>
+                </div>
+              </div>
+            ))}
           </div>
 
-          {!panelActive && (
+          {!managePanel && !canEdit && (
             <div className="mb-8">
               <EventEditLockedNotice eventId={id} status={event.status} compact />
             </div>
-          )}
-
-          {announcePanel && (
-            <Card className="mb-8">
-              <CardContent className="p-6">
-                <div className="mb-6">
-                  <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
-                    New announcement
-                  </h2>
-                  <p className="text-[13px] text-muted-dark mt-0.5 max-w-lg">
-                    Notify registered athletes about schedule changes, logistics, or event updates.
-                  </p>
-                </div>
-                {postError && (
-                  <div className="mb-3 px-3 py-2 bg-red-400/10 border border-red-400/20 rounded-lg text-[12px] text-red-300">{postError}</div>
-                )}
-                <div className="space-y-3">
-                  <div>
-                    <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1.5">Title</label>
-                    <input
-                      type="text"
-                      value={annTitle}
-                      onChange={e => setAnnTitle(e.target.value)}
-                      placeholder="e.g. Schedule update — Saturday heat times"
-                      className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1.5">Message</label>
-                    <RichTextEditor
-                      value={annBody}
-                      onChange={setAnnBody}
-                      placeholder="Write your announcement here…"
-                      editorClassName="min-h-[180px] bg-dark"
-                    />
-                  </div>
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <Button variant="ghost" onClick={() => setPanel(null)}>Cancel</Button>
-                    <Button onClick={postAnnouncement} disabled={posting}>
-                      {posting ? "Posting…" : "Post announcement"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Announcements — overview + under compose; hidden on manage registrations */}
-          {!managePanel && (
-          <Card className="mb-8">
-            <CardContent className="p-6">
-              <button
-                type="button"
-                onClick={() => setAnnouncementsOpen((o) => !o)}
-                aria-expanded={announcementsOpen}
-                className="w-full flex items-center justify-between gap-3 text-left"
-              >
-                <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
-                  Announcements
-                </h2>
-                <span className="flex items-center gap-3 shrink-0">
-                  <Badge className="bg-primary/10 text-primary border-0">
-                    {announcements.length} posted
-                  </Badge>
-                  <ChevronDown className={`w-4 h-4 text-muted-light transition-transform ${announcementsOpen ? "rotate-180" : ""}`} />
-                </span>
-              </button>
-
-              {announcementsOpen && (
-                <div className="mt-5">
-                  {announcements.length === 0 ? (
-                    <div className="text-center py-10">
-                      <div className="w-10 h-10 rounded-full bg-dark-light flex items-center justify-center mx-auto mb-3">
-                        <Megaphone className="w-5 h-5 text-muted-dark" />
-                      </div>
-                      <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-1">No announcements yet</div>
-                      <div className="text-[13px] text-muted-dark">Post one to notify registered athletes.</div>
-                      {!announcePanel && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          className="mt-4"
-                          onClick={() => setPanel("announce")}
-                        >
-                          <Plus className="w-4 h-4" /> New announcement
-                        </Button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {announcements.map(ann => (
-                        <div key={ann.id} className="flex items-start gap-4 p-4 bg-dark-light border border-dark-lighter rounded-xl">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                            <Megaphone className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="font-headline text-[14px] font-bold text-white">{ann.title}</div>
-                              <div className="font-headline text-[11px] uppercase tracking-widest text-muted-dark shrink-0">{timeAgo(ann.createdAt)}</div>
-                            </div>
-                            {/<[a-z][\s\S]*>/i.test(ann.body) ? (
-                              <div
-                                className="text-[13px] text-muted-light mt-1 leading-relaxed
-                                  [&_h3]:font-headline [&_h3]:font-black [&_h3]:text-[15px] [&_h3]:text-white [&_h3]:mt-3 [&_h3]:mb-1
-                                  [&_h4]:font-headline [&_h4]:font-bold [&_h4]:text-[13px] [&_h4]:text-white [&_h4]:mt-2 [&_h4]:mb-1
-                                  [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_li]:mb-0.5
-                                  [&_strong]:text-white [&_b]:text-white"
-                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(ann.body) }}
-                              />
-                            ) : (
-                              <p className="text-[13px] text-muted-light mt-1 leading-relaxed whitespace-pre-wrap">{ann.body}</p>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => setDelAnn(ann)}
-                            className="shrink-0 text-muted-dark hover:text-red-400 transition-colors mt-0.5"
-                            title="Delete announcement"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
           )}
 
           {managePanel ? (
             <div className="mb-8">
               <RaceManagementPanel eventId={id} />
             </div>
-          ) : announcePanel ? null : (
+          ) : (
           <>
-          {/* Ticket tiers */}
-          {event.waves.length > 0 && (
-            <Card className="mb-8">
-              <CardContent className="p-6">
-                <button
-                  type="button"
-                  onClick={() => setTiersOpen((o) => !o)}
-                  aria-expanded={tiersOpen}
-                  className="w-full flex items-center justify-between gap-3 text-left"
-                >
-                  <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
-                    Ticket tiers
-                  </h2>
-                  <span className="flex items-center gap-3 shrink-0">
-                    <Badge className="bg-primary/10 text-primary border-0">
-                      {event.waves.length} {event.waves.length === 1 ? "tier" : "tiers"}
-                    </Badge>
-                    <ChevronDown className={`w-4 h-4 text-muted-light transition-transform ${tiersOpen ? "rotate-180" : ""}`} />
-                  </span>
-                </button>
+          <div className="grid gap-6 lg:grid-cols-3 items-start">
 
-                {tiersOpen && (
+          {/* Registrations: the main column */}
+          <Card className="lg:col-span-2 min-w-0">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-baseline gap-2.5">
+                  <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
+                    Registrations
+                  </h2>
+                  <span className="font-headline text-[13px] tabular-nums text-muted-dark">
+                    {event.registrationCount.toLocaleString()}
+                  </span>
+                </div>
+                {recentRegistrations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setManagePanel(true)}
+                    className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:underline"
+                  >
+                    View all
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-4">
+                {recentRegistrations.length > 0 ? (
                   <>
-                    <div className="divide-y divide-white/5 mt-5">
-                      {event.waves.map((w, i) => {
-                        const sold = w.sold ?? 0;
-                        const capped = w.qty != null;
-                        return (
-                          <div key={i} className="py-3 gap-4">
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="font-headline text-[14px] font-bold text-white/90 min-w-0 truncate">{w.label}</div>
-                              <div className="flex items-center gap-4 sm:gap-6 shrink-0">
-                                <div className="font-headline text-[14px] font-black italic text-white">A${w.price}</div>
-                                <div className="text-right">
-                                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">Sold / Cap</div>
-                                  <div className="font-headline text-[13px] text-muted-light">
-                                    {sold.toLocaleString()}
-                                    {capped ? ` / ${w.qty!.toLocaleString()}` : ""}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            {capped && (
-                              <CapacityBar
-                                count={sold}
-                                cap={w.qty}
-                                className="mt-2.5 w-full max-w-[360px]"
-                                label={`${w.label}: ${sold} of ${w.qty} sold`}
-                              />
+                  {/* Phone: one stacked row per athlete, no sideways scroll */}
+                  <ul className="sm:hidden divide-y divide-white/5">
+                    {recentRegistrations.slice(0, PHONE_REGISTRATIONS).map((r) => (
+                      <li key={r.id} className="py-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-headline text-[14px] font-bold text-white/90 truncate">{r.name}</span>
+                            {r.medicalNotes && (
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-300" aria-label={`Medical: ${r.medicalNotes}`} />
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-white/5">
-                      <p className="text-[11px] text-muted-dark">
-                        Tiers without a cap show sold count only. Athletes register per tier; see the Registrations list below for each athlete&apos;s wave.
-                      </p>
-                    </div>
+                          <div className="text-[12px] text-muted-dark truncate">
+                            {[r.wave, timeAgo(r.createdAt)].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-headline text-[13px] font-black italic text-white whitespace-nowrap">{fmt(r.amount)}</div>
+                          {r.checkedInAt && (
+                            <div className="inline-flex items-center gap-1 mt-0.5 font-headline text-[10px] font-bold uppercase tracking-widest text-primary">
+                              <CheckCheck className="w-3 h-3" /> In
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {event.registrationCount > PHONE_REGISTRATIONS && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      className="sm:hidden w-full mt-2"
+                      onClick={() => setManagePanel(true)}
+                    >
+                      View all {event.registrationCount.toLocaleString()} registrations
+                    </Button>
+                  )}
+                  <div className="hidden sm:block overflow-x-auto -mx-2">
+                    <table className="w-full min-w-[520px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/5">
+                          {["Athlete", "Wave", "Registered", "Paid", "Check-in"].map((h) => (
+                            <th key={h} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark text-left px-2 py-2 last:text-right">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentRegistrations.map((r) => (
+                          <tr key={r.id} className="border-b border-white/5 last:border-0">
+                            <td className="px-2 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-headline text-[14px] font-bold text-white/90 truncate max-w-[200px]">{r.name}</span>
+                                {r.medicalNotes && (
+                                  <span
+                                    title={`Medical: ${r.medicalNotes}`}
+                                    className="shrink-0 inline-flex items-center gap-1 font-headline text-[9px] font-bold uppercase tracking-widest text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded px-1.5 py-0.5"
+                                  >
+                                    <AlertCircle className="w-2.5 h-2.5" /> Medical
+                                  </span>
+                                )}
+                              </div>
+                              {r.email !== r.name && (
+                                <div className="text-[12px] text-muted-dark truncate max-w-[220px]">{r.email}</div>
+                              )}
+                            </td>
+                            <td className="px-2 py-3">
+                              {r.wave
+                                ? <span className="font-headline text-[12px] text-muted-light">{r.wave}</span>
+                                : <span className="text-[12px] text-muted-dark">—</span>}
+                            </td>
+                            <td className="px-2 py-3 text-[12px] text-muted-light whitespace-nowrap">{timeAgo(r.createdAt)}</td>
+                            <td className="px-2 py-3 font-headline text-[13px] font-black italic text-white text-right whitespace-nowrap">{fmt(r.amount)}</td>
+                            <td className="px-2 py-3 text-right">
+                              {r.checkedInAt ? (
+                                <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 rounded px-1.5 py-0.5 whitespace-nowrap">
+                                  <CheckCheck className="w-3 h-3" /> {timeAgo(r.checkedInAt)}
+                                </span>
+                              ) : (
+                                <span className="text-[12px] text-muted-dark">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {event.registrationCount > recentRegistrations.length && (
+                    <p className="hidden sm:block text-[11px] text-muted-dark mt-3">
+                      Showing the {recentRegistrations.length} most recent of {event.registrationCount.toLocaleString()}.
+                    </p>
+                  )}
                   </>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-8 h-8 mx-auto mb-3 text-muted-dark" />
+                    <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-1">No registrations yet</div>
+                    <div className="text-[13px] text-muted-dark">Athletes who register will appear here.</div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sidebar: tiers and announcements */}
+          <div className="space-y-6">
+            {event.waves.length > 0 && (
+              <Card>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
+                      Ticket tiers
+                    </h2>
+                    <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark">Sold / Cap</span>
+                  </div>
+                  <div className="divide-y divide-white/5 mt-3">
+                    {event.waves.map((w, i) => {
+                      const sold = w.sold ?? 0;
+                      const capped = w.qty != null;
+                      return (
+                        <div key={i} className="py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-headline text-[14px] font-bold text-white/90 truncate">{w.label}</div>
+                              <div className="font-headline text-[12px] italic text-muted">A${w.price}</div>
+                            </div>
+                            <div className="font-headline text-[13px] text-muted-light shrink-0">
+                              {sold.toLocaleString()}
+                              {capped ? ` / ${w.qty!.toLocaleString()}` : ""}
+                            </div>
+                          </div>
+                          {capped && (
+                            <CapacityBar
+                              count={sold}
+                              cap={w.qty}
+                              className="mt-2 w-full"
+                              label={`${w.label}: ${sold} of ${w.qty} sold`}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-baseline gap-2.5">
+                    <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
+                      Announcements
+                    </h2>
+                    {announcements.length > 0 && (
+                      <span className="font-headline text-[13px] tabular-nums text-muted-dark">{announcements.length}</span>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    aria-label="New announcement"
+                    onClick={() => setPanel("announce")}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> New
+                  </Button>
+                </div>
+
+                {announcements.length === 0 ? (
+                  <p className="mt-4 text-[13px] text-muted-dark">
+                    No announcements yet. Post one to notify registered athletes.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {announcements.map(ann => (
+                      <div key={ann.id} className="p-3 bg-dark-light border border-dark-lighter rounded-xl">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-headline text-[14px] font-bold text-white">{ann.title}</div>
+                            <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5">{timeAgo(ann.createdAt)}</div>
+                          </div>
+                          <button
+                            onClick={() => setDelAnn(ann)}
+                            className="shrink-0 text-muted-dark hover:text-red-400 transition-colors mt-0.5"
+                            title="Delete announcement"
+                            aria-label={`Delete announcement ${ann.title}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-[13px] text-muted-light mt-1.5 leading-relaxed line-clamp-2">
+                          {stripHtml(ann.body)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
-          )}
+          </div>
+          </div>
 
-          {/* Registrations */}
-          <Card className="mb-8">
-            <CardContent className="p-6">
-              <button
-                type="button"
-                onClick={() => setRegsOpen((o) => !o)}
-                aria-expanded={regsOpen}
-                className="w-full flex flex-wrap items-center justify-between gap-3 text-left"
-              >
-                <h2 className="font-headline text-lg font-black italic tracking-tighter text-white">
-                  Registrations
-                </h2>
-                <span className="flex items-center gap-3 shrink-0">
-                  <Badge className="bg-primary/10 text-primary border-0">
-                    {event.registrationCount.toLocaleString()} {event.registrationCount === 1 ? "athlete" : "athletes"}
-                  </Badge>
-                  <ChevronDown className={`w-4 h-4 text-muted-light transition-transform ${regsOpen ? "rotate-180" : ""}`} />
-                </span>
-              </button>
-
-              {regsOpen && (
-                <div className="mt-4">
-                  {recentRegistrations.length > 0 ? (
-                    <div className="overflow-x-auto -mx-2">
-                      <table className="w-full min-w-[560px] border-collapse">
-                        <thead>
-                          <tr className="border-b border-white/5">
-                            {["Athlete", "Wave", "Registered", "Paid", "Check-in"].map((h) => (
-                              <th key={h} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark text-left px-2 py-2 last:text-right">
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {recentRegistrations.map((r) => (
-                            <tr key={r.id} className="border-b border-white/5 last:border-0">
-                              <td className="px-2 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-headline text-[14px] font-bold text-white/90 truncate max-w-[200px]">{r.name}</span>
-                                  {r.medicalNotes && (
-                                    <span
-                                      title={`Medical: ${r.medicalNotes}`}
-                                      className="shrink-0 inline-flex items-center gap-1 font-headline text-[9px] font-bold uppercase tracking-widest text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded px-1.5 py-0.5"
-                                    >
-                                      <AlertCircle className="w-2.5 h-2.5" /> Medical
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[12px] text-muted-dark truncate max-w-[220px]">{r.email}</div>
-                              </td>
-                              <td className="px-2 py-3">
-                                {r.wave
-                                  ? <span className="font-headline text-[12px] text-muted-light">{r.wave}</span>
-                                  : <span className="text-[12px] text-muted-dark">—</span>}
-                              </td>
-                              <td className="px-2 py-3 text-[12px] text-muted-light whitespace-nowrap">{timeAgo(r.createdAt)}</td>
-                              <td className="px-2 py-3 font-headline text-[13px] font-black italic text-white text-right whitespace-nowrap">{fmt(r.amount)}</td>
-                              <td className="px-2 py-3 text-right">
-                                {r.checkedInAt ? (
-                                  <span className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 rounded px-1.5 py-0.5 whitespace-nowrap">
-                                    <CheckCheck className="w-3 h-3" /> {timeAgo(r.checkedInAt)}
-                                  </span>
-                                ) : (
-                                  <span className="text-[12px] text-muted-dark">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {event.registrationCount > recentRegistrations.length && (
-                        <p className="text-[11px] text-muted-dark mt-3 px-2">
-                          Showing the {recentRegistrations.length} most recent of {event.registrationCount.toLocaleString()}.{" "}
-                          <button
-                            type="button"
-                            onClick={() => setManagePanel(true)}
-                            className="text-primary hover:underline font-headline"
-                          >
-                            Manage all
-                          </button>
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Users className="w-8 h-8 mx-auto mb-3 text-muted-dark" />
-                      <div className="font-headline text-sm font-bold uppercase tracking-widest text-muted mb-1">No registrations yet</div>
-                      <div className="text-[13px] text-muted-dark">Athletes who register will appear here.</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Live events open here rather than on the event page, so the
+              record of what changed has to be here too. */}
+          <div className="mt-8">
+            <PendingRevisionNotice eventId={id} />
+            <EventChangeHistory eventId={id} apiBase="/api/organiser" />
+          </div>
           </>
           )}
 
         </div>
       </main>
+
+      {/* New announcement: driven by ?panel=announce so the link stays shareable */}
+      <Dialog open={announcePanel} onOpenChange={open => { if (!open) setPanel(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Megaphone className="w-5 h-5 text-primary" />
+              </div>
+              <DialogTitle>New announcement</DialogTitle>
+            </div>
+            <DialogDescription>
+              Notify registered athletes about schedule changes, logistics, or event updates.
+            </DialogDescription>
+          </DialogHeader>
+          {postError && (
+            <div className="px-3 py-2 bg-red-400/10 border border-red-400/20 rounded-lg text-[12px] text-red-300">{postError}</div>
+          )}
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="announcement-title" className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1.5">Title</label>
+              <input
+                id="announcement-title"
+                type="text"
+                value={annTitle}
+                onChange={e => setAnnTitle(e.target.value)}
+                placeholder="e.g. Schedule update — Saturday heat times"
+                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted block mb-1.5">Message</label>
+              <RichTextEditor
+                value={annBody}
+                onChange={setAnnBody}
+                placeholder="Write your announcement here…"
+                editorClassName="min-h-[180px] bg-dark"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPanel(null)}>Cancel</Button>
+            <Button onClick={postAnnouncement} disabled={posting}>
+              {posting ? "Posting…" : "Post announcement"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Check-in QR */}
       <Dialog open={qrOpen} onOpenChange={open => { if (!open) setQrOpen(false); }}>

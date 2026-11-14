@@ -7,7 +7,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 // the second belongs to their active organisation and is only offered to
 // someone who owns or manages one.
 export const ACCOUNT_SECTIONS = ["profile", "details", "alerts", "security", "cookies"] as const;
-export const ORGANISATION_SECTIONS = ["organisation", "members", "notifications", "payments"] as const;
+export const ORGANISATION_SECTIONS = ["organisation", "members", "notifications", "payments", "refunds"] as const;
 
 export type SettingsSection =
   | (typeof ACCOUNT_SECTIONS)[number]

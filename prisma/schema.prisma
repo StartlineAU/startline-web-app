@@ -85,6 +85,12 @@ model Organiser {
   notifyEventRejected   Boolean @default(true)
   notifyNewRegistration Boolean @default(true)
 
+  // Change-of-mind refund policy for every event this organisation runs.
+  // Null means listings still use the policy stored on each event. The ACL
+  // floor is not stored here: it applies whether or not these tiers say so.
+  refundTiers  Json?
+  refundPolicy String?
+
   events        Event[]
   reviews       Review[]
   announcements Announcement[]
@@ -224,6 +230,8 @@ model Event {
   registrations Registration[]
   savedEvents   SavedEvent[]
   startWaveRows StartWave[]
+  changes       EventChange[]
+  revisions     EventRevision[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -455,10 +463,16 @@ model Registration {
   // amount quoted to the athlete cannot drift as the event draws closer, and so
   // the admin refunds exactly what was promised. outsidePolicy marks a
   // discretionary request the policy returns nothing for.
+  // The change-of-mind policy this entry was sold under. Set when the
+  // organisation later changes its policy, so that change does not rewrite
+  // what an athlete already paid against. Null means the event's tiers.
+  soldRefundTiers   Json?
   refundPercent     Int?
   refundAmountCents Int?
   refundRequestedAt DateTime?
   refundOutsidePolicy Boolean @default(false)
+  // Refunds are reviewed from a support ticket, by the organiser and Startline.
+  stripeRefundId String?
 
   // Set when the athlete confirms attendance via the check-in QR.
   checkedInAt DateTime?
@@ -600,6 +614,113 @@ enum UserNotificationType {
   // Sent to the athlete once an admin has actually processed their refund, so the
   // loop closes instead of leaving them wondering.
   REFUND_PROCESSED
+  // The organiser changed the date, time, location or type of an event the
+  // athlete had already entered, which entitles them to a full refund.
+  EVENT_CHANGED
+}
+
+// ─── Event change log ─────────────────────────────────────────────────────────
+// Append-only record of what an event said and when, so a dispute about the
+// original details can be settled from the record rather than from memory.
+// The first row for an event is its baseline: every field as it stood when it
+// first left DRAFT. Every later edit, by the organiser or by an admin, adds a
+// row with the fields it changed. Nothing updates or deletes these rows, and
+// they outlive the event itself (eventId goes null, eventTitle stays).
+model EventChange {
+  id         String            @id @default(uuid())
+  eventId    String?
+  event      Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  eventTitle String
+  source     EventChangeSource
+  // BASELINE for the first published snapshot, EDIT for everything after.
+  kind           EventChangeKind
+  changedById    String? // Organiser id or Admin id, per source
+  changedByEmail String?
+  organiserVerified Boolean @default(false)
+  statusAtChange    EventStatus
+  // [{ field, label, from, to, material }]
+  changes Json
+  // True when a date, time, location or event type field changed.
+  material        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  @@index([eventId, createdAt])
+  @@map("event_changes")
+}
+
+enum EventChangeSource {
+  ORGANISER
+  ADMIN
+  SYSTEM
+}
+
+enum EventChangeKind {
+  BASELINE
+  EDIT
+}
+
+// A proposed edit to a published event that is not yet the public offer.
+// Unverified organisers cannot change a live listing in place: the revision
+// waits here, and the event row stays as last approved until an admin applies
+// it. One PENDING row per event (enforced by a partial unique index).
+enum EventRevisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUPERSEDED
+}
+
+model EventRevision {
+  id               String              @id @default(uuid())
+  eventId          String
+  event            Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  status           EventRevisionStatus @default(PENDING)
+  // Fields the edit would write. Keys left out are not a clear.
+  payload          Json
+  // Diff against the live event at submit time: [{ field, label, from, to, material }]
+  changes          Json
+  material         Boolean             @default(false)
+  submittedById    String?
+  submittedByEmail String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([eventId, status])
+  @@map("event_revisions")
+}
+
+// An athlete's request to Startline. A refund is reviewed by the organiser and
+// Startline; nothing is issued from this form.
+model SupportTicket {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  userId      String?
+  requestType String
+  eventName   String?
+  eventDate   String?
+  eventId     String?
+  organiserId String?
+  reason      String
+  status      SupportTicketStatus @default(OPEN)
+  decidedById String?
+  decidedAt   DateTime?
+  decisionNote String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([organiserId, status])
+  @@map("support_tickets")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  APPROVED
+  DECLINED
+  REFUNDED
 }
 
 model WaitlistSubscriber {

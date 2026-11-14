@@ -50,8 +50,8 @@ const nextConfig: NextConfig = {
     // tracked as a post-MVP issue.
     const scriptSrc =
       process.env.NODE_ENV === "production"
-        ? "'self' 'unsafe-inline' https://js.stripe.com https://api.mapbox.com"
-        : "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://api.mapbox.com";
+        ? "'self' 'unsafe-inline' https://js.stripe.com https://api.mapbox.com https://challenges.cloudflare.com"
+        : "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://api.mapbox.com https://challenges.cloudflare.com";
 
     // After a Google or Apple sign-in the browser POSTs the authorization code
     // to our Cognito hosted domain, which connect-src has to allow or the
@@ -73,13 +73,13 @@ const nextConfig: NextConfig = {
           {
             key: "Content-Security-Policy",
             value: [
-              "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
+              "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
               `script-src ${scriptSrc}`,
               // The S3 origin is required: uploads POST straight to a presigned
               // bucket URL rather than through /api/upload, because Amplify's
               // compute runtime rejects a multipart body over roughly 4.4 MB.
               // Without it the browser blocks the upload with no server-side trace.
-              "connect-src 'self' https://js.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://cognito-idp.ap-southeast-2.amazonaws.com " + cognitoConnectSrc + " https://*.s3.ap-southeast-2.amazonaws.com https://*.s3.amazonaws.com capacitor:// http://localhost",
+              "connect-src 'self' https://js.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://challenges.cloudflare.com https://cognito-idp.ap-southeast-2.amazonaws.com " + cognitoConnectSrc + " https://*.s3.ap-southeast-2.amazonaws.com https://*.s3.amazonaws.com capacitor:// http://localhost",
               "img-src 'self' data: blob: https://*.tiles.mapbox.com https://api.mapbox.com https:",
               "worker-src blob: 'self'",
               "style-src 'self' 'unsafe-inline' https://api.mapbox.com",

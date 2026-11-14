@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { JWTPayload } from "jose";
-import { USER_DOMAIN, ORGANISER_DOMAIN, ADMIN_DOMAIN } from "@/lib/portal-domains";
+import {
+  USER_DOMAIN,
+  ORGANISER_DOMAIN,
+  ADMIN_DOMAIN,
+  portalsAreSplit,
+} from "@/lib/portal-domains";
 import { isLegalPath, publicSiteMode, servesWhileWaitlisted } from "@/lib/site-mode";
+import { accessTokenIsForClient } from "@/lib/native-api-auth";
 
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
@@ -53,9 +59,12 @@ async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> 
   try {
     const { payload } = await jwtVerify(accessToken, JWKS, {
       issuer: cognitoDomain,
-      audience: undefined,
+      algorithms: ["RS256"],
     });
-    return payload;
+    // Cognito access tokens carry no `aud`; `client_id` plays that role. Any
+    // other token from the pool (an id token, or one issued to another app
+    // client) is not a session for this app.
+    return accessTokenIsForClient(payload as Record<string, unknown>, clientId) ? payload : null;
   } catch {
     return null;
   }
@@ -78,6 +87,18 @@ function isSitePreviewer(payload: JWTPayload): boolean {
 function withPrivateNoStore(res: NextResponse): NextResponse {
   res.headers.set("Cache-Control", "private, no-store, max-age=0, must-revalidate");
   res.headers.set("Vary", "Cookie");
+  return res;
+}
+
+// Only the production portals may be indexed. A branch deployment and every PR
+// preview serve the whole app — including the staging database — from a host
+// that is neither of them, so a crawlable staging build ends up in search
+// results as a second copy of the product. The header covers every response,
+// not just the ones Next renders a <meta> tag for.
+function withNoIndexOnNonProduction(res: NextResponse, host: string): NextResponse {
+  if (!portalsAreSplit(host)) {
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
   return res;
 }
 
@@ -127,7 +148,7 @@ async function routeSingleHost(req: NextRequest, pathname: string): Promise<Next
   return NextResponse.next();
 }
 
-export async function middleware(req: NextRequest) {
+async function handleRequest(req: NextRequest) {
   if (process.env.NODE_ENV === "development") {
     const bypass = req.cookies.get("__e2e_bypass")?.value;
     if (bypass) return NextResponse.next();
@@ -236,6 +257,11 @@ export async function middleware(req: NextRequest) {
   }
 
   return routeSingleHost(req, pathname);
+}
+
+export async function middleware(req: NextRequest) {
+  const res = await handleRequest(req);
+  return withNoIndexOnNonProduction(res, req.headers.get("host") ?? "");
 }
 
 export const config = {

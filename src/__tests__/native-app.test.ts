@@ -132,7 +132,8 @@ describe("native sign-in", () => {
 
 describe("app links", () => {
   const prod = new URL("https://startlineau.com/");
-  const staging = new URL("https://staging.startlineau.com/activity");
+  // Staging is the Amplify branch domain; there is no staging subdomain.
+  const staging = new URL("http://localhost:3000/activity");
 
   it("treats the production portals as one site", () => {
     expect(isSameSite(new URL("https://organiser.startlineau.com/organiser/dashboard"), prod)).toBe(true);
@@ -141,7 +142,7 @@ describe("app links", () => {
 
   it("keeps a staging build on staging when a production link is tapped", () => {
     expect(appLinkTarget(new URL("https://startlineau.com/events/abc?x=1"), staging))
-      .toBe("https://staging.startlineau.com/events/abc?x=1");
+      .toBe("http://localhost:3000/events/abc?x=1");
     expect(appLinkTarget(new URL("https://organiser.startlineau.com/organiser"), prod))
       .toBe("https://organiser.startlineau.com/organiser");
   });

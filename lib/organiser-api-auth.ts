@@ -18,8 +18,10 @@ import { getServerSession, resolveOrganiserSession, type OrganiserSession } from
 // status.
 
 export type OrganiserGuard =
-  | { error: null; session: OrganiserSession }
-  | { error: NextResponse; session: null };
+  // actorEmail is the signed-in person. session.email is the organisation's
+  // account address, which is not who made a change when a MANAGER did.
+  | { error: null; session: OrganiserSession; actorEmail?: string }
+  | { error: NextResponse; session: null; actorEmail?: undefined };
 
 const SIGNED_OUT =
   "Your session has expired. Please sign in again.";
@@ -55,5 +57,5 @@ export async function requireOrganiser(): Promise<OrganiserGuard> {
     };
   }
 
-  return { error: null, session };
+  return { error: null, session, actorEmail: cognitoSession.email };
 }

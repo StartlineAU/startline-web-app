@@ -57,7 +57,8 @@ const entry = (
   amountCents: number,
   platformFeeCents: number,
   feeStructure: string,
-) => ({ amountCents, platformFeeCents, feeStructure });
+  stripeFeeCents = 0,
+) => ({ amountCents, platformFeeCents, stripeFeeCents, feeStructure });
 
 function operation(overrides: Record<string, unknown> = {}) {
   return {
@@ -198,9 +199,12 @@ describe("getPayoutEligibleEvents", () => {
     expect(events[0].netCents).toBe(19460);
     expect(mocks.event.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
+        // Only confirmed entries are paid out.
         registrations: {
           where: { status: "CONFIRMED" },
-          select: { amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true },
+          select: {
+            amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true, status: true,
+          },
         },
       }),
     }));
@@ -273,6 +277,36 @@ describe("runPayoutForEvent", () => {
       where: { id: "event-1" },
       data: expect.objectContaining({ payoutAmountCents: 19460 }),
     });
+  });
+
+  // #470: the Stripe fee must survive the database read, not just the helper.
+  // A select without stripeFeeCents would pay the organiser 9657 here.
+  it("pays out the net after the Stripe fee the organiser absorbs", async () => {
+    const withStripeFees = [
+      entry(5000, 343, "athlete", 124),
+      entry(5000, 343, "organiser", 118),
+    ];
+    mocks.event.findUnique.mockResolvedValue(event({ registrations: withStripeFees }));
+    mocks.payoutOperation.create.mockResolvedValue(operation({ amountCents: 9415 }));
+    mocks.payoutOperation.findUnique.mockResolvedValue(operation({ amountCents: 9415 }));
+
+    await expect(runPayoutForEvent("event-1")).resolves.toEqual({
+      netCents: 9415,
+      alreadyProcessed: false,
+      stripePayoutId: "po_1",
+    });
+
+    expect(mocks.event.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        registrations: expect.objectContaining({
+          select: expect.objectContaining({ stripeFeeCents: true }),
+        }),
+      }),
+    }));
+    expect(mocks.createPayout).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 9415 }),
+      expect.objectContaining({ stripeAccount: "acct_1" }),
+    );
   });
 
   it("corrects an unstarted operation recorded with the old gross amount", async () => {

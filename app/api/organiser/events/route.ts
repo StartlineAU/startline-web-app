@@ -10,9 +10,11 @@ import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted"
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserEventPayloadSchema } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { takesPayments } from "@/lib/event-approval";
+import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 export async function GET() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -137,6 +139,11 @@ export async function POST(req: NextRequest) {
   // Persist the status the event should have right now, not just the status
   // the review queue implies. Publishing an event whose start has already
   // passed must not briefly make it look bookable.
+  const orgRefund = await prisma.organiser.findUnique({
+    where: { id: organiserId },
+    select: { refundTiers: true, refundPolicy: true },
+  }) ?? { refundTiers: null, refundPolicy: null };
+
   const times = eventTimeData({
     eventDate: body.eventDate ?? "",
     endDate: body.endDate ?? null,
@@ -148,7 +155,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const event = await withUniqueSlug(body.title ?? "", (slug) =>
-      prisma.event.create({
+      // The event and its baseline change-log row commit together, so an event
+      // published at creation has its original details on record from the start.
+      prisma.$transaction(async (tx) => {
+      const created = await tx.event.create({
       data: {
         organiserId,
         status:           lifecycleStatus,
@@ -156,7 +166,7 @@ export async function POST(req: NextRequest) {
         slug,
         title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
-        description:      body.description       ?? null,
+        description:      body.description != null ? sanitizeHtml(body.description) : null,
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
@@ -176,8 +186,8 @@ export async function POST(req: NextRequest) {
         inclusions:       body.inclusions        ?? null,
         extras:           body.extras            ?? null,
         activations:      body.activations       ?? null,
-        refundTiers:      body.refundTiers       ?? [],
-        refundPolicy:     body.refundPolicy      ?? null,
+        refundTiers:      orgRefund.refundTiers ?? body.refundTiers ?? [],
+        refundPolicy:     orgRefund.refundPolicy ?? body.refundPolicy ?? null,
         registrationType,
         feeStructure:     body.feeStructure      ?? "athlete",
         registrationUrl:  body.registrationUrl   ?? null,
@@ -186,6 +196,21 @@ export async function POST(req: NextRequest) {
         informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
         photos:           Array.isArray(body.photos) ? body.photos : [],
       },
+      });
+      if (created.status !== "DRAFT") {
+        await recordEventChange(tx, {
+          eventId: created.id,
+          eventTitle: created.title,
+          source: "ORGANISER",
+          kind: "BASELINE",
+          changedById: organiserId,
+          changedByEmail: auth.actorEmail ?? session.email,
+          organiserVerified: verified,
+          statusAtChange: created.status,
+          changes: baselineChanges(created as unknown as Record<string, unknown>),
+        });
+      }
+      return created;
       }),
     );
 

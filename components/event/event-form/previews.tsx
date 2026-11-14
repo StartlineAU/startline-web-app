@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, startTransition } from "react";
+import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { useRouter } from "next/navigation";
 import { fetchAuthSession } from "aws-amplify/auth";
 import Image from "next/image";
@@ -292,7 +293,7 @@ export function EventFullPreview({ form, onClose }: { form: FormState; onClose: 
                         [&_h3]:font-headline [&_h3]:font-black [&_h3]:text-base [&_h3]:text-light [&_h3]:mt-4 [&_h3]:mb-1
                         [&_h4]:font-headline [&_h4]:font-bold [&_h4]:text-sm [&_h4]:text-light [&_h4]:mt-3 [&_h4]:mb-1
                         [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_li]:mb-0.5"
-                      dangerouslySetInnerHTML={{ __html: form.description }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeRichTextClient(form.description) }}
                     />
                   ) : (
                     <p className="text-sm font-medium text-light italic">Full description will appear here.</p>
