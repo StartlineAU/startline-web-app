@@ -270,7 +270,13 @@ Each kind of notification also has its own switch on the organisation
 only as well. Off means no feed entry and no email: anything that sends one must
 check `wantsNotification` from `lib/organiser-notification-preferences.ts`.
 
-All seed users share password `Password123!`.
+The seed creates these users in Cognito, and sets one shared password for them,
+only in a pool listed in `SEED_COGNITO_WRITE_POOLS` (your own development pool,
+never staging or prod). The password is `SEED_PASSWORD` if set, otherwise a new
+random one printed at the end of the run. Against any other pool the seed only
+reads the existing users' subs. The seed refuses to run with `ENV=prod` or
+`NODE_ENV=production`. The admin seed user has to set up an authenticator app
+at first admin sign-in: admin access requires one (`lib/admin-mfa.ts`).
 
 | Email | Notes |
 |---|---|
@@ -639,7 +645,10 @@ Run the full E2E suite only when explicitly requested.
 
 ## GitHub
 
-Use `gh` CLI — **not** GitHub MCP (fails for this private org repo).
+Use `gh` CLI — **not** GitHub MCP (fails for this org repo).
+
+**This repository is public.** Never put credentials, real passwords or exploit
+detail for an unreleased security fix in code, commits, issues or PR text.
 
 **`main` and `prod` are protected.** Always PR, never push directly.
 
