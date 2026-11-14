@@ -5,7 +5,7 @@ import { getUserSession } from "@/lib/amplify-server";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
 import { isFreeEvent, waveIsOpen, type PublicWave } from "@/lib/event-types";
-import { ACTIVE_ORGANISER_WHERE } from "@/lib/event-lifecycle";
+import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 import {
   compactParticipant,
   athleteNameFromParticipant,
@@ -122,7 +122,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
-    if (event.status !== "APPROVED") {
+    // Same rule as checkout: closed once the event starts, whether or not the
+    // background worker has moved the row to IN_PROGRESS yet.
+    if (!registrationOpenAt(event)) {
       return NextResponse.json(
         { error: "This event is not currently accepting registrations." },
         { status: 409 },

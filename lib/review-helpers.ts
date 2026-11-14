@@ -94,8 +94,9 @@ export function displayNameFromUser(user: {
 }): string {
   if (user.name?.trim()) return user.name.trim().slice(0, 80);
   if (user.username?.trim()) return user.username.trim().slice(0, 80);
-  const local = user.email.split("@")[0]?.trim();
-  return (local || "Startline user").slice(0, 80);
+  // Never the email's local part: a review is public, and that is often the
+  // person's full name or a guessable address.
+  return "Startline athlete";
 }
 
 /** Reasons offered when reporting a review. The API accepts only these. */

@@ -1,17 +1,54 @@
 import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureDatabaseUrl } from "./helpers";
 
 // Spam & bot protection behavior that is deterministic without a real
 // Turnstile (server fails open when TURNSTILE_SECRET_KEY is unset, which it
 // is in the E2E environment).
 
-async function getOrganiserId(page: import("@playwright/test").Page): Promise<string> {
-  const eventsRes = await page.request.get("/api/events");
-  expect(eventsRes.ok()).toBeTruthy();
-  const { events } = await eventsRes.json();
-  const organiserId = events.find((e: { organiserId?: string }) => e.organiserId)?.organiserId;
-  expect(organiserId).toBeTruthy();
-  return organiserId as string;
+ensureDatabaseUrl();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
+
+// Reviews need an entry with the organiser, so the review test gives the
+// "user" bypass identity (Jade Nguyen) one on an Apex event and removes it after.
+const REVIEW_REG_ID = "e2e-spam-review-entry";
+const REVIEW_EVENT_ID = "seed-event-001";
+const REVIEWER_EMAIL = "jade.nguyen@startline.test";
+
+async function reviewableOrganiserId(): Promise<string> {
+  const event = await prisma.event.findUnique({
+    where: { id: REVIEW_EVENT_ID },
+    select: { organiserId: true },
+  });
+  const user = await prisma.user.findUnique({ where: { email: REVIEWER_EMAIL }, select: { id: true } });
+  expect(event, "seeded Apex event should exist").toBeTruthy();
+  expect(user, "seeded reviewer should exist").toBeTruthy();
+  await prisma.registration.upsert({
+    where: { id: REVIEW_REG_ID },
+    update: { status: "CONFIRMED" },
+    create: {
+      id: REVIEW_REG_ID,
+      eventId: REVIEW_EVENT_ID,
+      organiserId: event!.organiserId,
+      userId: user!.id,
+      athleteName: "Jade Nguyen",
+      athleteEmail: REVIEWER_EMAIL,
+      amountCents: 0,
+      platformFeeCents: 0,
+      feeStructure: "athlete",
+      status: "CONFIRMED",
+    },
+  });
+  return event!.organiserId;
 }
+
+test.afterAll(async () => {
+  await prisma.registration.deleteMany({ where: { id: REVIEW_REG_ID } });
+  await prisma.$disconnect();
+});
 
 test.describe("spam & bot protection", () => {
   test.beforeEach(async ({ page }) => {
@@ -22,7 +59,7 @@ test.describe("spam & bot protection", () => {
   });
 
   test("a user cannot create a second review for the same organiser", async ({ page }) => {
-    const organiserId = await getOrganiserId(page);
+    const organiserId = await reviewableOrganiserId();
 
     const body = {
       overallRating: 4,

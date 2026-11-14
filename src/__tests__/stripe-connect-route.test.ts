@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireOrganiser: vi.fn(),
-  organiser: { findUnique: vi.fn(), update: vi.fn() },
+  organiser: { findUnique: vi.fn(), updateMany: vi.fn() },
   createAccount: vi.fn(),
   retrieveAccount: vi.fn(),
   updateAccount: vi.fn(),
@@ -51,8 +51,8 @@ describe("POST /api/organiser/stripe/connect", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.configured.value = true;
-    mocks.requireOrganiser.mockResolvedValue({ session: { sub: ORGANISER } });
-    mocks.organiser.update.mockResolvedValue({});
+    mocks.requireOrganiser.mockResolvedValue({ session: { sub: ORGANISER, role: "OWNER" } });
+    mocks.organiser.updateMany.mockResolvedValue({ count: 1 });
     mocks.createAccount.mockResolvedValue({ id: "acct_new" });
     mocks.createAccountLink.mockResolvedValue({ url: "https://connect.stripe.com/setup/e/acct_new" });
     mocks.updateBalanceSettings.mockResolvedValue({});
@@ -65,6 +65,30 @@ describe("POST /api/organiser/stripe/connect", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it("refuses a manager: whoever onboards chooses where payouts go", async () => {
+    mocks.requireOrganiser.mockResolvedValue({ session: { sub: ORGANISER, role: "MANAGER" } });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(403);
+    expect(mocks.organiser.findUnique).not.toHaveBeenCalled();
+    expect(mocks.createAccount).not.toHaveBeenCalled();
+  });
+
+  it("uses the account another request stored first instead of overwriting it", async () => {
+    mocks.organiser.findUnique
+      .mockResolvedValueOnce({ stripeAccountId: null, email: "hugo@example.com" })
+      .mockResolvedValueOnce({ stripeAccountId: "acct_winner" });
+    mocks.organiser.updateMany.mockResolvedValue({ count: 0 });
+    const POST = await loadRoute();
+
+    const res = await POST();
+
+    expect(res.status).toBe(200);
+    expect(mocks.createAccountLink).toHaveBeenCalledWith(expect.objectContaining({ account: "acct_winner" }));
   });
 
   it("says payments are unavailable when the environment has no Stripe key", async () => {
@@ -108,8 +132,8 @@ describe("POST /api/organiser/stripe/connect", () => {
         account_onboarding: expect.objectContaining({ configurations: ["merchant", "recipient"] }),
       }),
     }));
-    expect(mocks.organiser.update).toHaveBeenCalledWith({
-      where: { id: ORGANISER },
+    expect(mocks.organiser.updateMany).toHaveBeenCalledWith({
+      where: { id: ORGANISER, stripeAccountId: null },
       data:  { stripeAccountId: "acct_new", stripeOnboardingComplete: false },
     });
   });
@@ -237,9 +261,10 @@ describe("POST /api/organiser/stripe/connect", () => {
     expect(res.status).toBe(200);
     expect(mocks.createAccount).toHaveBeenCalledTimes(1);
     expect(mocks.createAccountLink).toHaveBeenLastCalledWith(expect.objectContaining({ account: "acct_new" }));
-    expect(mocks.organiser.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { stripeAccountId: "acct_new", stripeOnboardingComplete: false } }),
-    );
+    expect(mocks.organiser.updateMany).toHaveBeenCalledWith({
+      where: { id: ORGANISER, stripeAccountId: "acct_test_mode" },
+      data: { stripeAccountId: "acct_new", stripeOnboardingComplete: false },
+    });
   });
 
   it("does not replace the account for other Stripe errors, and logs the Stripe details", async () => {
@@ -265,7 +290,7 @@ describe("POST /api/organiser/stripe/connect", () => {
     const res = await POST();
 
     expect(res.status).toBe(503);
-    expect(mocks.organiser.update).not.toHaveBeenCalled();
+    expect(mocks.organiser.updateMany).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("create account"),
       expect.objectContaining({ code: "platform_account_required" }),

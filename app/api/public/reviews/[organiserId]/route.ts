@@ -89,6 +89,15 @@ export async function POST(
   const botBlocked = await assertTurnstile(req, parsed.data, "review");
   if (botBlocked) return botBlocked;
 
+  // An organisation's own people cannot review it.
+  const member = await prisma.organiserMember.findFirst({
+    where: { organiserId, userId: user.id },
+    select: { id: true },
+  });
+  if (member) {
+    return NextResponse.json({ error: "You can't review an organisation you belong to." }, { status: 403 });
+  }
+
   const existing = await prisma.review.findFirst({
     where: { organiserId, userId: user.id },
     select: { id: true },
@@ -124,6 +133,25 @@ export async function POST(
     eventTitle = event.title;
   }
 
+  // Only someone who entered one of this organiser's events (that event, when
+  // one is named) can review them. Without this anyone with an account could
+  // post as many one-star or five-star reviews as they had accounts.
+  const entered = await prisma.registration.findFirst({
+    where: {
+      organiserId,
+      userId: user.id,
+      status: "CONFIRMED",
+      ...(eventId ? { eventId } : {}),
+    },
+    select: { id: true },
+  });
+  if (!entered) {
+    return NextResponse.json(
+      { error: eventId ? "Only athletes who entered this event can review it." : "Only athletes who entered one of this organiser's events can review them." },
+      { status: 403 },
+    );
+  }
+
   const reviewerName = displayNameFromUser(user);
 
   try {
@@ -140,7 +168,8 @@ export async function POST(
         title,
         body: reviewBody,
         reviewerName,
-        isVerified: false,
+        // Every review now comes from an entrant.
+        isVerified: true,
         isPublished: true,
       },
       select: { id: true, reviewerName: true, eventId: true, eventTitle: true },

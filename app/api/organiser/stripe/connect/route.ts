@@ -47,6 +47,14 @@ export async function POST() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
   const session = auth.session;
+  // The connected account receives every payout. Whoever completes Stripe's
+  // onboarding chooses the bank account it pays into, so only an Owner can.
+  if (session.role !== "OWNER") {
+    return NextResponse.json(
+      { error: "Only an Owner can set up or change payouts." },
+      { status: 403 },
+    );
+  }
 
   // Checked up front rather than left to getStripe() to throw, so a deployment
   // without the key says so instead of looking like a Stripe outage.
@@ -78,18 +86,28 @@ export async function POST() {
   // account is left for Stripe to ask about once it knows the entity type.
   const prefill = individualPrefill(organiser.legalName, organiser.dob);
 
-  const newAccount = async () => {
+  // Store a new account only over the id this request started from. Two
+  // concurrent requests must not each create an account with the last write
+  // winning: the loser uses whatever the winner stored.
+  const newAccount = async (replacing: string | null) => {
     const account = await createConnectedAccount(stripe, organiser.email);
-    await prisma.organiser.update({
-      where: { id: session.sub },
+    const stored = await prisma.organiser.updateMany({
+      where: { id: session.sub, stripeAccountId: replacing },
       data:  { stripeAccountId: account.id, stripeOnboardingComplete: false },
     });
-    return account.id;
+    if (stored.count === 1) return account.id;
+    console.error("Stripe connect: another request stored an account first; unused account", account.id);
+    const current = await prisma.organiser.findUnique({
+      where: { id: session.sub },
+      select: { stripeAccountId: true },
+    });
+    if (!current?.stripeAccountId) throw new Error("Connected account could not be stored.");
+    return current.stripeAccountId;
   };
 
   let accountId: string;
   try {
-    accountId = organiser.stripeAccountId ?? (await newAccount());
+    accountId = organiser.stripeAccountId ?? (await newAccount(null));
   } catch (err) {
     logStripeError("create account", err);
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 503 });
@@ -127,7 +145,7 @@ export async function POST() {
 
   // The stored account is unusable. Replace it once and try again.
   try {
-    const link = await onboardingLink(await newAccount());
+    const link = await onboardingLink(await newAccount(organiser.stripeAccountId));
     return NextResponse.json({ url: link.url });
   } catch (err) {
     logStripeError("replace account", err);

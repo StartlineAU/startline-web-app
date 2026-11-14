@@ -287,6 +287,16 @@ describe("POST /api/registrations/free/rsvp", () => {
     ...over,
   });
 
+  it("refuses an RSVP once the event has started", async () => {
+    mocks.session.mockReturnValue(account());
+    mocks.eventFindUnique.mockResolvedValue(freeEvent({ startsAtUtc: new Date(Date.now() - 60_000) }));
+
+    const res = await postRsvp({ eventId: "evt-free", waveLabel: "General", acceptedTerms: true });
+
+    expect(res.status).toBe(409);
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
   it("reports an existing entry without writing anything", async () => {
     mocks.session.mockReturnValue(account());
     mocks.registrationFindFirst.mockResolvedValue({ id: "existing-registration" });
