@@ -266,7 +266,7 @@ test.describe("team registration", () => {
     await page.goto(`/organiser/new-listing?id=${PAID_TEAM_ID}`);
 
     const ticket = page.getByTestId("ticket-row").first();
-    await expect(ticket.getByLabel("People per team")).toHaveValue("4");
+    await expect(ticket.getByLabel("People per team", { exact: true })).toHaveValue("4");
     await expect(ticket.getByText("Price per person")).toBeVisible();
     await expect(ticket.getByText("Teams available")).toBeVisible();
     await expect(page.getByTestId("fee-breakdown-team")).toContainText(/a team of 4 pays/i);
