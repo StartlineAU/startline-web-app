@@ -114,7 +114,8 @@ test.describe("linked Google and Apple accounts", () => {
     const settings = await openSettings(page);
     await settings.getByRole("button", { name: "Connect", exact: true }).first().click();
     // An account with a password confirms it before a new way in is added.
-    await settings.getByLabel("Password").fill("Password123!");
+    // exact: the change-password form's "Current password" etc. also match.
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
     await expect(settings.getByLabel("Authenticator code")).toHaveCount(0);
     await settings.getByRole("button", { name: "Connect Google" }).click();
 

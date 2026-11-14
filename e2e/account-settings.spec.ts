@@ -157,7 +157,8 @@ test.describe("deleting an account", () => {
     await settings.getByLabel("Type DELETE to confirm").fill("DELETE");
     // A password account also confirms with its password.
     await expect(confirm).toBeDisabled();
-    await settings.getByLabel("Password").fill("Password123!");
+    // exact: the change-password form's "Current password" etc. also match.
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
     await expect(confirm).toBeEnabled();
 
     // Not clicked: the API is checked directly so nothing here depends on a
