@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
           refundPercent: true,
           refundOutsidePolicy: true,
           platformFeeCents: true,
+          stripeFeeCents: true,
           feeStructure: true,
           status: true,
           stripePaymentIntentId: true,

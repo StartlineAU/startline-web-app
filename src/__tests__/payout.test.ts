@@ -57,7 +57,8 @@ const entry = (
   amountCents: number,
   platformFeeCents: number,
   feeStructure: string,
-) => ({ amountCents, platformFeeCents, feeStructure });
+  stripeFeeCents = 0,
+) => ({ amountCents, platformFeeCents, stripeFeeCents, feeStructure });
 
 function operation(overrides: Record<string, unknown> = {}) {
   return {
@@ -154,6 +155,19 @@ describe("registrationPayoutCents", () => {
     expect(registrationPayoutCents(entry(100, 540, "organiser"))).toBe(0);
   });
 
+  // #470: the organiser absorbs Stripe's processing fee under both structures.
+  it("deducts the Stripe fee when the athlete paid the booking fee", () => {
+    expect(registrationPayoutCents({ ...entry(5000, 343, "athlete"), stripeFeeCents: 124 })).toBe(4876);
+  });
+
+  it("deducts the Stripe fee on top of an absorbed booking fee", () => {
+    expect(registrationPayoutCents({ ...entry(5000, 343, "organiser"), stripeFeeCents: 118 })).toBe(4539);
+  });
+
+  it("leaves entries paid before the change untouched", () => {
+    expect(registrationPayoutCents({ ...entry(5000, 343, "athlete"), stripeFeeCents: 0 })).toBe(5000);
+  });
+
   it("uses each entry's own snapshot in a mixed event", () => {
     expect(registrationsPayoutCents([
       entry(10000, 540, "athlete"),
@@ -189,7 +203,7 @@ describe("getPayoutEligibleEvents", () => {
         registrations: {
           where: { status: "CONFIRMED" },
           select: {
-            amountCents: true, platformFeeCents: true, feeStructure: true, status: true,
+            amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true, status: true,
           },
         },
       }),
@@ -263,6 +277,36 @@ describe("runPayoutForEvent", () => {
       where: { id: "event-1" },
       data: expect.objectContaining({ payoutAmountCents: 19460 }),
     });
+  });
+
+  // #470: the Stripe fee must survive the database read, not just the helper.
+  // A select without stripeFeeCents would pay the organiser 9657 here.
+  it("pays out the net after the Stripe fee the organiser absorbs", async () => {
+    const withStripeFees = [
+      entry(5000, 343, "athlete", 124),
+      entry(5000, 343, "organiser", 118),
+    ];
+    mocks.event.findUnique.mockResolvedValue(event({ registrations: withStripeFees }));
+    mocks.payoutOperation.create.mockResolvedValue(operation({ amountCents: 9415 }));
+    mocks.payoutOperation.findUnique.mockResolvedValue(operation({ amountCents: 9415 }));
+
+    await expect(runPayoutForEvent("event-1")).resolves.toEqual({
+      netCents: 9415,
+      alreadyProcessed: false,
+      stripePayoutId: "po_1",
+    });
+
+    expect(mocks.event.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        registrations: expect.objectContaining({
+          select: expect.objectContaining({ stripeFeeCents: true }),
+        }),
+      }),
+    }));
+    expect(mocks.createPayout).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 9415 }),
+      expect.objectContaining({ stripeAccount: "acct_1" }),
+    );
   });
 
   it("corrects an unstarted operation recorded with the old gross amount", async () => {

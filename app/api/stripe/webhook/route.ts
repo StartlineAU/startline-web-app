@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { parseParticipantsFromMetadata, parseTeamNamesFromMetadata } from "@/lib/stripe-webhook";
 import { groupOrderTeams } from "@/lib/team-tickets";
-import { calculateTotalWithFee } from "@/lib/platform-fee";
+import { allocateStripeFeeCents, calculateTotalWithFee } from "@/lib/platform-fee";
 import {
   announceRegistrations,
   ensureParticipantUsers,
@@ -192,7 +192,24 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  const entries = priced as PricedEntry[];
+  const pricedEntries = priced as PricedEntry[];
+
+  // The Stripe fee the organiser absorbs is whatever the application fee took
+  // beyond the booking fee (#470). Read it off the intent itself rather than
+  // its metadata. An intent created before the uplift, or in dev direct-charge
+  // mode with no application fee, comes out as zero, so its payout is unchanged.
+  const bookingFeeCents = pricedEntries.reduce((sum, entry) => sum + entry.platformFeeCents, 0);
+  const orderStripeFeeCents = Math.max(0, (paymentIntent.application_fee_amount ?? 0) - bookingFeeCents);
+  const stripeFeeShares = allocateStripeFeeCents(
+    orderStripeFeeCents,
+    pricedEntries.map((entry) => event.feeStructure === "athlete"
+      ? entry.priceCents + entry.platformFeeCents
+      : entry.priceCents),
+  );
+  const entries = pricedEntries.map((entry, index) => ({
+    ...entry,
+    stripeFeeCents: stripeFeeShares[index],
+  }));
 
   // For guest participants (no userId in metadata), create Cognito accounts +
   // Prisma Users up front so the confirmations below can link them.

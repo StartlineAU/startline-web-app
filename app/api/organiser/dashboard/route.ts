@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
+import { entryOrganiserNetCents } from "@/lib/platform-fee";
 import {
   buildTrendDays,
   computeCurrentStats,
@@ -48,6 +49,8 @@ export async function GET(req: NextRequest) {
           eventId: true,
           amountCents: true,
           platformFeeCents: true,
+          stripeFeeCents: true,
+          feeStructure: true,
           createdAt: true,
         },
       }),
@@ -67,7 +70,7 @@ export async function GET(req: NextRequest) {
     let allTimeRevenueCents = 0;
     for (const r of allConfirmed) {
       confirmedByEvent.set(r.eventId, (confirmedByEvent.get(r.eventId) ?? 0) + 1);
-      allTimeRevenueCents += Math.max(0, r.amountCents - r.platformFeeCents);
+      allTimeRevenueCents += entryOrganiserNetCents(r);
     }
 
     const now = new Date();
