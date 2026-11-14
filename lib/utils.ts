@@ -53,12 +53,8 @@ export function formatLevel(level: string): string {
 }
 
 const DISCIPLINE_LABELS: Record<string, string> = {
-  crossfit: "CrossFit",
   running: "Running",
-  hybrid: "Hybrid",
-  cycling: "Cycling",
-  swimming: "Swimming",
-  triathlon: "Triathlon",
+  run_club: "Run Clubs",
   other: "Other",
 };
 

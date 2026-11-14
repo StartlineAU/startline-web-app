@@ -55,7 +55,7 @@ async function ensureFixture(organiserId: string) {
   const data = {
     status: "APPROVED" as const,
     title: "Stripe E2E Playwright fixture",
-    discipline: "crossfit",
+    discipline: "running",
     eventDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
     startTime: "07:30",
     endTime: "17:00",

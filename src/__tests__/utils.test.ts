@@ -98,7 +98,7 @@ describe("sortEventsByDate", () => {
 describe("filterEvents", () => {
   const today = new Date();
   const baseEvents: UserEvent[] = [
-    { date: format(addDays(today, 7), "yyyy-MM-dd"), type: "crossfit", state: "vic", format: "team", level: "elite", fromPrice: 150, title: "CrossFit Melbourne", city: "Melbourne", location: "Melbourne Arena" } as UserEvent,
+    { date: format(addDays(today, 7), "yyyy-MM-dd"), type: "run_club", state: "vic", format: "team", level: "elite", fromPrice: 150, title: "Melbourne Run Club", city: "Melbourne", location: "Melbourne Arena" } as UserEvent,
     { date: format(addDays(today, -365), "yyyy-MM-dd"), type: "running", state: "qld", format: "individual", level: "open", fromPrice: 40, title: "Old Event", city: "Brisbane", location: "GABBA" } as UserEvent,
     { date: format(addDays(today, 30), "yyyy-MM-dd"), type: "running", state: "nsw", format: "individual", level: "open", fromPrice: 40, title: "Fun Run", city: "Sydney", location: "Park" } as UserEvent,
   ];
@@ -112,9 +112,9 @@ describe("filterEvents", () => {
   });
 
   it("filters by type", () => {
-    const result = filterEvents(baseEvents, { ...emptyFilters, types: ["crossfit"] });
+    const result = filterEvents(baseEvents, { ...emptyFilters, types: ["run_club"] });
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe("crossfit");
+    expect(result[0].type).toBe("run_club");
   });
 
   it("matches the search query against organiser-entered divisions", () => {

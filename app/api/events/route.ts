@@ -15,12 +15,11 @@ import type {
   FilterState,
   SortOption,
 } from "@/types";
+import { EVENT_TYPE_OPTIONS } from "@/types";
 
 export const dynamic = "force-dynamic";
 
-const EVENT_TYPES: readonly EventType[] = [
-  "crossfit", "running", "hybrid", "swimming", "cycling", "triathlon",
-];
+const EVENT_TYPES: readonly EventType[] = EVENT_TYPE_OPTIONS.map((o) => o.value);
 const AUSTRALIAN_STATES: readonly AustralianState[] = [
   "nsw", "vic", "qld", "wa", "sa", "tas", "act", "nt",
 ];

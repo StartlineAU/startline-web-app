@@ -344,10 +344,10 @@ test.describe("new listing wizard", () => {
     await expect(page.getByText("Review Table Classic").first()).toBeVisible();
   });
 
-  // A saved event whose discipline has no picker (crossfit, hybrid, triathlon)
+  // A saved event whose discipline has no picker (run_club, other)
   // still carries categories on the record. The summary shows what will
   // publish, so it must list them rather than drop them because the picker
-  // list does not apply. seed-event-002 is a pending hybrid event owned by
+  // list does not apply. seed-event-002 is a pending "other" event owned by
   // Apex; published events are intentionally locked from organiser editing.
   test("review table shows saved categories for a discipline with no picker", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });

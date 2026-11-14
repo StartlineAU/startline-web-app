@@ -40,8 +40,7 @@ const INTENSITY_LABELS: Record<string, string> = {
 };
 
 export const DISC_LABEL: Record<string, string> = {
-  crossfit: "CrossFit", running: "Running", hybrid: "Hybrid",
-  cycling: "Cycling", swimming: "Swimming", other: "Other",
+  running: "Running", run_club: "Run Club", other: "Other",
 };
 export const MONTHS_SHORT = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 

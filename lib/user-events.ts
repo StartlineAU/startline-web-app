@@ -3,14 +3,9 @@ import type { UserEvent, TicketDrop, EventType, AustralianState } from "@/types"
 
 function mapDiscipline(discipline: string): EventType {
   const d = discipline.toLowerCase();
-  if (d === "crossfit")       return "crossfit";
-  if (d === "running")        return "running";
-  if (d === "hybrid")         return "hybrid";
-  if (d === "swimming")       return "swimming";
-  if (d === "cycling")        return "cycling";
-  if (d === "triathlon")      return "triathlon";
-
-  return "running";
+  if (d === "running")  return "running";
+  if (d === "run_club") return "run_club";
+  return "other";
 }
 
 function mapState(state: string): AustralianState {
