@@ -94,7 +94,9 @@ const post = (handler: (req: NextRequest) => Promise<Response>, path: string, bo
     body: JSON.stringify(body),
   }));
 
-const postFree = (body: unknown) => post(registerFree, "/api/registrations/free", body);
+// The review step only sends this after the terms box is ticked.
+const postFree = (body: Record<string, unknown>) =>
+  post(registerFree, "/api/registrations/free", { acceptedTerms: true, ...body });
 const postRsvp = (body: unknown) => post(registerFreeRsvp, "/api/registrations/free/rsvp", body);
 const getRsvp = (eventId = "evt-free") =>
   getRsvpStatus(new NextRequest(
@@ -182,6 +184,43 @@ describe("POST /api/registrations/free", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("has to be paid for");
     expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to commit an entry without the terms and waiver accepted", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postFree({ eventId: "evt-free", participants: [participant()], acceptedTerms: false });
+
+    expect(res.status).toBe(400);
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("stores the waiver as accepted only because the request accepted it", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    await postFree({ eventId: "evt-free", participants: [participant({ waiverAccepted: false })] });
+
+    expect(mocks.registrationCreateMany.mock.calls[0][0].data[0].waiverAccepted).toBe(true);
+  });
+
+  it("refuses an order over the ticket limit", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postFree({
+      eventId: "evt-free",
+      participants: Array.from({ length: 11 }, (_, i) => participant({ email: `p${i}@example.com` })),
+    });
+
+    expect(res.status).toBe(400);
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses over-long participant fields", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+
+    const res = await postFree({ eventId: "evt-free", participants: [participant({ firstName: "x".repeat(101) })] });
+
+    expect(res.status).toBe(400);
   });
 
   it("holds the event cap inside the transaction, not just before it", async () => {

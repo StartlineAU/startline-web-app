@@ -179,6 +179,12 @@ export async function insertConfirmedRegistrations(opts: {
   userIdByEmail: Record<string, string>;
   stripePaymentIntentId: string | null;
   /**
+   * Whether the athlete accepted the terms and the event waiver for this order,
+   * as recorded by the server: the free paths require it in the request, a paid
+   * order carries it on its PaymentIntent. Stored as is, never assumed.
+   */
+  termsAccepted: boolean;
+  /**
    * Refuse an entry for someone who already holds one for this event. A paid
    * order is protected from double submission by its PaymentIntent, which is
    * created once and checked for on the way in; a free order has no such token,
@@ -312,7 +318,7 @@ export async function insertConfirmedRegistrations(opts: {
           emergencyContactName: expanded.emergencyContactName,
           emergencyContactPhone: expanded.emergencyContactPhone,
           medicalNotes: expanded.medicalNotes || null,
-          waiverAccepted: true,
+          waiverAccepted: opts.termsAccepted,
           estimatedFinishMinutes: participant.eft ?? null,
           waveLabel,
           amountCents: priceCents,

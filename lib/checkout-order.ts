@@ -7,6 +7,8 @@ import {
   validateParticipants,
   athleteNameFromParticipant,
   applySharedEmergencyContact,
+  MAX_MEDICAL_NOTES_LENGTH,
+  MAX_REGISTRATION_PARTICIPANTS,
   type RegistrationFormData,
   type EmergencyContact,
 } from "@/lib/registration-form";
@@ -24,17 +26,25 @@ export type CheckoutWave = {
   date?: string;
 };
 
+// Every field is bounded. The client caps the order at
+// MAX_REGISTRATION_PARTICIPANTS, but only the server's limit counts: each
+// participant can mean a Cognito lookup, an account and a row.
+const NAME_MAX = 100;
+const EMAIL_MAX = 254;
+const PHONE_MAX = 32;
+const SHORT_MAX = 40;
+
 const participantSchema = z.object({
-  firstName: z.string(),
-  lastName: z.string(),
-  dateOfBirth: z.string(),
-  gender: z.string(),
-  email: z.string(),
-  mobile: z.string(),
-  emergencyContactName: z.string(),
-  emergencyContactPhone: z.string(),
-  medicalNotes: z.string(),
-  estimatedFinish: z.string(),
+  firstName: z.string().max(NAME_MAX),
+  lastName: z.string().max(NAME_MAX),
+  dateOfBirth: z.string().max(SHORT_MAX),
+  gender: z.string().max(SHORT_MAX),
+  email: z.string().max(EMAIL_MAX),
+  mobile: z.string().max(PHONE_MAX),
+  emergencyContactName: z.string().max(NAME_MAX),
+  emergencyContactPhone: z.string().max(PHONE_MAX),
+  medicalNotes: z.string().max(MAX_MEDICAL_NOTES_LENGTH),
+  estimatedFinish: z.string().max(SHORT_MAX),
   waiverAccepted: z.boolean(),
   waveLabel: z.string().max(255).optional(),
 });
@@ -43,20 +53,26 @@ export const checkoutSchema = z.object({
   eventId: z.string().max(255).optional(),
   waveLabel: z.string().max(255).optional(),
   groupRegistration: z.boolean().optional(),
-  emergencyContact: z.object({ name: z.string(), phone: z.string() }).optional(),
+  emergencyContact: z.object({ name: z.string().max(NAME_MAX), phone: z.string().max(PHONE_MAX) }).optional(),
   turnstileToken: z.string().max(4000).optional(),
-  participants: z.array(participantSchema).optional(),
+  participants: z
+    .array(participantSchema)
+    .max(MAX_REGISTRATION_PARTICIPANTS, `An order can hold at most ${MAX_REGISTRATION_PARTICIPANTS} tickets.`)
+    .optional(),
+  // The athlete ticked the terms and waiver on the review step. Required by the
+  // free path, which commits; checkout records it on the PaymentIntent instead.
+  acceptedTerms: z.boolean().optional(),
   // Legacy single-participant payload fields (pre multi-ticket).
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  dateOfBirth: z.string().optional(),
-  gender: z.string().optional(),
-  email: z.string().optional(),
-  mobile: z.string().optional(),
-  emergencyContactName: z.string().optional(),
-  emergencyContactPhone: z.string().optional(),
-  medicalNotes: z.string().optional(),
-  estimatedFinish: z.string().optional(),
+  firstName: z.string().max(NAME_MAX).optional(),
+  lastName: z.string().max(NAME_MAX).optional(),
+  dateOfBirth: z.string().max(SHORT_MAX).optional(),
+  gender: z.string().max(SHORT_MAX).optional(),
+  email: z.string().max(EMAIL_MAX).optional(),
+  mobile: z.string().max(PHONE_MAX).optional(),
+  emergencyContactName: z.string().max(NAME_MAX).optional(),
+  emergencyContactPhone: z.string().max(PHONE_MAX).optional(),
+  medicalNotes: z.string().max(MAX_MEDICAL_NOTES_LENGTH).optional(),
+  estimatedFinish: z.string().max(SHORT_MAX).optional(),
   waiverAccepted: z.boolean().optional(),
 });
 

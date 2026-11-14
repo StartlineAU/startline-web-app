@@ -592,7 +592,9 @@ function RegisterContent() {
       const res = await fetch("/api/registrations/free", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderPayload()),
+        // Only reachable from the review step's confirm button, which needs the
+        // terms box ticked.
+        body: JSON.stringify({ ...orderPayload(), acceptedTerms: true }),
       });
       const data = (await res.json()) as { registrationIds?: string[]; error?: string };
       if (!res.ok || !data.registrationIds?.length) {

@@ -169,6 +169,8 @@ export async function POST(req: NextRequest) {
       buyerUserId: session.sub,
       userIdByEmail: {},
       stripePaymentIntentId: null,
+      // The request schema requires acceptedTerms to be true.
+      termsAccepted: true,
       rejectExistingEntries: true,
       rejectExistingUserEntries: true,
       duplicateStatuses: RSVP_DUPLICATE_STATUSES,

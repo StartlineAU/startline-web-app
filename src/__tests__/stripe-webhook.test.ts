@@ -309,6 +309,21 @@ describe("POST /api/stripe/webhook", () => {
     expect(created.status).toBe("CANCELLED");
   });
 
+  it("stores the waiver as accepted only when the PaymentIntent recorded it", async () => {
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+    await post({ id: "pi_123" });
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].waiverAccepted).toBe(false);
+
+    mocks.registration.createMany.mockClear();
+    signedEvent({
+      id: "pi_124",
+      amount_received: 10540,
+      metadata: metadata({ ...ONE_PARTICIPANT, termsAcceptedAt: "2026-11-14T00:00:00.000Z" }),
+    });
+    await post({ id: "pi_124" });
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].waiverAccepted).toBe(true);
+  });
+
   it("skips announcing when another delivery recorded the payment under the lock", async () => {
     // Fast path sees nothing; the check under the event lock finds the rows.
     mocks.registration.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);

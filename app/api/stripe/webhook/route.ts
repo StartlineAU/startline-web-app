@@ -193,6 +193,8 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     buyerUserId,
     userIdByEmail,
     stripePaymentIntentId: paymentIntent.id,
+    // Written by /api/checkout/accept-terms just before the card is charged.
+    termsAccepted: Boolean(meta.termsAcceptedAt),
   });
 
   if (!outcome.ok) {
