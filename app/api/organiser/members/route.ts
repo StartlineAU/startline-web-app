@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
-import { canAddMember, MAX_ORGS_PER_USER } from "@/lib/organiser-members";
+import { rateLimit } from "@/lib/rate-limit";
+import { organiserUrl } from "@/lib/portal-domains";
+import { sendOrganiserInviteEmail } from "@/lib/email";
+import {
+  INVITE_TTL_DAYS,
+  inviteExpiry,
+  newInviteToken,
+  normaliseInviteEmail,
+} from "@/lib/organiser-invites";
 import { z } from "zod";
 
-const addMemberSchema = z.object({ email: z.string().max(255) });
+const addMemberSchema = z.object({ email: z.string().trim().max(254).email() });
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 // GET /api/organiser/members
 // Lists all members of the active organiser.
@@ -34,8 +44,17 @@ export async function GET() {
         })
       : null;
 
+    // Invitations still waiting for an answer. Accepted and expired ones are
+    // history, not roster.
+    const invites = await prisma.organiserInvite.findMany({
+      where: { organiserId: session.sub, acceptedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, email: true, createdAt: true, expiresAt: true },
+    });
+
     return NextResponse.json({
       members,
+      invites,
       role: session.role,
       currentMemberId: currentMember?.id ?? null,
     });
@@ -45,8 +64,14 @@ export async function GET() {
 }
 
 // POST /api/organiser/members
-// Body: { email } — adds the user (who must already have a User account) as a MANAGER member.
-// Owner only.
+// Body: { email }. Owner only. Sends an invitation to join as a MANAGER; the
+// person becomes a member only when they accept it, signed in with that
+// address (POST /api/organiser/invites/accept).
+//
+// The answer is the same whether or not the address has an account, so this
+// cannot be used to find out who is on Startline. The invite link comes back
+// too, so the Owner can pass it on themselves: it is useless to anyone who is
+// not signed in as the invited address.
 export async function POST(req: NextRequest) {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -55,48 +80,67 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  let email = "";
-  try {
-    const parsed = addMemberSchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-    }
-    email = parsed.data.email.trim().toLowerCase();
-  } catch {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  const parsed = addMemberSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   }
-  if (!email) return NextResponse.json({ error: "Email is required." }, { status: 400 });
+  const email = normaliseInviteEmail(parsed.data.email);
+
+  // Each invitation sends an email from Startline, so the organisation's rate
+  // is capped as well as the caller's.
+  const blocked = await rateLimit(req, {
+    prefix: "organiser-invite",
+    limit: 30,
+    windowSeconds: 24 * 60 * 60,
+    identifier: session.sub,
+    failClosed: true,
+  });
+  if (blocked) return blocked;
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return NextResponse.json({ error: "No account found for that email." }, { status: 404 });
-    }
-    if (user.id === session.sub) {
-      return NextResponse.json({ error: "That user is already a member." }, { status: 400 });
-    }
-
-    const existing = await prisma.organiserMember.findUnique({
-      where: { organiserId_userId: { organiserId: session.sub, userId: user.id } },
+    const alreadyMember = await prisma.organiserMember.findFirst({
+      where: { organiserId: session.sub, user: { email: { equals: email, mode: "insensitive" } } },
+      select: { id: true },
     });
-    const membershipCount = await prisma.organiserMember.count({ where: { userId: user.id } });
-
-    const check = canAddMember(Boolean(existing), membershipCount);
-    if (!check.allowed) {
-      return NextResponse.json({ error: check.reason }, { status: 400 });
+    if (alreadyMember) {
+      return NextResponse.json({ error: "That person is already a member." }, { status: 409 });
     }
 
-    const membership = await prisma.organiserMember.create({
-      data: { organiserId: session.sub, userId: user.id, role: "MANAGER" },
-      select: {
-        id: true,
-        role: true,
-        createdAt: true,
-        user: { select: { id: true, name: true, email: true } },
-      },
+    const inviter = await getUserSession();
+    const organisation = await prisma.organiser.findUnique({
+      where: { id: session.sub },
+      select: { orgName: true },
     });
-    return NextResponse.json({ member: membership }, { status: 201 });
-  } catch {
+    const { token, tokenHash } = newInviteToken();
+
+    // A new invitation replaces any earlier one for the same address, so only
+    // the latest link works.
+    const invite = await prisma.$transaction(async (tx) => {
+      await tx.organiserInvite.deleteMany({
+        where: { organiserId: session.sub, email, acceptedAt: null },
+      });
+      return tx.organiserInvite.create({
+        data: {
+          organiserId: session.sub,
+          email,
+          tokenHash,
+          invitedById: inviter?.sub ?? null,
+          expiresAt: inviteExpiry(),
+        },
+        select: { id: true, email: true, createdAt: true, expiresAt: true },
+      });
+    });
+
+    const inviteUrl = organiserUrl(`/organiser/invite?token=${encodeURIComponent(token)}`, SITE);
+    await sendOrganiserInviteEmail(email, {
+      organisationName: organisation?.orgName || "An organisation",
+      inviteUrl,
+      expiresInDays: INVITE_TTL_DAYS,
+    }).catch((err: unknown) => console.error("Organiser invite email failed:", err));
+
+    return NextResponse.json({ invite, inviteUrl }, { status: 201 });
+  } catch (err) {
+    console.error("Organiser invite error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 }

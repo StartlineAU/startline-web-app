@@ -205,3 +205,17 @@ describe("account security notice", () => {
     expect(email.html).not.toContain("<b>x@example.com</b>");
   });
 });
+
+describe("organiser invitation", () => {
+  it("names the organisation and links to the invitation", async () => {
+    const { buildOrganiserInviteEmail } = await import("@/lib/email");
+    const email = await buildOrganiserInviteEmail({
+      organisationName: "Apex Endurance Events",
+      inviteUrl: "https://organiser.startlineau.com/organiser/invite?token=abc",
+      expiresInDays: 7,
+    });
+    expect(email.subject).toContain("Apex Endurance Events");
+    expect(email.html).toContain("https://organiser.startlineau.com/organiser/invite?token=abc");
+    expect(email.text).toMatch(/Nothing changes unless you accept/);
+  });
+});

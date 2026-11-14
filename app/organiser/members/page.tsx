@@ -15,11 +15,26 @@ interface Member {
   user: { id: string; name: string | null; email: string };
 }
 
+interface Invite {
+  id: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+type MembersData = {
+  members: Member[];
+  invites: Invite[];
+  role: "OWNER" | "MANAGER" | null;
+  currentMemberId: string | null;
+};
+
 export default function MembersPage() {
   const router            = useRouter();
   const [addEmail,      setAddEmail]      = useState("");
   const [adding,        setAdding]        = useState(false);
   const [addMsg,        setAddMsg]        = useState("");
+  const [sentInvite,    setSentInvite]    = useState<{ email: string; url: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<Member | null>(null);
   const [confirmLeave,  setConfirmLeave]  = useState(false);
   const [transferTo,    setTransferTo]    = useState<Member | null>(null);
@@ -31,11 +46,7 @@ export default function MembersPage() {
     if (response.status === 403) throw new Error("You do not have access to members.");
     if (!response.ok) throw new Error("Could not load members.");
     try {
-      return await response.json() as {
-        members: Member[];
-        role: "OWNER" | "MANAGER" | null;
-        currentMemberId: string | null;
-      };
+      return await response.json() as MembersData;
     } catch {
       throw new Error("Could not load members.");
     }
@@ -46,12 +57,9 @@ export default function MembersPage() {
     loading,
     error: loadError,
     reload: reloadMembers,
-  } = useApiResource<{
-    members: Member[];
-    role: "OWNER" | "MANAGER" | null;
-    currentMemberId: string | null;
-  }>(fetchMembers);
+  } = useApiResource<MembersData>(fetchMembers);
   const members = data?.members ?? null;
+  const invites = data?.invites ?? [];
   const role = data?.role ?? null;
   const currentMemberId = data?.currentMemberId ?? null;
   const error = loadError ?? actionError;
@@ -63,6 +71,7 @@ export default function MembersPage() {
     if (!email) return;
     setAdding(true);
     setAddMsg("");
+    setSentInvite(null);
     try {
       const r = await fetch("/api/organiser/members", {
         method: "POST",
@@ -71,16 +80,35 @@ export default function MembersPage() {
       });
       const data = await r.json();
       if (!r.ok) {
-        setAddMsg(data.error ?? "Could not add member.");
+        setAddMsg(data.error ?? "Could not send the invitation.");
       } else {
         setAddMsg("");
         setAddEmail("");
+        setSentInvite({ email: data.invite.email, url: data.inviteUrl });
         void reloadMembers();
       }
     } catch {
-      setAddMsg("Could not add member.");
+      setAddMsg("Could not send the invitation.");
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleRevoke = async (invite: Invite) => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/organiser/members/invites/${invite.id}`, { method: "DELETE" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setActionError(data.error ?? "Could not withdraw the invitation.");
+      } else {
+        setActionError("");
+        void reloadMembers();
+      }
+    } catch {
+      setActionError("Could not withdraw the invitation.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -161,7 +189,7 @@ export default function MembersPage() {
         </div>
       )}
 
-      {/* Add member (Owner only) */}
+      {/* Invite a member (Owner only) */}
       {isOwner && (
         <div className="mb-8 bg-dark border border-dark-lighter rounded-2xl p-4">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -181,13 +209,49 @@ export default function MembersPage() {
               disabled={adding || !addEmail.trim()}
               className="inline-flex items-center justify-center gap-2 h-[42px] px-5 rounded-xl bg-primary text-dark font-headline text-[12px] font-bold uppercase tracking-widest hover:brightness-95 transition-all disabled:opacity-40"
             >
-              <Plus className="w-4 h-4" /> {adding ? "Adding…" : "Add member"}
+              <Plus className="w-4 h-4" /> {adding ? "Sending…" : "Invite member"}
             </button>
           </div>
           {addMsg && <p className="mt-2 font-headline text-[12px] font-bold uppercase tracking-widest text-red-400">{addMsg}</p>}
+          {sentInvite && (
+            <div className="mt-3 text-[13px] text-muted">
+              <p>Invitation sent to <span className="text-light">{sentInvite.email}</span>. You can also share this link with them:</p>
+              <input
+                readOnly
+                aria-label="Invitation link"
+                value={sentInvite.url}
+                onFocus={(e) => e.currentTarget.select()}
+                className="mt-1.5 w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2 text-[12px] text-light"
+              />
+            </div>
+          )}
           <p className="mt-2 text-[12px] text-muted-dark">
-            The person must already have a Startline account. They are added as a manager.
+            They join as a manager once they accept, signed in to Startline with this email.
           </p>
+        </div>
+      )}
+
+      {/* Pending invitations */}
+      {invites.length > 0 && (
+        <div className="mb-8 bg-dark border border-dark-lighter rounded-2xl overflow-hidden">
+          <p className="px-4 sm:px-6 pt-4 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">Invited</p>
+          {invites.map((invite) => (
+            <div key={invite.id} className="flex items-center gap-4 px-4 sm:px-6 py-3 border-b border-white/[0.06] last:border-0">
+              <Mail className="w-4 h-4 text-muted shrink-0" />
+              <span className="flex-1 min-w-0 truncate text-[14px] text-light">{invite.email}</span>
+              <span className="font-headline text-[10px] uppercase tracking-widest text-muted-dark shrink-0">Pending</span>
+              {isOwner && (
+                <button
+                  onClick={() => handleRevoke(invite)}
+                  disabled={busy}
+                  className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted border border-white/10 rounded-lg px-3 py-2 hover:text-red-400 hover:border-red-400/30 transition-colors"
+                  aria-label={`Withdraw the invitation to ${invite.email}`}
+                >
+                  Withdraw
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

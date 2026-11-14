@@ -181,7 +181,13 @@ async function handleRequest(req: NextRequest) {
     // Waitlist mode closes the whole portal, not only the athlete site. The
     // auth and API paths above stay open so an organiser can still sign in;
     // after that the portal's own routes decide what they may see.
-    if (publicSiteMode() === "waitlist" && !servesPortalInfrastructure(pathname)) {
+    // The invitation page is reached from an email, often signed out; it has
+    // its own sign-in and shows nothing without a valid token.
+    if (
+      publicSiteMode() === "waitlist" &&
+      !servesPortalInfrastructure(pathname) &&
+      pathname !== "/organiser/invite"
+    ) {
       const payload = await getVerifiedPayload(req);
       if (!payload) return waitlistResponse(req, pathname);
     }
