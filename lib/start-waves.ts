@@ -21,6 +21,9 @@ export function sanitizeWaveInput(input: unknown): WaveDef[] | { error: string }
     const w = raw as Record<string, unknown>;
     const label = String(w.label ?? "").trim();
     if (!label) return { error: "Every wave needs a name." };
+    // The label is emailed to every athlete in the wave, so it is a short name,
+    // not a message.
+    if (label.length > 60) return { error: "A wave name can be at most 60 characters." };
     const key = label.toLowerCase();
     if (seen.has(key)) return { error: `Duplicate wave name "${label}".` };
     seen.add(key);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { isValidAbn } from "@/lib/abn";
 import { assetUrl } from "@/lib/asset-url";
 import { parseTiers } from "@/lib/refund-policy";
 import { saveOrganisationRefundPolicy } from "@/lib/organisation-refund-policy";
@@ -11,7 +12,14 @@ const organiserProfileSchema = z.object({
   contactName: z.string().max(200),
   contactEmail: z.string().trim().max(255).email("Enter a valid contact email."),
   phone: z.string().max(50),
-  abn: z.string().max(20).nullable().optional(),
+  // Checked only when one is given: clearing it stays possible, and values
+  // stored before the checksum existed are not re-validated until edited.
+  abn: z
+    .string()
+    .max(20)
+    .refine((value) => value.trim() === "" || isValidAbn(value), { message: "Enter a valid 11-digit ABN." })
+    .nullable()
+    .optional(),
   bio: z.string().max(5000).nullable().optional(),
   logoUrl: assetUrl().nullable().optional(),
   logoPosition: z.string().max(100).nullable().optional(),
