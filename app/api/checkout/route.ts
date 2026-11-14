@@ -3,6 +3,7 @@ import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import { getStripe } from "@/lib/stripe";
 import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
+import { rateLimit } from "@/lib/rate-limit";
 import { assertMetadataBudget } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest) {
 
     const botBlocked = await assertTurnstile(req, body, "checkout");
     if (botBlocked) return botBlocked;
+
+    // Each call creates a PaymentIntent carrying the order's personal details.
+    const blocked = await rateLimit(req, { prefix: "checkout", limit: 20, windowSeconds: 600 });
+    if (blocked) return blocked;
 
     const order = await resolveCheckoutOrder(body);
     if (isOrderFailure(order)) {
