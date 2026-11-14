@@ -169,6 +169,17 @@ Step 3 is not optional. Direct-to-S3 means the server never sees the bytes in
 flight, so it is the only remaining check that a file matching an image
 Content-Type is actually an image.
 
+## Error reporting
+
+Every unhandled error, server or browser, is one `STARTLINE_ERROR {json}` line
+on stderr, built by `lib/error-reporting.ts`. Server errors arrive through
+`onRequestError` in `instrumentation.ts`; browser errors through `app/error.tsx`,
+`app/global-error.tsx` and `components/ClientErrorReporter.tsx`, which POST to
+`/api/client-errors` (rate limited, 8 KB cap). Amplify sends stderr to
+CloudWatch, so alerting is a metric filter on the marker plus an alarm. Keep the
+marker unchanged or the filter stops matching. Query strings are stripped from
+reported paths; never add request bodies or headers to a report.
+
 ## Portals and hostnames
 
 Production splits the three portals across `startlineau.com`,
