@@ -142,9 +142,14 @@ The browser uploads straight to S3 instead:
 
 | Step | Endpoint | Does |
 |---|---|---|
-| 1 | `POST /api/upload/presign` | Authenticates, checks type/MIME/size, signs a POST scoped to `uploads/{sub}/{type}/{uuid}.{ext}` |
+| 1 | `POST /api/upload/presign` | Authenticates for the type (`lib/upload-access.ts`), checks type/MIME/size, signs a POST scoped to `pending/{owner}/{type}/{uuid}.{ext}`. Returns no URL |
 | 2 | `POST` to the S3 URL | Browser sends the bytes. No size ceiling |
-| 3 | `POST /api/upload/complete` | Ranged GET of the first 16 bytes, magic-byte check, deletes the object if it fails |
+| 3 | `POST /api/upload/complete` | Ranged GET of the first 16 bytes, magic-byte check, then copies the object to `uploads/…` (PDFs as `Content-Disposition: attachment`) and deletes the pending one. Only this returns the CDN URL |
+
+Avatars are any signed-in user's; every other type needs an organiser session
+(not suspended) or an admin. The CDN can only read `uploads/*`, so an object
+that never passes step 3 is never served. `pending/` should also get a short
+S3 lifecycle expiry in `startline-infra` so abandoned uploads are removed.
 
 Each upload type carries its own MIME allowlist and size cap in
 `lib/upload-limits.ts`, and both upload routes read them, so adding a type is
@@ -165,8 +170,9 @@ Two things break this silently if forgotten:
   `startline-infra/web-app/main.tf` must cover the portal origins. Prod lists the
   three domains; staging is `*`.
 
-Step 3 is not optional. Direct-to-S3 means the server never sees the bytes in
-flight, so it is the only remaining check that a file matching an image
+Step 3 is not optional, and cannot be skipped: until it runs the object sits in
+`pending/`, which nothing serves. Direct-to-S3 means the server never sees the
+bytes in flight, so it is the only check that a file matching an image
 Content-Type is actually an image.
 
 ## Portals and hostnames
