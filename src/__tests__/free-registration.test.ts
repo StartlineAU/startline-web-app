@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   registrationFindMany: vi.fn(),
   registrationCreateMany: vi.fn(),
   userUpsert: vi.fn(),
+  userFindUnique: vi.fn(),
+  userCreate: vi.fn(),
   notificationCreate: vi.fn(),
   paymentIntentCreate: vi.fn(),
 }));
@@ -25,7 +27,7 @@ const prismaMock = vi.hoisted(() => {
       findMany: mocks.registrationFindMany,
       createMany: mocks.registrationCreateMany,
     },
-    user: { upsert: mocks.userUpsert },
+    user: { upsert: mocks.userUpsert, findUnique: mocks.userFindUnique, create: mocks.userCreate },
     notification: { create: mocks.notificationCreate },
     // The capacity check and the insert share one transaction; the mock hands
     // the callback the same client so both are observed by the spies above.
@@ -113,6 +115,8 @@ beforeEach(() => {
   mocks.registrationFindMany.mockResolvedValue([]);
   mocks.registrationCreateMany.mockResolvedValue({ count: 1 });
   mocks.userUpsert.mockResolvedValue({ id: "user-1" });
+  mocks.userFindUnique.mockResolvedValue(null);
+  mocks.userCreate.mockResolvedValue({ id: "user-1" });
   mocks.notificationCreate.mockResolvedValue({});
   mocks.paymentIntentCreate.mockResolvedValue({ id: "pi_1", client_secret: "cs_1" });
 });
@@ -148,6 +152,8 @@ describe("POST /api/registrations/free", () => {
       vi.clearAllMocks();
       mocks.registrationCreateMany.mockResolvedValue({ count: 1 });
       mocks.userUpsert.mockResolvedValue({ id: "user-1" });
+      mocks.userFindUnique.mockResolvedValue(null);
+      mocks.userCreate.mockResolvedValue({ id: "user-1" });
       mocks.registrationFindMany.mockResolvedValue([]);
       mocks.eventFindUnique.mockResolvedValue(freeEvent({ feeStructure }));
 
@@ -164,11 +170,23 @@ describe("POST /api/registrations/free", () => {
 
     await postFree({ eventId: "evt-free", participants: [participant()] });
 
-    expect(mocks.userUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: "jordan@example.com" } })
+    expect(mocks.userCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ email: "jordan@example.com", cognitoSub: "cognito-sub-1" }) })
     );
     const [row] = mocks.registrationCreateMany.mock.calls[0][0].data;
     expect(row.userId).toBe("user-1");
+  });
+
+  it("leaves an existing account alone and does not link a guest's entry to it", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+    mocks.userFindUnique.mockResolvedValue({ id: "victim" });
+
+    await postFree({ eventId: "evt-free", participants: [participant({ firstName: "Someone" })] });
+
+    expect(mocks.userUpsert).not.toHaveBeenCalled();
+    expect(mocks.userCreate).not.toHaveBeenCalled();
+    const [row] = mocks.registrationCreateMany.mock.calls[0][0].data;
+    expect(row.userId).toBeNull();
   });
 
   it("refuses an order that is not actually free", async () => {
@@ -413,6 +431,7 @@ describe("POST /api/registrations/free/rsvp", () => {
       waiverAccepted: true,
     });
     expect(mocks.userUpsert).not.toHaveBeenCalled();
+    expect(mocks.userCreate).not.toHaveBeenCalled();
   });
 
   it("falls back to the account email when there is no display name", async () => {

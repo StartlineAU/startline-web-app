@@ -128,31 +128,45 @@ export async function findBlockingRsvpRegistration(opts: {
 }
 
 /**
- * Give every guest participant a Cognito account and a User row, so the entry
- * shows up under their account on Activity. Returns email to User id. Failures
- * are logged and skipped: a registration is never lost over account creation.
+ * Give each guest participant who has no account yet a Cognito user and a User
+ * row, so the entry shows on their Activity once they sign in. Returns email to
+ * User id for the accounts created here.
+ *
+ * Nobody checks that a guest owns the addresses they type, so an address that
+ * already has an account is left completely alone: its name, its Cognito link
+ * and its entries list are not touched, and the entry is not linked to it. The
+ * owner still sees the entry, because Activity and check-in also match entries
+ * by the account's verified email.
+ *
+ * Failures are logged and skipped: a registration is never lost over account
+ * creation.
  */
 export async function ensureParticipantUsers(
   entries: PricedEntry[],
 ): Promise<Record<string, string>> {
   const userIdByEmail: Record<string, string> = {};
+  const seen = new Set<string>();
   for (const { participant } of entries) {
     const email = normalizeEmail(participant.em);
-    if (!email || userIdByEmail[email]) continue;
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
 
-    let cognitoSub: string | null = null;
     try {
-      cognitoSub = await ensureAthleteCognitoUser(email);
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (existing) continue;
+
+      const cognitoSub = await ensureAthleteCognitoUser(email);
+      if (!cognitoSub) continue;
+
+      const name = athleteNameFromParticipant(participant);
+      const user = await prisma.user.create({
+        data: { email, name: name || undefined, cognitoSub },
+        select: { id: true },
+      });
+      userIdByEmail[email] = user.id;
     } catch (err) {
-      console.error(`Cognito creation failed for ${email}:`, err);
+      console.error("Guest account creation failed:", err);
     }
-    const name = athleteNameFromParticipant(participant);
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: { ...(cognitoSub && { cognitoSub }), name: name || undefined },
-      create: { email, name: name || undefined, ...(cognitoSub ? { cognitoSub } : {}) },
-    });
-    userIdByEmail[email] = user.id;
   }
   return userIdByEmail;
 }

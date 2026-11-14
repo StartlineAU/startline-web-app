@@ -4,14 +4,16 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   AdminGetUserCommand: class { constructor(public input: unknown) {} },
   ListUsersCommand: class { constructor(public input: unknown) {} },
+  AdminCreateUserCommand: class { constructor(public input: unknown) {} },
+  UsernameExistsException: class extends Error {},
 }));
 
 vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   CognitoIdentityProviderClient: class { send = mocks.send; },
-  AdminCreateUserCommand: class { constructor(public input: unknown) {} },
+  AdminCreateUserCommand: mocks.AdminCreateUserCommand,
   AdminGetUserCommand: mocks.AdminGetUserCommand,
   ListUsersCommand: mocks.ListUsersCommand,
-  UsernameExistsException: class extends Error {},
+  UsernameExistsException: mocks.UsernameExistsException,
 }));
 
 async function load() {
@@ -71,5 +73,55 @@ describe("findCognitoUserByEmail", () => {
     const { findCognitoUserByEmail } = await load();
 
     await expect(findCognitoUserByEmail("missing@example.com")).resolves.toBeNull();
+  });
+});
+
+describe("ensureAthleteCognitoUser", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("creates a user for a new email and returns its sub, not its username", async () => {
+    mocks.send
+      .mockRejectedValueOnce(notFound())
+      .mockResolvedValueOnce({ Users: [] })
+      .mockResolvedValueOnce({
+        User: { Username: "new@example.com", Attributes: [{ Name: "sub", Value: "sub-123" }] },
+      });
+    const { ensureAthleteCognitoUser } = await load();
+
+    await expect(ensureAthleteCognitoUser("New@Example.com ")).resolves.toBe("sub-123");
+  });
+
+  it("returns null for an email that already has a native user", async () => {
+    mocks.send.mockResolvedValueOnce({ Username: "taken@example.com", UserStatus: "CONFIRMED" });
+    const { ensureAthleteCognitoUser } = await load();
+
+    await expect(ensureAthleteCognitoUser("taken@example.com")).resolves.toBeNull();
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null for an email held by a Google user, without creating a second user", async () => {
+    mocks.send
+      .mockRejectedValueOnce(notFound())
+      .mockResolvedValueOnce({ Users: [{ Username: "Google_123", UserStatus: "EXTERNAL_PROVIDER" }] });
+    const { ensureAthleteCognitoUser } = await load();
+
+    await expect(ensureAthleteCognitoUser("gmail@example.com")).resolves.toBeNull();
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns null when a concurrent checkout created the user first", async () => {
+    mocks.send
+      .mockRejectedValueOnce(notFound())
+      .mockResolvedValueOnce({ Users: [] })
+      .mockRejectedValueOnce(new mocks.UsernameExistsException("exists"));
+    const { ensureAthleteCognitoUser } = await load();
+
+    await expect(ensureAthleteCognitoUser("race@example.com")).resolves.toBeNull();
   });
 });
