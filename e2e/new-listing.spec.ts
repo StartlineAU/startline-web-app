@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { organiserLogin, pickTime, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, pickTime, ensureDatabaseUrl, openDetail, pickSingleDayToday, chooseDiscipline, createCompleteDraft } from "./helpers";
 
 ensureDatabaseUrl();
 
@@ -9,60 +9,101 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
-test.describe("new listing wizard", () => {
-  test("loads the new listing page with 5 steps", async ({ page }) => {
+// The listing editor (#528): organisers fill in the athlete event page itself,
+// so the form is its own preview, and a checklist, not a step rail, says what
+// is still missing. The terms are agreed in a dialog Publish opens.
+test.describe("new listing editor", () => {
+  test("opens as an empty event page", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
 
     await expect(page.getByText("Create new listing")).toBeVisible();
-    await expect(page.getByText("The Basics").first()).toBeVisible();
-    await expect(page.getByText("Date & Location").first()).toBeVisible();
-    await expect(page.getByText("Tickets & Pricing").first()).toBeVisible();
-    await expect(page.getByText("Media & Description").first()).toBeVisible();
-    await expect(page.getByText("Final Review").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /continue/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /save draft/i })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Event title" })).toBeVisible();
+    for (const heading of ["Event Overview", "Pricing", "Gallery"]) {
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("Event Details", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit date", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /save draft/i }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /publish listing/i }).first()).toBeVisible();
+    // No step rail, and no separate preview: the page is the preview.
+    await expect(page.getByText("Final Review")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
+    // The terms are not asked for until the organiser publishes.
+    await expect(page.getByText(/I agree to the organiser terms/)).toHaveCount(0);
   });
 
-  test("fills step 1 basics and proceeds to step 2", async ({ page }) => {
+  test("the checklist names what is missing and takes you to it", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
 
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Test Event");
-    await page.getByRole("button", { name: /continue/i }).click();
+    await page.getByTestId("checklist-toggle").click();
+    const checklist = page.getByTestId("checklist");
+    const item = (name: string) => checklist.getByRole("button", { name, exact: true });
+    await expect(page.getByTestId("checklist-toggle")).toContainText(/required/i);
+    await expect(item("Event title")).toHaveAttribute("data-done", "false");
+    await expect(item("Cover image")).toHaveAttribute("data-done", "false");
 
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    // Following an item opens its row of the details card, in place.
+    await item("Date").click();
+    await expect(page.getByRole("button", { name: "Done editing date", exact: true })).toBeVisible();
+    await expect(page.getByText("Pick start date")).toBeVisible();
+
+    // The checklist only lists what is left: the page is marked up only once
+    // the organiser tries to publish.
+    await expect(page.locator('[data-missing="true"]')).toHaveCount(0);
+    await page.getByRole("button", { name: /publish listing/i }).first().click();
+    await expect(page.locator('[data-region="title"][data-missing="true"]')).toBeVisible();
+    await page.getByRole("textbox", { name: "Event title" }).fill("Checklist Classic");
+    await expect(page.locator('[data-region="title"][data-missing="true"]')).toHaveCount(0);
+    await page.getByTestId("checklist-toggle").click();
+    await expect(item("Event title")).toHaveAttribute("data-done", "true");
   });
 
-  // Continue is at the foot of the step, so the next step used to open
-  // scrolled to its own footer.
-  test("continue lands at the top of the next step", async ({ page }) => {
+  // Answering a row moves on to the next unfinished one by itself (#528).
+  test("finishing a details row opens the next one", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+
+    await openDetail(page, "format");
+    await page.getByRole("button", { name: /individual solo athletes/i }).click();
+    await expect(page.locator("#region-intensity button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#region-format button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "false");
+
+    // A date range is not cut short: the row waits until the picker closes.
+    await openDetail(page, "date");
+    await page.getByText("Pick start date").click();
+    await page.getByRole("button", { name: /today/i }).click();
+    await page.waitForTimeout(1500);
+    await expect(page.locator("#region-date button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+    await page.getByRole("heading", { name: /Event Overview/ }).click();
+    await expect(page.locator("#region-time button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+
+    // Time stays open after the start time, so the optional cut-off can follow.
+    await pickTime(page, "Start time", { hour: "7", minute: "00", period: "AM" });
+    await page.waitForTimeout(1500);
+    await expect(page.locator("#region-time button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+    await pickTime(page, "Cut-off time", { hour: "11", minute: "00", period: "AM" });
+    await page.getByRole("button", { name: /next: location/i }).click();
+    await expect(page.locator("#region-location button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  // A long title used to widen the page past the screen, and the
+  // notifications panel hung off the left edge.
+  test("the editor and notifications fit a phone screen", async ({ page }) => {
     await organiserLogin(page);
     await page.setViewportSize({ width: 390, height: 740 });
     await page.goto("/organiser/new-listing");
 
-    const next = page.getByRole("button", { name: /continue/i });
-    await next.scrollIntoViewIfNeeded();
-    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-    await next.click();
-
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-  });
-
-  // A long value in the review table used to widen the whole step past the
-  // screen, and the notifications panel hung off the left edge.
-  test("review step and notifications fit a phone screen", async ({ page }) => {
-    await organiserLogin(page);
-    await page.setViewportSize({ width: 390, height: 740 });
-    await page.goto("/organiser/new-listing");
-
-    await page.getByPlaceholder(/Apex Throwdown/i)
+    await page.getByRole("textbox", { name: "Event title" })
       .fill("The Very Long Named Coastal Endurance Championship Weekend 2026");
-    await page.locator("button", { hasText: /^05/ }).first().click();
-    await expect(page.getByText(/hit publish/i)).toBeVisible();
+    await page.getByTestId("checklist-toggle").click();
+    const list = (await page.getByTestId("checklist").boundingBox())!;
+    expect(list.x).toBeGreaterThanOrEqual(0);
+    expect(list.x + list.width).toBeLessThanOrEqual(390);
+    await page.getByTestId("checklist-toggle").click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
     await page.getByRole("button", { name: "Notifications", exact: true }).click();
@@ -72,35 +113,66 @@ test.describe("new listing wizard", () => {
     expect(box.x + box.width).toBeLessThanOrEqual(390);
   });
 
-  // The preview fills a phone screen, so the back swipe is how people leave
-  // it. That used to leave the wizard altogether and lose the event.
-  test("back from the preview returns to the wizard with the event intact", async ({ page }) => {
-    await organiserLogin(page);
-    await page.setViewportSize({ width: 390, height: 740 });
-    await page.goto("/organiser/new-listing");
-
-    const title = page.getByPlaceholder(/Apex Throwdown/i);
-    await title.fill("Back Swipe Classic");
-    const openPreview = page.getByRole("button", { name: "Preview", exact: true });
-    const banner = page.getByText("Athlete view preview");
-
-    await openPreview.click();
-    await expect(banner).toBeVisible();
-    await page.goBack();
-    await expect(banner).toHaveCount(0);
-    await expect(page).toHaveURL(/\/organiser\/new-listing/);
-    await expect(title).toHaveValue("Back Swipe Classic");
-
-    // Closing with the button leaves no extra history entry behind either.
-    await openPreview.click();
-    await page.getByRole("button", { name: /close preview/i }).click();
-    await expect(banner).toHaveCount(0);
-    await expect(page).toHaveURL(/\/organiser\/new-listing/);
-    await expect(title).toHaveValue("Back Swipe Classic");
-  });
-
   // #352: the old test passed when AWS was unavailable, so it never proved the
   // selection filled the form. Stub both lookups and assert the whole handoff.
+  // Field guidance lives in info bubbles, not small print on the page.
+  test("info bubbles explain a field on hover, focus and tap", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+    const tip = page.getByRole("button", { name: "About tickets available" });
+    const bubble = page.getByRole("tooltip");
+    await expect(tip).toBeVisible();
+    await expect(page.getByText(/Leave blank for no limit/)).toHaveCount(0);
+
+    // Hover opens it and names the field; moving away closes it.
+    await tip.hover();
+    await expect(bubble).toContainText("Tickets available");
+    await expect(bubble).toContainText(/Leave blank for no limit/);
+    await expect(tip).toHaveAttribute("aria-describedby", await bubble.getAttribute("id") ?? "");
+    await page.mouse.move(0, 0);
+    await expect(bubble).toHaveCount(0);
+
+    // Keyboard: focus opens it, Escape closes it.
+    // Tabbing out of the ticket name lands on the price's icon.
+    await page.getByLabel("Ticket category name").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "About price" })).toBeFocused();
+    await expect(page.getByRole("tooltip")).toContainText(/athletes pay/i);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "About price" })).toBeFocused();
+
+    // A click pins it open, and opening another closes the first.
+    await tip.click();
+    await page.mouse.move(0, 0);
+    await expect(bubble).toContainText(/Leave blank for no limit/);
+    await page.getByRole("button", { name: "About pricing" }).click();
+    await expect(page.getByRole("tooltip")).toHaveCount(1);
+    await expect(page.getByRole("tooltip")).toContainText(/Early bird/);
+    // A click anywhere else closes it.
+    await page.getByRole("heading", { name: /Event Overview/ }).click();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  });
+
+  test("an info bubble opens on tap and stays on a phone screen", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const page = await context.newPage();
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+    const tip = page.getByRole("button", { name: "About tickets available" });
+    await tip.scrollIntoViewIfNeeded();
+    await tip.tap();
+    const bubble = page.getByRole("tooltip");
+    await expect(bubble).toContainText(/Leave blank for no limit/);
+    const box = (await bubble.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    // A second tap closes it.
+    await tip.tap();
+    await expect(bubble).toHaveCount(0);
+    await context.close();
+  });
+
   test("address autocomplete fills city, state and location preview", async ({ page }) => {
     const label = "123 Test St, Sydney NSW 2000";
     await page.route("**/api/places/autocomplete**", (route) =>
@@ -126,11 +198,7 @@ test.describe("new listing wizard", () => {
 
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Address Test");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    await openDetail(page, "location");
 
     const addrInput = page.getByPlaceholder(/start typing an address/i);
     await addrInput.fill("123 Test St Sydney");
@@ -144,16 +212,16 @@ test.describe("new listing wizard", () => {
     await expect(page.getByTestId("location-preview-map")).toBeVisible();
     await expect(page.getByTestId("location-preview-no-token")).toHaveCount(0);
     await expect(page.getByTestId("location-preview-empty")).toHaveCount(0);
+
+    // The banner reads the place the way athletes will.
+    await page.getByRole("button", { name: "Done editing location", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Sydney, NSW", exact: true })).toBeVisible();
   });
 
   test("blocks an end time at or before the start time", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Time Test Event");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    await openDetail(page, "time");
 
     await pickTime(page, "Start time",   { hour: "10", minute: "00", period: "AM" });
     await pickTime(page, "Cut-off time", { hour: "9",  minute: "00", period: "AM" });
@@ -161,110 +229,83 @@ test.describe("new listing wizard", () => {
     await expect(page.getByText(/end time must be after start time/i)).toBeVisible();
   });
 
-  test("fills all 5 steps and saves as draft", async ({ page }) => {
+  test("fills in the page and saves it as a draft", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
+    const title = `E2E Page Draft ${Date.now()}`;
 
-    // === Step 1: The Basics ===
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E Draft Event");
-    await page.getByRole("button", { name: /continue/i }).click();
+    // Banner
+    await chooseDiscipline(page, "Running");
+    await page.getByRole("textbox", { name: "Event title" }).fill(title);
 
-    // === Step 2: Date & Location ===
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    // Main column
+    await page.getByRole("textbox", { name: "Event description" }).fill("Flat, fast and friendly. Bring a smile.");
+    await page.getByRole("button", { name: /add a prize pool/i }).click();
+    await page.getByLabel("Total prize pool").fill("2,000");
+    await page.getByLabel("Ticket category name").fill("Standard Entry");
+    await page.getByLabel("Ticket price").fill("50");
+    await expect(page.getByText(/athlete pays/i).first()).toBeVisible();
+    // The organiser's own number: never shown to athletes, read by checkout.
+    await page.getByLabel("Tickets available", { exact: true }).fill("1000");
+    await expect(page.getByTestId("ticket-total")).toContainText("1,000 tickets");
 
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
-    await page.getByRole("button", { name: /\d{4}/i }).first().click();
-
+    // Event Details card
+    await pickSingleDayToday(page);
+    await openDetail(page, "time");
     await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
+    await openDetail(page, "location");
+    await page.getByPlaceholder(/start typing an address/i).fill("1 Test St, Sydney NSW 2000");
+    await page.getByPlaceholder("Sydney Olympic Park").fill("Centennial Park");
+    await openDetail(page, "format");
+    await page.getByRole("button", { name: /individual solo athletes/i }).click();
+    await openDetail(page, "divisions");
+    await page.getByRole("button", { name: /^10km$/i }).click();
+    await openDetail(page, "intensity");
+    await page.getByRole("button", { name: /^moderate/i }).click();
 
-    // Address with autocomplete (also fills city + state on selection)
-    const addrInput = page.getByPlaceholder(/start typing an address/i);
-    await addrInput.fill("George St Sydney");
-    const addrDropdown = page.locator('[role="combobox"] + div').filter({ has: page.locator('button') });
-    if (await addrDropdown.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-      await addrDropdown.first().locator("button").first().click();
-    } else {
-      await addrInput.fill("1 Test St, Sydney NSW 2000");
-    }
+    await page.getByRole("button", { name: /save draft/i }).first().click();
+    await page.waitForURL("**/organiser/dashboard", { timeout: 30000 });
 
-    await page.getByRole("button", { name: /continue/i }).click();
-
-    // === Step 3: Tickets & Pricing ===
-    await page.getByRole("button", { name: /startline/i }).first().click();
-
-    const ticketLabel = page.getByPlaceholder(/general admission/i);
-    if (await ticketLabel.isVisible()) {
-      await ticketLabel.fill("Standard Entry");
-    }
-
-    const ticketPrice = page.locator('input[placeholder="129"]');
-    if (await ticketPrice.isVisible()) {
-      await ticketPrice.fill("50");
-    }
-
-    // The refund policy is organisation-scoped now; the wizard only shows it.
-    await page.getByRole("button", { name: /continue/i }).click();
-
-    // === Step 4: Media & Description ===
-    await expect(page.getByText(/cover image/i).first()).toBeVisible();
-
-    const editor = page.locator("[contenteditable]");
-    if (await editor.isVisible()) {
-      await editor.fill("This is a test event description created by E2E tests.");
-    }
-
-    const fileInput = page.locator('input[type="file"]').first();
-    if (await fileInput.isVisible()) {
-      await fileInput.setInputFiles({
-        name: "test.jpg",
-        mimeType: "image/jpeg",
-        buffer: Buffer.from("test image content"),
-      });
-    }
-
-    await page.getByRole("button", { name: /continue/i }).click();
-
-    // === Step 5: Final Review ===
-    await expect(page.getByText(/review/i).first()).toBeVisible();
-
-    await page.locator('input[type="checkbox"]').check();
-    await page.getByRole("button", { name: /save draft/i }).click();
-
-    await page.waitForTimeout(2000);
-    // The API save may fail in the test env; the wizard UX is what's being tested.
+    const saved = await prisma.event.findFirst({ where: { title }, orderBy: { createdAt: "desc" } });
+    expect(saved).toMatchObject({
+      status: "DRAFT",
+      discipline: "running",
+      venue: "Centennial Park",
+      format: "individual",
+      level: "moderate",
+      // The event cap is the total of the ticket quantities.
+      cap: 1000,
+      categories: ["10K"],
+    });
+    expect(saved?.waves).toEqual([{ label: "Standard Entry", price: "50", closes: "", startTime: "", qty: 1000 }]);
+    expect(saved?.extras).toContain("2,000");
+    await prisma.event.deleteMany({ where: { title } });
   });
 
-  test("step rail stays pinned while scrolling", async ({ page }) => {
+  test("the header stays pinned while scrolling", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("textbox", { name: "Event title" })).toBeVisible();
 
-    await page.mouse.wheel(0, 800);
-    await page.waitForTimeout(400);
-    const scrollY = await page.evaluate(() => window.scrollY);
-    expect(scrollY).toBeGreaterThan(0);
+    await page.mouse.wheel(0, 900);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
     // Regression: overflow-x on html/body used to disable position:sticky
-    // site-wide, so the rail scrolled out of view.
-    const rail = await page.locator("div.sticky.top-14").boundingBox();
-    expect(rail).not.toBeNull();
-    expect(rail!.y).toBeGreaterThanOrEqual(0);
+    // site-wide, so the header scrolled out of view.
+    const header = await page.getByTestId("editor-header").boundingBox();
+    expect(header).not.toBeNull();
+    expect(header!.y).toBeGreaterThanOrEqual(0);
   });
 
   test("single-day date reads clean after closing the picker", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
-
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Single Day Test");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
+    await openDetail(page, "date");
 
     await page.getByText("Pick start date").click();
     await page.getByRole("button", { name: /today/i }).click();
     // Close the popover with only a start date picked — a valid single-day event.
-    await page.locator("h1").click();
+    await page.getByRole("heading", { name: "Event Overview" }).click();
     const dateField = page.locator("button", { hasText: /\d{4}/ }).first();
     await expect(dateField).not.toContainText(/pick end date/i);
   });
@@ -272,13 +313,8 @@ test.describe("new listing wizard", () => {
   test("price input strips non-numeric characters", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
 
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Price Test");
-    await page.getByRole("button", { name: /continue/i }).click();
-    await page.getByRole("button", { name: /continue/i }).click();
-
-    const price = page.locator('input[placeholder="129"]');
+    const price = page.getByLabel("Ticket price");
     await price.fill("abc");
     await expect(price).toHaveValue("");
     await price.fill("12.50");
@@ -288,17 +324,15 @@ test.describe("new listing wizard", () => {
   test("draft without a cut-off time saves without a silent failure", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
-    await page.waitForLoadState("networkidle");
 
     // Minimal draft: title only, endTime left empty (it's optional).
     // Regression: the API used to coerce empty endTime to null, which the
     // required schema column rejected — every such save 500ed.
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("E2E No Cutoff Draft");
-    await page.getByRole("button", { name: /save draft/i }).click();
+    await page.getByRole("textbox", { name: "Event title" }).fill("E2E No Cutoff Draft");
+    await page.getByRole("button", { name: /save draft/i }).first().click();
 
-    // Success navigates to the dashboard; if the test env lacks an organiser
-    // profile the API errors instead — either way the user must see an
-    // outcome, never stay stuck on a silently-failed save.
+    // Success navigates to the dashboard; otherwise the error must show. Either
+    // way the organiser sees an outcome, never a silently failed save.
     const errorBanner = page.getByText(/unauthorised|failed to save|went wrong/i).first();
     await expect
       .poll(
@@ -310,70 +344,76 @@ test.describe("new listing wizard", () => {
       .toBe(true);
   });
 
-  // What is missing shows in the review table itself, before any click, rather
-  // than as a warning that only appeared after Publish was pressed.
-  test("review table flags missing required fields and blocks publish", async ({ page }) => {
+  test("publish takes you to the first missing field instead of asking for the terms", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
+    await page.getByRole("textbox", { name: "Event title" }).fill("Toast Classic");
 
-    // Advance through all 5 steps without filling anything
-    for (let i = 0; i < 4; i++) {
-      await page.getByRole("button", { name: /continue/i }).click();
+    await page.getByRole("button", { name: /publish listing/i }).first().click();
+    await expect(page.getByTestId("editor-toast")).toContainText(/required fields? left/i);
+    await expect(page.getByTestId("publish-dialog")).toHaveCount(0);
+
+    // View all opens the checklist.
+    await page.getByTestId("editor-toast").getByRole("button", { name: /view all/i }).click();
+    await expect(page.getByTestId("checklist")).toBeVisible();
+  });
+
+  test("a finished listing asks for the terms, then publishes", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await organiserLogin(page);
+    const title = `E2E Publish Dialog ${Date.now()}`;
+    const id = await createCompleteDraft(page, title);
+
+    try {
+      await page.goto(`/organiser/new-listing?id=${id}`);
+      await expect(page.getByRole("textbox", { name: "Event title" })).toHaveValue(title, { timeout: 30000 });
+      await expect(page.getByTestId("checklist-toggle")).toContainText(/ready to publish/i);
+
+      await page.getByRole("button", { name: /publish listing/i }).first().click();
+      const dialog = page.getByTestId("publish-dialog");
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", /\/terms#organisers$/);
+
+      // The terms are agreed here, and only once they are does it publish.
+      const confirm = dialog.getByRole("button", { name: /publish listing/i });
+      await expect(confirm).toBeDisabled();
+      await dialog.getByRole("checkbox").check();
+      await confirm.click();
+      await page.waitForURL("**/organiser/dashboard", { timeout: 30000 });
+
+      // Apex is verified and has an ABN, so a finished listing goes live.
+      expect((await prisma.event.findUnique({ where: { id } }))?.status).toBe("APPROVED");
+    } finally {
+      await prisma.event.deleteMany({ where: { id } });
     }
-
-    await expect(page.getByText(/required items still need fixing/i)).toBeVisible();
-    await expect(page.getByText("Add an event name of at least 3 characters")).toBeVisible();
-    await expect(page.getByText("Upload a cover image")).toBeVisible();
-    await expect(page.getByText(/ready to publish/i)).toHaveCount(0);
-
-    // Optional extras stay out of the table until something is added to them.
-    for (const optional of ["Prize money", "Info PDFs", "Gallery"]) {
-      await expect(page.getByText(optional, { exact: true })).toHaveCount(0);
-    }
-
-    // Ticking the confirmation is not enough while rows are still flagged.
-    await page.locator('input[type="checkbox"]').check();
-    await expect(page.getByRole("button", { name: /publish listing/i })).toBeDisabled();
-
-    // Fix takes them to the step, and the row clears once the field is filled.
-    await page.locator('[data-missing="true"]', { hasText: "Title" }).getByRole("button", { name: /fix/i }).click();
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Review Table Classic");
-    await page.getByRole("button", { name: /Final Review/i }).click();
-    await expect(page.getByText("Add an event name of at least 3 characters")).toHaveCount(0);
-    await expect(page.getByText("Review Table Classic").first()).toBeVisible();
   });
 
   // A saved event whose discipline has no picker (crossfit, hybrid, triathlon)
-  // still carries categories on the record. The summary shows what will
-  // publish, so it must list them rather than drop them because the picker
-  // list does not apply. seed-event-002 is a pending hybrid event owned by
-  // Apex; published events are intentionally locked from organiser editing.
-  test("review table shows saved categories for a discipline with no picker", async ({ page }) => {
+  // still carries categories on the record, and the details card must show
+  // them rather than drop them because the picker list does not apply.
+  // seed-event-002 is a pending hybrid event owned by Apex.
+  test("an existing event loads into the page, divisions included", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await organiserLogin(page);
+    await page.goto("/organiser/new-listing?id=seed-event-002");
 
-    // The wizard loads the event after hydration, and on a cold dev server that
-    // can lose the race with the server-rendered step rail — a click before
-    // hydration focuses the button but never fires. Retry the load until the
-    // review table shows the event's categories.
-    await expect(async () => {
-      await page.goto("/organiser/new-listing?id=seed-event-002");
-      await page.getByRole("button", { name: /Final Review/i }).click();
-      await expect(page.getByText("Open Male, Open Female, Masters 40+", { exact: true })).toBeVisible({ timeout: 3000 });
-    }).toPass({ timeout: 30000 });
-
-    await expect(page.getByText("Categories", { exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Event title" })).not.toHaveValue("", { timeout: 30000 });
+    await expect(page.getByText("Edit listing")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit divisions", exact: true })).toBeVisible();
+    for (const division of ["Open Male", "Open Female", "Masters 40+"]) {
+      await expect(page.getByText(division, { exact: true }).first()).toBeVisible();
+    }
   });
 });
 
-// A link out of the wizard (Payments, in the ABN notice) goes through the same
+// A link out of the editor (Payments, in the ABN notice) goes through the same
 // "Leave without saving?" prompt as Cancel, so following it cannot silently drop
 // an unsaved event, and "Save draft & leave" saves before it navigates.
 //
 // Both seeded organisers have an ABN, so this spec owns an organiser without
 // one rather than mutating seed data other specs depend on.
-test.describe("new listing wizard: leaving for Payments without an ABN", () => {
+test.describe("new listing editor: leaving for Payments without an ABN", () => {
   const EMAIL = "noabn.organiser@startline.test";
   let organiserId = "";
 
@@ -417,13 +457,13 @@ test.describe("new listing wizard: leaving for Payments without an ABN", () => {
 
   test("Payments prompts, and Save draft & leave saves the event then continues", async ({ page }) => {
     await page.goto("/organiser/new-listing");
-    await page.getByPlaceholder(/Apex Throwdown/i).fill("Payments Prompt Classic");
+    await page.getByRole("textbox", { name: "Event title" }).fill("Payments Prompt Classic");
 
-    await page.locator("button", { hasText: /^05/ }).first().click();
+    // A paid Startline event without an ABN: the editor says so up front.
     const notice = page.getByTestId("abn-notice");
     await expect(notice).toBeVisible();
 
-    // Keep editing closes the prompt and leaves the wizard untouched.
+    // Keep editing closes the prompt and leaves the editor untouched.
     await notice.getByRole("link", { name: "Payments", exact: true }).click();
     await expect(page.getByText(/leave without saving/i)).toBeVisible();
     await page.getByRole("button", { name: /keep editing/i }).click();
@@ -481,19 +521,15 @@ test.describe("new listing wizard: leaving for Payments without an ABN", () => {
     expect(body.abnRequired).toBe(true);
   });
 
-  test("the review step does not warn about the ABN on a free event", async ({ page }) => {
+  test("the editor does not warn about the ABN on a free event", async ({ page }) => {
     const res = await page.request.post("/api/organiser/events", {
       data: { ...listing("Free Draft E2E", "0"), submit: false },
     });
     const { id } = await res.json();
 
-    // Same hydration race as the categories test above: retry until the review
-    // step shows the saved event.
-    await expect(async () => {
-      await page.goto(`/organiser/new-listing?id=${id}`);
-      await page.locator("button", { hasText: /^05/ }).first().click();
-      await expect(page.getByText("Free Draft E2E").first()).toBeVisible({ timeout: 3000 });
-    }).toPass({ timeout: 30000 });
+    await page.goto(`/organiser/new-listing?id=${id}`);
+    await expect(page.getByRole("textbox", { name: "Event title" })).toHaveValue("Free Draft E2E", { timeout: 30000 });
+    await expect(page.getByText("Create new listing").or(page.getByText("Edit listing"))).toBeVisible();
     await expect(page.getByTestId("abn-notice")).toHaveCount(0);
   });
 });

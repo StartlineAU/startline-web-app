@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 interface AnalyticsData {
   events: { draft: number; pending: number; approved: number; inProgress: number; rejected: number; archived: number };
-  registrations: { total: number; revenueAud: number; platformFeeAud: number };
+  registrations: { total: number; revenueAud: number; platformFeeAud: number; stripeFeeAud: number };
   topEvents: { id: string; title: string; city: string; state: string; eventDate: string; registrationCount: number }[];
   organisers: { active: number; suspended: number };
   users: { total: number };
@@ -58,7 +58,7 @@ async function getAnalytics(): Promise<AnalyticsData | null> {
       prisma.event.groupBy({ by: ["status"], _count: { id: true } }),
       prisma.registration.count({ where: { status: "CONFIRMED" } }),
       prisma.registration.aggregate({ where: { status: "CONFIRMED" }, _sum: { amountCents: true } }),
-      prisma.registration.aggregate({ where: { status: "CONFIRMED" }, _sum: { platformFeeCents: true } }),
+      prisma.registration.aggregate({ where: { status: "CONFIRMED" }, _sum: { platformFeeCents: true, stripeFeeCents: true } }),
       prisma.event.findMany({
         where: { status: { in: ["APPROVED", "IN_PROGRESS"] } },
         orderBy: { registrations: { _count: "desc" } },
@@ -91,6 +91,7 @@ async function getAnalytics(): Promise<AnalyticsData | null> {
         total:          confirmedCount,
         revenueAud:     (revenueAgg._sum.amountCents       ?? 0) / 100,
         platformFeeAud: (platformFeeAgg._sum.platformFeeCents ?? 0) / 100,
+        stripeFeeAud:   (platformFeeAgg._sum.stripeFeeCents ?? 0) / 100,
       },
       topEvents: topEvents.map((e: any) => ({
         id: e.id, title: e.title, city: e.city, state: e.state,
@@ -160,7 +161,9 @@ export default async function AdminAnalyticsPage() {
               {
                 label:  "Platform revenue",
                 value:  formatAud(data.registrations.platformFeeAud),
-                sub:    "Startline fee collected",
+                sub:    data.registrations.stripeFeeAud > 0
+                  ? `Startline fee collected, plus ${formatAud(data.registrations.stripeFeeAud)} Stripe fees recovered`
+                  : "Startline fee collected",
                 icon:   <TrendingUp className="w-5 h-5" />,
                 accent: "text-primary",
               },

@@ -6,6 +6,7 @@ import {
   LEGAL_ENTITY_NAME,
   LEGAL_JURISDICTION,
   PLATFORM_FEE_DESCRIPTION,
+  STRIPE_FEE_DESCRIPTION,
   TERMS_LAST_UPDATED,
 } from "@/lib/legal";
 
@@ -267,9 +268,12 @@ const SECTIONS: LegalSection[] = [
             To take paid entries you must connect a Stripe Express account and accept Stripe’s
             Connected Account Agreement. Stripe collects and holds your bank account and identity
             details; Startline stores only a reference to your Stripe account. The Startline booking
-            fee (3.2) is deducted at the time of each sale. Once your event has finished, the ticket
-            amounts from confirmed entries, less any refunds, are paid out to your nominated bank
-            account.
+            fee (3.2) is deducted at the time of each sale. Stripe’s card processing fee is also
+            deducted from each sale. Startline estimates it at Stripe’s domestic card rate
+            ({STRIPE_FEE_DESCRIPTION} per payment, on the full amount the athlete paid) and covers
+            any higher rate Stripe charges for international or other cards. Once your event has
+            finished, the ticket amounts from confirmed entries, less these fees and any refunds,
+            are paid out to your nominated bank account.
           </p>
         </Clause>
         <Clause n="5.5" title="Tax reporting">

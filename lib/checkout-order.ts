@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import prisma from "@/lib/prisma";
-import { calculateTotalWithFee } from "@/lib/platform-fee";
+import {
+  applicationFeeCents,
+  calculateTotalWithFee,
+  estimateStripeFeeCents,
+} from "@/lib/platform-fee";
 import { getUserSession } from "@/lib/amplify-server";
 import {
   validateParticipants,
@@ -116,6 +120,13 @@ export interface ResolvedOrder {
   totalCents: number;
   /** Startline's cut of the whole order, in cents. */
   platformFeeCents: number;
+  /**
+   * Estimated Stripe processing fee on the whole charge, in cents. The
+   * organiser absorbs it (#470), so it is added to the application fee.
+   */
+  stripeFeeCents: number;
+  /** application_fee_amount: platform fee plus the Stripe fee estimate. */
+  applicationFeeCents: number;
   groupRegistration: boolean;
   userSession: { sub: string; email: string } | null;
   athleteName: string;
@@ -257,6 +268,9 @@ export async function resolveCheckoutOrder(
     totalCents += event.feeStructure === "athlete" ? p + f : p;
     platformFeeCents += f;
   }
+  // Stripe charges its fixed component once per PaymentIntent, so the estimate
+  // runs on the whole order rather than per ticket.
+  const stripeFeeCents = estimateStripeFeeCents(totalCents);
 
   // Only an order that actually charges needs somewhere to send the money. A
   // free event is registerable whether or not its organiser has connected
@@ -322,6 +336,8 @@ export async function resolveCheckoutOrder(
     wavePricing,
     totalCents,
     platformFeeCents,
+    stripeFeeCents,
+    applicationFeeCents: applicationFeeCents(totalCents, platformFeeCents, stripeFeeCents),
     groupRegistration,
     userSession: userSession ? { sub: userSession.sub, email: userSession.email } : null,
     athleteName: athleteNameFromParticipant(primary),

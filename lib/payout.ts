@@ -1,6 +1,7 @@
 import { PayoutAttemptStatus, PayoutStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
+import { entryOrganiserNetCents, type FeeSnapshot } from "@/lib/platform-fee";
 
 const PAYOUT_CURRENCY = "aud";
 
@@ -76,30 +77,23 @@ export type PayoutEligibleEvent = {
   netCents: number;
 };
 
-export interface PayoutRegistration {
-  amountCents: number;
-  platformFeeCents: number;
-  feeStructure: string;
+/**
+ * stripeFeeCents is required here, unlike on FeeSnapshot: a payout read that
+ * left it out would silently pay the organiser the Stripe fee as well (#470).
+ */
+export type PayoutRegistration = FeeSnapshot & {
+  stripeFeeCents: number;
   /** Absent means CONFIRMED, for callers that only ever pass confirmed rows. */
   status?: string;
-}
+};
 
 /**
- * What the organiser's connected account actually holds for one entry.
- *
- * Checkout always takes the platform fee as an application fee, so the
- * organiser's balance is the ticket price when the athlete paid the fee on top,
- * and the ticket price minus the fee when the organiser absorbed it. Reading
- * platformFeeCents as part of the organiser's share would pay out money the
- * connected account never received (issue #251).
- *
- * An unrecognised structure is treated as organiser-absorbed, matching
- * calculateTotalWithFee: that is the safer direction when the snapshot is odd.
+ * What the organiser's connected account actually holds for one entry: the
+ * ticket price less any booking fee the organiser absorbed and less the Stripe
+ * processing fee (#470). See entryOrganiserNetCents.
  */
 export function registrationPayoutCents(registration: PayoutRegistration): number {
-  return registration.feeStructure === "athlete"
-    ? registration.amountCents
-    : Math.max(0, registration.amountCents - registration.platformFeeCents);
+  return entryOrganiserNetCents(registration);
 }
 
 /** Net payout for a set of confirmed entries, using each entry's own snapshot. */
@@ -123,7 +117,7 @@ export function eventPayoutCents(registrations: PayoutRegistration[]): number {
 const payoutRegistrationsQuery = {
   where: { status: "CONFIRMED" as const },
   select: {
-    amountCents: true, platformFeeCents: true, feeStructure: true, status: true,
+    amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true, status: true,
   },
 };
 

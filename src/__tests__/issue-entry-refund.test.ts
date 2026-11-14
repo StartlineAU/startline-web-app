@@ -125,7 +125,9 @@ describe("issueEntryRefund — the reviewed policy refund", () => {
 });
 
 describe("payout", () => {
-  const confirmed = { amountCents: 10000, platformFeeCents: 540, feeStructure: "athlete", status: "CONFIRMED" };
+  const confirmed = {
+    amountCents: 10000, platformFeeCents: 540, stripeFeeCents: 0, feeStructure: "athlete", status: "CONFIRMED",
+  };
 
   it("pays out confirmed entries only", () => {
     expect(eventPayoutCents([confirmed])).toBe(10000);

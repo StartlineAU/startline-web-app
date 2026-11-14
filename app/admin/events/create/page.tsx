@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import EventFormWizard from "@/components/event/EventFormWizard";
+import EventPageEditor from "@/components/event/EventPageEditor";
 import { useApiResource } from "@/hooks/useApiResource";
 
 interface OrganiserOption {
@@ -70,7 +70,7 @@ export default function AdminCreateEventPage() {
         </div>
       </div>
 
-      <EventFormWizard
+      <EventPageEditor
         apiBase="/api/admin"
         submitRedirect="/admin/events"
         cancelRedirect="/admin/events"
