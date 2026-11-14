@@ -42,11 +42,14 @@ test.describe("reduced disciplines", () => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
 
+    // The disciplines live in the Category dialog behind the banner pill.
+    await page.getByRole("button", { name: "Choose category" }).click();
+    const dialog = page.getByRole("dialog", { name: "Category" });
     for (const name of ["Running", "Run Club", "Other"]) {
-      await expect(page.getByRole("button", { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 15000 });
+      await expect(dialog.getByRole("button", { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 15000 });
     }
     for (const name of REMOVED) {
-      await expect(page.getByRole("button", { name: new RegExp(`^${name}`) })).toHaveCount(0);
+      await expect(dialog.getByRole("button", { name: new RegExp(`^${name}`) })).toHaveCount(0);
     }
   });
 });
