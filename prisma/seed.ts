@@ -7,6 +7,7 @@ loadEnvLocal({ path: ".env.local", override: true });
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { DEFAULT_REFUND_TIERS } from "../lib/refund-policy";
+import { estimateStripeFeeCents } from "../lib/platform-fee";
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
@@ -553,6 +554,10 @@ async function main() {
 
   const platformFeeCents = (amountCents: number) =>
     Math.round(amountCents * 0.0395) + 145;
+  // Seeded entries are athlete-pays single-ticket orders, so Stripe's fee is
+  // estimated on ticket + booking fee, as checkout would (#470).
+  const stripeFeeCents = (amountCents: number) =>
+    estimateStripeFeeCents(amountCents + platformFeeCents(amountCents));
 
   // ── Events ───────────────────────────────────────────────────────────
 
@@ -888,6 +893,7 @@ async function main() {
         estimatedFinishMinutes,
         amountCents,
         platformFeeCents: platformFeeCents(amountCents),
+        stripeFeeCents: stripeFeeCents(amountCents),
         feeStructure: "athlete",
         status: "CONFIRMED",
       },
@@ -915,6 +921,7 @@ async function main() {
         waveLabel: r.wave,
         amountCents,
         platformFeeCents: platformFeeCents(amountCents),
+        stripeFeeCents: stripeFeeCents(amountCents),
         feeStructure: "athlete",
         status: r.status,
         stripePaymentIntentId: `pi_extra_${i}`,
@@ -1126,6 +1133,7 @@ async function main() {
           bibNumber: r.bib,
           amountCents,
           platformFeeCents: platformFeeCents(amountCents),
+          stripeFeeCents: stripeFeeCents(amountCents),
           feeStructure: "athlete",
           status: "CONFIRMED",
           resultDistance: r.distance,

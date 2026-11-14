@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { pickTime } from "./helpers";
+import { pickTime, openDetail, pickSingleDayToday, chooseDiscipline } from "./helpers";
 import { adminLogin } from "./helpers";
 
 const ts = () => Date.now().toString().slice(-6);
@@ -68,11 +68,11 @@ test.describe("admin event creation", () => {
     const select = page.locator("select").first();
     await expect(select).toBeVisible();
     await expect(select).toContainText("Apex Endurance Events");
-    // Wizard below the selector still renders.
-    await expect(page.getByText("The Basics").first()).toBeVisible();
+    // The listing editor below the selector still renders.
+    await expect(page.getByRole("textbox", { name: "Event title" })).toBeVisible();
   });
 
-  test("admin can fill the create wizard and save a draft", async ({ page }) => {
+  test("admin can fill the listing editor and save a draft", async ({ page }) => {
     await adminLogin(page);
     const organiserId = await getApexOrganiserId(page);
     const title = `E2E Admin Wizard ${ts()}`;
@@ -81,46 +81,34 @@ test.describe("admin event creation", () => {
     await page.waitForLoadState("networkidle");
     await page.locator("select").first().selectOption(organiserId);
 
-    // Step 1 — The Basics
-    await page.getByPlaceholder(/Apex Throwdown/i).fill(title);
-    await page.getByRole("button", { name: /individual solo athletes/i }).click();
-    await page.getByRole("button", { name: /^running/i }).click();
-    await page.getByRole("button", { name: /^10km$/i }).click();
-    await page.getByRole("button", { name: /moderate/i }).click();
-    await page.getByRole("button", { name: /1,000/i }).click();
-    await page.getByRole("button", { name: /open to all/i }).click();
-    await page.getByRole("button", { name: /continue/i }).click();
+    // Banner
+    await chooseDiscipline(page, "Running");
+    await page.getByRole("textbox", { name: "Event title" }).fill(title);
 
-    // Step 2 — Date & Location
-    await expect(page.getByText(/when and where/i).first()).toBeVisible();
-    await page.getByText("Pick start date").click();
-    await page.getByRole("button", { name: /today/i }).click();
+    // Main column. No cover image is set so the draft save never hits S3:
+    // CI's e2e role is read-only.
+    await page.getByRole("textbox", { name: "Event description" }).fill(`E2E description for ${title}`);
+    await page.getByLabel("Ticket category name").fill("Standard Entry");
+    await page.getByLabel("Ticket price").fill("50");
+    await page.getByLabel("Tickets available", { exact: true }).fill("1000");
+
+    // Event Details card
+    await pickSingleDayToday(page);
+    await openDetail(page, "time");
     await pickTime(page, "Start time", { hour: "9", minute: "00", period: "AM" });
+    await openDetail(page, "location");
     await page.getByPlaceholder(/start typing an address/i).fill("1 Test St, Sydney NSW 2000");
-    const cityInput = page.getByPlaceholder(/e.g. Melbourne/i);
-    if (await cityInput.isVisible()) await cityInput.fill("Sydney");
+    await page.getByPlaceholder(/e.g. Melbourne/i).fill("Sydney");
     await page.getByRole("combobox", { name: /state/i }).click();
     await page.getByRole("option", { name: /NSW/ }).click();
-    await page.getByRole("button", { name: /continue/i }).click();
+    await openDetail(page, "format");
+    await page.getByRole("button", { name: /individual solo athletes/i }).click();
+    await openDetail(page, "divisions");
+    await page.getByRole("button", { name: /^10km$/i }).click();
+    await openDetail(page, "intensity");
+    await page.getByRole("button", { name: /^moderate/i }).click();
 
-    // Step 3 — Tickets & Pricing
-    await page.getByRole("button", { name: /startline/i }).first().click();
-    const ticketLabel = page.getByPlaceholder(/general admission/i);
-    if (await ticketLabel.isVisible()) await ticketLabel.fill("Standard Entry");
-    const ticketPrice = page.locator('input[placeholder="129"]');
-    if (await ticketPrice.isVisible()) await ticketPrice.fill("50");
-    // The refund policy is organisation-scoped now; the wizard only shows it.
-    await page.getByRole("button", { name: /continue/i }).click();
-
-    // Step 4 — Media & Description. No cover image is set so the draft save
-    // never hits /api/upload (S3) — CI's e2e role is read-only.
-    await expect(page.getByText(/cover image/i).first()).toBeVisible();
-    const editor = page.locator("[contenteditable]");
-    if (await editor.isVisible()) {
-      await editor.fill(`E2E description for ${title}`);
-    }
-
-    await page.getByRole("button", { name: /save draft/i }).click();
+    await page.getByRole("button", { name: /save draft/i }).first().click();
     await page.waitForURL("**/admin/events", { timeout: 20000 });
   });
 
@@ -161,7 +149,7 @@ test.describe("admin event editing", () => {
     await page.goto(`/admin/events/${eventId}/edit`);
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { name: /edit event/i })).toBeVisible();
-    // Wait for the event to load into the form before typing. The wizard fills
+    // Wait for the event to load into the form before typing. The editor fills
     // its state from a fetch, and typing first lets that reply overwrite the
     // new title, so the save persists the old one and the edit looks ignored.
     await expect(page.getByPlaceholder(/Apex Throwdown/i)).toHaveValue(originalTitle);
@@ -196,7 +184,7 @@ test.describe("admin event editing", () => {
     await expect(page.getByPlaceholder(/Apex Throwdown/i)).toHaveValue(originalTitle);
 
     await page.getByPlaceholder(/Apex Throwdown/i).fill(newTitle);
-    await page.getByRole("button", { name: /save draft/i }).click();
+    await page.getByRole("button", { name: /save draft/i }).first().click();
     await page.waitForURL("**/admin/events**", { timeout: 20000 });
   });
 });

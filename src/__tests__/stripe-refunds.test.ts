@@ -33,6 +33,14 @@ describe("entryPaidCents", () => {
   it("treats an unrecognised fee structure as organiser-absorbed, never over-refunding", () => {
     expect(entryPaidCents({ ...athletePays, feeStructure: "" })).toBe(10000);
   });
+
+  // #470: the Stripe fee comes out of the organiser's share, not the athlete's
+  // charge, so a refund is the same whether or not one was recorded.
+  it("is unaffected by the Stripe fee the organiser absorbed", () => {
+    const withStripeFee = { ...athletePays, stripeFeeCents: 214 };
+    expect(entryPaidCents(withStripeFee)).toBe(10540);
+    expect(entryRefundAmountCents(withStripeFee)).toBe(entryRefundAmountCents(athletePays));
+  });
 });
 
 describe("entryRefundAmountCents", () => {

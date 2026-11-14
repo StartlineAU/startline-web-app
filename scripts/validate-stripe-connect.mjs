@@ -20,6 +20,9 @@ const ORGANISER_EMAIL = "organiser@startline.test";
 const TEST_PRICE_CENTS = 13500; // seed-event-001 Late Entry
 const FEE_PERCENT = 0.0395;
 const FEE_FIXED_CENTS = 145;
+// Stripe fee estimate the organiser absorbs (#470). Mirrors lib/platform-fee.ts.
+const STRIPE_FEE_PERCENT = 0.0175;
+const STRIPE_FEE_FIXED_CENTS = 30;
 
 function expectFee(expected, actual, label) {
   const ok = expected === actual;
@@ -80,12 +83,16 @@ async function main() {
     console.log(`  ${TEST_PRICE_CENTS / 100} AUD ticket → fee ${expectedFee / 100} AUD`);
     expectFee(expectedFee, Math.round(TEST_PRICE_CENTS * FEE_PERCENT) + FEE_FIXED_CENTS, "fee formula");
 
+    const chargedCents = TEST_PRICE_CENTS + expectedFee;
+    const expectedStripeFee = Math.round(chargedCents * STRIPE_FEE_PERCENT) + STRIPE_FEE_FIXED_CENTS;
+    const expectedApplicationFee = expectedFee + expectedStripeFee;
+
     console.log(`\n3. PaymentIntent with Connect (application_fee + transfer_data)`);
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: TEST_PRICE_CENTS + expectedFee,
+      amount: chargedCents,
       currency: "aud",
       payment_method_types: ["card"],
-      application_fee_amount: expectedFee,
+      application_fee_amount: expectedApplicationFee,
       transfer_data: { destination: accountId },
       metadata: {
         eventId: "seed-event-001",
@@ -99,7 +106,7 @@ async function main() {
     });
     console.log(`  Created ${paymentIntent.id}`);
 
-    expectFee(expectedFee, paymentIntent.application_fee_amount ?? 0, "application_fee_amount");
+    expectFee(expectedApplicationFee, paymentIntent.application_fee_amount ?? 0, "application_fee_amount");
     console.log(
       paymentIntent.transfer_data?.destination === accountId
         ? "  PASS transfer_data.destination matches connected account"
@@ -126,11 +133,15 @@ async function main() {
     // is authoritative for the transfer that was made.
     const charge = await stripe.charges.retrieve(confirmed.latest_charge);
     console.log(`  amount_net (transferred to connected account): ${(charge.amount_net ?? 0) / 100} AUD`);
-    expectFee(charge.amount_net ?? 0, TEST_PRICE_CENTS, "amount_net equals ticket price (fee already taken)");
+    expectFee(
+      charge.amount_net ?? 0,
+      TEST_PRICE_CENTS - expectedStripeFee,
+      "amount_net equals ticket price less the Stripe fee (fees already taken)",
+    );
 
     console.log(`\n✓ Validation complete.`);
-    console.log(`  Platform fee (${expectedFee / 100} AUD) stays with Startline;`);
-    console.log(`  ticket price (${TEST_PRICE_CENTS / 100} AUD) transfers to the organiser's Express balance.`);
+    console.log(`  Platform fee (${expectedFee / 100} AUD) and Stripe fee estimate (${expectedStripeFee / 100} AUD) go to Startline;`);
+    console.log(`  ticket price less the Stripe fee (${(TEST_PRICE_CENTS - expectedStripeFee) / 100} AUD) transfers to the organiser's Express balance.`);
   } finally {
     await prisma.$disconnect();
   }

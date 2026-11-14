@@ -56,6 +56,11 @@ const ATHLETE_PAYOUT_EVENT = "test-stripe-athlete-payout";
 const ORGANISER_PAYOUT_EVENT = "test-stripe-organiser-payout";
 
 const platformFee = (priceCents) => Math.round(priceCents * FEE_PERCENT) + FEE_FIXED_CENTS;
+// Stripe's domestic rate on the whole charge; the organiser absorbs it through
+// the application fee (#470). Mirrors lib/platform-fee.ts.
+const STRIPE_FEE_PERCENT = 0.0175;
+const STRIPE_FEE_FIXED_CENTS = 30;
+const stripeFee = (chargedCents) => Math.round(chargedCents * STRIPE_FEE_PERCENT) + STRIPE_FEE_FIXED_CENTS;
 
 let failures = 0;
 const check = (label, ok, extra = "") => {
@@ -169,7 +174,7 @@ function buildPaymentIntentArgs({ feeStructure, accountId, organiserId, eventId,
     amount,
     currency: "aud",
     payment_method_types: ["card"],
-    application_fee_amount: fee,
+    application_fee_amount: fee + stripeFee(amount),
     transfer_data: { destination: accountId },
     metadata: {
       eventId,
@@ -263,13 +268,18 @@ async function waitForConnectedBalance(stripe, accountId, minCents, timeoutMs = 
 async function runChargeFlow({ stripe, prisma, webhookSecret, feeStructure, eventId, accountId, organiserId, athleteEmail, athleteName }) {
   const fee = platformFee(PRICE_CENTS);
   const expectedTotal = feeStructure === "athlete" ? PRICE_CENTS + fee : PRICE_CENTS;
+  const expectedStripeFee = stripeFee(expectedTotal);
 
   console.log(`\n  Create PaymentIntent (feeStructure=${feeStructure})`);
   const pi = await stripe.paymentIntents.create(
     buildPaymentIntentArgs({ feeStructure, accountId, organiserId, eventId, priceCents: PRICE_CENTS, athleteEmail, athleteName })
   );
   check(`amount = ${expectedTotal}`, pi.amount === expectedTotal, `got ${pi.amount}`);
-  check(`application_fee_amount = ${fee}`, pi.application_fee_amount === fee, `got ${pi.application_fee_amount}`);
+  check(
+    `application_fee_amount = ${fee + expectedStripeFee}`,
+    pi.application_fee_amount === fee + expectedStripeFee,
+    `got ${pi.application_fee_amount}`
+  );
   check(
     `transfer_data.destination = connected account`,
     pi.transfer_data?.destination === accountId,
@@ -292,6 +302,7 @@ async function runChargeFlow({ stripe, prisma, webhookSecret, feeStructure, even
   check("registration status = CONFIRMED", registration.status === "CONFIRMED", `got ${registration.status}`);
   check("registration amountCents", registration.amountCents === PRICE_CENTS, `got ${registration.amountCents}`);
   check("registration platformFeeCents", registration.platformFeeCents === fee, `got ${registration.platformFeeCents}`);
+  check("registration stripeFeeCents", registration.stripeFeeCents === expectedStripeFee, `got ${registration.stripeFeeCents}`);
   check("registration feeStructure", registration.feeStructure === feeStructure, `got ${registration.feeStructure}`);
 
   return { registration, paymentIntent: retrieved, expectedTotal };
@@ -341,7 +352,9 @@ async function runPayoutFlow({ stripe, prisma, eventId, feeStructure, accountId,
   if (!flow) return;
 
   const fee = platformFee(PRICE_CENTS);
-  const expectedNet = feeStructure === "athlete" ? PRICE_CENTS : PRICE_CENTS - fee; // #251-correct net
+  const charged = feeStructure === "athlete" ? PRICE_CENTS + fee : PRICE_CENTS;
+  // #251-correct net, less the Stripe fee the organiser absorbs (#470).
+  const expectedNet = (feeStructure === "athlete" ? PRICE_CENTS : PRICE_CENTS - fee) - stripeFee(charged);
 
   if (!runPayout) {
     console.log(
@@ -368,7 +381,7 @@ async function runPayoutFlow({ stripe, prisma, eventId, feeStructure, accountId,
   check("payoutTriggered = true", event?.payoutTriggered === true, `got ${event?.payoutTriggered}`);
   check("payoutAt set", Boolean(event?.payoutAt));
   check(
-    "payoutAmountCents = Σ(amountCents − platformFeeCents)",
+    "payoutAmountCents = Σ(amountCents − absorbed fees)",
     event?.payoutAmountCents === expectedNet,
     `got ${event?.payoutAmountCents}, expected ${expectedNet}`
   );

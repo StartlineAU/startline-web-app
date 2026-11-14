@@ -195,9 +195,58 @@ describe("POST /api/stripe/webhook", () => {
       status: "CONFIRMED",
       amountCents: 10000,
       platformFeeCents: 540,
+      // No application fee on this intent (as before #470), so no Stripe fee.
+      stripeFeeCents: 0,
       stripePaymentIntentId: "pi_123",
     });
     expect(mocks.notification.create).toHaveBeenCalled();
+  });
+
+  // #470: the Stripe fee the organiser absorbs is read off the intent's own
+  // application fee, never its metadata.
+  it("records the Stripe fee taken in the application fee", async () => {
+    signedEvent({
+      id: "pi_fee",
+      amount_received: 10540,
+      application_fee_amount: 540 + 214,
+      metadata: metadata({
+        participantCount: "1",
+        stripeFeeCents: "9999", // ignored: metadata is never trusted
+        participant0: JSON.stringify({
+          fn: "Jordan", ln: "Clarke", em: "jordan@example.com", dob: "1990-01-01",
+          ecn: "Sam", ecp: "0400 000 000", wav: "General",
+        }),
+      }),
+    });
+    mocks.notification.create.mockResolvedValue({});
+
+    const res = await post({ id: "pi_fee", type: "payment_intent.succeeded" });
+    expect(res.status).toBe(200);
+    const created = mocks.registration.createMany.mock.calls[0][0].data[0];
+    expect(created).toMatchObject({ platformFeeCents: 540, stripeFeeCents: 214 });
+  });
+
+  it("splits a group order's Stripe fee across its entries", async () => {
+    const runner = (fn: string, em: string) => JSON.stringify({
+      fn, ln: "Clarke", em, dob: "1990-01-01", ecn: "Sam", ecp: "0400 000 000", wav: "General",
+    });
+    signedEvent({
+      id: "pi_group",
+      amount_received: 21080,
+      application_fee_amount: 1080 + 399,
+      metadata: metadata({
+        participantCount: "2",
+        participant0: runner("Jordan", "jordan@example.com"),
+        participant1: runner("Riley", "riley@example.com"),
+      }),
+    });
+    mocks.registration.createMany.mockResolvedValue({ count: 2 });
+    mocks.notification.create.mockResolvedValue({});
+
+    const res = await post({ id: "pi_group", type: "payment_intent.succeeded" });
+    expect(res.status).toBe(200);
+    const rows = mocks.registration.createMany.mock.calls[0][0].data;
+    expect(rows.map((r: { stripeFeeCents: number }) => r.stripeFeeCents)).toEqual([200, 199]);
   });
 
   it("rejects a PaymentIntent whose amount does not match DB pricing", async () => {

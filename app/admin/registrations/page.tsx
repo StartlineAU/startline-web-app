@@ -22,6 +22,7 @@ interface Registration {
   refundPercent: number | null;
   refundOutsidePolicy: boolean;
   platformFeeCents: number;
+  stripeFeeCents: number;
   feeStructure: string;
   status: RegStatus;
   stripePaymentIntentId: string | null;
@@ -109,6 +110,11 @@ function RegistrationRow({
             {reg.platformFeeCents > 0 && (
               <span className="font-headline text-[11px] text-muted-dark uppercase tracking-widest">
                 +{formatAud(reg.platformFeeCents)} fee
+              </span>
+            )}
+            {reg.stripeFeeCents > 0 && (
+              <span className="font-headline text-[11px] text-muted-dark uppercase tracking-widest">
+                {formatAud(reg.stripeFeeCents)} Stripe fee
               </span>
             )}
             {/* What the event's policy owes on this entry, frozen when the athlete asked,

@@ -25,7 +25,7 @@ export async function GET() {
       }),
       prisma.registration.aggregate({
         where: { status: "CONFIRMED" },
-        _sum: { platformFeeCents: true },
+        _sum: { platformFeeCents: true, stripeFeeCents: true },
       }),
       prisma.event.findMany({
         where: { status: { in: ["APPROVED", "IN_PROGRESS"] } },
@@ -70,6 +70,7 @@ export async function GET() {
         total:          confirmedCount,
         revenueAud:     (revenueAgg._sum.amountCents    ?? 0) / 100,
         platformFeeAud: (platformFeeAgg._sum.platformFeeCents ?? 0) / 100,
+        stripeFeeAud:   (platformFeeAgg._sum.stripeFeeCents ?? 0) / 100,
       },
       topEvents: topEvents.map((e: any) => ({
         id:                e.id,

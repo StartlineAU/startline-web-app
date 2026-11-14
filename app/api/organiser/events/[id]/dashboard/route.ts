@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
-import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FIXED_CENTS } from "@/lib/platform-fee";
+import { entryOrganiserNetCents, ticketFeeBreakdown } from "@/lib/platform-fee";
 import { idParams } from "@/lib/schemas";
 
 export async function GET(
@@ -43,7 +43,7 @@ export async function GET(
         select: {
           id: true, athleteName: true, athleteEmail: true, category: true,
           waveLabel: true, gender: true, medicalNotes: true, checkedInAt: true,
-          amountCents: true, platformFeeCents: true, createdAt: true,
+          amountCents: true, platformFeeCents: true, stripeFeeCents: true, feeStructure: true, createdAt: true,
         },
       }),
       prisma.registration.count({ where: { eventId: id, status: "CONFIRMED" } }),
@@ -59,16 +59,27 @@ export async function GET(
     const count = registrationCount;
     const hasRealData = count > 0;
 
-    let gross: number;
-    let fees: number;
+    // Net is what reaches the organiser's payout: the ticket price less any
+    // booking fee they absorbed and less the Stripe processing fee (#470).
+    let grossCents: number;
+    let platformFeeCents: number;
+    let stripeFeeCents: number;
+    let netCents: number;
     if (hasRealData) {
-      gross = registrations.reduce((sum: number, r: { amountCents: number; platformFeeCents: number }) => sum + r.amountCents, 0) / 100;
-      fees  = registrations.reduce((sum: number, r: { amountCents: number; platformFeeCents: number }) => sum + r.platformFeeCents, 0) / 100;
+      grossCents       = registrations.reduce((sum, r) => sum + r.amountCents, 0);
+      platformFeeCents = registrations.reduce((sum, r) => sum + r.platformFeeCents, 0);
+      stripeFeeCents   = registrations.reduce((sum, r) => sum + r.stripeFeeCents, 0);
+      netCents         = registrations.reduce((sum, r) => sum + entryOrganiserNetCents(r), 0);
     } else {
-      gross = lowestPrice * count;
-      fees  = count > 0 ? (gross * PLATFORM_FEE_PERCENT) + (count * PLATFORM_FEE_FIXED_CENTS / 100) : 0;
+      const perTicket  = ticketFeeBreakdown(Math.round(lowestPrice * 100), event.feeStructure);
+      grossCents       = Math.round(lowestPrice * 100) * count;
+      platformFeeCents = perTicket.platformFeeCents * count;
+      stripeFeeCents   = perTicket.stripeFeeCents * count;
+      netCents         = perTicket.organiserReceivesCents * count;
     }
-    const netPayout = Math.max(0, gross - fees);
+    const gross = grossCents / 100;
+    const fees  = platformFeeCents / 100;
+    const netPayout = netCents / 100;
 
     const recentRegistrations = registrations.slice(0, 20).map((r: { id: string; athleteName: string | null; athleteEmail: string | null; category: string | null; waveLabel: string | null; gender: string | null; medicalNotes: string | null; checkedInAt: Date | null; amountCents: number; platformFeeCents: number; createdAt: Date }) => ({
       id:           r.id,
@@ -116,6 +127,7 @@ export async function GET(
         lowestTicketPrice: lowestPrice,
         grossRevenue:      gross,
         platformFees:      fees,
+        stripeFees:        stripeFeeCents / 100,
         estimatedPayout:   netPayout,
         feeStructure:      event.feeStructure, // "athlete" | "organiser"
         isEstimate:        !hasRealData,

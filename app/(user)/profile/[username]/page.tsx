@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { User } from "lucide-react";
 import prisma from "@/lib/prisma";
-import { getServerSession } from "@/lib/amplify-server";
+import { getUserSession } from "@/lib/amplify-server";
 import ProfileServerView, {
   PROFILE_USER_SELECT,
   type ProfileUser,
@@ -23,8 +23,10 @@ export default async function PublicProfilePage({ params }: PublicProfilePagePro
     return <ProfileNotFound />;
   }
 
-  const session = await getServerSession();
-  const isOwner = session?.sub === user.id || (!!session?.email && session.email === user.email);
+  // Ownership is the Prisma User id resolved from the verified Cognito
+  // subject, never an email match.
+  const session = await getUserSession();
+  const isOwner = session?.sub === user.id;
 
   // Private profiles are only visible to their owner.
   if (!isOwner && !user.isPublic) {

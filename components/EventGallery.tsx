@@ -42,6 +42,7 @@ export default function EventGallery({ images, title }: { images: string[]; titl
               src={src}
               alt={`${title} — photo ${i + 1}`}
               fill
+              unoptimized={src.startsWith("blob:")}
               className="object-cover transition-transform duration-300 group-hover:scale-105"
               sizes="(max-width: 640px) 50vw, 33vw"
             />
@@ -86,6 +87,7 @@ export default function EventGallery({ images, title }: { images: string[]; titl
               src={images[lightbox]}
               alt={`${title} — photo ${lightbox + 1}`}
               fill
+              unoptimized={images[lightbox].startsWith("blob:")}
               className="object-contain"
               sizes="100vw"
               priority

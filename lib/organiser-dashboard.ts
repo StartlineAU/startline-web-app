@@ -5,10 +5,14 @@ export type DashboardEventInput = {
   cap: number | null;
 };
 
+import { entryOrganiserNetCents } from "@/lib/platform-fee";
+
 export type DashboardRegistrationInput = {
   eventId: string;
   amountCents: number;
   platformFeeCents: number;
+  stripeFeeCents?: number;
+  feeStructure: string;
   createdAt: Date | string;
 };
 
@@ -83,7 +87,8 @@ export function buildTrendDays(
     const bucket = buckets.get(key);
     if (!bucket) continue;
     bucket.registrations += 1;
-    bucket.revenueCents += Math.max(0, r.amountCents - r.platformFeeCents);
+    // Net to the organiser: what actually reaches their payout (#470).
+    bucket.revenueCents += entryOrganiserNetCents(r);
   }
 
   for (const raw of followCreatedAts) {

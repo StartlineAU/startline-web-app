@@ -488,8 +488,10 @@ describe("POST /api/checkout — free and mixed orders", () => {
 
     expect(res.status).toBe(200);
     // $20 ticket + its 3.95% + $1.45 fee. The free ticket adds nothing at all.
+    // The application fee also carries the Stripe fee estimate on the A$22.24
+    // charged (1.75% + 30c = 69c), which the organiser absorbs (#470).
     const args = mocks.paymentIntentCreate.mock.calls[0][0];
     expect(args.amount).toBe(2224);
-    expect(args.application_fee_amount).toBe(224);
+    expect(args.application_fee_amount).toBe(224 + 69);
   });
 });
