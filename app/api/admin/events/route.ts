@@ -11,6 +11,7 @@ import type { Prisma } from "@prisma/client";
 import { syncEventSchedules } from "@/lib/event-scheduler";
 import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 import { z } from "zod";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
@@ -179,7 +180,7 @@ export async function POST(req: NextRequest) {
         slug,
         title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
-        description:      body.description       ?? null,
+        description:      body.description != null ? sanitizeHtml(body.description) : null,
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",

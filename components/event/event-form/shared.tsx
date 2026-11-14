@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, startTransition } from "react";
+import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { useRouter } from "next/navigation";
 import { fetchAuthSession } from "aws-amplify/auth";
 import Image from "next/image";
@@ -189,7 +190,9 @@ export function RichTextEditor({ value, onChange }: { value: string; onChange: (
 
   useEffect(() => {
     if (editorRef.current && !userHasTyped.current) {
-      editorRef.current.innerHTML = value;
+      // `value` comes from the server and was written by an organiser; it is
+      // rendered for admins and co-members too, so never trust it as HTML.
+      editorRef.current.innerHTML = sanitizeRichTextClient(value);
     }
   }, [value]);
 
