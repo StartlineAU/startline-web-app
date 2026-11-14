@@ -31,6 +31,8 @@ interface CheckinRegistration {
   waveLabel: string | null;
   bibNumber: string | null;
   checkedInAt: string | null;
+  /** Set for a team entry; checking in checks in the whole team. */
+  teamName?: string | null;
 }
 
 interface CheckInInfo {
@@ -207,6 +209,11 @@ export default function CheckInScreen({
 
             <div className="bg-dark rounded-xl border border-dark-lighter p-5">
               <div className="font-headline text-[14px] font-bold text-white">{data.registration!.athleteName}</div>
+              {data.registration!.teamName && (
+                <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary mt-1">
+                  Team {data.registration!.teamName} · checks in together
+                </div>
+              )}
               <div className="flex flex-col gap-1 mt-3 text-[13px] text-muted">
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-primary shrink-0" />

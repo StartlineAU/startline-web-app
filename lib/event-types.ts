@@ -5,6 +5,8 @@ export interface PublicWave {
   qty?: number;
   closes?: string;
   startTime?: string;
+  /** Team ticket: members per team. `price` is per person, `qty` counts teams. */
+  teamSize?: number;
 }
 
 export interface InformationPdf {

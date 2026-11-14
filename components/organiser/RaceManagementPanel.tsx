@@ -60,6 +60,13 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const [editBib, setEditBib] = useState("");
   const [editStatus, setEditStatus] = useState<Registration["status"]>("CONFIRMED");
   const [editFinish, setEditFinish] = useState("");
+  // Team entries: rename the team, or swap the member being edited.
+  const [editTeamName, setEditTeamName] = useState("");
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [swap, setSwap] = useState({
+    firstName: "", lastName: "", email: "", dateOfBirth: "", gender: "",
+    mobile: "", emergencyContactName: "", emergencyContactPhone: "",
+  });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -161,6 +168,12 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     setEditStatus(r.status);
     setEditFinish(formatFinishMinutes(r.estimatedFinishMinutes));
     setEditError("");
+    setEditTeamName(r.team?.name ?? "");
+    setSwapOpen(false);
+    setSwap({
+      firstName: "", lastName: "", email: "", dateOfBirth: "", gender: "",
+      mobile: "", emergencyContactName: "", emergencyContactPhone: "",
+    });
   };
 
   // Lowest unused bib on the event; one obvious action, no guessing.
@@ -183,6 +196,24 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     setSavingEdit(true);
     setEditError("");
     try {
+      if (editReg.team) {
+        const renamed = editTeamName.trim() && editTeamName.trim() !== editReg.team.name;
+        if (renamed || swapOpen) {
+          const teamRes = await fetch(`/api/organiser/events/${id}/teams/${editReg.team.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(renamed ? { name: editTeamName.trim() } : {}),
+              ...(swapOpen ? { member: { registrationId: editReg.id, ...swap } } : {}),
+            }),
+          });
+          const teamJson = await teamRes.json().catch(() => ({}));
+          if (!teamRes.ok) {
+            setEditError(teamJson.error ?? "Could not update the team.");
+            return;
+          }
+        }
+      }
       const res = await fetch(`/api/organiser/events/${id}/registrations`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -216,20 +247,40 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
       const nextWaveId = editWave
         ? data?.event.startWaves.find((w) => w.label === editWave)?.id ?? null
         : null;
+      const teamId = editReg.team?.id ?? null;
+      const teamName = editTeamName.trim() || editReg.team?.name || "";
+      if (swapOpen) {
+        // A swap changes who the entry is for; reload rather than guess.
+        setEditReg(null);
+        load();
+        return;
+      }
       setData((d) => d ? {
         ...d,
-        registrations: d.registrations.map((r) =>
-          r.id === editReg.id
-            ? {
-                ...r,
-                waveId: nextWaveId,
-                wave: editWave || null,
-                bibNumber: editBib.trim() || null,
-                status: editStatus,
-                estimatedFinishMinutes: parseFinishToMinutes(editFinish),
-              }
-            : r
-        ),
+        registrations: d.registrations.map((r) => {
+          if (r.id === editReg.id) {
+            return {
+              ...r,
+              waveId: nextWaveId,
+              wave: editWave || null,
+              bibNumber: editBib.trim() || null,
+              status: editStatus,
+              estimatedFinishMinutes: parseFinishToMinutes(editFinish),
+              team: r.team ? { ...r.team, name: teamName } : r.team,
+            };
+          }
+          // Teammates share the team's bib and start wave.
+          if (teamId && r.team?.id === teamId) {
+            return {
+              ...r,
+              waveId: nextWaveId,
+              wave: editWave || null,
+              bibNumber: editBib.trim() || null,
+              team: { ...r.team, name: teamName },
+            };
+          }
+          return r;
+        }),
       } : d);
       setEditReg(null);
     } finally {
@@ -358,7 +409,18 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           gender: r.gender,
         }));
       const { assignments } = assignAthletesToWaves({ candidates, waves: builderWaves });
-      const desired = new Map(assignments.map((a) => [a.registrationId, a.waveLabel]));
+      const desired = new Map<string, string | null>(assignments.map((a) => [a.registrationId, a.waveLabel]));
+      // A team starts together, in the wave its captain (or first member) sorted into.
+      const leadOfTeam = new Map<string, string>();
+      for (const r of data.registrations) {
+        if (!r.team || r.status !== "CONFIRMED") continue;
+        if (r.team.captain || !leadOfTeam.has(r.team.id)) leadOfTeam.set(r.team.id, r.id);
+      }
+      for (const r of data.registrations) {
+        if (!r.team) continue;
+        const lead = leadOfTeam.get(r.team.id);
+        if (lead && lead !== r.id) desired.set(r.id, desired.get(lead) ?? null);
+      }
       // Include athletes who no longer match any wave (cleared to null).
       const rows = candidates
         .map((c) => ({ registrationId: c.id, startWaveLabel: desired.get(c.id) ?? null }))
@@ -604,6 +666,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     unassignedReason: r.waveId
                       ? null
                       : unassignedReason(candidate, event.startWaves),
+                    teamName: r.team?.name ?? null,
                   };
                 })}
                 onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
@@ -636,6 +699,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                   category: r.category,
                   resultTime: r.resultTime,
                   resultPlacement: r.resultPlacement,
+                  teamName: r.team?.name ?? null,
                 }))}
                 onEditResult={(aid) => {
                   const reg = registrations.find((r) => r.id === aid);
@@ -731,10 +795,71 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           <DialogHeader>
             <DialogTitle>Edit: {editReg?.name}</DialogTitle>
             <DialogDescription>
-              Update wave, bib number, or registration status.
+              {editReg?.team
+                ? "Update wave, bib number, or registration status. Wave and bib apply to the whole team."
+                : "Update wave, bib number, or registration status."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {editReg?.team && (
+              <div className="rounded-lg border border-dark-lighter p-3 space-y-3" data-testid="edit-team">
+                <div>
+                  <label htmlFor="edit-team-name" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
+                    Team name · {editReg.team.size} people{editReg.team.captain ? " · Captain" : ""}
+                  </label>
+                  <input
+                    id="edit-team-name"
+                    value={editTeamName}
+                    onChange={(e) => setEditTeamName(e.target.value)}
+                    className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                  />
+                </div>
+                {!swapOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setSwapOpen(true)}
+                    className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Swap {editReg.name} for someone else
+                  </button>
+                ) : (
+                  <div className="space-y-2" data-testid="swap-member">
+                    <p className="text-[12px] text-muted-dark">
+                      The new member takes over this place, its payment and the team&apos;s bib and wave.
+                    </p>
+                    {([
+                      ["firstName", "First name", "text"],
+                      ["lastName", "Last name", "text"],
+                      ["email", "Email", "email"],
+                      ["dateOfBirth", "Date of birth", "date"],
+                      ["mobile", "Mobile", "tel"],
+                      ["emergencyContactName", "Emergency contact name", "text"],
+                      ["emergencyContactPhone", "Emergency contact phone", "tel"],
+                    ] as const).map(([field, label, type]) => (
+                      <div key={field}>
+                        <label htmlFor={`swap-${field}`} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1">
+                          {label}
+                        </label>
+                        <input
+                          id={`swap-${field}`}
+                          type={type}
+                          value={swap[field]}
+                          onChange={(e) => setSwap((prev) => ({ ...prev, [field]: e.target.value }))}
+                          className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setSwapOpen(false)}
+                      className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors"
+                    >
+                      Keep {editReg.name}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <label htmlFor="edit-wave" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Start wave

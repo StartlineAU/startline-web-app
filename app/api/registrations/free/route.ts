@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { event, participants, waveLabels, wavePricing } = order;
+    const { event, participants, waveLabels, wavePricing, teams } = order;
 
     const entries: PricedEntry[] = participants.map((participant, index) => {
       const label = waveLabels[index];
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
         waveLabel: label,
         priceCents: wavePricing[label].p,
         platformFeeCents: wavePricing[label].f,
+        team: participant.team,
       };
     });
 
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
       userIdByEmail,
       stripePaymentIntentId: null,
       rejectExistingEntries: true,
+      teams,
     });
 
     // Both a full event and an entry that already exists are conflicts with the
@@ -93,7 +95,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: outcome.error }, { status: 409 });
     }
 
-    await announceRegistrations(event, event.organiser.id, entries);
+    await announceRegistrations(event, event.organiser.id, entries, teams);
 
     return NextResponse.json({
       registrationIds: outcome.registrationIds,

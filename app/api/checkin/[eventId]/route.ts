@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { entryBib, type TeamLink } from "@/lib/team-entries";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { z } from "zod";
@@ -30,7 +31,16 @@ const REGISTRATION_SELECT = {
   waveLabel: true,
   bibNumber: true,
   checkedInAt: true,
+  teamId: true,
+  team: { select: { name: true, bibNumber: true } },
 } as const;
+
+/** A team member shows the team's bib and name. */
+function present<T extends TeamLink & { teamId: string | null }>(row: T | null) {
+  if (!row) return null;
+  const { team, teamId: _teamId, ...rest } = row;
+  return { ...rest, bibNumber: entryBib(row), teamName: team?.name ?? null };
+}
 
 type CheckInEvent = {
   title: string;
@@ -134,7 +144,7 @@ export async function GET(
 
   return NextResponse.json({
     event,
-    registration,
+    registration: present(registration),
     checkIn: checkInPayload(event),
   });
 }
@@ -183,11 +193,14 @@ export async function POST(
     );
   }
 
-  const updated = await prisma.registration.update({
-    where: { id: registration.id },
-    data: { checkedInAt: new Date() },
-    select: { checkedInAt: true },
+  // A team checks in together: any member's scan checks in the whole team.
+  const checkedInAt = new Date();
+  await prisma.registration.updateMany({
+    where: registration.teamId
+      ? { eventId, teamId: registration.teamId, status: "CONFIRMED", checkedInAt: null }
+      : { id: registration.id },
+    data: { checkedInAt },
   });
 
-  return NextResponse.json({ checkedInAt: updated.checkedInAt });
+  return NextResponse.json({ checkedInAt });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { entryBib } from "@/lib/team-entries";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { wavesWithCounts } from "@/lib/start-waves";
@@ -78,6 +79,8 @@ export async function GET(
       resultPlacement: true,
       isPersonalBest: true,
       isTopResult: true,
+      teamId: true,
+      team: { select: { id: true, name: true, size: true, bibNumber: true, captainRegistrationId: true } },
     },
   });
 
@@ -100,7 +103,16 @@ export async function GET(
       wave: r.startWaveLabel,
       tier: r.waveLabel,
       waveNotified: r.waveNotifiedLabel,
-      bibNumber: r.bibNumber,
+      // A team member carries the team's bib.
+      bibNumber: entryBib(r),
+      team: r.team
+        ? {
+            id: r.team.id,
+            name: r.team.name,
+            size: r.team.size,
+            captain: r.team.captainRegistrationId === r.id,
+          }
+        : null,
       gender: r.gender,
       dateOfBirth: r.dateOfBirth,
       estimatedFinishMinutes: r.estimatedFinishMinutes,
@@ -155,15 +167,34 @@ export async function PATCH(
 
   const existing = await prisma.registration.findMany({
     where: { eventId: id },
-    select: { id: true, bibNumber: true },
+    select: { id: true, bibNumber: true, teamId: true },
   });
   const byId = new Map(existing.map((r) => [r.id, r]));
+  const teams = await prisma.team.findMany({
+    where: { eventId: id },
+    select: { id: true, bibNumber: true },
+  });
+  const membersByTeam = new Map<string, string[]>();
+  for (const r of existing) {
+    if (!r.teamId) continue;
+    membersByTeam.set(r.teamId, [...(membersByTeam.get(r.teamId) ?? []), r.id]);
+  }
 
-  // Track bibs after applying this batch so we catch intra-batch collisions.
+  // A bib belongs to an entry, or to a whole team: a team member's bib is the
+  // team's. Owners are keyed so the two never collide: "team:<id>" or the
+  // registration id. Tracked through the batch to catch intra-batch clashes.
+  const ownerKey = (registrationId: string) => {
+    const teamId = byId.get(registrationId)?.teamId;
+    return teamId ? `team:${teamId}` : registrationId;
+  };
   const bibOwner = new Map<string, string>();
   for (const r of existing) {
-    if (r.bibNumber?.trim()) bibOwner.set(r.bibNumber.trim(), r.id);
+    if (!r.teamId && r.bibNumber?.trim()) bibOwner.set(r.bibNumber.trim(), r.id);
   }
+  for (const t of teams) {
+    if (t.bibNumber?.trim()) bibOwner.set(t.bibNumber.trim(), `team:${t.id}`);
+  }
+  const teamBibUpdates = new Map<string, string | null>();
 
   const updates: { id: string; data: Prisma.RegistrationUncheckedUpdateInput }[] = [];
   const unmatched: string[] = [];
@@ -194,25 +225,24 @@ export async function PATCH(
 
     if ("bibNumber" in row) {
       const bib = row.bibNumber?.trim() || null;
+      const key = ownerKey(row.registrationId);
       if (bib) {
         const owner = bibOwner.get(bib);
-        if (owner && owner !== row.registrationId) {
+        if (owner && owner !== key) {
           return NextResponse.json(
             { error: `Bib ${bib} is already assigned.` },
             { status: 409 }
           );
         }
-        // Release previous bib for this registration in the map
-        for (const [b, ownerId] of bibOwner) {
-          if (ownerId === row.registrationId) bibOwner.delete(b);
-        }
-        bibOwner.set(bib, row.registrationId);
-      } else {
-        for (const [b, ownerId] of bibOwner) {
-          if (ownerId === row.registrationId) bibOwner.delete(b);
-        }
       }
-      data.bibNumber = bib;
+      // Release this owner's previous bib, then take the new one.
+      for (const [b, ownerId] of bibOwner) {
+        if (ownerId === key) bibOwner.delete(b);
+      }
+      if (bib) bibOwner.set(bib, key);
+      const teamId = byId.get(row.registrationId)?.teamId;
+      if (teamId) teamBibUpdates.set(teamId, bib);
+      else data.bibNumber = bib;
     }
 
     if ("status" in row && row.status != null) {
@@ -232,13 +262,28 @@ export async function PATCH(
 
     if (Object.keys(data).length === 0) continue;
     updates.push({ id: row.registrationId, data });
+
+    // A team starts together: a start wave set on one member moves them all.
+    const teamId = byId.get(row.registrationId)?.teamId;
+    if (teamId && "startWaveId" in data) {
+      for (const mate of membersByTeam.get(teamId) ?? []) {
+        if (mate === row.registrationId) continue;
+        updates.push({ id: mate, data: { startWaveId: data.startWaveId, startWaveLabel: data.startWaveLabel } });
+      }
+    }
   }
 
-  if (updates.length > 0) {
-    await prisma.$transaction(
-      updates.map((u) => prisma.registration.update({ where: { id: u.id }, data: u.data }))
-    );
+  if (updates.length > 0 || teamBibUpdates.size > 0) {
+    await prisma.$transaction([
+      // Clear the bibs first so a swap inside one batch never trips the
+      // unique index part-way through.
+      ...[...teamBibUpdates.keys()].map((teamId) =>
+        prisma.team.update({ where: { id: teamId }, data: { bibNumber: null } })),
+      ...[...teamBibUpdates].filter(([, bib]) => bib).map(([teamId, bib]) =>
+        prisma.team.update({ where: { id: teamId }, data: { bibNumber: bib } })),
+      ...updates.map((u) => prisma.registration.update({ where: { id: u.id }, data: u.data })),
+    ]);
   }
 
-  return NextResponse.json({ updated: updates.length, unmatched });
+  return NextResponse.json({ updated: updates.length + teamBibUpdates.size, unmatched });
 }

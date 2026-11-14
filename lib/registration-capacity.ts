@@ -8,25 +8,29 @@
  * in-flight payments near the cap; that needs a reservation/hold system.
  */
 
+import { teamSizeOf } from "@/lib/team-tickets";
+
 export interface CapacityWave {
   label: string;
+  /** Tickets for an individual tier, teams for a team tier. */
   qty?: number;
+  teamSize?: unknown;
 }
 
 export interface CapacityCheckInput {
   /** Event-wide capacity, or null when the event is uncapped. */
   cap: number | null;
-  /** Confirmed registrations for the whole event. */
+  /** Confirmed registrations (people) for the whole event. */
   confirmedTotal: number;
-  /** Tickets in this order across all tiers. */
+  /** People in this order across all tiers. */
   requestedTotal: number;
   /** Tier definitions; only those with a numeric `qty` are capped. */
   waves: CapacityWave[];
   /** Tiers used by this order. */
   usedLabels: string[];
-  /** Confirmed registrations per tier label. */
+  /** Confirmed units per tier label: entries, or teams for a team tier. */
   confirmedByWave: Record<string, number>;
-  /** Tickets requested per tier label in this order. */
+  /** Units requested per tier label in this order: tickets, or teams. */
   requestedByWave: Record<string, number>;
 }
 
@@ -46,9 +50,10 @@ export function getCapacityError(input: CapacityCheckInput): string | null {
     const requested = requestedByWave[wave.label] ?? 0;
     if (already + requested > wave.qty) {
       const remaining = Math.max(0, wave.qty - already);
+      const unit = teamSizeOf(wave) ? "team" : "ticket";
       return remaining === 0
         ? `"${wave.label}" is sold out.`
-        : `Only ${remaining} "${wave.label}" ticket${remaining === 1 ? "" : "s"} left.`;
+        : `Only ${remaining} "${wave.label}" ${unit}${remaining === 1 ? "" : "s"} left.`;
     }
   }
 

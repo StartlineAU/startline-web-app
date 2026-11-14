@@ -2,7 +2,7 @@ import type { EventDetailData } from "@/lib/event-detail";
 import { lowestPrice } from "@/lib/event-types";
 import { normalisePrizeAmount } from "@/lib/prize-pool";
 import { EVENT_TYPE_LABELS, type AustralianState, type EventType, type TicketDrop } from "@/types";
-import { eventCap, waveQty, type FormState } from "./shared";
+import { eventCap, waveQty, waveTeamSize, type FormState } from "./shared";
 
 /** Object URLs for files picked in this session, so unsaved images still show. */
 export interface FormMedia {
@@ -21,7 +21,11 @@ export function formToDetailData(form: FormState, media: FormMedia): EventDetail
   // receives priced rows, because publishing requires one on every category.
   const waves = form.waves
     .filter((w) => w.price === "0" || !!w.price)
-    .map(({ qty, ...w }) => ({ ...w, qty: waveQty({ qty }) ?? undefined }));
+    .map(({ qty, teamSize, ...w }) => ({
+      ...w,
+      qty: waveQty({ qty }) ?? undefined,
+      teamSize: waveTeamSize({ teamSize }) ?? undefined,
+    }));
   const prizeAmount = form.prizeMoney ? normalisePrizeAmount(form.prizeMoneyAmount) : "";
 
   return {

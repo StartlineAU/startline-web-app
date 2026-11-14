@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { parseParticipantsFromMetadata } from "@/lib/stripe-webhook";
+import { parseParticipantsFromMetadata, parseTeamNamesFromMetadata } from "@/lib/stripe-webhook";
+import { groupOrderTeams } from "@/lib/team-tickets";
 import { calculateTotalWithFee } from "@/lib/platform-fee";
 import {
   announceRegistrations,
@@ -120,7 +121,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   // free tier is priced at zero rather than rejected, so a mixed cart (a free
   // tier alongside a paid one) confirms with the right amount on each entry.
   const waves = Array.isArray(event.waves)
-    ? event.waves as { label: string; price: string; qty?: number }[]
+    ? event.waves as { label: string; price: string; qty?: number; teamSize?: number }[]
     : [];
   const waveOf = (participant: CompactParticipant) => participant.wav || meta.waveLabel || null;
   const priceEntry = (participant: CompactParticipant): PricedEntry | null => {
@@ -130,7 +131,13 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     const priceCents = Math.round(parseFloat(wave.price || "0") * 100);
     if (!Number.isFinite(priceCents) || priceCents < 0) return null;
     const { platformFeeCents } = calculateTotalWithFee(priceCents, event.feeStructure);
-    return { participant, waveLabel: label, priceCents, platformFeeCents };
+    return {
+      participant,
+      waveLabel: label,
+      priceCents,
+      platformFeeCents,
+      ...(participant.tm != null ? { team: participant.tm } : {}),
+    };
   };
 
   const priced = participants.map(priceEntry);
@@ -163,6 +170,19 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       : entry.priceCents);
   }, 0);
 
+  // Team structure is re-checked against the DB tiers too: the grouping came
+  // from metadata.
+  const grouped = groupOrderTeams(
+    participants.map((p) => ({ waveLabel: waveOf(p), team: p.tm })),
+    waves,
+    parseTeamNamesFromMetadata(meta),
+  );
+  if ("error" in grouped) {
+    console.error("PaymentIntent team structure is invalid:", paymentIntent.id, grouped.error);
+    await recordCancelled();
+    return;
+  }
+
   if (paymentIntent.amount_received !== expectedTotalCents || priced.some((entry) => !entry)) {
     console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id, {
       expectedTotalCents,
@@ -186,6 +206,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     buyerUserId,
     userIdByEmail,
     stripePaymentIntentId: paymentIntent.id,
+    teams: grouped.teams,
   });
 
   if (!outcome.ok) {
@@ -194,7 +215,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  await announceRegistrations(event, organiserId, entries);
+  await announceRegistrations(event, organiserId, entries, grouped.teams);
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

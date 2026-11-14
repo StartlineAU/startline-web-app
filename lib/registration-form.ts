@@ -55,6 +55,8 @@ export interface CompactParticipant {
   wav?: string;
   /** Estimated finish time in whole minutes. */
   eft?: number;
+  /** Index of this participant's team in the order, on a team ticket. */
+  tm?: number;
 }
 
 /**

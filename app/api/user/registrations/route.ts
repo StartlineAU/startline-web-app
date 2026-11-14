@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { entryBib } from "@/lib/team-entries";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import {
@@ -34,6 +35,7 @@ export async function GET() {
       athleteName: true,
       startWaveLabel: true,
       bibNumber: true,
+      team: { select: { name: true, bibNumber: true } },
       checkedInAt: true,
       amountCents: true,
       platformFeeCents: true,
@@ -89,7 +91,8 @@ export async function GET() {
         status: r.status,
         athleteName: r.athleteName,
         wave: r.startWaveLabel,
-        bibNumber: r.bibNumber,
+        bibNumber: entryBib(r),
+        teamName: r.team?.name ?? null,
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
         checkInOpensAt: window.opensAt?.toISOString() ?? null,

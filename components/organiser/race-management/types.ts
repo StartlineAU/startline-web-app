@@ -26,6 +26,8 @@ export interface Registration {
   resultPlacement: string | null;
   isPersonalBest: boolean;
   isTopResult: boolean;
+  /** Set for a team entry. Bib, start wave, check-in and result are the team's. */
+  team: { id: string; name: string; size: number; captain: boolean } | null;
 }
 
 export interface StartWave extends WaveDef {

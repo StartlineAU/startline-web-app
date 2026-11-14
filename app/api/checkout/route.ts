@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     const {
-      event, participants, waveLabels, wavePricing,
+      event, participants, waveLabels, wavePricing, teams,
       totalCents, platformFeeCents,
       groupRegistration, userSession, athleteName, athleteEmail,
     } = order;
@@ -52,8 +52,14 @@ export async function POST(req: NextRequest) {
       participantMetadata[`participant${index}`] = JSON.stringify({
         ...compactParticipant(participant),
         wav: waveLabels[index],
+        ...(participant.team != null ? { tm: participant.team } : {}),
       });
     });
+    // Team names, indexed by each member's `tm`. The webhook re-checks the
+    // grouping against the event's tiers before writing anything.
+    if (teams.length > 0) {
+      participantMetadata.teams = JSON.stringify(teams.map((t) => t.name));
+    }
 
     const primaryWave = wavePricing[waveLabels[0]];
 

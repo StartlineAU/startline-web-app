@@ -1,3 +1,4 @@
+import { teamSizeOf, MIN_TEAM_SIZE, MAX_TEAM_SIZE } from "@/lib/team-tickets";
 import { z } from "zod";
 
 // Path params — untrusted input, whitelisted before it reaches Prisma.
@@ -97,6 +98,28 @@ export const eventPayloadSchema = z
         code: z.ZodIssueCode.custom,
         path: ["endTime"],
         message: "End time must be after start time.",
+      });
+    }
+    // Team tickets: a whole-number team size in range, and only on an event
+    // whose format includes teams.
+    if (Array.isArray(data.waves)) {
+      data.waves.forEach((w: unknown, i: number) => {
+        if (!w || typeof w !== "object" || !("teamSize" in w)) return;
+        const size = (w as { teamSize: unknown }).teamSize;
+        if (size == null) return;
+        if (teamSizeOf({ teamSize: size }) == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["waves", i, "teamSize"],
+            message: `A team ticket needs between ${MIN_TEAM_SIZE} and ${MAX_TEAM_SIZE} people per team.`,
+          });
+        } else if (data.format === "individual") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["waves", i, "teamSize"],
+            message: "An individual event cannot sell team tickets. Change the format to Team or Individual & Team.",
+          });
+        }
       });
     }
     // Ticket categories cannot close after the event ends.

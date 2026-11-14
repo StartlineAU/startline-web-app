@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { teammatesOf } from "@/lib/team-entries";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
@@ -92,9 +93,18 @@ export async function PATCH(
     updates.push({ id: match.id, data });
   }
 
-  if (updates.length > 0) {
+  // A team is ranked as one: its result is written to every member.
+  const teammates = await teammatesOf(id, updates.map((u) => u.id));
+  const writes = new Map<string, Prisma.RegistrationUpdateInput>();
+  for (const u of updates) {
+    for (const mate of teammates.get(u.id) ?? [u.id]) {
+      writes.set(mate, { ...(writes.get(mate) ?? {}), ...u.data });
+    }
+  }
+
+  if (writes.size > 0) {
     await prisma.$transaction(
-      updates.map((u) => prisma.registration.update({ where: { id: u.id }, data: u.data }))
+      [...writes].map(([rid, data]) => prisma.registration.update({ where: { id: rid }, data }))
     );
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { MIN_TEAM_SIZE, MAX_TEAM_SIZE } from "@/lib/team-tickets";
 import { useEffect, useLayoutEffect, useRef, useState, startTransition, type ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -30,6 +31,7 @@ import {
 import { STATE_LABELS } from "@/types";
 import {
   DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, FORMATS, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
+  waveTeamSize, eventCap,
   type AusState, type Discipline, type FormState, type RegionId, type Wave,
 } from "./shared";
 
@@ -445,7 +447,9 @@ const STARTLINE_FLAT = 1.45;
 const STRIPE_PCT     = 0.0175;
 const STRIPE_FLAT    = 0.30;
 
-function FeeBreakdown({ price, feeStructure }: { price: string; feeStructure: FormState["feeStructure"] }) {
+function FeeBreakdown({ price, feeStructure, teamSize }: {
+  price: string; feeStructure: FormState["feeStructure"]; teamSize?: number | null;
+}) {
   const p = parseFloat(price);
   if (!price || price === "0" || isNaN(p) || p <= 0) return null;
   const startlineFee = p * STARTLINE_PCT + STARTLINE_FLAT;
@@ -461,10 +465,17 @@ function FeeBreakdown({ price, feeStructure }: { price: string; feeStructure: Fo
     </div>
   );
   return (
-    <div className="grid grid-cols-3 gap-3 rounded-lg bg-dark-darker/60 px-4 py-3" data-testid="fee-breakdown">
-      {cell("Athlete pays", fmt(athletePays))}
-      {cell("You receive", fmt(youReceive), "After Stripe fee")}
-      {cell("Startline fee", fmt(startlineFee))}
+    <div className="rounded-lg bg-dark-darker/60 px-4 py-3 space-y-2" data-testid="fee-breakdown">
+      <div className="grid grid-cols-3 gap-3">
+        {cell(teamSize ? "Each pays" : "Athlete pays", fmt(athletePays))}
+        {cell("You receive", fmt(youReceive), teamSize ? "Per person, after Stripe" : "After Stripe fee")}
+        {cell("Startline fee", fmt(startlineFee), teamSize ? "Per person" : undefined)}
+      </div>
+      {teamSize && (
+        <p className="font-headline text-[10px] uppercase tracking-widest text-muted" data-testid="fee-breakdown-team">
+          A team of {teamSize} pays {fmt(athletePays * teamSize)} · you receive {fmt(youReceive * teamSize)}
+        </p>
+      )}
     </div>
   );
 }
@@ -503,13 +514,17 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
     update({ waves: form.waves.filter((_, j) => j !== i) });
     setExpanded(new Set());
   };
-  const addWave = () => update({ waves: [...form.waves, EMPTY_WAVE] });
+  // A Team event only sells team tickets, so a new one starts as pairs.
+  const addWave = () => update({ waves: [...form.waves, { ...EMPTY_WAVE, teamSize: form.format === "team" ? "2" : "" }] });
+  const teamsAllowed = form.format === "team" || form.format === "both";
   const toggle = (i: number) => setExpanded(prev => {
     const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next;
   });
   const quantities = form.waves.map(waveQty);
   const allLimited = quantities.length > 0 && quantities.every(q => q !== null);
-  const totalTickets = quantities.reduce<number>((sum, q) => sum + (q ?? 0), 0);
+  const totalTickets = quantities.reduce<number>((sum, q, i) => sum + (waveTeamSize(form.waves[i]) ? 0 : q ?? 0), 0);
+  const totalTeams = quantities.reduce<number>((sum, q, i) => sum + (waveTeamSize(form.waves[i]) ? q ?? 0 : 0), 0);
+  const totalPeople = allLimited ? eventCap(form) ?? 0 : 0;
 
   return (
     <Region id="tickets" missing={missing}>
@@ -526,6 +541,12 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
           const labelMissing = !!missing && !w.label.trim();
           const priceMissing = !!missing && !free && !(parseFloat(w.price) >= 0);
           const id = `ticket-${i}`;
+          const teamSize = waveTeamSize(w);
+          // Shown whenever the ticket carries a size, so a leftover team ticket
+          // on an Individual event can still be switched back.
+          const showTeam = teamsAllowed || w.teamSize !== "";
+          const isTeam = w.teamSize !== "";
+          const teamSizeBad = isTeam && teamSize === null && (!!missing || w.teamSize.length > 0);
           return (
             <div key={i} data-testid="ticket-row" className="bg-dark rounded-xl border border-dark-lighter p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between">
@@ -548,8 +569,10 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                     className={`${ticketInput} ${labelMissing ? "!border-orange-400/70" : ""}`} />
                 </TicketField>
 
-                <TicketField label="Price" htmlFor={`${id}-price`} required
-                  info="What athletes pay for this ticket, in Australian dollars. Tap Free if it costs nothing.">
+                <TicketField label={isTeam ? "Price per person" : "Price"} htmlFor={`${id}-price`} required
+                  info={isTeam
+                    ? "What each team member pays, in Australian dollars. A team pays this times the team size. Tap Free if it costs nothing."
+                    : "What athletes pay for this ticket, in Australian dollars. Tap Free if it costs nothing."}>
                   <div className="flex items-stretch gap-2">
                     {/* The price field stays put when the ticket is free, blanked out, so the row never changes shape. */}
                     <div className={`relative flex-1 transition-opacity ${free ? "opacity-40" : ""}`}>
@@ -569,10 +592,44 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                 </TicketField>
               </div>
 
-              <TicketField label="Tickets available" htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
-                info="How many of this ticket you will sell. Leave blank for no limit. Only you see this number, and sales stop when it runs out.">
+              {showTeam && (
+                <div className="space-y-3" data-testid="ticket-team">
+                  {form.format !== "team" && (
+                    <div role="radiogroup" aria-label="Who this ticket is for" className="inline-flex rounded-md border border-dark-lighter p-0.5">
+                      {([["individual", "Individual"], ["team", "Team"]] as const).map(([v, l]) => {
+                        const on = v === "team" ? isTeam : !isTeam;
+                        return (
+                          <button key={v} type="button" role="radio" aria-checked={on}
+                            onClick={() => updateWave(i, { teamSize: v === "team" ? (w.teamSize || "2") : "" })}
+                            className={`rounded px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                              on ? "bg-primary text-darker" : "text-muted hover:text-primary"
+                            }`}>
+                            {l}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {isTeam && (
+                    <TicketField label="People per team" htmlFor={`${id}-team-size`} required className="sm:max-w-[260px]"
+                      info={`How many athletes make up one team, from ${MIN_TEAM_SIZE} to ${MAX_TEAM_SIZE}. The buyer enters every member's details at checkout.`}>
+                      <input id={`${id}-team-size`} value={w.teamSize} inputMode="numeric" placeholder="e.g. 4" aria-label="People per team"
+                        onChange={e => updateWave(i, { teamSize: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+                        className={`${ticketInput} tabular-nums ${teamSizeBad ? "!border-orange-400/70" : ""}`} />
+                      {teamSizeBad && (
+                        <p className="mt-1.5 text-[12px] text-orange-300">Teams can have {MIN_TEAM_SIZE} to {MAX_TEAM_SIZE} people.</p>
+                      )}
+                    </TicketField>
+                  )}
+                </div>
+              )}
+
+              <TicketField label={isTeam ? "Teams available" : "Tickets available"} htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
+                info={isTeam
+                  ? "How many teams you will take on this ticket. Leave blank for no limit. Only you see this number, and sales stop when it runs out."
+                  : "How many of this ticket you will sell. Leave blank for no limit. Only you see this number, and sales stop when it runs out."}>
                 <div className="relative">
-                  <input id={`${id}-qty`} value={w.qty} inputMode="numeric" placeholder="No limit" aria-label="Tickets available"
+                  <input id={`${id}-qty`} value={w.qty} inputMode="numeric" placeholder="No limit" aria-label={isTeam ? "Teams available" : "Tickets available"}
                     onChange={e => updateWave(i, { qty: e.target.value.replace(/\D/g, "").slice(0, 6) })}
                     className={`${ticketInput} !pr-10 tabular-nums`} />
                   <EyeOff className="w-4 h-4 text-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
@@ -602,14 +659,19 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                 </button>
               )}
 
-              {form.registrationType === "startline" && <FeeBreakdown price={w.price} feeStructure={form.feeStructure} />}
+              {form.registrationType === "startline" && <FeeBreakdown price={w.price} feeStructure={form.feeStructure} teamSize={teamSize} />}
             </div>
           );
         })}
 
         {allLimited && (
           <p className="px-1 font-headline text-[10px] uppercase tracking-widest text-muted" data-testid="ticket-total">
-            {totalTickets.toLocaleString()} ticket{totalTickets === 1 ? "" : "s"} in total · registrations close when they sell out
+            {totalTeams > 0
+              ? <>{[
+                  `${totalTeams.toLocaleString()} team${totalTeams === 1 ? "" : "s"}`,
+                  ...(totalTickets > 0 ? [`${totalTickets.toLocaleString()} individual ticket${totalTickets === 1 ? "" : "s"}`] : []),
+                ].join(" + ")} · up to {totalPeople.toLocaleString()} athletes · registrations close when they sell out</>
+              : <>{totalTickets.toLocaleString()} ticket{totalTickets === 1 ? "" : "s"} in total · registrations close when they sell out</>}
           </p>
         )}
         {!allLimited && form.cap && (

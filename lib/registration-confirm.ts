@@ -13,6 +13,8 @@ import {
   type RegistrationFormData,
 } from "@/lib/registration-form";
 import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
+import { confirmedUnitsByWave, requestedUnitsByWave, type OrderTeam } from "@/lib/team-tickets";
+import { findTakenTeamNames } from "@/lib/team-entries";
 
 /** One ticket, priced from the database rather than from the client. */
 export interface PricedEntry {
@@ -20,6 +22,8 @@ export interface PricedEntry {
   waveLabel: string | null;
   priceCents: number;
   platformFeeCents: number;
+  /** Index of this entry's team in the order, for a team-ticket member. */
+  team?: number;
 }
 
 /** The event fields needed to write and announce a registration. */
@@ -195,6 +199,11 @@ export async function insertConfirmedRegistrations(opts: {
    * already been cancelled or refunded no longer blocks a fresh RSVP.
    */
   duplicateStatuses?: RegistrationStatus[];
+  /**
+   * Teams in the order, from groupOrderTeams. Each becomes a Team row and its
+   * members' entries are linked to it. The first member is the captain.
+   */
+  teams?: OrderTeam[];
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
@@ -245,27 +254,34 @@ export async function insertConfirmedRegistrations(opts: {
       }
     }
 
-    const requestedByWave = entries.reduce<Record<string, number>>((acc, { waveLabel }) => {
-      if (waveLabel) acc[waveLabel] = (acc[waveLabel] ?? 0) + 1;
-      return acc;
-    }, {});
+    const teams = opts.teams ?? [];
+    if (teams.length > 0) {
+      const taken = await findTakenTeamNames(event.id, teams.map((t) => t.name), tx);
+      if (taken) {
+        return {
+          ok: false as const,
+          reason: "duplicate" as const,
+          error: `A team called "${taken}" is already entered in this event.`,
+        };
+      }
+    }
+
+    // Tier quantities count tickets, or teams for a team tier.
+    const requestedByWave = requestedUnitsByWave(entries);
     const usedLabels = Object.keys(requestedByWave);
     const needsCapCheck = event.cap != null;
     const needsWaveCheck = hasCappedWave(waves, usedLabels);
     const confirmedTotal = needsCapCheck
       ? await tx.registration.count({ where: { eventId: event.id, status: "CONFIRMED" } })
       : 0;
-    const confirmedByWave: Record<string, number> = {};
-    if (needsWaveCheck) {
-      const grouped = await tx.registration.groupBy({
-        by: ["waveLabel"],
-        where: { eventId: event.id, status: "CONFIRMED" },
-        _count: { _all: true },
-      });
-      for (const row of grouped) {
-        if (row.waveLabel) confirmedByWave[row.waveLabel] = row._count._all;
-      }
-    }
+    const confirmedRows = needsWaveCheck
+      ? await tx.registration.groupBy({
+          by: ["waveLabel", "teamId"],
+          where: { eventId: event.id, status: "CONFIRMED" },
+          _count: { _all: true },
+        })
+      : [];
+    const confirmedByWave = confirmedUnitsByWave(confirmedRows);
     const capacityError = getCapacityError({
       cap: event.cap,
       confirmedTotal,
@@ -279,8 +295,25 @@ export async function insertConfirmedRegistrations(opts: {
       return { ok: false as const, reason: "capacity" as const, error: capacityError };
     }
 
+    // Team rows first, so each member's entry can point at its team.
+    const teamIdByIndex = new Map<number, string>();
+    for (const team of teams) {
+      const id = randomUUID();
+      teamIdByIndex.set(team.index, id);
+      await tx.team.create({
+        data: {
+          id,
+          eventId: event.id,
+          name: team.name,
+          ticketLabel: team.waveLabel,
+          size: team.size,
+          captainRegistrationId: registrationIds[team.members[0]],
+        },
+      });
+    }
+
     await tx.registration.createMany({
-      data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents }, index) => {
+      data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, team }, index) => {
         const expanded = expandCompactParticipant(participant);
         const email = normalizeEmail(participant.em);
         return {
@@ -306,6 +339,7 @@ export async function insertConfirmedRegistrations(opts: {
           feeStructure: event.feeStructure,
           status: "CONFIRMED" as const,
           stripePaymentIntentId,
+          teamId: team != null ? teamIdByIndex.get(team) ?? null : null,
         };
       }),
     });
@@ -323,11 +357,15 @@ export async function announceRegistrations(
   event: ConfirmEvent,
   organiserId: string,
   entries: PricedEntry[],
+  teams: OrderTeam[] = [],
 ): Promise<void> {
   const names = entries.map(({ participant }) => athleteNameFromParticipant(participant));
-  const notificationBody = entries.length === 1
-    ? `${names[0]} registered for ${event.title}`
-    : `${entries.length} participants registered for ${event.title}: ${names.join(", ")}`;
+  const teamByIndex = new Map(teams.map((t) => [t.index, t]));
+  const notificationBody = teams.length > 0
+    ? `${teams.length === 1 ? `Team ${teams[0].name}` : `${teams.length} teams (${teams.map((t) => t.name).join(", ")})`} registered for ${event.title}: ${names.join(", ")}`
+    : entries.length === 1
+      ? `${names[0]} registered for ${event.title}`
+      : `${entries.length} participants registered for ${event.title}: ${names.join(", ")}`;
 
   // The organisation can turn registration notifications off. If the lookup
   // fails, tell them anyway: a missed notification is worse than an extra one.
@@ -348,7 +386,9 @@ export async function announceRegistrations(
         organiserId,
         eventId: event.id,
         type: "NEW_REGISTRATION",
-        title: entries.length === 1 ? "New registration" : "New group registration",
+        title: teams.length > 0
+          ? "New team registration"
+          : entries.length === 1 ? "New registration" : "New group registration",
         body: notificationBody,
       },
     }).catch((err: unknown) => console.error("Failed to create notification:", err));
@@ -367,7 +407,8 @@ export async function announceRegistrations(
     endsAtUtc: event.endsAtUtc,
     location,
   });
-  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents }) => {
+  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }) => {
+    const entryTeam = team != null ? teamByIndex.get(team) : undefined;
     if (!participant.em) return;
     const feeCents = athletePaysFee ? platformFeeCents : 0;
 
@@ -379,6 +420,7 @@ export async function announceRegistrations(
       category:         waveLabel || "General",
       location,
       calendarUrl,
+      ...(entryTeam ? { team: `${entryTeam.name} (team of ${entryTeam.size})` } : {}),
       registrationFee:  formatCents(priceCents),
       serviceFee:       formatCents(feeCents),
       total:            formatCents(priceCents + feeCents),

@@ -33,6 +33,8 @@ export interface TicketDrop {
   qty?: number;
   closes?: string;
   startTime?: string;
+  /** Team ticket: members per team. `price` is per person. */
+  teamSize?: number;
 }
 
 export interface UserEvent {
