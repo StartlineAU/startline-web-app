@@ -5,6 +5,7 @@ import { getUserSession } from "@/lib/amplify-server";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
 import { isFreeEvent, waveIsOpen, type PublicWave } from "@/lib/event-types";
+import { teamSizeOf } from "@/lib/team-tickets";
 import {
   compactParticipant,
   athleteNameFromParticipant,
@@ -141,6 +142,14 @@ export async function POST(req: NextRequest) {
     const wave = waves.find((candidate) => candidate.label === body.waveLabel);
     if (!wave) {
       return NextResponse.json({ error: "Selected ticket tier not found." }, { status: 400 });
+    }
+    // A team entry needs every member's details, which a one-tap RSVP has not
+    // got; it goes through the standard registration flow instead.
+    if (teamSizeOf(wave)) {
+      return NextResponse.json(
+        { error: "Team tickets need the standard registration flow." },
+        { status: 400 },
+      );
     }
     if (!waveIsOpen(wave)) {
       return NextResponse.json(

@@ -14,7 +14,7 @@ import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import {
-  DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty,
+  DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty, waveTeamSize,
   type Discipline, type FormState, type RegionId, type Wave,
 } from "./event-form/shared";
 import { popIn, revealWords, spotlight, staggerIn } from "./event-form/motion";
@@ -159,9 +159,10 @@ export default function EventPageEditor({
         if (e.editContext?.pendingRevision?.payload) Object.assign(e, e.editContext.pendingRevision.payload);
         originalFields.current = { inclusions: e.inclusions, activations: e.activations, accessibilityInfo: e.accessibilityInfo };
         const waves: Wave[] = Array.isArray(e.waves) && e.waves.length
-          ? e.waves.map((w: { label?: string; price?: string; closes?: string; startTime?: string; qty?: number }) => ({
+          ? e.waves.map((w: { label?: string; price?: string; closes?: string; startTime?: string; qty?: number; teamSize?: number }) => ({
               label: w.label ?? "", price: w.price ?? "", closes: w.closes ?? "", startTime: w.startTime ?? "",
               qty: typeof w.qty === "number" && w.qty > 0 ? String(w.qty) : "",
+              teamSize: typeof w.teamSize === "number" && w.teamSize > 0 ? String(w.teamSize) : "",
             }))
           : [EMPTY_WAVE];
         // An overall cap from before ticket quantities. One ticket category
@@ -378,9 +379,12 @@ export default function EventPageEditor({
         cap:               eventCap(form),
         // A quantity is only stored when the organiser set one: no `qty` is
         // what checkout already reads as "no limit".
-        waves:             form.waves.map(({ qty, ...w }) => {
+        // Team size is stored as a number on team tickets only; an
+        // individual ticket carries no `teamSize`.
+        waves:             form.waves.map(({ qty, teamSize, ...w }) => {
           const n = waveQty({ qty });
-          return n === null ? w : { ...w, qty: n };
+          const size = waveTeamSize({ teamSize });
+          return { ...w, ...(n === null ? {} : { qty: n }), ...(size === null ? {} : { teamSize: size }) };
         }),
         inclusions:        originalFields.current.inclusions ?? null,
         activations:       originalFields.current.activations ?? null,

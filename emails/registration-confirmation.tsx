@@ -17,6 +17,8 @@ export interface RegistrationConfirmationEmailProps {
   /** Display-ready, blanks already dropped. */
   location: string
   bib?: string
+  /** Team entry, display-ready: "Harbour Hustlers (team of 4)". */
+  team?: string
   registrationFee: string
   serviceFee: string
   total: string
@@ -34,6 +36,7 @@ export function RegistrationConfirmationEmail({
   category,
   location,
   bib,
+  team,
   registrationFee,
   serviceFee,
   total,
@@ -44,6 +47,7 @@ export function RegistrationConfirmationEmail({
     { label: 'Date', value: eventDate },
     { label: 'Start time', value: startTime },
     { label: 'Category', value: category },
+    ...(team ? [{ label: 'Team', value: team }] : []),
     { label: 'Location', value: location || 'To be confirmed' },
   ]
   if (bib) details.push({ label: 'Bib number', value: `#${bib}` })
@@ -66,7 +70,7 @@ export function RegistrationConfirmationEmail({
       <SummaryTable
         title="Payment summary"
         rows={[
-          { label: 'Registration', value: registrationFee },
+          { label: team ? 'Your entry' : 'Registration', value: registrationFee },
           { label: 'Service fee', value: serviceFee },
         ]}
         total={{ label: 'Total paid', value: total }}

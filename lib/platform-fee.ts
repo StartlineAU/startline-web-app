@@ -70,11 +70,18 @@ export type TicketFeeBreakdown = {
 };
 
 /**
- * What one ticket, bought on its own, costs the athlete and pays the
- * organiser. The event form preview shows this, so it must match checkout.
+ * What `people` tickets bought together in one payment cost and pay the
+ * organiser: one ticket on its own by default, or a whole team ticket. The
+ * event form preview shows this, so it must match checkout.
+ *
+ * The booking fee is per person, as checkout charges it, but Stripe charges
+ * one fee on the whole payment. Multiplying a single ticket's breakdown by the
+ * team size would count Stripe's fixed 30c once per member.
  */
-export function ticketFeeBreakdown(priceCents: number, feeStructure: string): TicketFeeBreakdown {
-  const { totalCents, platformFeeCents } = calculateTotalWithFee(priceCents, feeStructure);
+export function ticketFeeBreakdown(priceCents: number, feeStructure: string, people = 1): TicketFeeBreakdown {
+  const each = calculateTotalWithFee(priceCents, feeStructure);
+  const totalCents = each.totalCents * people;
+  const platformFeeCents = each.platformFeeCents * people;
   const stripeFeeCents = estimateStripeFeeCents(totalCents);
   const appFee = applicationFeeCents(totalCents, platformFeeCents, stripeFeeCents);
   return {

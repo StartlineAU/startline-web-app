@@ -44,6 +44,8 @@ export interface ResultsWave {
 }
 
 export interface ResultsAthlete {
+  /** Team entry: the team's name. A team shares one result. */
+  teamName?: string | null;
   id: string;
   name: string;
   email: string;
@@ -124,6 +126,11 @@ export default function WaveResultsBoard({ waves, athletes, onEditResult }: Prop
         <span className="min-w-0 flex-1">
           <span className="font-headline text-[13.5px] font-bold text-white/90 truncate block">
             {a.name}
+            {a.teamName && (
+              <span className="ml-2 inline-flex items-center align-middle font-headline text-[9px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5">
+                {a.teamName}
+              </span>
+            )}
           </span>
           <span className="block text-[11px] text-muted-dark truncate mt-0.5">{a.email}</span>
         </span>

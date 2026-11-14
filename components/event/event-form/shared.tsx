@@ -5,6 +5,7 @@ import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { teamSizeOf } from "@/lib/team-tickets";
 
 /**
  * The parts of the listing page an organiser fills in. Each is an element id
@@ -53,6 +54,14 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   check("Description", "description", stripHtml(form.description).length > 0, "Write the event description");
   check("Tickets & prices", "tickets", form.waves.length > 0 && form.waves.every(waveIsComplete),
     "Every ticket category needs a name and a price");
+  // A Team event sells only team tickets; an Individual one sells none.
+  if (form.format === "team") {
+    check("Team tickets", "tickets", form.waves.every((w) => waveTeamSize(w) !== null),
+      "Set a team size on every ticket: this event's format is Team");
+  } else if (form.format === "individual" && form.waves.some((w) => waveTeamSize(w) !== null)) {
+    check("Team tickets", "tickets", false,
+      "Individual events cannot sell team tickets. Change the format or remove the team size");
+  }
   if (form.registrationType !== "startline") {
     check("Registration link", "registration", !!form.registrationUrl.trim(), "Add your registration link");
   }
@@ -88,9 +97,21 @@ export type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "
  * organiser sets it and athletes never see it: checkout stops selling at it and
  * the register page shows the tier as sold out (#528).
  */
-export interface Wave { label: string; price: string; closes: string; startTime: string; qty: string; }
+export interface Wave {
+  label: string; price: string; closes: string; startTime: string; qty: string;
+  /**
+   * People per team ("" for an individual ticket). On a team ticket `price` is
+   * per person, so a team pays price x size, and `qty` counts teams (#541).
+   */
+  teamSize: string;
+}
 
-export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "" };
+export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "", teamSize: "" };
+
+/** A ticket category's team size, or null for an individual ticket. */
+export function waveTeamSize(w: Pick<Wave, "teamSize">): number | null {
+  return teamSizeOf({ teamSize: w.teamSize === "" ? undefined : Number(w.teamSize) });
+}
 
 /** A ticket category's quantity as a number, or null when it has no limit. */
 export function waveQty(w: Pick<Wave, "qty">): number | null {
@@ -107,7 +128,8 @@ export function waveQty(w: Pick<Wave, "qty">): number | null {
 export function eventCap(form: Pick<FormState, "waves" | "cap">): number | null {
   const quantities = form.waves.map(waveQty);
   if (quantities.length > 0 && quantities.every((q): q is number => q !== null)) {
-    return quantities.reduce((sum, q) => sum + q, 0);
+    // The cap counts people; a team ticket's quantity counts teams.
+    return form.waves.reduce((sum, w, i) => sum + (quantities[i] as number) * (waveTeamSize(w) ?? 1), 0);
   }
   const legacy = parseInt(form.cap, 10);
   return Number.isFinite(legacy) && legacy > 0 ? legacy : null;

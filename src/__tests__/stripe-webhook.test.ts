@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 
 const tx = {
   registration: mocks.registration,
+  // The event-row lock the confirm transaction takes first.
+  $queryRaw: async () => [],
 };
 
 vi.mock("@/lib/stripe", () => ({
@@ -261,6 +263,30 @@ describe("POST /api/stripe/webhook", () => {
 
     await post({ id: "pi_123" });
     expect(mocks.registration.createMany).toHaveBeenCalledTimes(1);
+    const created = mocks.registration.createMany.mock.calls[0][0].data[0];
+    expect(created.status).toBe("CANCELLED");
+    expect(mocks.notification.create).not.toHaveBeenCalled();
+  });
+
+  // #541: the team grouping comes from metadata, so it is re-checked against
+  // the event's tiers. A pair ticket paid for with one member never confirms.
+  it("rejects a team order whose members do not fill the team", async () => {
+    mocks.event.findUnique.mockResolvedValue({
+      ...approvedEvent,
+      waves: [{ label: "Pairs", price: "100.00", teamSize: 2 }],
+    });
+    signedEvent({
+      id: "pi_team",
+      amount_received: 10540,
+      metadata: metadata({
+        waveLabel: "Pairs",
+        teams: JSON.stringify(["Solo Act"]),
+        participantCount: "1",
+        participant0: JSON.stringify({ fn: "Jordan", ln: "Clarke", em: "jordan@example.com", wav: "Pairs", tm: 0 }),
+      }),
+    });
+
+    await post({ id: "pi_team" });
     const created = mocks.registration.createMany.mock.calls[0][0].data[0];
     expect(created.status).toBe("CANCELLED");
     expect(mocks.notification.create).not.toHaveBeenCalled();

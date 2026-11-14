@@ -9,15 +9,28 @@ import { getUserSession } from "@/lib/amplify-server";
 import {
   validateParticipants,
   athleteNameFromParticipant,
+  MAX_REGISTRATION_PARTICIPANTS,
   applySharedEmergencyContact,
   type RegistrationFormData,
   type EmergencyContact,
 } from "@/lib/registration-form";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
+import {
+  confirmedUnitsByWave,
+  groupOrderTeams,
+  requestedUnitsByWave,
+  MAX_TEAM_NAME_LENGTH,
+  type OrderTeam,
+} from "@/lib/team-tickets";
+import { findTakenTeamNames } from "@/lib/team-entries";
 import { todayIso } from "@/lib/event-types";
 import { registrationOpenAt } from "@/lib/event-lifecycle";
 
-export type CheckoutParticipant = RegistrationFormData & { waveLabel?: string };
+export type CheckoutParticipant = RegistrationFormData & {
+  waveLabel?: string;
+  /** Index into the order's `teams`, for a member of a team ticket. */
+  team?: number;
+};
 
 export type CheckoutWave = {
   label: string;
@@ -25,6 +38,8 @@ export type CheckoutWave = {
   qty?: number;
   closes?: string;
   date?: string;
+  /** Set on a team ticket: members per team. `price` stays per person. */
+  teamSize?: number;
 };
 
 const participantSchema = z.object({
@@ -40,6 +55,7 @@ const participantSchema = z.object({
   estimatedFinish: z.string(),
   waiverAccepted: z.boolean(),
   waveLabel: z.string().max(255).optional(),
+  team: z.number().int().min(0).max(MAX_REGISTRATION_PARTICIPANTS).optional(),
 });
 
 export const checkoutSchema = z.object({
@@ -48,7 +64,13 @@ export const checkoutSchema = z.object({
   groupRegistration: z.boolean().optional(),
   emergencyContact: z.object({ name: z.string(), phone: z.string() }).optional(),
   turnstileToken: z.string().max(4000).optional(),
-  participants: z.array(participantSchema).optional(),
+  participants: z.array(participantSchema).max(MAX_REGISTRATION_PARTICIPANTS).optional(),
+  // Team tickets: one entry per team in the order, referenced by each
+  // member's `team` index.
+  teams: z
+    .array(z.object({ name: z.string().max(MAX_TEAM_NAME_LENGTH * 2) }))
+    .max(MAX_REGISTRATION_PARTICIPANTS)
+    .optional(),
   // Legacy single-participant payload fields (pre multi-ticket).
   firstName: z.string().optional(),
   lastName: z.string().optional(),
@@ -95,6 +117,8 @@ export interface ResolvedOrder {
   participants: CheckoutParticipant[];
   /** Ticket tier per participant, aligned by index. */
   waveLabels: string[];
+  /** Teams in the order, each with the indexes of its members. */
+  teams: OrderTeam[];
   /** Per-tier price (p) and platform fee (f), both in cents. */
   wavePricing: Record<string, { p: number; f: number }>;
   /**
@@ -243,6 +267,20 @@ export async function resolveCheckoutOrder(
     wavePricing[label] = { p: priceCents, f: pricing.platformFeeCents };
   }
 
+  // Team tickets: every member names a team of exactly the tier's size.
+  const grouped = groupOrderTeams(
+    participants.map((p, i) => ({ waveLabel: waveLabels[i], team: p.team })),
+    waves,
+    (body.teams ?? []).map((t) => t.name),
+  );
+  if ("error" in grouped) return { error: grouped.error, status: 400 };
+  const { teams } = grouped;
+  if (teams.length > 0) {
+    const taken = await findTakenTeamNames(event.id, teams.map((t) => t.name));
+    if (taken) return { error: `A team called "${taken}" is already entered in this event.`, status: 409 };
+  }
+
+  // Each member is charged the per-person price, so a team costs price x size.
   let totalCents = 0;
   let platformFeeCents = 0;
   for (const label of waveLabels) {
@@ -267,10 +305,11 @@ export async function resolveCheckoutOrder(
   // Capacity guard — never sell past the event cap or a tier's quantity. The
   // authoritative check runs again, atomically, when the registrations are
   // written; this one just fails fast with a useful message.
-  const requestedByWave = waveLabels.reduce<Record<string, number>>((acc, label) => {
-    acc[label] = (acc[label] ?? 0) + 1;
-    return acc;
-  }, {});
+  // Tier quantities count tickets, or teams for a team tier; the event cap
+  // counts people.
+  const requestedByWave = requestedUnitsByWave(
+    participants.map((p, i) => ({ waveLabel: waveLabels[i], team: p.team })),
+  );
   const needsCapCheck = event.cap != null;
   const needsWaveCheck = hasCappedWave(waves, usedLabels);
   if (needsCapCheck || needsWaveCheck) {
@@ -278,17 +317,14 @@ export async function resolveCheckoutOrder(
     const confirmedTotal = needsCapCheck
       ? await prisma.registration.count({ where: confirmedWhere })
       : 0;
-    const confirmedByWave: Record<string, number> = {};
-    if (needsWaveCheck) {
-      const grouped = await prisma.registration.groupBy({
-        by: ["waveLabel"],
-        where: confirmedWhere,
-        _count: { _all: true },
-      });
-      for (const row of grouped) {
-        if (row.waveLabel) confirmedByWave[row.waveLabel] = row._count._all;
-      }
-    }
+    const confirmedRows = needsWaveCheck
+      ? await prisma.registration.groupBy({
+          by: ["waveLabel", "teamId"],
+          where: confirmedWhere,
+          _count: { _all: true },
+        })
+      : [];
+    const confirmedByWave = confirmedUnitsByWave(confirmedRows);
     const capacityError = getCapacityError({
       cap: event.cap,
       confirmedTotal,
@@ -315,6 +351,7 @@ export async function resolveCheckoutOrder(
     waves,
     participants: resolvedParticipants,
     waveLabels,
+    teams,
     wavePricing,
     totalCents,
     platformFeeCents,
@@ -326,3 +363,4 @@ export async function resolveCheckoutOrder(
     athleteEmail: primary.email.trim().toLowerCase(),
   };
 }
+

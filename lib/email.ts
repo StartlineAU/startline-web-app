@@ -58,6 +58,8 @@ export interface RegistrationEmailData {
   /** Display-ready; see formatEmailPlace. */
   location: string;
   bib?: string;
+  /** Team entry, display-ready: "Harbour Hustlers (team of 4)". */
+  team?: string;
   registrationFee: string;
   serviceFee: string;
   total: string;

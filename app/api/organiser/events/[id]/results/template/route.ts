@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { entryBib } from "@/lib/team-entries";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { buildResultsTemplateCsv, type ResultsTemplateRow } from "@/lib/results-template";
@@ -47,6 +48,7 @@ export async function GET(
       athleteName: true,
       athleteEmail: true,
       bibNumber: true,
+      team: { select: { name: true, bibNumber: true } },
       category: true,
       resultTime: true,
       resultPlacement: true,
@@ -58,14 +60,14 @@ export async function GET(
 
   const rows: ResultsTemplateRow[] = registrations
     .sort((a, b) => {
-      const bibDiff = bibSortKey(a.bibNumber) - bibSortKey(b.bibNumber);
+      const bibDiff = bibSortKey(entryBib(a)) - bibSortKey(entryBib(b));
       if (bibDiff !== 0) return bibDiff;
       return a.athleteName.localeCompare(b.athleteName);
     })
     .map((registration) => ({
       registrationId: registration.id,
       name: registration.athleteName,
-      bib: registration.bibNumber ?? "",
+      bib: entryBib(registration) ?? "",
       category: registration.category ?? "",
       email: registration.athleteEmail,
       time: registration.resultTime ?? "",

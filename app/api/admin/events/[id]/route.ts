@@ -5,6 +5,7 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { checkTeamTierChange } from "@/lib/team-entries";
 import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
@@ -93,6 +94,10 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
+
+    // A ticket's team size is fixed once it has entries, for admins too.
+    const teamTierError = await checkTeamTierChange(id, existing, { waves: data.waves, format: data.format });
+    if (teamTierError) return NextResponse.json({ error: teamTierError }, { status: 409 });
 
     if (submit) {
       const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;

@@ -33,6 +33,17 @@ export function parseParticipantsFromMetadata(meta: Stripe.Metadata): CompactPar
   return [];
 }
 
+/** Team names written by the checkout route, indexed by each participant's `tm`. */
+export function parseTeamNamesFromMetadata(meta: Stripe.Metadata): string[] {
+  if (!meta.teams) return [];
+  try {
+    const parsed: unknown = JSON.parse(meta.teams);
+    return Array.isArray(parsed) ? parsed.map((n) => (typeof n === "string" ? n : "")) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Stripe's own limits. Asserted before the PaymentIntent call, not discovered from a 400. */
 export const STRIPE_METADATA_MAX_KEYS = 50;
 export const STRIPE_METADATA_MAX_VALUE_CHARS = 500;

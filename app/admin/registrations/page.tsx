@@ -29,6 +29,8 @@ interface Registration {
   createdAt: string;
   event: { id: string; title: string; eventDate: string; city: string; state: string };
   organiser: { id: string; orgName: string | null; contactName: string | null; email: string };
+  /** Team entry. `held` counts members still holding a place. */
+  team: { name: string; size: number; held: number } | null;
 }
 
 const STATUS_TABS: { status: RegStatus | "ALL"; label: string }[] = [
@@ -65,7 +67,7 @@ function RegistrationRow({
   onRefunded,
 }: {
   reg: Registration;
-  onRefunded: (id: string) => void;
+  onRefunded: (id: string, teamChanged: boolean) => void;
 }) {
   const [refunding,  setRefunding]  = useState(false);
   const [error,      setError]      = useState("");
@@ -81,12 +83,16 @@ function RegistrationRow({
     setConfirming(false);
     try {
       const res = await fetch(`/api/admin/registrations/${reg.id}/refund`, { method: "POST" });
-      if (res.ok) {
-        onRefunded(reg.id);
-      } else {
-        const data = await res.json() as { error?: string };
-        setError(data.error ?? "Refund failed.");
-      }
+      const data = await res.json().catch(() => ({})) as {
+        error?: string;
+        teamRefunded?: string[];
+        teamFailed?: unknown[];
+      };
+      // A team refund changes other rows too, and a partial one still
+      // refunded this entry, so both reload rather than patch one row.
+      const teamChanged = (data.teamRefunded?.length ?? 0) > 0 || (data.teamFailed?.length ?? 0) > 0;
+      if (res.ok || teamChanged) onRefunded(reg.id, teamChanged);
+      if (!res.ok) setError(data.error ?? "Refund failed.");
     } finally {
       setRefunding(false);
     }
@@ -132,6 +138,7 @@ function RegistrationRow({
             {reg.athleteEmail}
             {reg.category  && <span> · {reg.category}</span>}
             {reg.waveLabel && <span> · {reg.waveLabel}</span>}
+            {reg.team && <span className="text-primary"> · Team {reg.team.name}</span>}
           </div>
 
           <div className="font-headline text-[11px] uppercase tracking-widest text-muted">
@@ -154,11 +161,14 @@ function RegistrationRow({
         {/* Refund-requested entries need the action most: the athlete has already
             asked. The API has always accepted both, but the button only rendered on
             CONFIRMED, so requests had nowhere to be actioned from. */}
-        {(reg.status === "CONFIRMED" || reg.status === "REFUND_REQUESTED") && (
+        {/* A refunded team member with teammates still holding places is a
+            team refund that stopped part-way; refunding again finishes it. */}
+        {(reg.status === "CONFIRMED" || reg.status === "REFUND_REQUESTED"
+          || (reg.status === "REFUNDED" && !!reg.team && reg.team.held > 0)) && (
           <div className="shrink-0 ml-auto pl-2 flex items-center gap-2">
             {confirming && (
               <span className="font-headline text-[11px] text-amber-300 uppercase tracking-widest">
-                Confirm?
+                {reg.team ? `Refunds all of team ${reg.team.name}?` : "Confirm?"}
               </span>
             )}
             <button
@@ -174,7 +184,7 @@ function RegistrationRow({
                 ? <span className="w-3 h-3 border border-current/40 border-t-current rounded-full animate-spin" />
                 : confirming
                   ? <><RotateCcw className="w-3.5 h-3.5" /> Yes, refund</>
-                  : <><DollarSign className="w-3.5 h-3.5" /> Refund</>}
+                  : <><DollarSign className="w-3.5 h-3.5" /> {reg.status === "REFUNDED" ? "Refund rest of team" : reg.team ? "Refund team" : "Refund"}</>}
             </button>
             {confirming && (
               <button
@@ -240,7 +250,11 @@ function RegistrationsContent() {
     setQuery(search);
   };
 
-  const handleRefunded = (id: string) => {
+  const handleRefunded = (id: string, teamChanged: boolean) => {
+    if (teamChanged) {
+      void reloadRegs();
+      return;
+    }
     setRegistrationPage((prev) => prev ? {
       ...prev,
       registrations: prev.registrations.map((r) => r.id === id ? { ...r, status: "REFUNDED" } : r),

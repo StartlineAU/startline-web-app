@@ -13,6 +13,8 @@ import {
   type RegistrationFormData,
 } from "@/lib/registration-form";
 import { ensureAthleteCognitoUser } from "@/lib/athlete-accounts";
+import { confirmedUnitsByWave, requestedUnitsByWave, type OrderTeam } from "@/lib/team-tickets";
+import { findTakenTeamNames } from "@/lib/team-entries";
 
 /** One ticket, priced from the database rather than from the client. */
 export interface PricedEntry {
@@ -25,6 +27,8 @@ export interface PricedEntry {
    * (#470). Absent on the free path, where nothing is charged.
    */
   stripeFeeCents?: number;
+  /** Index of this entry's team in the order, for a team-ticket member. */
+  team?: number;
 }
 
 /** The event fields needed to write and announce a registration. */
@@ -55,7 +59,7 @@ const normalizeEmail = (email: string | undefined) => (email ?? "").trim().toLow
 export const RSVP_DUPLICATE_STATUSES: RegistrationStatus[] = ["CONFIRMED", "REFUND_REQUESTED"];
 
 /** Match on the person, not just the address: one email can carry several entries. */
-function entryIdentityKey(email: string, first: string, last: string, dob: string): string {
+export function entryIdentityKey(email: string, first: string, last: string, dob: string): string {
   return `${normalizeEmail(email)}|${first.trim().toLowerCase()}|${last.trim().toLowerCase()}|${dob}`;
 }
 
@@ -200,6 +204,11 @@ export async function insertConfirmedRegistrations(opts: {
    * already been cancelled or refunded no longer blocks a fresh RSVP.
    */
   duplicateStatuses?: RegistrationStatus[];
+  /**
+   * Teams in the order, from groupOrderTeams. Each becomes a Team row and its
+   * members' entries are linked to it. The first member is the captain.
+   */
+  teams?: OrderTeam[];
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
@@ -209,6 +218,13 @@ export async function insertConfirmedRegistrations(opts: {
     : { not: "CANCELLED" as const };
 
   return prisma.$transaction(async (tx) => {
+    // Confirms for one event run one at a time. Every check below (duplicate
+    // entries, team names, tier and event capacity) reads rows and then
+    // writes; under READ COMMITTED two concurrent confirms could both pass and
+    // both write, overselling a tier or entering two teams with one name.
+    // Locking the event row serialises them; other events are unaffected.
+    await tx.$queryRaw`SELECT id FROM "events" WHERE id = ${event.id} FOR UPDATE`;
+
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({
         where: { eventId: event.id, userId: buyerUserId, status: duplicateStatus },
@@ -250,27 +266,34 @@ export async function insertConfirmedRegistrations(opts: {
       }
     }
 
-    const requestedByWave = entries.reduce<Record<string, number>>((acc, { waveLabel }) => {
-      if (waveLabel) acc[waveLabel] = (acc[waveLabel] ?? 0) + 1;
-      return acc;
-    }, {});
+    const teams = opts.teams ?? [];
+    if (teams.length > 0) {
+      const taken = await findTakenTeamNames(event.id, teams.map((t) => t.name), tx);
+      if (taken) {
+        return {
+          ok: false as const,
+          reason: "duplicate" as const,
+          error: `A team called "${taken}" is already entered in this event.`,
+        };
+      }
+    }
+
+    // Tier quantities count tickets, or teams for a team tier.
+    const requestedByWave = requestedUnitsByWave(entries);
     const usedLabels = Object.keys(requestedByWave);
     const needsCapCheck = event.cap != null;
     const needsWaveCheck = hasCappedWave(waves, usedLabels);
     const confirmedTotal = needsCapCheck
       ? await tx.registration.count({ where: { eventId: event.id, status: "CONFIRMED" } })
       : 0;
-    const confirmedByWave: Record<string, number> = {};
-    if (needsWaveCheck) {
-      const grouped = await tx.registration.groupBy({
-        by: ["waveLabel"],
-        where: { eventId: event.id, status: "CONFIRMED" },
-        _count: { _all: true },
-      });
-      for (const row of grouped) {
-        if (row.waveLabel) confirmedByWave[row.waveLabel] = row._count._all;
-      }
-    }
+    const confirmedRows = needsWaveCheck
+      ? await tx.registration.groupBy({
+          by: ["waveLabel", "teamId"],
+          where: { eventId: event.id, status: "CONFIRMED" },
+          _count: { _all: true },
+        })
+      : [];
+    const confirmedByWave = confirmedUnitsByWave(confirmedRows);
     const capacityError = getCapacityError({
       cap: event.cap,
       confirmedTotal,
@@ -284,8 +307,25 @@ export async function insertConfirmedRegistrations(opts: {
       return { ok: false as const, reason: "capacity" as const, error: capacityError };
     }
 
+    // Team rows first, so each member's entry can point at its team.
+    const teamIdByIndex = new Map<number, string>();
+    for (const team of teams) {
+      const id = randomUUID();
+      teamIdByIndex.set(team.index, id);
+      await tx.team.create({
+        data: {
+          id,
+          eventId: event.id,
+          name: team.name,
+          ticketLabel: team.waveLabel,
+          size: team.size,
+          captainRegistrationId: registrationIds[team.members[0]],
+        },
+      });
+    }
+
     await tx.registration.createMany({
-      data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, stripeFeeCents }, index) => {
+      data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, stripeFeeCents, team }, index) => {
         const expanded = expandCompactParticipant(participant);
         const email = normalizeEmail(participant.em);
         return {
@@ -312,6 +352,7 @@ export async function insertConfirmedRegistrations(opts: {
           feeStructure: event.feeStructure,
           status: "CONFIRMED" as const,
           stripePaymentIntentId,
+          teamId: team != null ? teamIdByIndex.get(team) ?? null : null,
         };
       }),
     });
@@ -329,11 +370,15 @@ export async function announceRegistrations(
   event: ConfirmEvent,
   organiserId: string,
   entries: PricedEntry[],
+  teams: OrderTeam[] = [],
 ): Promise<void> {
   const names = entries.map(({ participant }) => athleteNameFromParticipant(participant));
-  const notificationBody = entries.length === 1
-    ? `${names[0]} registered for ${event.title}`
-    : `${entries.length} participants registered for ${event.title}: ${names.join(", ")}`;
+  const teamByIndex = new Map(teams.map((t) => [t.index, t]));
+  const notificationBody = teams.length > 0
+    ? `${teams.length === 1 ? `Team ${teams[0].name}` : `${teams.length} teams (${teams.map((t) => t.name).join(", ")})`} registered for ${event.title}: ${names.join(", ")}`
+    : entries.length === 1
+      ? `${names[0]} registered for ${event.title}`
+      : `${entries.length} participants registered for ${event.title}: ${names.join(", ")}`;
 
   // The organisation can turn registration notifications off. If the lookup
   // fails, tell them anyway: a missed notification is worse than an extra one.
@@ -354,18 +399,47 @@ export async function announceRegistrations(
         organiserId,
         eventId: event.id,
         type: "NEW_REGISTRATION",
-        title: entries.length === 1 ? "New registration" : "New group registration",
+        title: teams.length > 0
+          ? "New team registration"
+          : entries.length === 1 ? "New registration" : "New group registration",
         body: notificationBody,
       },
     }).catch((err: unknown) => console.error("Failed to create notification:", err));
   }
 
-  // When the athlete absorbs the platform fee, the amount charged is
-  // price + fee — the email total must reflect that, not just the ticket
-  // price. When the organiser absorbs it, the athlete pays the ticket price
-  // only and the service fee shown to them is $0. A free entry is $0 across
-  // the board.
+  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }) => {
+    const entryTeam = team != null ? teamByIndex.get(team) : undefined;
+    if (!participant.em) return;
+    void sendEntryConfirmation(event, {
+      email: participant.em,
+      waveLabel,
+      priceCents,
+      platformFeeCents,
+      team: entryTeam ? { name: entryTeam.name, size: entryTeam.size } : null,
+    });
+  });
+}
+
+/**
+ * Email one entry its confirmation. Best-effort: logs and never throws.
+ *
+ * When the athlete absorbs the platform fee, the amount charged is
+ * price + fee, and the email total reflects that. When the organiser absorbs
+ * it, the athlete pays the ticket price only and the service fee shown to them
+ * is $0. A free entry is $0 across the board.
+ */
+export async function sendEntryConfirmation(
+  event: ConfirmEvent,
+  entry: {
+    email: string;
+    waveLabel: string | null;
+    priceCents: number;
+    platformFeeCents: number;
+    team?: { name: string; size: number } | null;
+  },
+): Promise<void> {
   const athletePaysFee = event.feeStructure === "athlete";
+  const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
   const location = formatEmailPlace(event);
   const calendarUrl = googleCalendarUrl({
     title: event.title,
@@ -373,22 +447,22 @@ export async function announceRegistrations(
     endsAtUtc: event.endsAtUtc,
     location,
   });
-  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents }) => {
-    if (!participant.em) return;
-    const feeCents = athletePaysFee ? platformFeeCents : 0;
-
-    sendRegistrationConfirmationEmail(participant.em, {
+  try {
+    await sendRegistrationConfirmationEmail(entry.email, {
       eventId:          event.id,
       eventName:        event.title,
       eventDate:        event.eventDate,
       startTime:        event.startTime,
-      category:         waveLabel || "General",
+      category:         entry.waveLabel || "General",
       location,
       calendarUrl,
-      registrationFee:  formatCents(priceCents),
+      ...(entry.team ? { team: `${entry.team.name} (team of ${entry.team.size})` } : {}),
+      registrationFee:  formatCents(entry.priceCents),
       serviceFee:       formatCents(feeCents),
-      total:            formatCents(priceCents + feeCents),
-      userEmail:        participant.em,
-    }).catch((err) => console.error("Failed to send registration confirmation email:", err));
-  });
+      total:            formatCents(entry.priceCents + feeCents),
+      userEmail:        entry.email,
+    });
+  } catch (err) {
+    console.error("Failed to send registration confirmation email:", err);
+  }
 }

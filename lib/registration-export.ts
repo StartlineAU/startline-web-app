@@ -23,6 +23,8 @@ export type ExportRegistrationInput = {
   resultDistance: string | null;
   resultTime: string | null;
   resultPlacement: string | null;
+  /** Team entry's team name. */
+  teamName?: string | null;
 };
 
 export type ExportRegistrationRow = {
@@ -49,12 +51,14 @@ export type ExportRegistrationRow = {
   resultDistance: string;
   resultTime: string;
   resultPlacement: string;
+  team: string;
 };
 
 /** Selectable organiser export fields (Excel + filtered CSV). */
 export const EXPORT_COLUMNS = [
   { key: "bib", label: "Bib", width: 8, required: false },
   { key: "name", label: "Name", width: 22, required: true },
+  { key: "team", label: "Team", width: 20, required: false },
   { key: "email", label: "Email", width: 28, required: false },
   { key: "mobile", label: "Mobile", width: 14, required: false },
   { key: "startWave", label: "Start wave", width: 14, required: false },
@@ -87,6 +91,7 @@ const EXPORT_COLUMN_BY_KEY = Object.fromEntries(
 const CELL_GETTERS: Record<ExportColumnKey, (r: ExportRegistrationRow) => string> = {
   bib: (r) => r.bib,
   name: (r) => r.name,
+  team: (r) => r.team,
   email: (r) => r.email,
   mobile: (r) => r.mobile,
   startWave: (r) => r.startWave,
@@ -109,6 +114,7 @@ const CELL_GETTERS: Record<ExportColumnKey, (r: ExportRegistrationRow) => string
 /** Machine CSV: key → header (age omitted; status uses raw enum). */
 const MACHINE_CSV_FIELD: Partial<Record<ExportColumnKey, { header: string; get: (r: ExportRegistrationRow) => string }>> = {
   name: { header: "name", get: (r) => r.name },
+  team: { header: "team", get: (r) => r.team },
   email: { header: "email", get: (r) => r.email },
   mobile: { header: "mobile", get: (r) => r.mobile },
   bib: { header: "bib", get: (r) => r.bib },
@@ -254,6 +260,7 @@ export function toExportRow(r: ExportRegistrationInput): ExportRegistrationRow {
     resultDistance: r.resultDistance ?? "",
     resultTime: r.resultTime ?? "",
     resultPlacement: r.resultPlacement ?? "",
+    team: r.teamName ?? "",
   };
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { idParams } from "@/lib/schemas";
 import { registrationOpenAt } from "@/lib/event-lifecycle";
+import { confirmedUnitsByWave, teamSizeOf } from "@/lib/team-tickets";
 
 export const dynamic = "force-dynamic";
 
@@ -37,18 +38,17 @@ export async function GET(
   const [confirmed, grouped] = await Promise.all([
     prisma.registration.count({ where: confirmedWhere }),
     prisma.registration.groupBy({
-      by: ["waveLabel"],
+      by: ["waveLabel", "teamId"],
       where: confirmedWhere,
       _count: { _all: true },
     }),
   ]);
 
-  const confirmedByWave: Record<string, number> = {};
-  for (const row of grouped) {
-    if (row.waveLabel) confirmedByWave[row.waveLabel] = row._count._all;
-  }
+  // Per tier: tickets, or teams for a team tier. `confirmed` overall is people,
+  // which is what the event cap counts.
+  const confirmedByWave = confirmedUnitsByWave(grouped);
 
-  const waves = (event.waves as { label: string; qty?: number }[] | null) ?? [];
+  const waves = (event.waves as { label: string; qty?: number; teamSize?: number }[] | null) ?? [];
 
   return NextResponse.json({
     cap: event.cap,
@@ -57,6 +57,7 @@ export async function GET(
       label: w.label,
       qty: typeof w.qty === "number" ? w.qty : null,
       confirmed: confirmedByWave[w.label] ?? 0,
+      teamSize: teamSizeOf(w),
     })),
   });
 }

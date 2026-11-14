@@ -230,6 +230,7 @@ model Event {
   registrations Registration[]
   savedEvents   SavedEvent[]
   startWaveRows StartWave[]
+  teams         Team[]
   changes       EventChange[]
   revisions     EventRevision[]
 
@@ -295,6 +296,59 @@ model PayoutAttempt {
 
   @@unique([operationId, attemptNumber])
   @@map("payout_attempts")
+}
+
+// ─── Teams ───────────────────────────────────────────────────────────────────
+// A team entry bought on a team ticket (a tier in Event.waves with a teamSize).
+// Each member is still their own Registration, linked here by teamId, so money,
+// refunds and athlete history stay per person. The team is the race-day unit:
+// one bib (stored here, so Registration's per-row bib uniqueness still holds),
+// and its members' start wave, check-in and results are written together.
+model Team {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  name        String
+  // Ticket tier the team was bought on, and that tier's team size at the time.
+  ticketLabel String
+  size        Int
+  // The member who booked. Null once that entry is removed from the team.
+  captainRegistrationId String?
+  bibNumber             String?
+
+  members Registration[]
+  changes TeamMemberChange[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, bibNumber])
+  @@index([eventId])
+  @@map("teams")
+}
+
+// Who changed a team after it was entered: a rename, or a member swapped for
+// someone else. A swap hands a paid place to another person, so the record
+// keeps both sets of details and who made the change.
+model TeamMemberChange {
+  id     String @id @default(uuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // The entry whose holder changed. Null for a rename.
+  registrationId String?
+  // RENAME or SWAP.
+  kind           String
+  // { name } for a rename; the holder's details for a swap.
+  before         Json
+  after          Json
+  // The signed-in person who made it, and the organisation they acted for.
+  changedByEmail String?
+  organiserId    String
+
+  createdAt DateTime @default(now())
+
+  @@index([teamId, createdAt])
+  @@map("team_member_changes")
 }
 
 // ─── Start waves (heats) ──────────────────────────────────────────────────────
@@ -449,6 +503,10 @@ model Registration {
   // athletes into start waves by pace. Null when not provided.
   estimatedFinishMinutes Int?
   bibNumber    String?
+  // Set for a member of a team entry. The team's bib lives on Team; this row's
+  // bibNumber stays null.
+  teamId       String?
+  team         Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   // Money is stored in integer cents (AUD) to avoid float rounding.
   amountCents      Int    @default(0) // ticket price paid by the athlete
@@ -492,6 +550,7 @@ model Registration {
   @@index([eventId])
   @@index([organiserId])
   @@index([startWaveId])
+  @@index([teamId])
   @@index([stripePaymentIntentId])
   @@map("registrations")
 }
