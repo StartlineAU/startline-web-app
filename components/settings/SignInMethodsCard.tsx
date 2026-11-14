@@ -44,7 +44,7 @@ function flashFromQuery(query: URLSearchParams): Message {
 }
 
 function ProofFields({
-  id, password, code, onPassword, onCode, disabled, needsCode = true,
+  id, password, code, onPassword, onCode, disabled, needsCode,
 }: {
   id: string;
   password: string;
@@ -52,8 +52,12 @@ function ProofFields({
   onPassword: (value: string) => void;
   onCode: (value: string) => void;
   disabled: boolean;
-  /** False for an account without an authenticator app: the password alone. */
-  needsCode?: boolean;
+  /**
+   * False for an account without an authenticator app: the password alone.
+   * Required, not defaulted: a defaulted `true` turned a missing mfaRequired
+   * into a code field that the submit then ignored.
+   */
+  needsCode: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -338,7 +342,7 @@ export default function SignInMethodsCard({
                       onPassword={setPassword}
                       onCode={setCode}
                       disabled={busy !== null}
-                      needsCode={methods.mfaRequired}
+                      needsCode={methods.mfaRequired === true}
                     />
                     {proofError && <ErrorNote>{proofError}</ErrorNote>}
                     <div className="flex flex-wrap gap-2">
@@ -375,6 +379,7 @@ export default function SignInMethodsCard({
                           onPassword={setPassword}
                           onCode={setCode}
                           disabled={busy !== null}
+                          needsCode
                         />
                         {proofError && <ErrorNote>{proofError}</ErrorNote>}
                       </div>
