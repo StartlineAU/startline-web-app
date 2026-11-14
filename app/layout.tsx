@@ -2,6 +2,7 @@
 import { Inter, Chakra_Petch } from "next/font/google";
 import NativeLinkHandler from "@/components/NativeLinkHandler";
 import RouteHistoryTracker from "@/components/RouteHistoryTracker";
+import ClientErrorReporter from "@/components/ClientErrorReporter";
 import "./globals.css";
 
 const inter = Inter({
@@ -110,6 +111,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-dark-darker text-light font-sans antialiased">
         <NativeLinkHandler />
         <RouteHistoryTracker />
+        <ClientErrorReporter />
         {children}
       </body>
     </html>

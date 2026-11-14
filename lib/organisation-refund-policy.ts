@@ -12,18 +12,18 @@ export async function saveOrganisationRefundPolicy(
   refundTiers: RefundTier[],
   refundPolicy: string | null,
 ) {
-  const events = await prisma.event.findMany({
-    where: { organiserId },
-    select: { id: true, refundTiers: true },
-  });
-
   await prisma.$transaction(async (tx) => {
-    for (const event of events) {
-      await tx.registration.updateMany({
-        where: { eventId: event.id, soldRefundTiers: { equals: Prisma.DbNull } },
-        data: { soldRefundTiers: (event.refundTiers ?? []) as Prisma.InputJsonValue },
-      });
-    }
+    // Freeze every listing's current tiers onto its unfrozen entries in one
+    // statement. This used to be one update per event, so an organisation with
+    // many listings paid a round trip for each inside the transaction.
+    await tx.$executeRaw`
+      UPDATE registrations AS r
+      SET "soldRefundTiers" = COALESCE(NULLIF(e."refundTiers", 'null'::jsonb), '[]'::jsonb)
+      FROM events AS e
+      WHERE r."eventId" = e.id
+        AND e."organiserId" = ${organiserId}
+        AND r."soldRefundTiers" IS NULL
+    `;
     await tx.organiser.update({
       where: { id: organiserId },
       data: {
@@ -31,14 +31,12 @@ export async function saveOrganisationRefundPolicy(
         refundPolicy,
       },
     });
-    if (events.length > 0) {
-      await tx.event.updateMany({
-        where: { organiserId },
-        data: {
-          refundTiers: refundTiers as unknown as Prisma.InputJsonValue,
-          refundPolicy,
-        },
-      });
-    }
+    await tx.event.updateMany({
+      where: { organiserId },
+      data: {
+        refundTiers: refundTiers as unknown as Prisma.InputJsonValue,
+        refundPolicy,
+      },
+    });
   });
 }

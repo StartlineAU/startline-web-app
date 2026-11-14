@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 import { getUserSession } from "@/lib/amplify-server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import { canAddMember, MAX_ORGS_PER_USER } from "@/lib/organiser-members";
@@ -54,6 +55,10 @@ export async function POST(req: NextRequest) {
   if (session.role !== "OWNER") {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
+  // "No account found for that email" answers whether an address is
+  // registered, so cap how many addresses one owner can try.
+  const limited = await rateLimit(req, { prefix: "add-member", limit: 20, windowSeconds: 3600, identifier: session.sub });
+  if (limited) return limited;
 
   let email = "";
   try {

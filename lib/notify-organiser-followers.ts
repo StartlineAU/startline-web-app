@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { sendFollowedOrganiserEventEmail } from "@/lib/email";
+import { sendFollowedOrganiserEventEmails } from "@/lib/email";
 
 export type NotifyOrganiserFollowersInput = {
   organiserId: string;
@@ -13,7 +13,8 @@ export type NotifyOrganiserFollowersInput = {
 /**
  * Notify every follower of an organiser that a new event is live.
  * Call only on transitions into APPROVED (not on every edit).
- * Returns counts; email failures are swallowed per-recipient.
+ * Returns counts. Emails go out in Resend batches; a failed batch is logged
+ * and does not stop the rest.
  */
 export async function notifyOrganiserFollowers(
   input: NotifyOrganiserFollowersInput,
@@ -44,24 +45,25 @@ export async function notifyOrganiserFollowers(
   });
 
   let emailed = 0;
-  await Promise.all(
-    follows.map(async (f) => {
-      if (!f.user.email) return;
-      try {
-        await sendFollowedOrganiserEventEmail(f.user.email, {
-          followerName: f.user.name,
-          organiserName: organiserLabel,
-          eventTitle: input.eventTitle,
-          eventId: input.eventId,
-          eventDate: input.eventDate,
-          city: input.city,
-        });
-        emailed += 1;
-      } catch (err) {
-        console.error("Failed to send follower event email:", err);
-      }
-    }),
-  );
+  try {
+    emailed = await sendFollowedOrganiserEventEmails(
+      follows
+        .filter((f) => f.user.email)
+        .map((f) => ({
+          to: f.user.email!,
+          data: {
+            followerName: f.user.name,
+            organiserName: organiserLabel,
+            eventTitle: input.eventTitle,
+            eventId: input.eventId,
+            eventDate: input.eventDate,
+            city: input.city,
+          },
+        })),
+    );
+  } catch (err) {
+    console.error("Failed to send follower event emails:", err);
+  }
 
   return { notified: follows.length, emailed };
 }

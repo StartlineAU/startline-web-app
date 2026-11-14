@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { describeChangeValue, type EventFieldChange } from "@/lib/event-change-log";
-import { sendEventChangedEmail, type EventChangeLine } from "@/lib/email";
+import { sendEventChangedEmails, type EventChangeLine } from "@/lib/email";
 
 export interface NotifyEventChangeInput {
   eventId: string;
@@ -22,7 +22,9 @@ export function changeLines(changes: EventFieldChange[]): ChangeLine[] {
  * type changed. There is no automatic refund: anyone affected is told to raise
  * it through Support, and the organiser and Startline review that.
  *
- * Called after the edit has committed. Each send is best-effort and isolated.
+ * Called after the edit has committed. Sends are best-effort and go out in
+ * Resend batches, so a large field of entrants does not hold the request open
+ * for one round trip per athlete.
  */
 export async function notifyEventChange(input: NotifyEventChangeInput): Promise<void> {
   const event = await prisma.event.findUnique({
@@ -63,20 +65,25 @@ export async function notifyEventChange(input: NotifyEventChangeInput): Promise<
 
   // One email per address, even if a family entered several athletes on it.
   const seen = new Set<string>();
+  const emails: Parameters<typeof sendEventChangedEmails>[0] = [];
   for (const entrant of entrants) {
     const to = entrant.athleteEmail.trim().toLowerCase();
     if (!to || seen.has(to)) continue;
     seen.add(to);
-    try {
-      await sendEventChangedEmail(entrant.athleteEmail, {
+    emails.push({
+      to: entrant.athleteEmail,
+      data: {
         athleteName: entrant.athleteName,
         eventId: event.id,
         eventTitle: event.title,
         organiserName,
         changes: lines,
-      });
-    } catch (err) {
-      console.error("Event change email failed:", err);
-    }
+      },
+    });
+  }
+  try {
+    await sendEventChangedEmails(emails);
+  } catch (err) {
+    console.error("Event change emails failed:", err);
   }
 }
