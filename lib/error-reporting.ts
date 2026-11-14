@@ -1,7 +1,7 @@
 /**
  * One place every unhandled error is reported, server and browser alike.
  *
- * Each report is a single JSON line on stderr that starts with ERROR_MARKER.
+ * Each report is a single line on stderr: ERROR_MARKER, `env=<env>`, then JSON.
  * Amplify ships the server's output to CloudWatch, so a metric filter on the
  * marker counts errors and an alarm on that metric is the alert. Keeping the
  * shape here, rather than in each caller, is what lets one filter match all
@@ -63,9 +63,15 @@ export function toErrorReport(
   };
 }
 
-/** The line written to the log. Exported so tests and the filter agree on it. */
+/**
+ * The line written to the log: `STARTLINE_ERROR env=<env> {json}`. The
+ * environment is a plain token rather than only a JSON field because a
+ * CloudWatch filter matches `"STARTLINE_ERROR env=prod"` exactly, while
+ * escaped quotes inside a pattern do not match reliably.
+ */
 export function formatErrorLine(report: ErrorReport): string {
-  return `${ERROR_MARKER} ${JSON.stringify({ ...report, env: process.env.ENV ?? process.env.NODE_ENV })}`;
+  const env = (process.env.ENV ?? process.env.NODE_ENV ?? "unknown").replace(/\s+/g, "-");
+  return `${ERROR_MARKER} env=${env} ${JSON.stringify({ ...report, env })}`;
 }
 
 export function reportError(report: ErrorReport): void {

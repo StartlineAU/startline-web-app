@@ -27,7 +27,7 @@ function loggedReports(spy: ReturnType<typeof vi.spyOn>) {
   return spy.mock.calls
     .map((args: unknown[]) => String(args[0]))
     .filter((line: string) => line.startsWith(`${ERROR_MARKER} `))
-    .map((line: string) => JSON.parse(line.slice(ERROR_MARKER.length + 1)));
+    .map((line: string) => JSON.parse(line.slice(line.indexOf("{"))));
 }
 
 describe("error reporting", () => {
@@ -58,10 +58,18 @@ describe("error reporting", () => {
   });
 
   it("writes one marked JSON line the log filter can match", () => {
-    const line = formatErrorLine({ source: "server", message: "boom" });
-    expect(line.startsWith(`${ERROR_MARKER} {`)).toBe(true);
-    expect(line).not.toContain("\n");
-    expect(JSON.parse(line.slice(ERROR_MARKER.length + 1))).toMatchObject({ source: "server", message: "boom" });
+    const previous = process.env.ENV;
+    process.env.ENV = "prod";
+    try {
+      const line = formatErrorLine({ source: "server", message: "boom\nsecond line" });
+      // startline-infra's CloudWatch metric filter matches this exact phrase.
+      expect(line.startsWith(`${ERROR_MARKER} env=prod {`)).toBe(true);
+      expect(line).not.toContain("\n");
+      expect(JSON.parse(line.slice(line.indexOf("{")))).toMatchObject({ source: "server", env: "prod" });
+    } finally {
+      if (previous === undefined) delete process.env.ENV;
+      else process.env.ENV = previous;
+    }
   });
 
   it("reports unhandled server errors from Next.js", async () => {
