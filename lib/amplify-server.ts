@@ -64,9 +64,11 @@ const JWKS = createRemoteJWKSet(
 );
 
 async function verifyToken(token: string) {
+  // Audience and token_use are checked by nativeSessionFromClaims, because
+  // Cognito access tokens carry `client_id` rather than `aud`.
   const { payload } = await jwtVerify(token, JWKS, {
     issuer: cognitoDomain,
-    audience: undefined,
+    algorithms: ["RS256"],
   });
   return payload;
 }
@@ -212,45 +214,31 @@ export async function getServerSession(): Promise<ServerSession | null> {
     );
     if (!accessToken) return null;
 
-    const payload = await verifyToken(accessToken);
-
-    const groups = (payload["cognito:groups"] as string[] | undefined) ?? [];
-    const sub   = payload.sub as string;
-    const username = typeof payload.username === "string" ? payload.username : undefined;
-    const phoneNumber = payload.phone_number as string | undefined;
-    const birthdate   = payload.birthdate as string | undefined;
-
-    // The email must come from the verified id-token `email` claim: access
-    // tokens carry no email, and for this pool `LastAuthUser` is the Cognito
-    // sub (a UUID), not an address. Fall back to LastAuthUser only if it is
-    // itself an email (pools where the username is the email).
-    let email = lastAuthUser.includes("@") ? lastAuthUser : "";
-    let name: string | undefined;
-    let emailTrusted = true;
     const idToken = (
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${lastAuthUser}.idToken`)?.value ??
       cookieStore.get(`CognitoIdentityServiceProvider.${clientId}.${encodeURIComponent(lastAuthUser)}.idToken`)?.value
     );
-    if (idToken) {
-      try {
-        const idPayload = await verifyToken(idToken);
-        if (typeof idPayload.email === "string" && idPayload.email) {
-          email = idPayload.email;
-        }
-        if (typeof idPayload.name === "string" && idPayload.name.trim()) {
-          name = idPayload.name.trim();
-        }
-        // Only Google and Apple users carry `identities`. Password users are
-        // left alone: seeded accounts are not marked email_verified.
-        if (idPayload.identities && String(idPayload.email_verified) !== "true") {
-          emailTrusted = false;
-        }
-      } catch {
-        // Keep the fallback if the id token can't be verified.
-      }
-    }
+    // Amplify always stores both tokens. A request with only an access token
+    // is not a browser session, and without the id token there is no email we
+    // can trust: the cookie names, LastAuthUser included, are chosen by the
+    // client, so nothing about identity may be read from them.
+    if (!idToken) return null;
 
-    return { sub, username, email, groups, phoneNumber, birthdate, name, emailTrusted };
+    const accessPayload = await verifyToken(accessToken);
+    const idPayload = await verifyToken(idToken);
+
+    // Same checks as the native path: an access token issued to this client,
+    // and an id token for the same client and the same subject. Without the
+    // subject check, someone could pair their own access token with another
+    // person's id token.
+    const session = nativeSessionFromClaims(
+      accessPayload as Record<string, unknown>,
+      idPayload as Record<string, unknown>,
+      clientId,
+    );
+    if (!session) return null;
+
+    return { ...session, bypass: undefined };
   } catch {
     return null;
   }

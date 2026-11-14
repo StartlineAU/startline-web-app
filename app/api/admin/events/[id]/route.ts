@@ -6,6 +6,7 @@ import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { eventTimeData } from "@/lib/event-time";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { randomUUID } from "node:crypto";
@@ -50,7 +51,12 @@ export async function GET(
   try {
     const event = await prisma.event.findUnique({ where: { id } });
     if (!event) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    return NextResponse.json(event);
+    // The editor writes this into the admin's page as HTML, and an organiser
+    // wrote it. Rows saved before sanitise-on-write may still carry markup.
+    return NextResponse.json({
+      ...event,
+      description: event.description != null ? sanitizeHtml(event.description) : null,
+    });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
@@ -120,7 +126,7 @@ export async function PATCH(
     const fields = {
       title:             data.title             ?? undefined,
       discipline:        data.discipline        ?? undefined,
-      description:       data.description       ?? undefined,
+      description:       data.description != null ? sanitizeHtml(data.description) : undefined,
       eventDate:         data.eventDate         ?? undefined,
       endDate:           data.endDate !== undefined ? data.endDate : undefined,
       startTime:         data.startTime         ?? undefined,

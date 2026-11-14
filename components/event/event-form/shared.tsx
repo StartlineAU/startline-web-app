@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
@@ -208,7 +209,9 @@ export function RichTextEditor({ value, onChange, invalid = false }: { value: st
 
   useEffect(() => {
     if (editorRef.current && !userHasTyped.current) {
-      editorRef.current.innerHTML = value;
+      // `value` comes from the server and was written by an organiser; it is
+      // rendered for admins and co-members too, so never trust it as HTML.
+      editorRef.current.innerHTML = sanitizeRichTextClient(value);
     }
   }, [value]);
 

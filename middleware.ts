@@ -8,6 +8,7 @@ import {
   portalsAreSplit,
 } from "@/lib/portal-domains";
 import { isLegalPath, publicSiteMode, servesWhileWaitlisted } from "@/lib/site-mode";
+import { accessTokenIsForClient } from "@/lib/native-api-auth";
 
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
@@ -58,9 +59,12 @@ async function getVerifiedPayload(req: NextRequest): Promise<JWTPayload | null> 
   try {
     const { payload } = await jwtVerify(accessToken, JWKS, {
       issuer: cognitoDomain,
-      audience: undefined,
+      algorithms: ["RS256"],
     });
-    return payload;
+    // Cognito access tokens carry no `aud`; `client_id` plays that role. Any
+    // other token from the pool (an id token, or one issued to another app
+    // client) is not a session for this app.
+    return accessTokenIsForClient(payload as Record<string, unknown>, clientId) ? payload : null;
   } catch {
     return null;
   }

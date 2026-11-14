@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import TotpQrCode from "@/components/TotpQrCode";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldAlert } from "lucide-react";
 import { signIn, signOut, confirmSignIn, fetchAuthSession } from "aws-amplify/auth";
 import { customerHref } from "@/lib/portal-domains";
@@ -222,14 +223,7 @@ export default function AdminLoginPage() {
         ) : mfaStep === "setup" && totpSetupUri ? (
           <div className="space-y-5">
             <div className="flex justify-center">
-              <Image
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(totpSetupUri)}`}
-                alt="TOTP QR Code"
-                width={192}
-                height={192}
-                unoptimized
-                className="w-48 h-48 rounded-lg"
-              />
+              <TotpQrCode uri={totpSetupUri} className="w-48 h-48 rounded-lg" />
             </div>
             <form onSubmit={handleMfaSetupConfirm} className="space-y-4">
               <div>

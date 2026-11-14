@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 
 type Props = {
   value: string;
@@ -27,7 +28,7 @@ export default function RichTextEditor({
   useEffect(() => {
     if (!editorRef.current) return;
     if (!userHasTyped.current || value === "") {
-      editorRef.current.innerHTML = value;
+      editorRef.current.innerHTML = sanitizeRichTextClient(value);
       if (value === "") userHasTyped.current = false;
     }
   }, [value]);

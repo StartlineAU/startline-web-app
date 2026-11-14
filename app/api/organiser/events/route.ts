@@ -10,6 +10,7 @@ import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted"
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserEventPayloadSchema } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { takesPayments } from "@/lib/event-approval";
@@ -165,7 +166,7 @@ export async function POST(req: NextRequest) {
         slug,
         title:            body.title ?? "",
         discipline:       body.discipline        ?? "",
-        description:      body.description       ?? null,
+        description:      body.description != null ? sanitizeHtml(body.description) : null,
         eventDate:        body.eventDate         ?? "",
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",

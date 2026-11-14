@@ -10,6 +10,7 @@ import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { eventTimeData } from "@/lib/event-time";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { effectiveEventStatus, type PersistedEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { takesPayments } from "@/lib/event-approval";
@@ -52,6 +53,9 @@ export async function GET(
 
     return NextResponse.json({
       ...event,
+      // The editor writes this into the page as HTML. Rows saved before
+      // descriptions were sanitised on write may still carry markup.
+      description: event.description != null ? sanitizeHtml(event.description) : null,
       editContext: {
         enteredCount,
         materialFields: MATERIAL_FIELD_GROUPS,
@@ -175,7 +179,7 @@ export async function PATCH(
     const fields = {
       title:             data.title             ?? undefined,
       discipline:        data.discipline        ?? undefined,
-      description:       data.description       ?? undefined,
+      description:       data.description != null ? sanitizeHtml(data.description) : undefined,
       eventDate:         data.eventDate         ?? undefined,
       endDate:           data.endDate !== undefined ? data.endDate : undefined,
       startTime:         data.startTime         ?? undefined,
