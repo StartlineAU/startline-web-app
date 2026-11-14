@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { getServerSession } from "@/lib/amplify-server";
-export async function POST() {
-  const session = await getServerSession();
+import { getAdminSession } from "@/lib/amplify-server";
 
-  if (!session || !session.groups.includes("admins")) {
+// Called after an admin signs in so their Admin row exists before the first
+// review or audit entry needs it. getAdminSession creates or finds the row.
+export async function POST() {
+  const admin = await getAdminSession();
+  if (!admin) {
     return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
   }
-
-  try {
-    await prisma.admin.upsert({
-      where:  { cognitoSub: session.sub },
-      update: { email: session.email },
-      create: { cognitoSub: session.sub, email: session.email },
-      select: { id: true },
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error("Admin session upsert error:", err);
-    return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
-  }
+  return NextResponse.json({ ok: true });
 }

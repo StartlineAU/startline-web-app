@@ -77,10 +77,11 @@ export function nativeSessionFromClaims(
     ? stringClaim(idPayload, "birthdate") ?? stringClaim(accessPayload, "birthdate")
     : stringClaim(accessPayload, "birthdate");
 
-  // Provider sign-ins with an unverified email must not be used to adopt a
-  // pre-existing row by email. Password users do not carry `identities`.
+  // Only an address Cognito has verified may tie this sign-in to an existing
+  // account. That holds for password users too: an admin-created or migrated
+  // user can carry an email nobody has proved they own.
   const emailTrusted = idPayload
-    ? !(idPayload.identities && String(idPayload.email_verified) !== "true")
+    ? Boolean(email) && String(idPayload.email_verified) === "true"
     : false;
 
   return {

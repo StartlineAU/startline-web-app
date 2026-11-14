@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { idParams } from "@/lib/schemas";
-import { registrationOpenAt } from "@/lib/event-lifecycle";
+import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function GET(
   const { id } = parsedParams.data;
 
   const event = await prisma.event.findUnique({
-    where: { id },
+    where: { id, ...ACTIVE_ORGANISER_WHERE },
     select: {
       id: true, cap: true, waves: true, status: true, registrationType: true,
       startsAtUtc: true, endsAtUtc: true,

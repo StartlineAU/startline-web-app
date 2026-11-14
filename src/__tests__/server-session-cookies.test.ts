@@ -44,7 +44,7 @@ function signIn(lastAuthUser: string, access?: string, id?: string) {
 }
 
 const ATTACKER_ACCESS = { token_use: "access", client_id: CLIENT_ID, sub: "attacker-sub", username: "attacker-sub" };
-const ATTACKER_ID = { token_use: "id", aud: CLIENT_ID, sub: "attacker-sub", email: "attacker@example.com" };
+const ATTACKER_ID = { token_use: "id", aud: CLIENT_ID, sub: "attacker-sub", email: "attacker@example.com", email_verified: "true" };
 const VICTIM_ID = { token_use: "id", aud: CLIENT_ID, sub: "victim-sub", email: "victim@example.com" };
 
 beforeEach(() => {

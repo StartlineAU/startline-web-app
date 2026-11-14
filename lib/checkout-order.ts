@@ -11,7 +11,7 @@ import {
 } from "@/lib/registration-form";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import { todayIso } from "@/lib/event-types";
-import { registrationOpenAt } from "@/lib/event-lifecycle";
+import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 
 export type CheckoutParticipant = RegistrationFormData & { waveLabel?: string };
 
@@ -184,7 +184,8 @@ export async function resolveCheckoutOrder(
   }
 
   const event = await prisma.event.findUnique({
-    where: { id: eventId },
+    // A suspended organisation takes no new entries.
+    where: { id: eventId, ...ACTIVE_ORGANISER_WHERE },
     select: {
       id: true, title: true, status: true, feeStructure: true, registrationType: true,
       waves: true, cap: true, eventDate: true, startTime: true,

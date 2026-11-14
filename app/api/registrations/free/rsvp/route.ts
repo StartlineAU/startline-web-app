@@ -5,6 +5,7 @@ import { getUserSession } from "@/lib/amplify-server";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
 import { isFreeEvent, waveIsOpen, type PublicWave } from "@/lib/event-types";
+import { ACTIVE_ORGANISER_WHERE } from "@/lib/event-lifecycle";
 import {
   compactParticipant,
   athleteNameFromParticipant,
@@ -99,7 +100,8 @@ export async function POST(req: NextRequest) {
     if (blocked) return blocked;
 
     const event = await prisma.event.findUnique({
-      where: { id: body.eventId },
+      // A suspended organisation takes no new entries.
+      where: { id: body.eventId, ...ACTIVE_ORGANISER_WHERE },
       select: {
         id: true,
         title: true,

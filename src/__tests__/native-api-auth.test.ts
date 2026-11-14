@@ -71,6 +71,14 @@ describe("native API authentication claims", () => {
     expect(session?.emailTrusted).toBe(false);
   });
 
+  it("marks an unverified password-user email as untrusted", () => {
+    // No `identities` claim: a native Cognito user. An admin-created user can
+    // carry an address nobody has confirmed, so it must not adopt a row.
+    const session = nativeSessionFromClaims(access(), id({ email_verified: "false" }), CLIENT_ID);
+    expect(session?.emailTrusted).toBe(false);
+    expect(nativeSessionFromClaims(access(), id({ email_verified: undefined }), CLIENT_ID)?.emailTrusted).toBe(false);
+  });
+
   it("does not produce a session for mismatched token subjects", () => {
     expect(nativeSessionFromClaims(access(), id({ sub: "other" }), CLIENT_ID)).toBeNull();
   });
