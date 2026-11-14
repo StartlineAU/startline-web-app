@@ -61,6 +61,6 @@ describe("displayNameFromUser", () => {
   it("prefers name, then username, then email local-part", () => {
     expect(displayNameFromUser({ name: "Alex", username: "alex", email: "a@x.com" })).toBe("Alex");
     expect(displayNameFromUser({ name: null, username: "alex", email: "a@x.com" })).toBe("alex");
-    expect(displayNameFromUser({ name: null, username: null, email: "runner@x.com" })).toBe("runner");
+    expect(displayNameFromUser({ name: null, username: null, email: "runner@x.com" })).toBe("Startline athlete");
   });
 });

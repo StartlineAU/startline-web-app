@@ -98,6 +98,7 @@ model Organiser {
   registrations Registration[]
   follows       OrganiserFollow[]
   members       OrganiserMember[]
+  invites       OrganiserInvite[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -124,6 +125,27 @@ model OrganiserMember {
   @@unique([organiserId, userId])
   @@index([userId])
   @@map("organiser_members")
+}
+
+// An Owner's invitation for someone to join as a MANAGER. Nobody becomes a
+// member without accepting: only the signed-in account whose verified email is
+// the invited address can accept it (app/api/organiser/invites/accept). The
+// token is stored hashed; the link in the email carries the token itself.
+model OrganiserInvite {
+  id          String    @id @default(uuid())
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String    @unique
+  // The User who sent it. Not a relation: it stays readable if they leave.
+  invitedById String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+
+  @@index([organiserId])
+  @@index([email])
+  @@map("organiser_invites")
 }
 
 enum OrganiserStatus {
@@ -264,7 +286,7 @@ enum PayoutAttemptStatus {
 model PayoutOperation {
   id              String       @id @default(uuid())
   eventId         String       @unique
-  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
   stripeAccountId String
   amountCents     Int
   currency        String       @default("aud")
@@ -415,9 +437,9 @@ model Announcement {
 model Registration {
   id          String    @id @default(uuid())
   eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
   organiserId String
-  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Restrict)
   userId      String?
   user        User?     @relation(fields: [userId], references: [id])
 

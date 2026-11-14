@@ -13,6 +13,7 @@ import { isFreeEvent } from "@/lib/event-types";
 import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
+import { safeReturnPath } from "@/lib/safe-return-path";
 import {
   DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty,
   type Discipline, type FormState, type RegionId, type Wave,
@@ -63,7 +64,9 @@ interface EditContext {
 function returnPath(): string | null {
   if (typeof window === "undefined") return null;
   const from = new URLSearchParams(window.location.search).get("from");
-  return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
+  if (!from) return null;
+  const safe = safeReturnPath(from, { fallback: "" });
+  return safe || null;
 }
 
 interface EventPageEditorProps {

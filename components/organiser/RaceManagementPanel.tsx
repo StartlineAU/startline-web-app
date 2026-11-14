@@ -790,17 +790,24 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
               <label htmlFor="edit-status" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Status
               </label>
-              <FormSelect
-                id="edit-status"
-                value={editStatus}
-                onChange={(v) => setEditStatus(v as Registration["status"])}
-                options={[
-                  { value: "CONFIRMED", label: "Confirmed" },
-                  { value: "REFUND_REQUESTED", label: "Refund requested" },
-                  { value: "REFUNDED", label: "Refunded" },
-                  { value: "CANCELLED", label: "Cancelled" },
-                ]}
-              />
+              {editReg?.statusEditable && (editStatus === "CONFIRMED" || editStatus === "CANCELLED") ? (
+                <FormSelect
+                  id="edit-status"
+                  value={editStatus}
+                  onChange={(v) => setEditStatus(v as Registration["status"])}
+                  options={[
+                    { value: "CONFIRMED", label: "Confirmed" },
+                    { value: "CANCELLED", label: "Cancelled" },
+                  ]}
+                />
+              ) : (
+                <>
+                  <p id="edit-status" className="text-[14px] text-light">{STATUS_LABEL[editStatus]}</p>
+                  <p className="text-[12px] text-muted-dark mt-1.5">
+                    Paid entries change status only through a refund, which the athlete requests from their activity.
+                  </p>
+                </>
+              )}
             </div>
             {editError && (
               <p className="text-[13px] text-red-300">{editError}</p>

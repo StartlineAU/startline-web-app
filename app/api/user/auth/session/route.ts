@@ -11,10 +11,11 @@ export async function POST() {
   }
 
   try {
-    const user = await resolveUserRow(session.sub, session.email, session.name);
+    const user = await resolveUserRow(session);
     // No row means this identity was never linked to the account that holds the
-    // email. The caller is signed in to Cognito but has no app account, which is
-    // a refusal, not an error they can fix by retrying.
+    // email, its email is unverified, or the account is banned. The caller is
+    // signed in to Cognito but has no app account, which is a refusal, not an
+    // error they can fix by retrying.
     if (!user) {
       return NextResponse.json({ error: "No account for this identity." }, { status: 403 });
     }

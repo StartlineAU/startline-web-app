@@ -4,6 +4,7 @@ import { config as loadEnvLocal } from "dotenv";
 // local overrides) with higher precedence than `.env`. Mirror that here so
 // `prisma db seed` reaches the same staging auth pool the app uses.
 loadEnvLocal({ path: ".env.local", override: true });
+import { randomBytes } from "crypto";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { DEFAULT_REFUND_TIERS } from "../lib/refund-policy";
@@ -84,11 +85,31 @@ async function uniqueSlug(title: string): Promise<string> {
   }
 }
 
-const PASSWORD = "Password123!";
-
 const region       = process.env.NEXT_PUBLIC_AWS_REGION ?? "ap-southeast-2";
 const userPoolId   = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
 const userPoolName = userPoolId.split("_").pop() ?? "unknown";
+
+// The seed only creates users, sets their password and adds the admin to the
+// `admins` group in a Cognito pool named here (comma-separated pool ids). Your
+// own development pool belongs on the list; the shared staging pool and the
+// production pool never do. Against any other pool the seed only reads the
+// existing users' subs, so a reseed can no longer recreate a known admin login
+// on a shared pool or reset a password someone rotated.
+const cognitoWritePools = (process.env.SEED_COGNITO_WRITE_POOLS ?? "")
+  .split(",")
+  .map((pool) => pool.trim())
+  .filter(Boolean);
+const mayWriteCognito = Boolean(userPoolId) && cognitoWritePools.includes(userPoolId);
+
+// Never a constant in this public repository. SEED_PASSWORD keeps it stable
+// across reseeds of your own pool; otherwise each run makes a new one and
+// prints it.
+function seedPassword(): string {
+  if (process.env.SEED_PASSWORD) return process.env.SEED_PASSWORD;
+  // Cognito's policy wants upper, lower, a digit and a symbol.
+  return `Sl-${randomBytes(12).toString("base64url")}9a!`;
+}
+const PASSWORD = seedPassword();
 
 const cognito = new CognitoIdentityProviderClient({ region });
 
@@ -231,8 +252,9 @@ async function ensureCognitoUsers(): Promise<void> {
         Username: user.email,
         GroupName: "admins",
       }));
-      // Best-effort: SOFTWARE_TOKEN_MFA needs pool-level delivery config that
-      // may not be set on a given pool. Seeding must not fail because of it.
+      // Usually fails for a new user, who has no authenticator app yet. That is
+      // not a hole: admin access requires one (lib/admin-mfa.ts), and the admin
+      // login sets it up on first sign-in.
       try {
         await cognito.send(new AdminSetUserMFAPreferenceCommand({
           UserPoolId: userPoolId,
@@ -308,12 +330,18 @@ function databaseHost(): string {
 }
 
 // The seed truncates users, organisers, events and registrations before it
-// writes, and it creates 15 Cognito accounts that all share PASSWORD — one of
+// writes, and in a pool listed in SEED_COGNITO_WRITE_POOLS it creates 15
+// Cognito accounts that all share PASSWORD — one of
 // them in the `admins` group. Running it against a deployed environment wipes
 // real accounts and leaves signed-in browsers holding a valid Cognito session
 // with no matching user row, which is what turned "publish event" into a 401
 // (issue #302). Remote targets therefore need an explicit ALLOW_REMOTE_SEED.
 function assertSeedTargetIsSafe(): void {
+  // Production is never seeded, whatever else is set.
+  if (process.env.ENV === "prod" || process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to seed: this is a production environment (ENV=prod or NODE_ENV=production).");
+  }
+
   if (process.env.ALLOW_REMOTE_SEED === "true") {
     console.warn("  ⚠  ALLOW_REMOTE_SEED=true — seeding a non-local database, existing data will be destroyed\n");
     return;
@@ -351,6 +379,8 @@ async function main() {
     console.warn("  NEXT_PUBLIC_COGNITO_USER_POOL_ID not set — skipping Cognito seeding");
   } else if (forceMockSubs) {
     console.log("  CI detected — skipping Cognito seeding (using mock e2e subs)");
+  } else if (!mayWriteCognito) {
+    console.log(`  Pool ${userPoolName} is not in SEED_COGNITO_WRITE_POOLS — not creating users or setting passwords`);
   } else {
     try {
       await removeLegacyCognitoUsers();
@@ -398,6 +428,9 @@ async function main() {
 
   await prisma.adminAuditLog.deleteMany();
   await prisma.registration.deleteMany();
+  // Payout records no longer cascade from their event (RESTRICT), so they go
+  // before the events. Attempts cascade from their operation.
+  await prisma.payoutOperation.deleteMany();
   await prisma.savedEvent.deleteMany();
   await prisma.organiserFollow.deleteMany();
   await prisma.review.deleteMany();
@@ -1231,7 +1264,7 @@ async function main() {
   console.log(`  Admin audit log entries: ${auditEntries.length}`);
 
   console.log("\n✅ Database seeding complete!");
-  console.log(`   Password for all users: ${PASSWORD}`);
+  if (mayWriteCognito) console.log(`   Password for all seed users in pool ${userPoolName}: ${PASSWORD}`);
   console.log("   Users: marcus.stirling@startline.test, sarah.mitchell@startline.test, jade.nguyen@startline.test");
 }
 

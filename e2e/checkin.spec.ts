@@ -68,6 +68,8 @@ test.beforeAll(async () => {
   });
   expect(user, `seeded user ${USER_EMAIL} should exist`).toBeTruthy();
 
+  // Registrations block deleting their event (onDelete: Restrict).
+  await prisma.registration.deleteMany({ where: { eventId: EVENT_ID } });
   await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
   await prisma.event.create({
     data: {
@@ -119,6 +121,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // Registrations block deleting their event (onDelete: Restrict).
+  await prisma.registration.deleteMany({ where: { eventId: EVENT_ID } });
   await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
   await prisma.$disconnect();
 });

@@ -3,14 +3,15 @@
 // the event wizard are deferred to submit, so without the client-side check an
 // oversized file is accepted silently and only fails five steps later.
 
-export type UploadType = "logo" | "cover" | "photo" | "video" | "avatar" | "document";
+// No video type: nothing uploads one, and a 200 MB allowance for any account
+// was a free file host.
+export type UploadType = "logo" | "cover" | "photo" | "avatar" | "document";
 
 export const UPLOAD_LIMITS: Record<UploadType, { bytes: number; label: string }> = {
   logo:     { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   cover:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   photo:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
   avatar:   { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
-  video:    { bytes: 200 * 1024 * 1024, label: "Video must be 200 MB or smaller." },
   document: { bytes: 15 * 1024 * 1024,  label: "PDF must be 15 MB or smaller."    },
 };
 
@@ -37,7 +38,6 @@ export const TYPE_MIMES: Record<UploadType, string[]> = {
   cover:    ["image/jpeg", "image/png", "image/webp"],
   photo:    ["image/jpeg", "image/png", "image/webp"],
   avatar:   ["image/jpeg", "image/png", "image/webp"],
-  video:    ["video/mp4", "video/webm", "video/quicktime", "video/avi", "video/ogg"],
   document: ["application/pdf"],
 };
 
@@ -57,5 +57,6 @@ export const MIME_EXT: Record<string, string> = {
 export const UPLOAD_TYPES = Object.keys(TYPE_MIMES) as UploadType[];
 
 export function isUploadType(value: unknown): value is UploadType {
-  return typeof value === "string" && value in TYPE_MIMES;
+  // Own keys only: `in` also accepts inherited names such as "constructor".
+  return typeof value === "string" && Object.hasOwn(TYPE_MIMES, value);
 }

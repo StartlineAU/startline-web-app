@@ -9,6 +9,7 @@ import {
 } from "@/lib/portal-domains";
 import { isLegalPath, publicSiteMode, servesWhileWaitlisted } from "@/lib/site-mode";
 import { accessTokenIsForClient } from "@/lib/native-api-auth";
+import { crossSiteWriteBlocked } from "@/lib/request-origin";
 
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
@@ -149,6 +150,18 @@ async function routeSingleHost(req: NextRequest, pathname: string): Promise<Next
 }
 
 async function handleRequest(req: NextRequest) {
+  // Before anything else, the dev bypass included: see lib/request-origin.ts.
+  if (crossSiteWriteBlocked({
+    method: req.method,
+    pathname: req.nextUrl.pathname,
+    host: req.headers.get("host") ?? "",
+    origin: req.headers.get("origin"),
+    authorization: req.headers.get("authorization"),
+    protocol: req.nextUrl.protocol,
+  })) {
+    return NextResponse.json({ error: "Cross-site request refused." }, { status: 403 });
+  }
+
   if (process.env.NODE_ENV === "development") {
     const bypass = req.cookies.get("__e2e_bypass")?.value;
     if (bypass) return NextResponse.next();
@@ -168,7 +181,13 @@ async function handleRequest(req: NextRequest) {
     // Waitlist mode closes the whole portal, not only the athlete site. The
     // auth and API paths above stay open so an organiser can still sign in;
     // after that the portal's own routes decide what they may see.
-    if (publicSiteMode() === "waitlist" && !servesPortalInfrastructure(pathname)) {
+    // The invitation page is reached from an email, often signed out; it has
+    // its own sign-in and shows nothing without a valid token.
+    if (
+      publicSiteMode() === "waitlist" &&
+      !servesPortalInfrastructure(pathname) &&
+      pathname !== "/organiser/invite"
+    ) {
       const payload = await getVerifiedPayload(req);
       if (!payload) return waitlistResponse(req, pathname);
     }

@@ -13,6 +13,7 @@ import ReviewPayStep, { backBtnCls, type ReviewRow } from "./ReviewPayStep";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import TicketHolderToggle, { type TicketHolder } from "@/components/registration/TicketHolderToggle";
 import SaveDetailsPrompt, { type ProfileUpdate } from "@/components/registration/SaveDetailsPrompt";
+import { botCheckAppliesTo } from "@/lib/bot-check-hosts";
 import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
@@ -21,7 +22,6 @@ import { getLifecyclePhase } from "@/lib/event-status";
 import { useApiResource } from "@/hooks/useApiResource";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
-const BOT_CHECK_HOSTS = ["startlineau.com", "www.startlineau.com"];
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
@@ -170,7 +170,7 @@ function RegisterContent() {
   const [showTurnstile, setShowTurnstile] = useState(false);
   useEffect(() => {
     startTransition(() => {
-      setShowTurnstile(Boolean(TURNSTILE_SITE_KEY) && BOT_CHECK_HOSTS.includes(window.location.hostname));
+      setShowTurnstile(Boolean(TURNSTILE_SITE_KEY) && botCheckAppliesTo(window.location.hostname));
     });
   }, []);
 
@@ -592,7 +592,9 @@ function RegisterContent() {
       const res = await fetch("/api/registrations/free", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderPayload()),
+        // Only reachable from the review step's confirm button, which needs the
+        // terms box ticked.
+        body: JSON.stringify({ ...orderPayload(), acceptedTerms: true }),
       });
       const data = (await res.json()) as { registrationIds?: string[]; error?: string };
       if (!res.ok || !data.registrationIds?.length) {

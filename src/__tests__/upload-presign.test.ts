@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => {
   class DeleteObjectCommand {
     constructor(readonly input: Record<string, unknown>) {}
   }
+  class CopyObjectCommand {
+    constructor(readonly input: Record<string, unknown>) {}
+  }
   return {
+    CopyObjectCommand,
     getOrganiserSession: vi.fn(),
     getAdminSession: vi.fn(),
     getUserSession: vi.fn(),
@@ -34,6 +38,7 @@ vi.mock("@aws-sdk/s3-presigned-post", () => ({
 vi.mock("@aws-sdk/client-s3", () => ({
   GetObjectCommand: mocks.GetObjectCommand,
   DeleteObjectCommand: mocks.DeleteObjectCommand,
+  CopyObjectCommand: mocks.CopyObjectCommand,
 }));
 
 // These tests are not about rate limiting, but both routes now call the limiter,
@@ -138,8 +143,33 @@ describe("POST /api/upload/presign", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.mode).toBe("s3");
-    expect(body.key).toMatch(new RegExp(`^uploads/${SUB}/photo/[0-9a-f-]+\\.jpg$`));
-    expect(body.fileUrl).toBe(`https://cdn.startlineau.com/${body.key}`);
+    // Signed into the unserved pending prefix, with no URL until it is checked.
+    expect(body.key).toMatch(new RegExp(`^pending/${SUB}/photo/[0-9a-f-]+\\.jpg$`));
+    expect(body.fileUrl).toBeUndefined();
+  });
+
+  it("does not let an athlete account upload organisation or event files", async () => {
+    mocks.getOrganiserSession.mockResolvedValue(null);
+    mocks.getUserSession.mockResolvedValue({ sub: "cog_jade" });
+
+    for (const type of ["photo", "cover", "logo", "document"]) {
+      const res = await presignReq({ type, contentType: type === "document" ? "application/pdf" : "image/jpeg", size: MB });
+      expect(res.status, type).toBe(401);
+    }
+    expect(mocks.createPresignedPost).not.toHaveBeenCalled();
+  });
+
+  it("does not let a suspended organisation upload", async () => {
+    mocks.getOrganiserSession.mockResolvedValue({ sub: SUB, status: "SUSPENDED" });
+
+    const res = await presignReq({ type: "photo", contentType: "image/jpeg", size: MB });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("no longer offers a video upload", async () => {
+    const res = await presignReq({ type: "video", contentType: "video/mp4", size: MB });
+    expect(res.status).toBe(400);
   });
 
   it("pins the size and content type into the signature", async () => {
@@ -160,25 +190,49 @@ describe("POST /api/upload/presign", () => {
 
     const res = await presignReq({ type: "avatar", contentType: "image/webp", size: MB });
 
-    expect((await res.json()).key).toMatch(/^uploads\/cog_jade\/avatar\//);
+    expect((await res.json()).key).toMatch(/^pending\/cog_jade\/avatar\//);
   });
 });
 
 describe("POST /api/upload/complete", () => {
-  const KEY = `uploads/${SUB}/photo/abc.jpg`;
+  const FILE = "0f8fad5b-d9cb-469f-a165-70867728950e.jpg";
+  const KEY = `pending/${SUB}/photo/${FILE}`;
+  const SERVED = `uploads/${SUB}/photo/${FILE}`;
   const bodyOf = (bytes: number[]) => ({
     Body: { transformToByteArray: async () => new Uint8Array(bytes) },
   });
   const JPEG = [0xff, 0xd8, 0xff, 0xe0];
 
-  it("returns the CDN url when the bytes match the declared type", async () => {
-    mocks.send.mockResolvedValue(bodyOf(JPEG));
+  it("publishes a checked object to the served prefix and returns its CDN url", async () => {
+    mocks.send.mockResolvedValueOnce(bodyOf(JPEG)).mockResolvedValue({});
 
     const res = await completeReq({ key: KEY, type: "photo", contentType: "image/jpeg" });
 
     expect(res.status).toBe(200);
-    expect((await res.json()).fileUrl).toBe(`https://cdn.startlineau.com/${KEY}`);
-    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect((await res.json()).fileUrl).toBe(`https://cdn.startlineau.com/${SERVED}`);
+    const copy = mocks.send.mock.calls[1][0];
+    expect(copy).toBeInstanceOf(mocks.CopyObjectCommand);
+    expect(copy.input).toMatchObject({ Key: SERVED, CopySource: `startline-staging-uploads/${KEY}`, ContentType: "image/jpeg", MetadataDirective: "REPLACE" });
+    const cleanup = mocks.send.mock.calls[2][0];
+    expect(cleanup).toBeInstanceOf(mocks.DeleteObjectCommand);
+    expect(cleanup.input.Key).toBe(KEY);
+  });
+
+  it("serves a PDF as a download", async () => {
+    const pdfKey = `pending/${SUB}/document/0f8fad5b-d9cb-469f-a165-70867728950e.pdf`;
+    mocks.send.mockResolvedValueOnce(bodyOf([0x25, 0x50, 0x44, 0x46, 0x2d])).mockResolvedValue({});
+
+    const res = await completeReq({ key: pdfKey, type: "document", contentType: "application/pdf" });
+
+    expect(res.status).toBe(200);
+    expect(mocks.send.mock.calls[1][0].input.ContentDisposition).toBe("attachment");
+  });
+
+  it("never touches a served object", async () => {
+    const res = await completeReq({ key: SERVED, type: "photo", contentType: "image/jpeg" });
+
+    expect(res.status).toBe(400);
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it("reads only the leading bytes, not the whole object", async () => {
@@ -207,7 +261,7 @@ describe("POST /api/upload/complete", () => {
 
   it("refuses a key belonging to another user", async () => {
     const res = await completeReq({
-      key: "uploads/cog_someone_else/photo/abc.jpg",
+      key: `pending/cog_someone_else/photo/${FILE}`,
       type: "photo",
       contentType: "image/jpeg",
     });
@@ -218,7 +272,7 @@ describe("POST /api/upload/complete", () => {
 
   it("refuses a key that climbs out of its own prefix", async () => {
     const res = await completeReq({
-      key: `uploads/${SUB}/photo/../../cog_other/photo/abc.jpg`,
+      key: `pending/${SUB}/photo/../../cog_other/photo/${FILE}`,
       type: "photo",
       contentType: "image/jpeg",
     });

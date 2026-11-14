@@ -1,3 +1,4 @@
+import { safeReturnPath } from "./safe-return-path";
 import {
   SOCIAL_PROVIDERS,
   socialProviderFromCognitoName,
@@ -167,8 +168,5 @@ export function linkErrorMessage(code: string | null): string | null {
 }
 
 export function safeReturnTo(value: unknown): string {
-  if (typeof value !== "string") return "/";
-  if (!value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.startsWith("/auth/")) return "/";
-  return value;
+  return safeReturnPath(value, { blockedPrefixes: ["/auth/"] });
 }

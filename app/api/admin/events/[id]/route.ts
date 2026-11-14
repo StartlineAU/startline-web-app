@@ -9,6 +9,7 @@ import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -262,6 +263,9 @@ export async function DELETE(
     if (!event) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
+    if ((await eventIdsWithEntries([id])).has(id)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
 
     await prisma.event.delete({ where: { id } });
     await cancelEventSchedules(id).catch((err) =>
@@ -278,6 +282,9 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
     console.error("Admin delete event error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }

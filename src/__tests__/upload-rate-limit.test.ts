@@ -16,7 +16,11 @@ const mocks = vi.hoisted(() => {
   class DeleteObjectCommand {
     constructor(readonly input: Record<string, unknown>) {}
   }
+  class CopyObjectCommand {
+    constructor(readonly input: Record<string, unknown>) {}
+  }
   return {
+    CopyObjectCommand,
     getOrganiserSession: vi.fn(),
     getAdminSession: vi.fn(),
     getUserSession: vi.fn(),
@@ -45,6 +49,7 @@ vi.mock("@aws-sdk/client-s3", () => ({
   PutObjectCommand: mocks.PutObjectCommand,
   GetObjectCommand: mocks.GetObjectCommand,
   DeleteObjectCommand: mocks.DeleteObjectCommand,
+  CopyObjectCommand: mocks.CopyObjectCommand,
 }));
 
 vi.mock("@/lib/s3", () => ({
@@ -64,18 +69,27 @@ const SUB = "cog_sarah";
 const tooMany = () =>
   NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
 
-const post = (url: string) => new Request(url, { method: "POST" }) as never;
+const post = (url: string, body: unknown) =>
+  new Request(url, { method: "POST", body: JSON.stringify(body) }) as never;
 
-// /api/upload reads a multipart body once past the limiter, so it needs a real
-// one. Left empty on purpose: the route then 400s on the missing file, which is
-// far enough for these tests and never reaches S3.
-const postForm = (url: string) =>
-  new Request(url, { method: "POST", body: new FormData() }) as never;
+// The routes read the upload type first, because it decides whose session
+// counts (lib/upload-access.ts). /api/upload's form carries a type and no
+// file: it then 400s on the missing file, after the limiter, and never
+// reaches S3.
+const postForm = (url: string) => {
+  const form = new FormData();
+  form.append("type", "photo");
+  return new Request(url, { method: "POST", body: form }) as never;
+};
 
 const call = {
   upload: () => upload(postForm("http://localhost/api/upload")),
-  presign: () => presign(post("http://localhost/api/upload/presign")),
-  complete: () => complete(post("http://localhost/api/upload/complete")),
+  presign: () => presign(post("http://localhost/api/upload/presign", { type: "photo", contentType: "image/jpeg", size: 1 })),
+  complete: () => complete(post("http://localhost/api/upload/complete", {
+    key: `pending/${SUB}/photo/0f8fad5b-d9cb-469f-a165-70867728950e.jpg`,
+    type: "photo",
+    contentType: "image/jpeg",
+  })),
 };
 
 const optionsFor = () => {

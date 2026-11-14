@@ -1,4 +1,4 @@
-import type { EventStatus } from "@prisma/client";
+import type { EventStatus, OrganiserStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 /**
@@ -67,8 +67,17 @@ export function publicDiscoveryWhere(now: Date = new Date()) {
   return {
     status: { in: ["APPROVED", "IN_PROGRESS"] as EventStatus[] },
     endsAtUtc: { gt: now },
+    ...ACTIVE_ORGANISER_WHERE,
   };
 }
+
+/**
+ * Events of a suspended organisation are off every public surface and closed
+ * to new entries. Spread this into any Prisma event filter an athlete can reach.
+ */
+export const ACTIVE_ORGANISER_WHERE = {
+  organiser: { status: "APPROVED" as OrganiserStatus },
+};
 
 /** Events whose status is allowed to become live, before date filtering. */
 export const LIVE_EVENT_STATUSES: EventStatus[] = ["APPROVED", "IN_PROGRESS"];

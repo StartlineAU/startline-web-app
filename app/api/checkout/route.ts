@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import { getStripe } from "@/lib/stripe";
 import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
+import { rateLimit } from "@/lib/rate-limit";
 import { assertMetadataBudget } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
@@ -22,6 +24,10 @@ export async function POST(req: NextRequest) {
 
     const botBlocked = await assertTurnstile(req, body, "checkout");
     if (botBlocked) return botBlocked;
+
+    // Each call creates a PaymentIntent carrying the order's personal details.
+    const blocked = await rateLimit(req, { prefix: "checkout", limit: 20, windowSeconds: 600 });
+    if (blocked) return blocked;
 
     const order = await resolveCheckoutOrder(body);
     if (isOrderFailure(order)) {
@@ -61,7 +67,7 @@ export async function POST(req: NextRequest) {
     // (transfer_data.destination). In dev direct-charge mode there is no
     // connected account, so the charge lands on the platform account with no
     // application fee.
-    const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
+    const isDirectCharge = isDevDirectCharge();
     const useConnect = Boolean(event.organiser.stripeAccountId) && !isDirectCharge;
     const metadata: Record<string, string> = {
       eventId: event.id,

@@ -81,6 +81,7 @@ describe("registration and discovery rules", () => {
     expect(publicDiscoveryWhere(now)).toEqual({
       status: { in: ["APPROVED", "IN_PROGRESS"] },
       endsAtUtc: { gt: now },
+      organiser: { status: "APPROVED" },
     });
   });
 });

@@ -7,15 +7,20 @@ on:
 # PR checks run with no AWS credentials on purpose: anything a PR workflow can
 # read, unmerged PR code can read. Environment secrets belong to the trusted
 # deploy workflows (deploy.yml) only. See AGENTS.md -> Environment variables.
+# Read-only by default. Only gitleaks comments on the PR, so only it gets
+# pull-requests: write. A failed install fails the job: falling back to
+# `pnpm approve-builds --all` would run every dependency's install script,
+# which is what the allowBuilds list exists to stop.
 permissions:
   contents: read
-  pull-requests: write
-  security-events: write
 
 jobs:
   gitleaks:
     continue-on-error: false
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -40,7 +45,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
+      - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
@@ -56,7 +61,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
+      - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - run: npx prisma generate
       - run: pnpm typecheck
@@ -73,7 +78,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
+      - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - run: npx prisma generate
       - run: pnpm build
@@ -90,7 +95,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
+      - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - run: npx prisma generate
       - run: pnpm test
@@ -143,7 +148,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile || pnpm approve-builds --all
+      - run: pnpm install --frozen-lockfile
       - run: pnpm install --frozen-lockfile
       - run: npx playwright install chromium
       - run: npx prisma generate
@@ -156,6 +161,13 @@ jobs:
         run: |
           # The app needs a non-empty pool and client id to build an authorize
           # URL at all; social-sign-in.spec.ts then intercepts the redirect.
-          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 &
+          # Output goes to a file: a background process's output is lost once
+          # this step ends, which hid why the server stalled and dropped
+          # connections mid-run. Printed below when the e2e run fails.
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 > "$RUNNER_TEMP/next-dev.log" 2>&1 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
       - run: pnpm test:e2e
+      - name: Dev server log
+        if: failure()
+        shell: bash
+        run: grep -vE '^\s*(GET|POST|PUT|PATCH|DELETE|HEAD) /' "$RUNNER_TEMP/next-dev.log" | tail -n 400

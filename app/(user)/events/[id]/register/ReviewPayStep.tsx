@@ -121,6 +121,19 @@ function StripeReviewForm(props: ReviewPayStepProps) {
       return false;
     }
 
+    // Record the terms acceptance on the PaymentIntent before charging, so the
+    // entry stores what the athlete actually agreed to.
+    const accepted = await fetch("/api/checkout/accept-terms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientSecret: props.clientSecret }),
+    }).catch(() => null);
+    if (!accepted?.ok) {
+      const body = (await accepted?.json().catch(() => null)) as { error?: string } | null;
+      props.onError(body?.error ?? "Could not record your acceptance of the terms. Please try again.");
+      return false;
+    }
+
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       clientSecret: props.clientSecret,

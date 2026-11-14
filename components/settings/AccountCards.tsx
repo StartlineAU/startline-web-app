@@ -273,6 +273,10 @@ export function DeleteAccountCard() {
   const [status, setStatus] = useState<DeletionStatus | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmText, setConfirmText] = useState("");
+  // What the server will ask for before deleting (lib/account-proof.ts).
+  const [proof, setProof] = useState<"password-and-code" | "password" | "recent-sign-in">("password");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState("");
 
@@ -285,6 +289,7 @@ export function DeleteAccountCard() {
         if (cancelled) return;
         if (!data) { setError("Could not check your account. Please try again."); return; }
         setStatus({ blockers: data.blockers ?? [], upcomingEntries: data.upcomingEntries ?? 0 });
+        if (data.proof) setProof(data.proof);
       })
       .catch(() => { if (!cancelled) setError("Could not check your account. Please try again."); });
     return () => { cancelled = true; };
@@ -293,7 +298,11 @@ export function DeleteAccountCard() {
   const deleteAccount = async () => {
     setBusy(true); setError("");
     try {
-      const { ok, data } = await send("/api/user/account", "DELETE", { confirm: "DELETE" });
+      const { ok, data } = await send("/api/user/account", "DELETE", {
+        confirm: "DELETE",
+        ...(proof !== "recent-sign-in" ? { password } : {}),
+        ...(proof === "password-and-code" ? { code } : {}),
+      });
       if (!ok) {
         setError(errorOf(data, "Could not delete your account."));
         if (data.code === "OWNS_ORGANISATION") setReloadKey(k => k + 1);
@@ -363,11 +372,36 @@ export function DeleteAccountCard() {
                   <input id="settings-delete-confirm" value={confirmText} autoComplete="off"
                     onChange={(e) => setConfirmText(e.target.value)} className={inputCls} />
                 </div>
+                {proof !== "recent-sign-in" && (
+                  <div>
+                    <label htmlFor="settings-delete-password" className={labelCls}>Password</label>
+                    <input id="settings-delete-password" type="password" autoComplete="current-password"
+                      value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+                  </div>
+                )}
+                {proof === "password-and-code" && (
+                  <div>
+                    <label htmlFor="settings-delete-code" className={labelCls}>Authenticator code</label>
+                    <input id="settings-delete-code" inputMode="numeric" autoComplete="one-time-code" placeholder="000000"
+                      value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} className={inputCls} />
+                  </div>
+                )}
+                {proof === "recent-sign-in" && (
+                  <p className="text-[12px] text-muted-dark leading-relaxed">
+                    You signed in with Google or Apple. If you signed in more than a few minutes ago, sign out and back in first.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  <button type="submit" disabled={busy || confirmText !== "DELETE"} className={dangerBtn}>
+                  <button type="submit"
+                    disabled={
+                      busy || confirmText !== "DELETE" ||
+                      (proof !== "recent-sign-in" && !password) ||
+                      (proof === "password-and-code" && code.length !== 6)
+                    }
+                    className={dangerBtn}>
                     {busy ? "Deleting…" : "Delete my account"}
                   </button>
-                  <button type="button" onClick={() => { setOpen(false); setConfirmText(""); setError(""); }} disabled={busy} className={neutralBtn}>
+                  <button type="button" onClick={() => { setOpen(false); setConfirmText(""); setPassword(""); setCode(""); setError(""); }} disabled={busy} className={neutralBtn}>
                     Cancel
                   </button>
                 </div>

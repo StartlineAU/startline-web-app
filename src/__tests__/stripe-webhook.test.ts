@@ -12,15 +12,19 @@ const mocks = vi.hoisted(() => ({
   organiser: { updateMany: vi.fn() },
   sendEmail: vi.fn(),
   ensureCognitoUser: vi.fn(),
+  refundCreate: vi.fn(),
 }));
 
 const tx = {
   registration: mocks.registration,
+  // The per-event advisory lock taken before the capacity count.
+  $executeRaw: vi.fn(async () => 0),
 };
 
 vi.mock("@/lib/stripe", () => ({
   getStripe: () => ({
     webhooks: { constructEvent: mocks.constructEvent },
+    refunds: { create: mocks.refundCreate },
   }),
 }));
 
@@ -61,9 +65,19 @@ const metadata = (overrides: Record<string, string>): Stripe.Metadata => ({
   ...overrides,
 });
 
-function signedEvent(object: Record<string, unknown>, type = "payment_intent.succeeded") {
-  mocks.constructEvent.mockReturnValue({ type, data: { object } });
+function signedEvent(
+  object: Record<string, unknown>,
+  type = "payment_intent.succeeded",
+  extra: Record<string, unknown> = {},
+) {
+  const withCurrency = type === "payment_intent.succeeded" ? { currency: "aud", ...object } : object;
+  mocks.constructEvent.mockReturnValue({ type, data: { object: withCurrency }, ...extra });
 }
+
+const ONE_PARTICIPANT = {
+  participantCount: "1",
+  participant0: JSON.stringify({ fn: "Jordan", ln: "Clarke", em: "jordan@example.com", wav: "General" }),
+};
 
 async function post(payload: Record<string, unknown>): Promise<Response> {
   const req = new NextRequest("http://localhost/api/stripe/webhook", {
@@ -90,6 +104,7 @@ const approvedEvent = {
   city: "Melbourne",
   state: "vic",
   organiserId: "org-1",
+  organiser: { status: "APPROVED" },
 };
 
 beforeEach(() => {
@@ -104,6 +119,7 @@ beforeEach(() => {
   mocks.event.findUnique.mockResolvedValue(approvedEvent);
   mocks.notification.create.mockResolvedValue({});
   mocks.userNotification.create.mockResolvedValue({});
+  mocks.refundCreate.mockResolvedValue({ id: "re_123" });
 });
 
 describe("parseParticipantsFromMetadata", () => {
@@ -200,6 +216,7 @@ describe("POST /api/stripe/webhook", () => {
       stripePaymentIntentId: "pi_123",
     });
     expect(mocks.notification.create).toHaveBeenCalled();
+    expect(mocks.refundCreate).not.toHaveBeenCalled();
   });
 
   // #470: the Stripe fee the organiser absorbs is read off the intent's own
@@ -263,7 +280,12 @@ describe("POST /api/stripe/webhook", () => {
     expect(mocks.registration.createMany).toHaveBeenCalledTimes(1);
     const created = mocks.registration.createMany.mock.calls[0][0].data[0];
     expect(created.status).toBe("CANCELLED");
+    expect(created.stripeRefundId).toBe("re_123");
     expect(mocks.notification.create).not.toHaveBeenCalled();
+    expect(mocks.refundCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_intent: "pi_123" }),
+      { idempotencyKey: "refused-payment-refund-pi_123" },
+    );
   });
 
   it("rejects a PaymentIntent referencing an unknown or mismatched event", async () => {
@@ -280,6 +302,8 @@ describe("POST /api/stripe/webhook", () => {
     await post({ id: "pi_123" });
     expect(mocks.registration.createMany).not.toHaveBeenCalled();
     expect(mocks.notification.create).not.toHaveBeenCalled();
+    // The athlete still paid, so the money goes back even with nothing to record.
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
   });
 
   it("refuses to confirm past the event capacity", async () => {
@@ -288,7 +312,13 @@ describe("POST /api/stripe/webhook", () => {
       cap: 1,
       waves: [{ label: "General", price: "100.00", qty: 1 }],
     });
-    mocks.registration.count.mockResolvedValueOnce(0).mockResolvedValue(1); // idempotency=0, capacity=1 already confirmed
+    // Fast-path idempotency 0, idempotency under the lock 0, capacity 1 already
+    // confirmed, then 0 rows for this payment when the refusal is recorded.
+    mocks.registration.count
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValue(0);
     mocks.registration.groupBy.mockResolvedValue([{ waveLabel: "General", _count: { _all: 1 } }]);
     signedEvent({
       id: "pi_123",
@@ -304,6 +334,8 @@ describe("POST /api/stripe/webhook", () => {
     const created = mocks.registration.createMany.mock.calls[0][0].data[0];
     expect(created.status).toBe("CANCELLED");
     expect(mocks.notification.create).not.toHaveBeenCalled();
+    // A buyer who lost the race for the last place is refunded, not kept.
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
   });
 
   it("is idempotent — skips a PaymentIntent that was already processed", async () => {
@@ -320,9 +352,86 @@ describe("POST /api/stripe/webhook", () => {
     signedEvent({ id: "pi_123", amount_received: 10540, metadata: { eventId: "seed-event-001", organiserId: "org-1" } });
 
     await post({ id: "pi_123" });
-    expect(mocks.registration.create).toHaveBeenCalledTimes(1);
-    const created = mocks.registration.create.mock.calls[0][0].data;
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.registration.createMany).toHaveBeenCalledTimes(1);
+    const created = mocks.registration.createMany.mock.calls[0][0].data[0];
     expect(created.status).toBe("CANCELLED");
+  });
+
+  it("stores the waiver as accepted only when the PaymentIntent recorded it", async () => {
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+    await post({ id: "pi_123" });
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].waiverAccepted).toBe(false);
+
+    mocks.registration.createMany.mockClear();
+    signedEvent({
+      id: "pi_124",
+      amount_received: 10540,
+      metadata: metadata({ ...ONE_PARTICIPANT, termsAcceptedAt: "2026-11-14T00:00:00.000Z" }),
+    });
+    await post({ id: "pi_124" });
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].waiverAccepted).toBe(true);
+  });
+
+  it("skips announcing when another delivery recorded the payment under the lock", async () => {
+    // Fast path sees nothing; the check under the event lock finds the rows.
+    mocks.registration.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+
+    const res = await post({ id: "pi_123" });
+    expect(res.status).toBe(200);
+    expect(mocks.registration.createMany).not.toHaveBeenCalled();
+    expect(mocks.notification.create).not.toHaveBeenCalled();
+    expect(mocks.refundCreate).not.toHaveBeenCalled();
+  });
+
+  it("refunds and records nothing new when the organisation is suspended", async () => {
+    mocks.event.findUnique.mockResolvedValue({ ...approvedEvent, organiser: { status: "SUSPENDED" } });
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+
+    await post({ id: "pi_123" });
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].status).toBe("CANCELLED");
+  });
+
+  it("refunds a payment in an unexpected currency", async () => {
+    signedEvent({ id: "pi_123", amount_received: 10540, currency: "usd", metadata: metadata(ONE_PARTICIPANT) });
+
+    await post({ id: "pi_123" });
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].status).toBe("CANCELLED");
+  });
+
+  it("reverses the organiser's transfer when refunding a Connect charge", async () => {
+    mocks.event.findUnique.mockResolvedValue(null);
+    signedEvent({
+      id: "pi_123",
+      amount_received: 10540,
+      transfer_data: { destination: "acct_org" },
+      metadata: metadata(ONE_PARTICIPANT),
+    });
+
+    await post({ id: "pi_123" });
+    expect(mocks.refundCreate.mock.calls[0][0]).toMatchObject({ payment_intent: "pi_123", reverse_transfer: true });
+  });
+
+  it("fails the delivery and records nothing when the refund fails, so Stripe retries", async () => {
+    mocks.event.findUnique.mockResolvedValue({ ...approvedEvent, status: "REJECTED" });
+    mocks.refundCreate.mockRejectedValue(new Error("stripe down"));
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+
+    const res = await post({ id: "pi_123" });
+    expect(res.status).toBe(500);
+    expect(mocks.registration.createMany).not.toHaveBeenCalled();
+  });
+
+  it("ignores events from a connected account", async () => {
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) }, "payment_intent.succeeded", { account: "acct_org" });
+
+    const res = await post({ id: "pi_123" });
+    expect(res.status).toBe(200);
+    expect(mocks.registration.count).not.toHaveBeenCalled();
+    expect(mocks.refundCreate).not.toHaveBeenCalled();
   });
 
   it("marks stripeOnboardingComplete when account.updated enables charges and payouts", async () => {

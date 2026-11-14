@@ -5,6 +5,7 @@ import prisma from "./prisma";
 import { pickActiveMembership } from "./active-organiser";
 import { nativeSessionFromClaims } from "./native-api-auth";
 import { resolveUserRow } from "./user-session";
+import { adminHasAuthenticator } from "./admin-mfa";
 
 export type ServerSession = {
   sub:          string;
@@ -20,6 +21,8 @@ export type ServerSession = {
   // only for a Google or Apple sign-in whose provider did not verify the email.
   name?:         string;
   emailTrusted?: boolean;
+  // Seconds since epoch of the last real sign-in. Refreshing tokens keeps it.
+  authTime?:     number;
   // The dev/E2E identity that produced this session, if any. Used by the
   // settings screen to model provider-only and linked accounts without Cognito.
   bypass?: string;
@@ -183,6 +186,9 @@ export async function getServerSession(): Promise<ServerSession | null> {
         // that use them, so tests never mutate the shared seed users.
         "profile":  { sub: "dev-bypass-profile-test", email: "profile.test@startline.test", groups: [] },
         "noabn":    { sub: "dev-bypass-noabn-test",   email: "noabn.organiser@startline.test", groups: [] },
+        // Owns an organisation that security.spec.ts suspends. Its own rows, so
+        // suspending it never disturbs a spec running in the other worker.
+        "suspended": { sub: "dev-bypass-suspended-test", email: "suspended.organiser@startline.test", groups: [] },
         // Login & security states for issue #389. The sign-in-methods route
         // returns a fixed state for these; they only give the page a signed-in
         // visitor without contacting Cognito.
@@ -249,16 +255,7 @@ export async function getUserSession(): Promise<UserSession | null> {
   if (!cognitoSession) return null;
 
   try {
-    const existing = await prisma.user.findUnique({ where: { cognitoSub: cognitoSession.sub } });
-    if (existing) {
-      return { sub: existing.id, email: existing.email, name: existing.name, phoneNumber: cognitoSession.phoneNumber, birthdate: cognitoSession.birthdate };
-    }
-
-    // Re-pointing an existing row at this sub hands that person's account to
-    // whoever holds the session, so it needs an email the provider vouched for.
-    if (cognitoSession.email && cognitoSession.emailTrusted === false) return null;
-
-    const user = await resolveUserRow(cognitoSession.sub, cognitoSession.email, cognitoSession.name);
+    const user = await resolveUserRow(cognitoSession);
     if (!user) return null;
     return {
       sub: user.id,
@@ -302,7 +299,8 @@ export async function resolveOrganiserSession(
   if (!cognitoSession) return null;
 
   const user = await prisma.user.findUnique({
-    where: { cognitoSub: cognitoSession.sub },
+    // A banned account manages nothing, whatever its memberships say.
+    where: { cognitoSub: cognitoSession.sub, isBanned: false },
     include: {
       memberships: {
         include: {
@@ -341,7 +339,7 @@ export async function getOrganiserMemberships(): Promise<OrganiserMembership[] |
 
   try {
     const user = await prisma.user.findUnique({
-      where: { cognitoSub: cognitoSession.sub },
+      where: { cognitoSub: cognitoSession.sub, isBanned: false },
       select: {
         memberships: {
           select: {
@@ -372,7 +370,7 @@ export async function getOrganiserRole(organiserId: string): Promise<OrganiserRo
     const membership = await prisma.organiserMember.findFirst({
       where: {
         organiserId,
-        user: { cognitoSub: cognitoSession.sub },
+        user: { cognitoSub: cognitoSession.sub, isBanned: false },
       },
       select: { role: true },
     });
@@ -386,25 +384,49 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return null;
   if (!cognitoSession.groups.includes("admins")) return null;
+  // Admin access needs an authenticator app, not just the group: see
+  // lib/admin-mfa.ts.
+  if (!(await adminHasAuthenticator(cognitoSession))) return null;
 
   try {
-    // Resolve by email first (unique): a dev/bypass identity can share the
-    // seeded admin's email but carry a different cognitoSub, so upserting by
-    // sub alone would try to create a duplicate email row and fail.
-    const admin = await prisma.admin.findUnique({
-      where:  { email: cognitoSession.email ?? "" },
-      select: { id: true, email: true, name: true },
-    });
-    if (admin) return { sub: admin.id, email: admin.email, name: admin.name };
-
-    const created = await prisma.admin.upsert({
-      where:  { cognitoSub: cognitoSession.sub },
-      update: cognitoSession.email ? { email: cognitoSession.email } : {},
-      create: { cognitoSub: cognitoSession.sub, email: cognitoSession.email || cognitoSession.sub },
-      select: { id: true, email: true, name: true },
-    });
-    return { sub: created.id, email: created.email, name: created.name };
+    return await resolveAdminRow(cognitoSession);
   } catch {
     return null;
   }
+}
+
+/**
+ * The Admin row for a session already known to be in the `admins` group. The
+ * row is for attribution only (reviews, audit log); the group is what grants
+ * admin. It is found by sub. An existing row is only matched by email when that
+ * email is verified, and then re-pointed at this sub, so the audit trail never
+ * credits one admin's actions to another's row on an unverified address.
+ */
+export async function resolveAdminRow(session: ServerSession): Promise<AdminSession | null> {
+  const select = { id: true, email: true, name: true } as const;
+  const toSession = (row: { id: string; email: string; name: string | null }) =>
+    ({ sub: row.id, email: row.email, name: row.name });
+
+  const bySub = await prisma.admin.findUnique({ where: { cognitoSub: session.sub }, select });
+  if (bySub) return toSession(bySub);
+
+  const email = session.email;
+  if (!email) return null;
+
+  // Dev bypass identities share the seeded admin's email under a made-up sub.
+  // Use that row as it is rather than re-pointing it at the fake sub.
+  if (session.bypass) {
+    const seeded = await prisma.admin.findUnique({ where: { email }, select });
+    return seeded ? toSession(seeded) : null;
+  }
+
+  if (!session.emailTrusted) return null;
+
+  const row = await prisma.admin.upsert({
+    where:  { email },
+    update: { cognitoSub: session.sub },
+    create: { cognitoSub: session.sub, email },
+    select,
+  });
+  return toSession(row);
 }

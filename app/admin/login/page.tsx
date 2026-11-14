@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import TotpQrCode from "@/components/TotpQrCode";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldAlert } from "lucide-react";
-import { signIn, signOut, confirmSignIn, fetchAuthSession } from "aws-amplify/auth";
+import { signIn, signOut, confirmSignIn, fetchAuthSession, setUpTOTP, verifyTOTPSetup, updateMFAPreference } from "aws-amplify/auth";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 
@@ -25,6 +25,9 @@ export default function AdminLoginPage() {
   const [mfaStep,          setMfaStep]          = useState<"none" | "setup" | "challenge">("none");
   const [totpCode,         setTotpCode]         = useState("");
   const [totpSetupUri,     setTotpSetupUri]     = useState<string | null>(null);
+  // Setting up an authenticator for a signed-in admin who had none, as opposed
+  // to answering Cognito's own setup challenge during sign-in.
+  const [enrolling,        setEnrolling]        = useState(false);
 
   const portalHost = usePortalHost();
   const forgotPasswordHref = email.trim()
@@ -47,7 +50,21 @@ export default function AdminLoginPage() {
       return;
     }
 
-    await fetch("/api/admin/auth/session", { method: "POST" }).catch(() => {});
+    const res = await fetch("/api/admin/auth/session", { method: "POST" }).catch(() => null);
+    const data = (await res?.json().catch(() => null)) as { code?: string; error?: string } | null;
+    if (res?.status === 403 && data?.code === "MFA_REQUIRED") {
+      // Admin access needs an authenticator app. Set one up now, on this
+      // signed-in session, rather than sending the admin away.
+      const setup = await setUpTOTP();
+      setTotpSetupUri(setup.getSetupUri("Startline", email).toString());
+      setEnrolling(true);
+      setMfaStep("setup");
+      return;
+    }
+    if (!res?.ok) {
+      setError(data?.error ?? "Could not start your admin session. Please try again.");
+      return;
+    }
     router.push("/admin/dashboard");
   };
 
@@ -152,6 +169,14 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
     try {
+      if (enrolling) {
+        await verifyTOTPSetup({ code: totpCode });
+        await updateMFAPreference({ totp: "PREFERRED" });
+        await fetch("/api/user/mfa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "enable" }) });
+        setEnrolling(false);
+        await completeAdminSignIn();
+        return;
+      }
       const result = await confirmSignIn({ challengeResponse: totpCode });
       if (result.nextStep.signInStep === "DONE") {
         await fetch("/api/user/mfa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "enable" }) });

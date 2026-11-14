@@ -194,3 +194,28 @@ describe("escaping", () => {
     expect(submitted.html).toContain("Sydney NSW");
   });
 });
+
+describe("account security notice", () => {
+  it("names the change and how to get help, escaping what it is given", async () => {
+    const { buildAccountSecurityNoticeEmail } = await import("@/lib/email");
+    const email = await buildAccountSecurityNoticeEmail("Your sign-in email was changed to <b>x@example.com</b>.");
+    expect(email.subject).toMatch(/security change/i);
+    expect(email.text).toContain("Your sign-in email was changed to");
+    expect(email.text).toContain("admin@startlineau.com");
+    expect(email.html).not.toContain("<b>x@example.com</b>");
+  });
+});
+
+describe("organiser invitation", () => {
+  it("names the organisation and links to the invitation", async () => {
+    const { buildOrganiserInviteEmail } = await import("@/lib/email");
+    const email = await buildOrganiserInviteEmail({
+      organisationName: "Apex Endurance Events",
+      inviteUrl: "https://organiser.startlineau.com/organiser/invite?token=abc",
+      expiresInDays: 7,
+    });
+    expect(email.subject).toContain("Apex Endurance Events");
+    expect(email.html).toContain("https://organiser.startlineau.com/organiser/invite?token=abc");
+    expect(email.text).toMatch(/Nothing changes unless you accept/);
+  });
+});

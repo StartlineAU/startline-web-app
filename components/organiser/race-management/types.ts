@@ -21,6 +21,8 @@ export interface Registration {
   refundRequestedAt: string | null;
   refundOutsidePolicy: boolean;
   createdAt: string;
+  /** Free entries only: a paid entry's status changes through a refund. */
+  statusEditable: boolean;
   resultDistance: string | null;
   resultTime: string | null;
   resultPlacement: string | null;
