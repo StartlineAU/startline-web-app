@@ -4,6 +4,11 @@ import {
   PLATFORM_FEE_FIXED_CENTS,
   calculatePlatformFee,
   calculateTotalWithFee,
+  estimateStripeFeeCents,
+  applicationFeeCents,
+  ticketFeeBreakdown,
+  allocateStripeFeeCents,
+  entryOrganiserNetCents,
 } from "@/lib/platform-fee";
 
 describe("calculatePlatformFee", () => {
@@ -108,5 +113,86 @@ describe("booking fee across a whole basket", () => {
 
   it("charges nothing for a free ticket", () => {
     expect(basketFeeCents([0])).toBe(0);
+  });
+});
+
+// ─── Organisers absorb the Stripe processing fee (#470) ─────────────────────
+
+describe("estimateStripeFeeCents", () => {
+  it("charges the domestic rate on the amount charged", () => {
+    // 1.75% of A$53.43 = 93.5c, rounded to 94c, plus 30c.
+    expect(estimateStripeFeeCents(5343)).toBe(124);
+    expect(estimateStripeFeeCents(5000)).toBe(118);
+  });
+
+  it("charges nothing on a free order", () => {
+    expect(estimateStripeFeeCents(0)).toBe(0);
+    expect(estimateStripeFeeCents(-1)).toBe(0);
+  });
+});
+
+describe("applicationFeeCents", () => {
+  it("adds the Stripe fee estimate to the booking fee", () => {
+    expect(applicationFeeCents(5343, 343, 124)).toBe(467);
+  });
+
+  // Stripe rejects an application fee larger than the charge.
+  it("never exceeds the amount charged", () => {
+    expect(applicationFeeCents(100, 149, 32)).toBe(100);
+  });
+});
+
+describe("ticketFeeBreakdown — the issue's A$50 example", () => {
+  it("athlete pays: Startline keeps its whole fee, organiser absorbs Stripe's", () => {
+    expect(ticketFeeBreakdown(5000, "athlete")).toEqual({
+      athletePaysCents: 5343,
+      platformFeeCents: 343,
+      stripeFeeCents: 124,
+      organiserReceivesCents: 4876,
+    });
+  });
+
+  it("organiser pays: both fees come out of the ticket price", () => {
+    expect(ticketFeeBreakdown(5000, "organiser")).toEqual({
+      athletePaysCents: 5000,
+      platformFeeCents: 343,
+      stripeFeeCents: 118,
+      organiserReceivesCents: 4539,
+    });
+  });
+
+  it("matches what the organiser's payout reads back", () => {
+    for (const feeStructure of ["athlete", "organiser"]) {
+      const fees = ticketFeeBreakdown(12900, feeStructure);
+      expect(entryOrganiserNetCents({
+        amountCents: 12900,
+        platformFeeCents: fees.platformFeeCents,
+        stripeFeeCents: fees.stripeFeeCents,
+        feeStructure,
+      })).toBe(fees.organiserReceivesCents);
+    }
+  });
+
+  it("is all zeros for a free ticket", () => {
+    expect(ticketFeeBreakdown(0, "athlete")).toEqual({
+      athletePaysCents: 0, platformFeeCents: 0, stripeFeeCents: 0, organiserReceivesCents: 0,
+    });
+  });
+});
+
+describe("allocateStripeFeeCents", () => {
+  it("splits an order's fee so the parts sum to the whole", () => {
+    const parts = allocateStripeFeeCents(101, [2000, 2000, 2000]);
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(101);
+    expect(parts).toEqual([35, 33, 33]);
+  });
+
+  it("weights by what each entry charged and skips free entries", () => {
+    expect(allocateStripeFeeCents(90, [0, 3000, 6000])).toEqual([0, 30, 60]);
+  });
+
+  it("gives nothing when there is no fee or nothing was charged", () => {
+    expect(allocateStripeFeeCents(0, [5000])).toEqual([0]);
+    expect(allocateStripeFeeCents(50, [0, 0])).toEqual([0, 0]);
   });
 });

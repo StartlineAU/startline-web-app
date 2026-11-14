@@ -40,6 +40,11 @@ const PRICE_CENTS = 13500;
 const FEE_PERCENT = 0.0395;
 const FEE_FIXED_CENTS = 145;
 const platformFee = (p: number) => Math.round(p * FEE_PERCENT) + FEE_FIXED_CENTS;
+// Stripe's domestic rate, estimated on the whole charge. The organiser absorbs
+// it through the application fee (#470).
+const STRIPE_PERCENT = 0.0175;
+const STRIPE_FIXED_CENTS = 30;
+const stripeFee = (charged: number) => Math.round(charged * STRIPE_PERCENT) + STRIPE_FIXED_CENTS;
 
 const FIXTURE_EVENT_ID = "test-stripe-e2e-athlete";
 
@@ -158,9 +163,10 @@ test.describe("stripe lifecycle (real test-mode Stripe)", () => {
 
     // 2. Assert the real PaymentIntent's Connect fields.
     const fee = platformFee(PRICE_CENTS);
+    const processingFee = stripeFee(PRICE_CENTS + fee);
     const pi = await stripe.paymentIntents.retrieve(checkout.paymentIntentId);
     expect(pi.amount).toBe(PRICE_CENTS + fee);
-    expect(pi.application_fee_amount).toBe(fee);
+    expect(pi.application_fee_amount).toBe(fee + processingFee);
     expect(pi.transfer_data?.destination).toBe(organiser.stripeAccountId);
 
     // 3. Confirm with a Stripe test card.
@@ -179,6 +185,7 @@ test.describe("stripe lifecycle (real test-mode Stripe)", () => {
     expect(registration!.status).toBe("CONFIRMED");
     expect(registration!.amountCents).toBe(PRICE_CENTS);
     expect(registration!.platformFeeCents).toBe(fee);
+    expect(registration!.stripeFeeCents).toBe(processingFee);
     expect(registration!.feeStructure).toBe("athlete");
 
     // 5. A paid entry cannot be refunded from the entry itself: the athlete is

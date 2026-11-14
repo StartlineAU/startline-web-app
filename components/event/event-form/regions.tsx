@@ -21,6 +21,7 @@ import {
 } from "@/components/event/EventDetailView";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { isFreeEvent } from "@/lib/event-types";
+import { ticketFeeBreakdown } from "@/lib/platform-fee";
 import { normalisePrizeAmount } from "@/lib/prize-pool";
 import { describeTiers } from "@/lib/refund-policy";
 import { UPLOAD_LIMITS, TYPE_MIMES } from "@/lib/upload-limits";
@@ -440,31 +441,27 @@ export function PrizePoolEditor({ form, update }: Props) {
   );
 }
 
-const STARTLINE_PCT  = 0.0395;
-const STARTLINE_FLAT = 1.45;
-const STRIPE_PCT     = 0.0175;
-const STRIPE_FLAT    = 0.30;
-
 function FeeBreakdown({ price, feeStructure }: { price: string; feeStructure: FormState["feeStructure"] }) {
   const p = parseFloat(price);
   if (!price || price === "0" || isNaN(p) || p <= 0) return null;
-  const startlineFee = p * STARTLINE_PCT + STARTLINE_FLAT;
-  const stripeFee    = p * STRIPE_PCT + STRIPE_FLAT;
-  const athletePays  = feeStructure === "athlete" ? p + startlineFee : p;
-  const youReceive   = feeStructure === "athlete" ? p - stripeFee : p - startlineFee - stripeFee;
-  const fmt = (n: number) => `A$${n.toFixed(2)}`;
+  // The same arithmetic checkout charges, so the preview matches the real
+  // payout to the cent: the Stripe fee is estimated on the whole charge,
+  // booking fee included, and the organiser absorbs it (#470).
+  const fees = ticketFeeBreakdown(Math.round(p * 100), feeStructure);
+  const fmt = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
   const cell = (label: string, value: string, note?: string) => (
-    <div className="min-w-0">
+    <div className="min-w-0" data-fee-row={label}>
       <div className="font-headline text-[9px] font-bold uppercase tracking-widest text-muted">{label}</div>
       <div className="font-headline text-[14px] font-bold text-light tabular-nums">{value}</div>
       {note && <div className="font-headline text-[9px] uppercase tracking-widest text-muted-dark">{note}</div>}
     </div>
   );
   return (
-    <div className="grid grid-cols-3 gap-3 rounded-lg bg-dark-darker/60 px-4 py-3" data-testid="fee-breakdown">
-      {cell("Athlete pays", fmt(athletePays))}
-      {cell("You receive", fmt(youReceive), "After Stripe fee")}
-      {cell("Startline fee", fmt(startlineFee))}
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg bg-dark-darker/60 px-4 py-3" data-testid="fee-breakdown">
+      {cell("Athlete pays", fmt(fees.athletePaysCents))}
+      {cell("You receive", fmt(fees.organiserReceivesCents), "After Stripe fee")}
+      {cell("Startline fee", fmt(fees.platformFeeCents))}
+      {cell("Stripe fee", fmt(fees.stripeFeeCents), "Estimate, from your payout")}
     </div>
   );
 }

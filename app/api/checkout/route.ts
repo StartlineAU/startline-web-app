@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const {
       event, participants, waveLabels, wavePricing,
-      totalCents, platformFeeCents,
+      totalCents, platformFeeCents, stripeFeeCents, applicationFeeCents,
       groupRegistration, userSession, athleteName, athleteEmail,
     } = order;
 
@@ -76,6 +76,9 @@ export async function POST(req: NextRequest) {
       ticketPriceCents: String(primaryWave.p),
       platformFeeCents: String(platformFeeCents),
       platformFeeCentsPerTicket: String(primaryWave.f),
+      // Informational only: the webhook reads the fee back from the intent's
+      // own application_fee_amount, never from metadata.
+      stripeFeeCents: String(stripeFeeCents),
       feeStructure: event.feeStructure,
       groupRegistration: groupRegistration ? "true" : "false",
       ...participantMetadata,
@@ -91,7 +94,10 @@ export async function POST(req: NextRequest) {
       payment_method_types: ["card"],
       ...(useConnect
         ? {
-            application_fee_amount: platformFeeCents,
+            // Booking fee plus the Stripe fee estimate: Stripe debits its
+            // processing fee from the platform, and the organiser absorbs it
+            // (#470). The athlete's total is unchanged.
+            application_fee_amount: applicationFeeCents,
             transfer_data: { destination: event.organiser.stripeAccountId as string },
           }
         : {}),
