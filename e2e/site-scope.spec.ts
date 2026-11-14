@@ -51,13 +51,44 @@ test.describe("reduced disciplines", () => {
   });
 });
 
-test.describe("about page", () => {
-  test("is one short column with a team photo and a contact link", async ({ page }) => {
+test.describe("about page (#539)", () => {
+  test("carries the SEO title, description, H1 and indexing", async ({ page }) => {
     await page.goto("/about");
 
-    await expect(page.getByRole("heading", { level: 1, name: /Built for the start line/i })).toBeVisible();
-    await expect(page.getByRole("img", { name: "The Startline founders" })).toBeVisible();
-    await expect(page.getByText(/founded by Lachlan Martin, Nathan Sweet, Hugo Shrowder\s+and Noah Helu/i)).toBeVisible();
-    await expect(page.locator("main").getByRole("link", { name: "Contact", exact: true })).toHaveAttribute("href", "/contact");
+    const title = await page.title();
+    expect(title).toBe("About Startline | Running & Fitness Events in Australia");
+    expect(title.length).toBeLessThanOrEqual(60);
+
+    const description = await page.locator('meta[name="description"]').getAttribute("content");
+    expect(description).toMatch(/Melbourne-born/);
+    expect(description!.length).toBeLessThanOrEqual(155);
+
+    await expect(page.getByRole("heading", { level: 1 }))
+      .toHaveText("About Startline: Your Start Line for Every Race in Australia");
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/about$/);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /^index, follow/);
+  });
+
+  test("publishes Organization schema and no FAQ", async ({ page }) => {
+    await page.goto("/about");
+
+    const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
+    const schemas = blocks.map((b) => JSON.parse(b));
+    const org = schemas.find((s) => s["@type"] === "Organization");
+
+    expect(org).toMatchObject({ name: "Startline", url: "https://www.startlineau.com" });
+    expect(org.logo).toMatch(/^https:\/\/.+\/images\/logo\.png$/);
+    expect(org.sameAs).toContain("https://www.instagram.com/startlineau/");
+
+    // The FAQ lives on /faq, not here.
+    expect(schemas.some((s) => s["@type"] === "FAQPage")).toBe(false);
+    await expect(page.locator("main details")).toHaveCount(0);
+  });
+
+  test("links to events and contact", async ({ page }) => {
+    await page.goto("/about");
+    const main = page.locator("main");
+    await expect(main.getByRole("link", { name: "Browse events" })).toHaveAttribute("href", "/events");
+    await expect(main.getByRole("link", { name: "Contact", exact: true })).toHaveAttribute("href", "/contact");
   });
 });
