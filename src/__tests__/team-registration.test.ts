@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   userUpsert: vi.fn(),
   notificationCreate: vi.fn(),
   paymentIntentCreate: vi.fn(),
+  queryRaw: vi.fn(async (_sql: TemplateStringsArray, ..._values: unknown[]) => []),
 }));
 
 const prismaMock = vi.hoisted(() => {
@@ -31,6 +32,7 @@ const prismaMock = vi.hoisted(() => {
     organiser: { findUnique: async () => ({ notifyNewRegistration: true }) },
     notification: { create: mocks.notificationCreate },
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
+    $queryRaw: mocks.queryRaw,
   };
   return client;
 });
@@ -194,6 +196,25 @@ describe("free team registration (#541)", () => {
     const emails = vi.mocked(sendRegistrationConfirmationEmail).mock.calls;
     expect(emails).toHaveLength(2);
     expect(emails[0][1].team).toBe("Fast Feet (team of 2)");
+  });
+
+  it("locks the event row before checking team names and capacity", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeTeamEvent());
+    const res = await post(registerFree, "/api/registrations/free", pairOrder());
+    expect(res.status).toBe(200);
+
+    // Two confirms for one event must not both pass the name and capacity
+    // checks, so the lock is the first thing the transaction does.
+    expect(mocks.queryRaw).toHaveBeenCalled();
+    const sql = mocks.queryRaw.mock.calls[0][0].join("?");
+    expect(sql).toMatch(/FOR UPDATE/);
+    // The order resolver checks names once up front, outside the transaction;
+    // the authoritative check is the last one, and it runs under the lock.
+    const nameChecks = mocks.teamFindMany.mock.invocationCallOrder;
+    expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(nameChecks[nameChecks.length - 1]);
+    expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.registrationCreateMany.mock.invocationCallOrder[0],
+    );
   });
 
   it("does not offer a one-tap RSVP for a team ticket", async () => {

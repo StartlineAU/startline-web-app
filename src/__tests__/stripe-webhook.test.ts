@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 
 const tx = {
   registration: mocks.registration,
+  // The event-row lock the confirm transaction takes first.
+  $queryRaw: async () => [],
 };
 
 vi.mock("@/lib/stripe", () => ({

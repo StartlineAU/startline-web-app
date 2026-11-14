@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   getAdminSession: vi.fn(),
-  registration: { findUnique: vi.fn(), update: vi.fn() },
+  registration: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
   userNotification: { create: vi.fn() },
   retrievePaymentIntent: vi.fn(),
   createRefund: vi.fn(),
@@ -194,5 +194,86 @@ describe("admin refund route", () => {
     const res = await refund();
     expect(res.status).toBe(401);
     expect(mocks.registration.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin refund route: team entries (#541)", () => {
+  const teamEntry = { ...confirmedRegistration, teamId: "team-1" };
+  const mate = (id: string, athleteName: string) => ({
+    ...confirmedRegistration,
+    id,
+    athleteName,
+    status: "CONFIRMED",
+  });
+
+  it("refunds every teammate still holding a place, and logs each refund", async () => {
+    mocks.registration.findUnique.mockResolvedValue(teamEntry);
+    mocks.registration.findMany.mockResolvedValue([mate("reg-2", "Sam Lee")]);
+
+    const res = await refund();
+    expect(res.status).toBe(200);
+    expect((await res.json()).teamRefunded).toEqual(["reg-2"]);
+
+    expect(mocks.createRefund).toHaveBeenCalledTimes(2);
+    expect(mocks.createRefund.mock.calls[1][1]).toEqual({ idempotencyKey: "entry-refund-reg-2" });
+    const logged = mocks.writeAuditLog.mock.calls.map(([entry]) => entry.targetId);
+    expect(logged).toEqual(["reg-1", "reg-2"]);
+  });
+
+  it("logs the first refund and keeps going when one teammate's refund fails", async () => {
+    mocks.registration.findUnique.mockResolvedValue(teamEntry);
+    mocks.registration.findMany.mockResolvedValue([mate("reg-2", "Sam Lee"), mate("reg-3", "Ari Kim")]);
+    mocks.createRefund
+      .mockResolvedValueOnce({ id: "re_1" })
+      .mockRejectedValueOnce(new Error("card_declined"))
+      .mockResolvedValueOnce({ id: "re_3" });
+
+    const res = await refund();
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/Sam Lee/);
+    expect(body.error).toMatch(/again/);
+    expect(body.teamRefunded).toEqual(["reg-3"]);
+    expect(body.teamFailed.map((f: { id: string }) => f.id)).toEqual(["reg-2"]);
+
+    // The refund that went through is on record whatever happened after it.
+    const logged = mocks.writeAuditLog.mock.calls.map(([entry]) => entry.targetId);
+    expect(logged).toEqual(["reg-1", "reg-3"]);
+  });
+
+  it("finishes a part-done team refund when the refunded entry is refunded again", async () => {
+    mocks.registration.findUnique.mockResolvedValue({ ...teamEntry, status: "REFUNDED" });
+    mocks.registration.count.mockResolvedValue(1);
+    mocks.registration.findMany.mockResolvedValue([mate("reg-2", "Sam Lee")]);
+
+    const res = await refund();
+    expect(res.status).toBe(200);
+
+    // Only the teammate is refunded: the entry itself was refunded last time.
+    expect(mocks.createRefund).toHaveBeenCalledTimes(1);
+    expect(mocks.createRefund.mock.calls[0][1]).toEqual({ idempotencyKey: "entry-refund-reg-2" });
+  });
+
+  it("still refuses a refunded entry with no teammates left to refund", async () => {
+    mocks.registration.findUnique.mockResolvedValue({ ...teamEntry, status: "REFUNDED" });
+    mocks.registration.count.mockResolvedValue(0);
+
+    const res = await refund();
+    expect(res.status).toBe(409);
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+
+  it("gives a teammate with no quote the same percentage as the team", async () => {
+    mocks.registration.findUnique.mockResolvedValue({ ...teamEntry, refundPercent: 50, refundAmountCents: 5270 });
+    const unquoted = { ...mate("reg-2", "Sam Lee"), refundAmountCents: null, refundPercent: null };
+    mocks.registration.findMany.mockResolvedValue([unquoted]);
+    mocks.registration.update.mockImplementation(async ({ where, data }) =>
+      where.id === "reg-2" ? { ...unquoted, ...data } : {},
+    );
+
+    const res = await refund();
+    expect(res.status).toBe(200);
+    const quote = mocks.registration.update.mock.calls.find(([arg]) => arg.where.id === "reg-2" && "refundPercent" in arg.data);
+    expect(quote?.[0].data.refundPercent).toBe(50);
   });
 });

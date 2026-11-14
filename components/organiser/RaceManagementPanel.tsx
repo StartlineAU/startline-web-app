@@ -18,6 +18,7 @@ import {
   Skeleton, CardListSkeleton,
 } from "@/components/ui/skeleton";
 import { nextAvailableBib } from "@/lib/bib-assignment";
+import { holdsTeamPlace } from "@/lib/team-tickets";
 import { assignAthletesToWaves, unassignedReason, type WaveDef } from "@/lib/wave-assignment";
 import { parseFinishToMinutes, formatFinishMinutes, calcAgeFromIsoDate } from "@/lib/registration-form";
 import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
@@ -115,12 +116,20 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         ? data?.event.startWaves.find((w) => w.id === destWaveId)?.label ?? null
         : null;
       const snapshot = data;
+      // A team starts together, and the server moves every member still
+      // holding a place, so the board moves them all too rather than showing
+      // the team split until the next reload.
+      const movingTeams = new Set(
+        (data?.registrations ?? []).filter((r) => ids.includes(r.id) && r.team).map((r) => r.team!.id),
+      );
+      const moves = (r: Registration) =>
+        ids.includes(r.id) || (!!r.team && movingTeams.has(r.team.id) && holdsTeamPlace(r.status));
       setData((d) =>
         d
           ? {
               ...d,
               registrations: d.registrations.map((r) =>
-                ids.includes(r.id) ? { ...r, waveId: destWaveId, wave: destLabel } : r,
+                moves(r) ? { ...r, waveId: destWaveId, wave: destLabel } : r,
               ),
             }
           : d,
@@ -269,12 +278,12 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
               team: r.team ? { ...r.team, name: teamName } : r.team,
             };
           }
-          // Teammates share the team's bib and start wave.
+          // Teammates still holding a place share the team's start wave; every
+          // member shows the team's bib and name.
           if (teamId && r.team?.id === teamId) {
             return {
               ...r,
-              waveId: nextWaveId,
-              wave: editWave || null,
+              ...(holdsTeamPlace(r.status) ? { waveId: nextWaveId, wave: editWave || null } : {}),
               bibNumber: editBib.trim() || null,
               team: { ...r.team, name: teamName },
             };
@@ -328,10 +337,16 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         return;
       }
       const savedTime = trimmedTime ? normaliseRaceTime(trimmedTime) : null;
+      // A team shares one result; the server wrote it to every member still
+      // holding a place.
+      const resultTeamId = editingResult.team?.id ?? null;
+      const sharesResult = (r: Registration) =>
+        r.id === editingResult.id ||
+        (!!resultTeamId && r.team?.id === resultTeamId && holdsTeamPlace(r.status));
       setData((d) => d ? {
         ...d,
         registrations: d.registrations.map((r) =>
-          r.id === editingResult.id
+          sharesResult(r)
             ? {
                 ...r,
                 resultTime: savedTime,
@@ -502,6 +517,18 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   }
 
   const { event, registrations } = data;
+  // Members still holding a place, per team. A team with fewer than its size
+  // (someone cancelled or was refunded) is flagged on its badge, so the
+  // organiser can swap someone in or settle the rest of the team.
+  const heldByTeam = new Map<string, number>();
+  for (const r of registrations) {
+    if (r.team && holdsTeamPlace(r.status)) heldByTeam.set(r.team.id, (heldByTeam.get(r.team.id) ?? 0) + 1);
+  }
+  const teamLabel = (r: Registration): string | null => {
+    if (!r.team) return null;
+    const held = heldByTeam.get(r.team.id) ?? 0;
+    return held < r.team.size ? `${r.team.name} · ${held}/${r.team.size}` : r.team.name;
+  };
   const confirmed = registrations.filter((r) => r.status === "CONFIRMED");
   const confirmedCount = confirmed.length;
   const wavesConfigured = event.startWaves.length > 0;
@@ -666,7 +693,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     unassignedReason: r.waveId
                       ? null
                       : unassignedReason(candidate, event.startWaves),
-                    teamName: r.team?.name ?? null,
+                    teamName: teamLabel(r),
                   };
                 })}
                 onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
@@ -699,7 +726,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                   category: r.category,
                   resultTime: r.resultTime,
                   resultPlacement: r.resultPlacement,
-                  teamName: r.team?.name ?? null,
+                  teamName: teamLabel(r),
                 }))}
                 onEditResult={(aid) => {
                   const reg = registrations.find((r) => r.id === aid);
@@ -806,6 +833,9 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 <div>
                   <label htmlFor="edit-team-name" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                     Team name · {editReg.team.size} people{editReg.team.captain ? " · Captain" : ""}
+                    {(heldByTeam.get(editReg.team.id) ?? 0) < editReg.team.size && (
+                      <span className="text-amber-300"> · {heldByTeam.get(editReg.team.id) ?? 0} still entered</span>
+                    )}
                   </label>
                   <input
                     id="edit-team-name"
@@ -814,7 +844,11 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
                   />
                 </div>
-                {!swapOpen ? (
+                {!holdsTeamPlace(editReg.status) ? (
+                  <p className="text-[12px] text-muted-dark">
+                    This place was cancelled or refunded, so it cannot be handed to someone else.
+                  </p>
+                ) : !swapOpen ? (
                   <button
                     type="button"
                     onClick={() => setSwapOpen(true)}

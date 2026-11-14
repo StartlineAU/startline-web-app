@@ -59,7 +59,7 @@ const normalizeEmail = (email: string | undefined) => (email ?? "").trim().toLow
 export const RSVP_DUPLICATE_STATUSES: RegistrationStatus[] = ["CONFIRMED", "REFUND_REQUESTED"];
 
 /** Match on the person, not just the address: one email can carry several entries. */
-function entryIdentityKey(email: string, first: string, last: string, dob: string): string {
+export function entryIdentityKey(email: string, first: string, last: string, dob: string): string {
   return `${normalizeEmail(email)}|${first.trim().toLowerCase()}|${last.trim().toLowerCase()}|${dob}`;
 }
 
@@ -218,6 +218,13 @@ export async function insertConfirmedRegistrations(opts: {
     : { not: "CANCELLED" as const };
 
   return prisma.$transaction(async (tx) => {
+    // Confirms for one event run one at a time. Every check below (duplicate
+    // entries, team names, tier and event capacity) reads rows and then
+    // writes; under READ COMMITTED two concurrent confirms could both pass and
+    // both write, overselling a tier or entering two teams with one name.
+    // Locking the event row serialises them; other events are unaffected.
+    await tx.$queryRaw`SELECT id FROM "events" WHERE id = ${event.id} FOR UPDATE`;
+
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({
         where: { eventId: event.id, userId: buyerUserId, status: duplicateStatus },
@@ -400,12 +407,39 @@ export async function announceRegistrations(
     }).catch((err: unknown) => console.error("Failed to create notification:", err));
   }
 
-  // When the athlete absorbs the platform fee, the amount charged is
-  // price + fee — the email total must reflect that, not just the ticket
-  // price. When the organiser absorbs it, the athlete pays the ticket price
-  // only and the service fee shown to them is $0. A free entry is $0 across
-  // the board.
+  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }) => {
+    const entryTeam = team != null ? teamByIndex.get(team) : undefined;
+    if (!participant.em) return;
+    void sendEntryConfirmation(event, {
+      email: participant.em,
+      waveLabel,
+      priceCents,
+      platformFeeCents,
+      team: entryTeam ? { name: entryTeam.name, size: entryTeam.size } : null,
+    });
+  });
+}
+
+/**
+ * Email one entry its confirmation. Best-effort: logs and never throws.
+ *
+ * When the athlete absorbs the platform fee, the amount charged is
+ * price + fee, and the email total reflects that. When the organiser absorbs
+ * it, the athlete pays the ticket price only and the service fee shown to them
+ * is $0. A free entry is $0 across the board.
+ */
+export async function sendEntryConfirmation(
+  event: ConfirmEvent,
+  entry: {
+    email: string;
+    waveLabel: string | null;
+    priceCents: number;
+    platformFeeCents: number;
+    team?: { name: string; size: number } | null;
+  },
+): Promise<void> {
   const athletePaysFee = event.feeStructure === "athlete";
+  const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
   const location = formatEmailPlace(event);
   const calendarUrl = googleCalendarUrl({
     title: event.title,
@@ -413,24 +447,22 @@ export async function announceRegistrations(
     endsAtUtc: event.endsAtUtc,
     location,
   });
-  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }) => {
-    const entryTeam = team != null ? teamByIndex.get(team) : undefined;
-    if (!participant.em) return;
-    const feeCents = athletePaysFee ? platformFeeCents : 0;
-
-    sendRegistrationConfirmationEmail(participant.em, {
+  try {
+    await sendRegistrationConfirmationEmail(entry.email, {
       eventId:          event.id,
       eventName:        event.title,
       eventDate:        event.eventDate,
       startTime:        event.startTime,
-      category:         waveLabel || "General",
+      category:         entry.waveLabel || "General",
       location,
       calendarUrl,
-      ...(entryTeam ? { team: `${entryTeam.name} (team of ${entryTeam.size})` } : {}),
-      registrationFee:  formatCents(priceCents),
+      ...(entry.team ? { team: `${entry.team.name} (team of ${entry.team.size})` } : {}),
+      registrationFee:  formatCents(entry.priceCents),
       serviceFee:       formatCents(feeCents),
-      total:            formatCents(priceCents + feeCents),
-      userEmail:        participant.em,
-    }).catch((err) => console.error("Failed to send registration confirmation email:", err));
-  });
+      total:            formatCents(entry.priceCents + feeCents),
+      userEmail:        entry.email,
+    });
+  } catch (err) {
+    console.error("Failed to send registration confirmation email:", err);
+  }
 }

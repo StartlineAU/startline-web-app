@@ -14,6 +14,17 @@ export const MIN_TEAM_SIZE = 2;
 export const MAX_TEAM_SIZE = 10;
 export const MAX_TEAM_NAME_LENGTH = 60;
 
+/**
+ * Statuses of a member who still holds a team place. A cancelled or refunded
+ * member has left the team: race-day writes skip them and they no longer
+ * reserve the team's name.
+ */
+export const TEAM_HELD_STATUSES = ["CONFIRMED", "REFUND_REQUESTED"] as ("CONFIRMED" | "REFUND_REQUESTED")[];
+
+export function holdsTeamPlace(status: string): boolean {
+  return (TEAM_HELD_STATUSES as string[]).includes(status);
+}
+
 export interface TeamTierLike {
   label: string;
   qty?: number;
@@ -166,4 +177,53 @@ export function confirmedUnitsByWave(rows: ConfirmedGroupRow[]): Record<string, 
     counts[row.waveLabel] = (counts[row.waveLabel] ?? 0) + (row.teamId ? 1 : row._count._all);
   }
   return counts;
+}
+
+/**
+ * Why an edit to an event's tickets would break teams already entered, or
+ * null when it is safe.
+ *
+ * A tier's team size is fixed once it has entries: teams already sold were
+ * built to the old size, tier capacity counts them as teams, and checkout
+ * would start holding new teams to a different size than the old ones. That
+ * includes switching a tier between individual and team. A new ticket is the
+ * way to sell a different size.
+ *
+ * An event whose format ends up Individual cannot keep team tickets either;
+ * the payload schema catches that when the edit sends `waves`, and this
+ * catches a format-only edit.
+ */
+export function teamTierChangeError(opts: {
+  previousWaves: unknown;
+  nextWaves: unknown;
+  nextFormat?: string | null;
+  /** Tier labels with at least one entry still holding a place. */
+  labelsWithEntries: Iterable<string>;
+}): string | null {
+  const sizes = (waves: unknown) => {
+    const out = new Map<string, number | null>();
+    if (!Array.isArray(waves)) return out;
+    for (const w of waves) {
+      if (w && typeof w === "object" && typeof (w as { label?: unknown }).label === "string") {
+        out.set((w as { label: string }).label, teamSizeOf(w as { teamSize?: unknown }));
+      }
+    }
+    return out;
+  };
+  const before = sizes(opts.previousWaves);
+  const after = sizes(opts.nextWaves);
+
+  for (const label of opts.labelsWithEntries) {
+    if (!before.has(label) || !after.has(label)) continue;
+    const was = before.get(label) ?? null;
+    const now = after.get(label) ?? null;
+    if (was === now) continue;
+    const describe = (n: number | null) => (n ? `teams of ${n}` : "individual");
+    return `"${label}" already has entries as ${describe(was)}, so it cannot change to ${describe(now)}. Add a new ticket instead.`;
+  }
+
+  if (opts.nextFormat === "individual" && [...after.values()].some((n) => n !== null)) {
+    return "An individual event cannot sell team tickets. Change the format to Team or Individual & Team, or remove the team size.";
+  }
+  return null;
 }

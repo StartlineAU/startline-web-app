@@ -29,6 +29,8 @@ const prismaMock = vi.hoisted(() => {
     // The capacity check and the insert share one transaction; the mock hands
     // the callback the same client so both are observed by the spies above.
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
+    // The event-row lock the confirm transaction takes first.
+    $queryRaw: async () => [],
   };
   return client;
 });

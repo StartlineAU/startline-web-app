@@ -7,6 +7,7 @@ import { getEventCoords } from "@/lib/australia-coords";
 import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { checkTeamTierChange } from "@/lib/team-entries";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { eventTimeData } from "@/lib/event-time";
@@ -121,6 +122,10 @@ export async function PATCH(
         { error: organiserEditBlockedMessage(currentStatus) },
         { status: 409 },
       );
+
+    // A ticket's team size is fixed once it has entries.
+    const teamTierError = await checkTeamTierChange(id, existing, { waves: data.waves, format: data.format });
+    if (teamTierError) return NextResponse.json({ error: teamTierError }, { status: 409 });
 
     // Judge required fields on the event as it will be once written. A partial
     // payload (the event page's "Submit for review" sends only `submit`) keeps

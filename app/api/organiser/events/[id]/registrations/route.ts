@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { entryBib } from "@/lib/team-entries";
+import { entryBib, holdsTeamPlace } from "@/lib/team-entries";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { wavesWithCounts } from "@/lib/start-waves";
@@ -167,7 +167,7 @@ export async function PATCH(
 
   const existing = await prisma.registration.findMany({
     where: { eventId: id },
-    select: { id: true, bibNumber: true, teamId: true },
+    select: { id: true, bibNumber: true, teamId: true, status: true },
   });
   const byId = new Map(existing.map((r) => [r.id, r]));
   const teams = await prisma.team.findMany({
@@ -175,8 +175,9 @@ export async function PATCH(
     select: { id: true, bibNumber: true },
   });
   const membersByTeam = new Map<string, string[]>();
+  // Members still holding a place; a cancelled or refunded one is left alone.
   for (const r of existing) {
-    if (!r.teamId) continue;
+    if (!r.teamId || !holdsTeamPlace(r.status)) continue;
     membersByTeam.set(r.teamId, [...(membersByTeam.get(r.teamId) ?? []), r.id]);
   }
 

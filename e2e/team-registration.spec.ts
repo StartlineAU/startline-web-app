@@ -71,6 +71,37 @@ async function createTeamEvent(id: string, title: string, waves: unknown[]) {
   });
 }
 
+/** A team of four on the paid event; `statuses` per member, all confirmed by default. */
+async function seedQuadSquad(statuses: ("CONFIRMED" | "CANCELLED" | "REFUNDED")[] = []) {
+  const { organiserId } = await prisma.event.findUniqueOrThrow({
+    where: { id: PAID_TEAM_ID },
+    select: { organiserId: true },
+  });
+  const team = await prisma.team.create({
+    data: { eventId: PAID_TEAM_ID, name: "Quad Squad", ticketLabel: "Squad", size: 4 },
+  });
+  const members: { id: string }[] = [];
+  for (const [i, first] of ["Ari", "Bo", "Cy", "Di"].entries()) {
+    members.push(await prisma.registration.create({
+      data: {
+        eventId: PAID_TEAM_ID,
+        organiserId,
+        athleteName: `${first} Quad`,
+        athleteEmail: `quad-${i}@example.com`,
+        firstName: first,
+        lastName: "Quad",
+        dateOfBirth: "1990-05-01",
+        waveLabel: "Squad",
+        status: statuses[i] ?? "CONFIRMED",
+        teamId: team.id,
+        amountCents: 4500,
+      },
+      select: { id: true },
+    }));
+  }
+  return { team, members };
+}
+
 async function cleanUp() {
   const ids = [FREE_TEAM_ID, PAID_TEAM_ID];
   await prisma.registration.deleteMany({ where: { eventId: { in: ids } } });
@@ -155,30 +186,7 @@ test.describe("team registration", () => {
   });
 
   test("race management shows the team on every member and edits them together", async ({ page }) => {
-    const organiser = await prisma.event.findUniqueOrThrow({
-      where: { id: PAID_TEAM_ID },
-      select: { organiserId: true },
-    });
-    const team = await prisma.team.create({
-      data: { eventId: PAID_TEAM_ID, name: "Quad Squad", ticketLabel: "Squad", size: 4 },
-    });
-    const names = ["Ari", "Bo", "Cy", "Di"];
-    for (const [i, first] of names.entries()) {
-      await prisma.registration.create({
-        data: {
-          eventId: PAID_TEAM_ID,
-          organiserId: organiser.organiserId,
-          athleteName: `${first} Quad`,
-          athleteEmail: `quad-${i}@example.com`,
-          firstName: first,
-          lastName: "Quad",
-          waveLabel: "Squad",
-          status: "CONFIRMED",
-          teamId: team.id,
-          amountCents: 4500,
-        },
-      });
-    }
+    const { team } = await seedQuadSquad();
 
     await organiserLogin(page);
     await page.goto(`/organiser/events/${PAID_TEAM_ID}/registrations`);
@@ -192,6 +200,65 @@ test.describe("team registration", () => {
     await expect.poll(async () =>
       (await prisma.team.findUnique({ where: { id: team.id }, select: { bibNumber: true } }))?.bibNumber,
     ).toBe("77");
+  });
+
+  test("race management flags a team that has lost a member", async ({ page }) => {
+    await seedQuadSquad(["CONFIRMED", "CONFIRMED", "CONFIRMED", "CANCELLED"]);
+
+    await organiserLogin(page);
+    await page.goto(`/organiser/events/${PAID_TEAM_ID}/registrations`);
+    await expect(page.getByTestId("team-badge").filter({ hasText: "Quad Squad · 3/4" }).first()).toBeVisible();
+  });
+
+  test("a member swap refuses someone already entered, and is recorded when it goes through", async ({ page }) => {
+    const { team, members } = await seedQuadSquad();
+    await organiserLogin(page);
+    const swap = (person: Record<string, string>) =>
+      page.request.patch(`/api/organiser/events/${PAID_TEAM_ID}/teams/${team.id}`, {
+        data: {
+          member: {
+            registrationId: members[0].id,
+            dateOfBirth: "1990-05-01",
+            mobile: "0412 345 678",
+            emergencyContactName: "Sam Rivers",
+            emergencyContactPhone: "0498 111 222",
+            ...person,
+          },
+        },
+      });
+
+    // Bo is already on the team: checkout would refuse a second entry, so does a swap.
+    const clash = await swap({ firstName: "Bo", lastName: "Quad", email: "quad-1@example.com" });
+    expect(clash.status()).toBe(409);
+    expect((await clash.json()).error).toMatch(/already holds an entry/);
+
+    const ok = await swap({ firstName: "Eve", lastName: "Newman", email: "eve.newman@example.com" });
+    expect(ok.status()).toBe(200);
+
+    const entry = await prisma.registration.findUniqueOrThrow({
+      where: { id: members[0].id },
+      select: { athleteName: true, athleteEmail: true, teamId: true },
+    });
+    expect(entry).toEqual({ athleteName: "Eve Newman", athleteEmail: "eve.newman@example.com", teamId: team.id });
+
+    const change = await prisma.teamMemberChange.findFirstOrThrow({ where: { teamId: team.id, kind: "SWAP" } });
+    expect(change.registrationId).toBe(members[0].id);
+    expect(change.before).toMatchObject({ athleteName: "Ari Quad" });
+    expect(change.after).toMatchObject({ athleteName: "Eve Newman" });
+  });
+
+  test("a team ticket's size is locked once it has entries", async ({ page }) => {
+    await seedQuadSquad();
+    await organiserLogin(page);
+
+    const res = await page.request.patch(`/api/organiser/events/${PAID_TEAM_ID}`, {
+      data: { waves: [{ label: "Squad", price: "45", teamSize: 3, qty: 5 }] },
+    });
+    expect(res.status()).toBe(409);
+    expect((await res.json()).error).toMatch(/already has entries/);
+
+    const event = await prisma.event.findUniqueOrThrow({ where: { id: PAID_TEAM_ID }, select: { waves: true } });
+    expect((event.waves as { teamSize?: number }[])[0].teamSize).toBe(4);
   });
 
   test("the editor asks for a team size and prices per person", async ({ page }) => {

@@ -318,12 +318,37 @@ model Team {
   bibNumber             String?
 
   members Registration[]
+  changes TeamMemberChange[]
 
   createdAt DateTime @default(now())
 
   @@unique([eventId, bibNumber])
   @@index([eventId])
   @@map("teams")
+}
+
+// Who changed a team after it was entered: a rename, or a member swapped for
+// someone else. A swap hands a paid place to another person, so the record
+// keeps both sets of details and who made the change.
+model TeamMemberChange {
+  id     String @id @default(uuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // The entry whose holder changed. Null for a rename.
+  registrationId String?
+  // RENAME or SWAP.
+  kind           String
+  // { name } for a rename; the holder's details for a swap.
+  before         Json
+  after          Json
+  // The signed-in person who made it, and the organisation they acted for.
+  changedByEmail String?
+  organiserId    String
+
+  createdAt DateTime @default(now())
+
+  @@index([teamId, createdAt])
+  @@map("team_member_changes")
 }
 
 // ─── Start waves (heats) ──────────────────────────────────────────────────────
