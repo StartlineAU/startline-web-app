@@ -11,8 +11,8 @@ import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { firstLocationError, tidyLocationText } from "@/lib/event-location";
-import { verifyEventLocation } from "@/lib/event-location-verify";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 import { effectiveEventStatus, type PersistedEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { takesPayments } from "@/lib/event-approval";
@@ -138,18 +138,9 @@ export async function PATCH(
       }
     }
 
-    // A real place, not spaces or symbols (#530), judged on the event as it
-    // will be once written. A submit is checked against the geocoder.
-    {
-      const location = {
-        venue:   data.venue   !== undefined ? data.venue   : existing.venue,
-        address: data.address !== undefined ? data.address : existing.address,
-        city:    data.city    !== undefined ? data.city    : existing.city,
-        state:   data.state   !== undefined ? data.state   : existing.state,
-      };
-      const locationError = submit ? await verifyEventLocation(location) : firstLocationError(location);
-      if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
-    }
+    // A real place, not spaces or symbols (#530).
+    const locationError = await checkEventLocation(data, { submit, saved: existing });
+    if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
 
     // See the create route: a missing ABN costs the event its auto-approval
     // rather than rejecting the edit and stranding the organiser's changes. An

@@ -12,8 +12,8 @@ import { syncEventSchedules } from "@/lib/event-scheduler";
 import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 import { z } from "zod";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { firstLocationError, tidyLocationText } from "@/lib/event-location";
-import { verifyEventLocation } from "@/lib/event-location-verify";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
@@ -159,11 +159,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // A real place, not spaces or symbols (#530). A submit is checked against
-  // the geocoder; a draft only has to look like a place where it is filled in.
-  const locationError = submit
-    ? await verifyEventLocation(body)
-    : firstLocationError(body);
+  // A real place, not spaces or symbols (#530).
+  const locationError = await checkEventLocation(body, { submit });
   if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
 
   const eventStatus = submit ? (organiser.verified ? "APPROVED" : "PENDING") : "DRAFT";

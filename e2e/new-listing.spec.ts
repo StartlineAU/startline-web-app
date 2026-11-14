@@ -579,40 +579,29 @@ test.describe("new listing editor: browser Back", () => {
 });
 
 // #530: a listing reached review with a city of spaces, and showed as ", VIC".
-// Spaces and symbols are refused by the API, and the editor says why.
+// The API refuses spaces and symbols (each rule is unit tested in
+// event-location.test.ts), and the editor says why.
 test.describe("new listing editor: a real location", () => {
-  const base = {
-    title: "Junk Location E2E",
-    discipline: "Running",
-    eventDate: "2027-03-14",
-    startTime: "07:00",
-    venue: "Albert Park",
-    address: "Aughtie Dr, Albert Park VIC 3206",
-    city: "Melbourne",
-    state: "VIC",
-    format: "Individual",
-    level: "All levels",
-    registrationType: "startline",
-    waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
-    submit: true,
-  };
+  const TITLE = "Junk Location E2E";
 
   test.afterAll(async () => {
-    await prisma.event.deleteMany({ where: { title: base.title } });
+    await prisma.event.deleteMany({ where: { title: TITLE } });
   });
 
-  for (const [what, patch] of [
-    ["a city of spaces", { city: "   " }],
-    ["a city of symbols", { city: "!!!" }],
-    ["a street address of symbols", { address: "#### ####" }],
-    ["a venue of symbols", { venue: "???" }],
-  ] as const) {
-    test(`the API refuses ${what}`, async ({ page }) => {
-      await organiserLogin(page);
-      const res = await page.request.post("/api/organiser/events", { data: { ...base, ...patch } });
-      expect(res.status()).toBe(400);
+  test("the API refuses a city of spaces", async ({ page }) => {
+    await organiserLogin(page);
+    const res = await page.request.post("/api/organiser/events", {
+      data: {
+        title: TITLE, discipline: "Running", eventDate: "2027-03-14", startTime: "07:00",
+        venue: "Albert Park", address: "Aughtie Dr, Albert Park VIC 3206", city: "   ", state: "VIC",
+        format: "Individual", level: "All levels", registrationType: "startline",
+        waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
+        submit: true,
+      },
     });
-  }
+    expect(res.status()).toBe(400);
+    expect((await res.json()).error).toMatch(/city or suburb/i);
+  });
 
   test("the editor flags a city of symbols", async ({ page }) => {
     await organiserLogin(page);

@@ -5,6 +5,21 @@ const sameText = (a: string, b: string) =>
   a.localeCompare(b, "en-AU", { sensitivity: "base" }) === 0;
 
 /**
+ * The location check every event route runs, on the event as it will be once
+ * written: on an edit, a field the payload leaves out keeps its `saved` value.
+ * A submit is checked against the geocoder; a draft only has to look like a
+ * place where it is filled in.
+ */
+export async function checkEventLocation(
+  fields: LocationFields,
+  { submit, saved }: { submit?: boolean; saved?: LocationFields } = {},
+): Promise<string | null> {
+  const pick = (k: keyof LocationFields) => (fields[k] !== undefined ? fields[k] : saved?.[k]);
+  const location = { venue: pick("venue"), address: pick("address"), city: pick("city"), state: pick("state") };
+  return submit ? verifyEventLocation(location) : firstLocationError(location);
+}
+
+/**
  * Whether a location is a real place, for a listing being submitted (#530).
  * Null when it is (or when the geocoder cannot be asked, after the shape
  * check has passed); otherwise the reason, ready to show the organiser.

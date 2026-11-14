@@ -11,7 +11,8 @@ import { EventChangedEmail } from "@/emails/event-changed";
 import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
-import { formatEmailDate, formatEmailTime, formatEmailPlace } from "@/lib/email-format";
+import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
+import { formatEventPlace } from "@/lib/event-place";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
 
 // Every email is a React Email template under emails/, rendered to HTML plus
@@ -55,7 +56,7 @@ export interface RegistrationEmailData {
   /** `HH:mm` as stored, or already formatted. */
   startTime: string;
   category: string;
-  /** Display-ready; see formatEmailPlace. */
+  /** Display-ready; see formatEventPlace. */
   location: string;
   bib?: string;
   registrationFee: string;
@@ -145,7 +146,7 @@ export async function buildEventSubmittedForReviewEmail(
       eventTitle: data.eventTitle,
       organiserName: data.organiserName,
       eventDate: formatEmailDate(data.eventDate),
-      location: formatEmailPlace({ city: data.city, state: data.state }) || null,
+      location: formatEventPlace({ city: data.city, state: data.state }) || null,
       discipline: data.discipline,
       blocker: data.blocker,
       previewUrl: adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl),

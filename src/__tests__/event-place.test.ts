@@ -17,6 +17,7 @@ describe("formatEventPlace", () => {
   it("drops a blank city", () => {
     expect(formatEventPlace({ venue: "", city: "", state: "VIC" })).toBe("VIC");
     expect(formatEventPlace({ venue: "Olympic Park", city: "", state: "VIC" })).toBe("Olympic Park, VIC");
+    expect(formatEventPlace({ venue: "Olympic Park", city: "", state: "" })).toBe("Olympic Park");
   });
 
   it("is empty when nothing is set", () => {

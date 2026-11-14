@@ -7,8 +7,8 @@ import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
-import { firstLocationError, tidyLocationText } from "@/lib/event-location";
-import { verifyEventLocation } from "@/lib/event-location-verify";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { randomUUID } from "node:crypto";
@@ -106,18 +106,9 @@ export async function PATCH(
       }
     }
 
-    // A real place, not spaces or symbols (#530), judged on the event as it
-    // will be once written. A submit is checked against the geocoder.
-    {
-      const location = {
-        venue:   data.venue   !== undefined ? data.venue   : existing.venue,
-        address: data.address !== undefined ? data.address : existing.address,
-        city:    data.city    !== undefined ? data.city    : existing.city,
-        state:   data.state   !== undefined ? data.state   : existing.state,
-      };
-      const locationError = submit ? await verifyEventLocation(location) : firstLocationError(location);
-      if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
-    }
+    // A real place, not spaces or symbols (#530).
+    const locationError = await checkEventLocation(data, { submit, saved: existing });
+    if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
 
     // Live events stay live after an admin edit; everything else re-enters the
     // review queue. Archived events stay archived rather than reopening.

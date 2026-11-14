@@ -12,7 +12,7 @@
  *   every submit.
  */
 
-export const AUS_STATE_CODES: readonly string[] = ["nsw", "vic", "qld", "wa", "sa", "tas", "act", "nt"];
+import { STATE_LABELS } from "@/types";
 
 export interface LocationFields {
   venue?: string | null;
@@ -67,7 +67,7 @@ export function locationFieldErrors(
 
   if (!state) {
     if (required) errors.state = "Choose the state.";
-  } else if (!AUS_STATE_CODES.includes(state)) {
+  } else if (!Object.hasOwn(STATE_LABELS, state)) {
     errors.state = "Choose an Australian state or territory.";
   }
 
