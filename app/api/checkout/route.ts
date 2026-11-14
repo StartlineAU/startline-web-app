@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import { getStripe } from "@/lib/stripe";
 import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
     // (transfer_data.destination). In dev direct-charge mode there is no
     // connected account, so the charge lands on the platform account with no
     // application fee.
-    const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
+    const isDirectCharge = isDevDirectCharge();
     const useConnect = Boolean(event.organiser.stripeAccountId) && !isDirectCharge;
     const metadata: Record<string, string> = {
       eventId: event.id,

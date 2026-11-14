@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import prisma from "@/lib/prisma";
 import { calculateTotalWithFee } from "@/lib/platform-fee";
 import { getUserSession } from "@/lib/amplify-server";
@@ -244,7 +245,7 @@ export async function resolveCheckoutOrder(
   // Only an order that actually charges needs somewhere to send the money. A
   // free event is registerable whether or not its organiser has connected
   // Stripe, so this gate sits after pricing rather than before it.
-  const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
+  const isDirectCharge = isDevDirectCharge();
   if (totalCents > 0 && !isDirectCharge) {
     if (!event.organiser.stripeOnboardingComplete || !event.organiser.stripeAccountId) {
       return { error: "This event is not ready to accept payments.", status: 409 };

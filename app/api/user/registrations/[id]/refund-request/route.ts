@@ -73,8 +73,10 @@ export async function POST(
     );
   }
 
-  await prisma.registration.update({
-    where: { id },
+  // Conditional on the status read above: an admin refund that lands between
+  // the read and this write must not be overwritten.
+  const claimed = await prisma.registration.updateMany({
+    where: { id, status: "CONFIRMED" },
     data: {
       status: "REFUND_REQUESTED",
       refundRequestedAt: new Date(),
@@ -83,6 +85,12 @@ export async function POST(
       refundOutsidePolicy: false,
     },
   });
+  if (claimed.count !== 1) {
+    return NextResponse.json(
+      { error: "This entry changed a moment ago. Refresh and try again." },
+      { status: 409 },
+    );
+  }
 
   // Tell every member of the organiser in-app. Best-effort: the cancellation flag
   // is what matters, so a notification failure must never fail the request.

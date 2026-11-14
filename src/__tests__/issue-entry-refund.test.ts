@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/prisma", () => ({
   default: {
-    registration: { update: mocks.registrationUpdate },
+    registration: { updateMany: mocks.registrationUpdate },
     userNotification: { create: mocks.notificationCreate },
   },
 }));
@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.createRefund.mockResolvedValue({ id: "re_1" });
   mocks.notificationCreate.mockResolvedValue({});
-  mocks.registrationUpdate.mockResolvedValue({});
+  mocks.registrationUpdate.mockResolvedValue({ count: 1 });
 });
 
 describe("issueEntryRefund — the reviewed policy refund", () => {
@@ -89,6 +89,34 @@ describe("issueEntryRefund — the reviewed policy refund", () => {
     expect(mocks.createRefund).not.toHaveBeenCalled();
     expect(mocks.registrationUpdate.mock.calls[0][0].data).toEqual({ status: "REFUNDED" });
     expect(result.method).toBe("free");
+  });
+
+  it("moves the row only from a refundable status", async () => {
+    mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: charge(true) });
+
+    await issueEntryRefund(entry);
+
+    expect(mocks.registrationUpdate.mock.calls[0][0].where).toEqual({
+      id: "reg-1", status: { in: ["CONFIRMED", "REFUND_REQUESTED"] },
+    });
+  });
+
+  it("does not notify twice when a concurrent refund already recorded the entry", async () => {
+    mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: charge(true) });
+    mocks.registrationUpdate.mockResolvedValue({ count: 0 });
+
+    const result = await issueEntryRefund(entry);
+
+    expect(result).toEqual({ method: "stripe", refundId: "re_1", refundCents: 10540 });
+    expect(mocks.notificationCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses to release a free entry whose status changed meanwhile", async () => {
+    mocks.registrationUpdate.mockResolvedValue({ count: 0 });
+
+    await expect(issueEntryRefund({
+      ...entry, stripePaymentIntentId: null, amountCents: 0, platformFeeCents: 0, refundAmountCents: 0,
+    })).rejects.toMatchObject({ status: 409, code: "STALE" });
   });
 
   it("only refunds a confirmed or refund-requested entry", async () => {

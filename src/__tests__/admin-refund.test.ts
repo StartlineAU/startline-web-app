@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   getAdminSession: vi.fn(),
-  registration: { findUnique: vi.fn(), update: vi.fn() },
+  registration: { findUnique: vi.fn(), updateMany: vi.fn() },
   userNotification: { create: vi.fn() },
   retrievePaymentIntent: vi.fn(),
   createRefund: vi.fn(),
@@ -68,7 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getAdminSession.mockResolvedValue({ sub: "admin-1" });
   mocks.registration.findUnique.mockResolvedValue(confirmedRegistration);
-  mocks.registration.update.mockResolvedValue({});
+  mocks.registration.updateMany.mockResolvedValue({ count: 1 });
   mocks.userNotification.create.mockResolvedValue({});
   mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: destinationCharge });
   mocks.createRefund.mockResolvedValue({ id: "re_1" });
@@ -145,7 +145,7 @@ describe("admin refund route", () => {
     const res = await refund();
     expect(res.status).toBe(409);
     expect(mocks.createRefund).not.toHaveBeenCalled();
-    expect(mocks.registration.update).not.toHaveBeenCalled();
+    expect(mocks.registration.updateMany).not.toHaveBeenCalled();
   });
 
   it("refuses rather than guessing when the charge could not be expanded", async () => {

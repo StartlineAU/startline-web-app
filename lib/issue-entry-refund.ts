@@ -15,6 +15,8 @@ import {
  * Nothing here is automatic.
  */
 
+const REFUNDABLE_STATUSES: ("CONFIRMED" | "REFUND_REQUESTED")[] = ["CONFIRMED", "REFUND_REQUESTED"];
+
 export class RefundError extends Error {
   constructor(
     message: string,
@@ -72,10 +74,13 @@ export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult
 
   // Free or external registration: nothing to send back, just release the spot.
   if (!entry.stripePaymentIntentId) {
-    await prisma.registration.update({
-      where: { id: entry.id },
+    const released = await prisma.registration.updateMany({
+      where: { id: entry.id, status: { in: REFUNDABLE_STATUSES } },
       data: { status: "REFUNDED" },
     });
+    if (released.count !== 1) {
+      throw new RefundError("This registration changed a moment ago. Refresh and try again.", 409, "STALE");
+    }
     await notifyAthlete(entry, 0);
     return { method: "free", refundId: null, refundCents: 0 };
   }
@@ -120,14 +125,20 @@ export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult
     }),
   );
 
-  await prisma.registration.update({
-    where: { id: entry.id },
+  // The refund is idempotent per entry, so a concurrent second attempt gets the
+  // same refund back. Only one of them moves the row; the other finds it
+  // already REFUNDED and reports the same result without notifying twice.
+  const recorded = await prisma.registration.updateMany({
+    where: { id: entry.id, status: { in: REFUNDABLE_STATUSES } },
     data: {
       status: "REFUNDED",
       stripeRefundId: refund.id,
       refundAmountCents: refundCents,
     },
   });
+  if (recorded.count !== 1) {
+    return { method: "stripe", refundId: refund.id, refundCents };
+  }
 
   await notifyAthlete(entry, refundCents);
 

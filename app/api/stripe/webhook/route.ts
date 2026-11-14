@@ -11,6 +11,8 @@ import {
   type PricedEntry,
 } from "@/lib/registration-confirm";
 import { athleteNameFromParticipant, type CompactParticipant } from "@/lib/registration-form";
+import { refundRefusedPayment } from "@/lib/refund-refused-payment";
+import { lockEventEntries } from "@/lib/event-entry-lock";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -31,6 +33,10 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
     }
+
+    // Events from a connected account describe that account's own payments,
+    // not a checkout on the platform. This endpoint only handles the platform's.
+    if (event.account) return NextResponse.json({ received: true });
 
     switch (event.type) {
       case "payment_intent.succeeded":
@@ -56,21 +62,24 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   const eventId = meta.eventId;
   const organiserId = meta.organiserId;
 
+  // Every checkout PaymentIntent carries both. One without them was not made by
+  // checkout, so it is not ours to confirm or to refund.
   if (!eventId || !organiserId) {
     console.error("Missing metadata on PaymentIntent:", paymentIntent.id);
     return;
   }
 
-  const existingCount = await prisma.registration.count({
+  // Fast path for a redelivery. The authoritative check runs again under the
+  // event lock, inside the transaction that writes the rows.
+  const recorded = await prisma.registration.count({
     where: { stripePaymentIntentId: paymentIntent.id },
   });
-  if (existingCount > 0) return;
+  if (recorded > 0) return;
 
   const participants = parseParticipantsFromMetadata(meta);
 
-  // Re-derive everything from the DB — metadata on a PaymentIntent is
-  // client-influenced (the publishable key can create intents with arbitrary
-  // metadata), so it must never be trusted for pricing or identity.
+  // Re-derive everything from the DB. Pricing and identity never come from
+  // PaymentIntent metadata.
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
@@ -79,12 +88,35 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       startsAtUtc: true, endsAtUtc: true,
       venue: true, city: true, state: true,
       organiserId: true,
+      organiser: { select: { status: true } },
     },
   });
 
-  // Reject intents that don't match a real, approved, self-hosted event.
+  // Every refusal gives the money back first. Recording comes second, so a
+  // failed refund throws, Stripe retries the webhook, and the retry is not
+  // stopped by a row this attempt already wrote.
+  const refuse = async (reason: string, detail?: Record<string, unknown>) => {
+    console.error(`PaymentIntent refused (${reason}), refunding:`, paymentIntent.id, detail ?? "");
+    const refundId = await refundRefusedPayment(paymentIntent);
+    if (!event || event.organiserId !== organiserId) return;
+    await recordRefused({
+      eventId: event.id,
+      organiserId,
+      feeStructure: event.feeStructure,
+      paymentIntentId: paymentIntent.id,
+      refundId,
+      people: participants.length > 0
+        ? participants.map((participant) => ({
+            name: athleteNameFromParticipant(participant),
+            email: participant.em,
+          }))
+        : [{ name: meta.userName || "Unknown", email: meta.userEmail || "" }],
+    });
+  };
+
+  // Refuse intents that don't match a real, approved, self-hosted event.
   if (!event || event.organiserId !== organiserId) {
-    console.error("PaymentIntent references an unknown/mismatched event:", paymentIntent.id);
+    await refuse("unknown or mismatched event");
     return;
   }
   // A payment started before the event began can settle while the event is in
@@ -94,29 +126,23 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     (event.status !== "APPROVED" && event.status !== "IN_PROGRESS") ||
     event.registrationType !== "startline"
   ) {
-    console.error("PaymentIntent references a non-bookable event:", paymentIntent.id);
+    await refuse("event not bookable", { status: event.status });
     return;
   }
-
+  if (event.organiser.status !== "APPROVED") {
+    await refuse("organisation suspended");
+    return;
+  }
+  if (paymentIntent.currency !== "aud") {
+    await refuse("unexpected currency", { currency: paymentIntent.currency });
+    return;
+  }
   if (participants.length === 0) {
-    console.error("No participant data on PaymentIntent:", paymentIntent.id);
-    await prisma.registration.create({
-      data: {
-        eventId,
-        organiserId,
-        athleteName: meta.userName ?? "Unknown",
-        athleteEmail: meta.userEmail ?? "",
-        amountCents: 0,
-        platformFeeCents: 0,
-        feeStructure: event.feeStructure,
-        status: "CANCELLED",
-        stripePaymentIntentId: paymentIntent.id,
-      },
-    });
+    await refuse("no participant data");
     return;
   }
 
-  // Price every ticket from the DB wave definitions — never from metadata. A
+  // Price every ticket from the DB wave definitions, never from metadata. A
   // free tier is priced at zero rather than rejected, so a mixed cart (a free
   // tier alongside a paid one) confirms with the right amount on each entry.
   const waves = Array.isArray(event.waves)
@@ -135,27 +161,9 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const priced = participants.map(priceEntry);
 
-  const recordCancelled = () =>
-    prisma.registration.createMany({
-      data: participants.map((participant) => ({
-        eventId,
-        organiserId,
-        athleteName: athleteNameFromParticipant(participant),
-        athleteEmail: participant.em,
-        amountCents: 0,
-        platformFeeCents: 0,
-        feeStructure: event.feeStructure,
-        status: "CANCELLED" as const,
-        stripePaymentIntentId: paymentIntent.id,
-      })),
-    });
-
-  // The charged amount must match what the DB pricing implies. Stripe reports
-  // amount_received in the minor currency unit, same as our cents.
-  //
-  // This comparison is the most dangerous line in the product: a mismatch writes
-  // CANCELLED registrations with amountCents 0 and returns, keeping the athlete's
-  // money with no refund.
+  // The charged amount must match what the DB pricing implies: a price or tier
+  // can change while the athlete is paying. Stripe reports amount_received in
+  // the minor currency unit, same as our cents.
   const expectedTotalCents = priced.reduce((sum, entry) => {
     if (!entry) return sum;
     return sum + (event.feeStructure === "athlete"
@@ -164,11 +172,10 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   }, 0);
 
   if (paymentIntent.amount_received !== expectedTotalCents || priced.some((entry) => !entry)) {
-    console.error("PaymentIntent amount does not match DB pricing:", paymentIntent.id, {
+    await refuse("amount does not match pricing", {
       expectedTotalCents,
       amountReceived: paymentIntent.amount_received,
     });
-    await recordCancelled();
     return;
   }
 
@@ -189,12 +196,50 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   });
 
   if (!outcome.ok) {
-    console.error("Confirmation refused:", paymentIntent.id, outcome.error);
-    await recordCancelled();
+    await refuse("confirmation refused", { error: outcome.error });
     return;
   }
+  // Another delivery of this payment got there first.
+  if (outcome.alreadyRecorded) return;
 
   await announceRegistrations(event, organiserId, entries);
+}
+
+/**
+ * Keep a record of a refused, refunded payment: one CANCELLED row per person,
+ * carrying the refund id. Written under the same event lock as confirmations
+ * and skipped if rows for this PaymentIntent already exist, so a redelivery
+ * does not duplicate them.
+ */
+async function recordRefused(opts: {
+  eventId: string;
+  organiserId: string;
+  feeStructure: string;
+  paymentIntentId: string;
+  refundId: string | null;
+  people: { name: string; email: string }[];
+}) {
+  await prisma.$transaction(async (tx) => {
+    await lockEventEntries(tx, opts.eventId);
+    const existing = await tx.registration.count({
+      where: { stripePaymentIntentId: opts.paymentIntentId },
+    });
+    if (existing > 0) return;
+    await tx.registration.createMany({
+      data: opts.people.map((person) => ({
+        eventId: opts.eventId,
+        organiserId: opts.organiserId,
+        athleteName: person.name,
+        athleteEmail: person.email,
+        amountCents: 0,
+        platformFeeCents: 0,
+        feeStructure: opts.feeStructure,
+        status: "CANCELLED" as const,
+        stripePaymentIntentId: opts.paymentIntentId,
+        stripeRefundId: opts.refundId,
+      })),
+    });
+  });
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

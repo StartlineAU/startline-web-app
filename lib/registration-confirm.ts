@@ -158,7 +158,9 @@ export async function ensureParticipantUsers(
 }
 
 export type ConfirmOutcome =
-  | { ok: true; registrationIds: string[] }
+  // alreadyRecorded: rows for this PaymentIntent already exist (a webhook
+  // redelivery), so nothing was written and nothing should be announced.
+  | { ok: true; registrationIds: string[]; alreadyRecorded?: boolean }
   | { ok: false; error: string; reason: "capacity" | "duplicate" };
 
 /**
@@ -208,6 +210,13 @@ export async function insertConfirmedRegistrations(opts: {
     // Without this, concurrent confirmations both pass the capacity count below
     // and oversell the event.
     await lockEventEntries(tx, event.id);
+
+    // A PaymentIntent belongs to one event, so under that event's lock this
+    // check cannot race another delivery of the same payment.
+    if (stripePaymentIntentId) {
+      const recorded = await tx.registration.count({ where: { stripePaymentIntentId } });
+      if (recorded > 0) return { ok: true as const, registrationIds: [], alreadyRecorded: true };
+    }
 
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({
