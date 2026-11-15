@@ -13,6 +13,12 @@ import { useApiResource } from "@/hooks/useApiResource";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import type { CheckInState } from "@/lib/check-in-window";
 import { useAuthContext } from "@/context/AuthContext";
+import {
+  WITHDRAW_CODE_LENGTH,
+  generateWithdrawCode,
+  sanitiseWithdrawInput,
+  withdrawCodeMatches,
+} from "@/lib/withdraw-confirmation";
 import EventCard from "@/components/EventCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -477,9 +483,21 @@ export default function ActivityPage() {
   const [refundTarget, setRefundTarget] = useState<{ meta: RegMeta; title: string } | null>(null);
   const [refunding, setRefunding] = useState(false);
   const [refundError, setRefundError] = useState("");
+  const [withdrawCode, setWithdrawCode] = useState("");
+  const [withdrawInput, setWithdrawInput] = useState("");
+  const withdrawConfirmed = withdrawCodeMatches(withdrawCode, withdrawInput);
+
+  // A new code on every open, so one seen earlier cannot be retyped from memory
+  // and a half-typed one from a cancelled attempt does not carry over (#551).
+  const openWithdraw = (meta: RegMeta, title: string) => {
+    setRefundError("");
+    setWithdrawInput("");
+    setWithdrawCode(generateWithdrawCode());
+    setRefundTarget({ meta, title });
+  };
 
   const confirmRefund = async () => {
-    if (!refundTarget) return;
+    if (!refundTarget || !withdrawConfirmed) return;
     setRefunding(true);
     setRefundError("");
     try {
@@ -739,10 +757,7 @@ export default function ActivityPage() {
                     event={event}
                     metas={confirmedMetas(String(event.id))}
                     now={now}
-                    onRequestRefund={(meta) => {
-                      setRefundError("");
-                      setRefundTarget({ meta, title: event.title });
-                    }}
+                    onRequestRefund={(meta) => openWithdraw(meta, event.title)}
                   />
                 ))}
               </div>
@@ -771,10 +786,7 @@ export default function ActivityPage() {
                       event={event}
                       metas={withdrawnMetas(String(event.id))}
                       now={now}
-                      onRequestRefund={(meta) => {
-                        setRefundError("");
-                        setRefundTarget({ meta, title: event.title });
-                      }}
+                      onRequestRefund={(meta) => openWithdraw(meta, event.title)}
                     />
                   ))}
                 </div>
@@ -818,13 +830,55 @@ export default function ActivityPage() {
                   Paid an entry fee? Ask for a refund through Support.
                 </p>
               </div>
+
+              <form
+                id="withdraw-confirm-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (withdrawConfirmed && !refunding) void confirmRefund();
+                }}
+              >
+                <label
+                  htmlFor="withdraw-confirm-code"
+                  className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted-light block mb-1.5"
+                >
+                  Type{" "}
+                  <span
+                    data-testid="withdraw-code"
+                    className="font-headline text-[13px] tracking-[0.3em] text-light tabular-nums"
+                  >
+                    {withdrawCode}
+                  </span>{" "}
+                  to confirm
+                </label>
+                <input
+                  id="withdraw-confirm-code"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={WITHDRAW_CODE_LENGTH}
+                  autoComplete="off"
+                  value={withdrawInput}
+                  // Refuse a letter or symbol before it lands, so it never even
+                  // flashes in the box. onChange still strips anything that gets
+                  // past this (paste, autofill, IME composition).
+                  onBeforeInput={(e) => {
+                    const data = (e.nativeEvent as InputEvent).data;
+                    if (data && /\D/.test(data)) e.preventDefault();
+                  }}
+                  onChange={(e) => setWithdrawInput(sanitiseWithdrawInput(e.target.value))}
+                  disabled={refunding}
+                  placeholder="00000"
+                  className="w-full bg-dark-light border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors tracking-[0.5em] text-center font-bold tabular-nums"
+                />
+              </form>
             </div>
           )}
 
           {refundError && <p className="text-[13px] text-red-300">{refundError}</p>}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRefundTarget(null)}>Keep my spot</Button>
-            <Button onClick={confirmRefund} disabled={refunding}>
+            <Button type="submit" form="withdraw-confirm-form" disabled={refunding || !withdrawConfirmed}>
               {refunding ? "Withdrawing…" : "Withdraw my entry"}
             </Button>
           </DialogFooter>

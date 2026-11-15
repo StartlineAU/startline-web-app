@@ -436,7 +436,28 @@ test.describe("free event RSVP", () => {
     await entry.getByRole("button", { name: /withdraw my entry/i }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: /withdraw your entry/i })).toBeVisible();
-    await dialog.getByRole("button", { name: /withdraw my entry/i }).click();
+
+    // Issue #551: withdrawing needs the dialog's 5-digit code typed back.
+    const confirmButton = dialog.getByRole("button", { name: /withdraw my entry/i });
+    const codeInput = dialog.getByLabel(/to confirm/i);
+    const code = (await dialog.getByTestId("withdraw-code").innerText()).trim();
+    expect(code).toMatch(/^\d{5}$/);
+    await expect(confirmButton).toBeDisabled();
+
+    // Only digits go in: typed letters and symbols are refused, and a pasted
+    // mix keeps just its digits.
+    await codeInput.pressSequentially("ab-c!x ");
+    await expect(codeInput).toHaveValue("");
+    await codeInput.fill("1a2b3");
+    await expect(codeInput).toHaveValue("123");
+
+    const wrong = code.slice(0, 4) + String((Number(code[4]) + 1) % 10);
+    await codeInput.fill(wrong);
+    await expect(confirmButton).toBeDisabled();
+
+    await codeInput.fill(code);
+    await expect(confirmButton).toBeEnabled();
+    await confirmButton.click();
 
     await expect(page.getByText("You withdrew from this event.")).toBeVisible();
     await expect(page.getByText("Your spot has been released.")).toBeVisible();
