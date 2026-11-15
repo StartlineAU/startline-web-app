@@ -18,7 +18,8 @@ import {
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
 } from "@/lib/email";
-import { formatEmailDate, formatEmailPlace, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
+import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
+import { formatEventPlace } from "@/lib/event-place";
 
 // Every transactional email in the app goes through `render` from
 // @react-email/render, which converts the HTML body to text with html-to-text.
@@ -64,7 +65,7 @@ describe("registration confirmation email", () => {
       ...data,
       eventDate: "2026-11-21",
       startTime: "07:00",
-      location: formatEmailPlace({ venue: "", city: "Melbourne", state: "vic" }),
+      location: formatEventPlace({ venue: "", city: "Melbourne", state: "vic" }),
       category: "General admission",
     });
 
@@ -102,12 +103,6 @@ describe("email formatting", () => {
     expect(formatEmailTime("07:00")).toBe("7:00 AM");
     expect(formatEmailTime("18:30")).toBe("6:30 PM");
     expect(formatEmailTime("TBC")).toBe("TBC");
-  });
-
-  it("drops blank parts of a place and upper-cases the state", () => {
-    expect(formatEmailPlace({ venue: "Olympic Park", city: "Melbourne", state: "vic" })).toBe("Olympic Park, Melbourne VIC");
-    expect(formatEmailPlace({ venue: "  ", city: "Melbourne", state: "VIC" })).toBe("Melbourne VIC");
-    expect(formatEmailPlace({ venue: "Olympic Park", city: "", state: "" })).toBe("Olympic Park");
   });
 
   it("builds a calendar link from the UTC instants, or none without a start", () => {

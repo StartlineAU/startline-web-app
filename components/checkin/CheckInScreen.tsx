@@ -12,6 +12,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { useApiResource } from "@/hooks/useApiResource";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import type { CheckInState } from "@/lib/check-in-window";
+import { formatEventPlace } from "@/lib/event-place";
 
 interface CheckinEvent {
   title: string;
@@ -215,7 +216,7 @@ export default function CheckInScreen({
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-                  {data.event.venue}, {data.event.city} {data.event.state.toUpperCase()}
+                  {formatEventPlace(data.event)}
                 </span>
                 {data.registration!.bibNumber && (
                   <span className="flex items-center gap-1.5">

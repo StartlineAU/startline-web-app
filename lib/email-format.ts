@@ -25,17 +25,6 @@ export function formatEmailTime(value: string | null | undefined): string | null
   return HH_MM.test(v) ? formatTime(v) : v;
 }
 
-/** `Olympic Park, Melbourne VIC`, skipping whatever is blank. */
-export function formatEmailPlace(place: {
-  venue?: string | null;
-  city?: string | null;
-  state?: string | null;
-}): string {
-  const venue = place.venue?.trim();
-  const area = [place.city?.trim(), place.state?.trim().toUpperCase()].filter(Boolean).join(" ");
-  return [venue, area].filter(Boolean).join(", ");
-}
-
 const calendarStamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
 /**

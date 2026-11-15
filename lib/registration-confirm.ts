@@ -2,7 +2,8 @@ import { randomUUID } from "crypto";
 import type { RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
-import { formatEmailPlace, googleCalendarUrl } from "@/lib/email-format";
+import { googleCalendarUrl } from "@/lib/email-format";
+import { formatEventPlace } from "@/lib/event-place";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import {
   createEmptyParticipant,
@@ -366,7 +367,7 @@ export async function announceRegistrations(
   // only and the service fee shown to them is $0. A free entry is $0 across
   // the board.
   const athletePaysFee = event.feeStructure === "athlete";
-  const location = formatEmailPlace(event);
+  const location = formatEventPlace(event);
   const calendarUrl = googleCalendarUrl({
     title: event.title,
     startsAtUtc: event.startsAtUtc,
