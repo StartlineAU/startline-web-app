@@ -62,7 +62,7 @@ describe("diffEventFields", () => {
 
   it("flags date, time, location and type changes as material and nothing else", () => {
     const changes = diffEventFields(stored, {
-      startTime: "08:00", state: "NSW", discipline: "cycling", cap: 600, waves: [], title: "Renamed",
+      startTime: "08:00", state: "NSW", discipline: "other", cap: 600, waves: [], title: "Renamed",
     });
     expect(materialChanges(changes).map((c) => c.field)).toEqual(["discipline", "startTime", "state"]);
     expect(materialGroupsChanged(changes)).toEqual(["date and time", "location", "event type"]);
