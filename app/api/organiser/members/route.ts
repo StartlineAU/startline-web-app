@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
 import { getUserSession } from "@/lib/amplify-server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import { rateLimit } from "@/lib/rate-limit";

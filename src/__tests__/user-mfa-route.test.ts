@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
 }));
 
+vi.mock("@/lib/rate-limit", () => ({ rateLimit: async () => null }));
 vi.mock("@/lib/amplify-server", () => ({ getServerSession: mocks.session }));
 vi.mock("@/lib/session-sign-in-methods", () => ({ getSessionSignInMethods: mocks.methods }));
 vi.mock("@/lib/prisma", () => ({ default: { user: { findUnique: mocks.findUser, update: mocks.updateUser } } }));
@@ -26,7 +28,7 @@ vi.mock("@/lib/cognito-user", () => ({
 import { POST } from "@/app/api/user/mfa/route";
 
 function post(body: unknown) {
-  return POST(new Request("http://localhost/api/user/mfa", { method: "POST", body: JSON.stringify(body) }));
+  return POST(new NextRequest("http://localhost/api/user/mfa", { method: "POST", body: JSON.stringify(body) }));
 }
 
 beforeEach(() => {
