@@ -859,12 +859,13 @@ export default function ActivityPage() {
                   maxLength={WITHDRAW_CODE_LENGTH}
                   autoComplete="off"
                   value={withdrawInput}
-                  // Refuse a letter or symbol before it lands, so it never even
-                  // flashes in the box. onChange still strips anything that gets
-                  // past this (paste, autofill, IME composition).
+                  // Refuse an insert with no digits in it (a typed letter or
+                  // symbol) before it lands, so it never even flashes in the box.
+                  // A paste or autofill arrives as one insert; if it carries any
+                  // digits it goes through and onChange keeps only those.
                   onBeforeInput={(e) => {
                     const data = (e.nativeEvent as InputEvent).data;
-                    if (data && /\D/.test(data)) e.preventDefault();
+                    if (data && !/\d/.test(data)) e.preventDefault();
                   }}
                   onChange={(e) => setWithdrawInput(sanitiseWithdrawInput(e.target.value))}
                   disabled={refunding}
