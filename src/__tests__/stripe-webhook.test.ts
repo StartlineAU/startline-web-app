@@ -4,7 +4,14 @@ import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   constructEvent: vi.fn(),
-  registration: { count: vi.fn(), create: vi.fn(), createMany: vi.fn(), groupBy: vi.fn() },
+  registration: {
+    count: vi.fn(),
+    create: vi.fn(),
+    createMany: vi.fn(),
+    groupBy: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+  },
   user: { upsert: vi.fn() },
   event: { findUnique: vi.fn() },
   notification: { create: vi.fn() },
@@ -17,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 
 const tx = {
   registration: mocks.registration,
+  event: mocks.event,
   // The per-event advisory lock taken before the capacity count.
   $executeRaw: vi.fn(async () => 0),
 };
@@ -113,6 +121,8 @@ beforeEach(() => {
   mocks.user.upsert.mockResolvedValue({ id: "user-1" });
   mocks.sendEmail.mockResolvedValue(undefined);
   mocks.registration.count.mockResolvedValue(0);
+  mocks.registration.findMany.mockResolvedValue([]);
+  mocks.registration.updateMany.mockResolvedValue({ count: 1 });
   mocks.registration.groupBy.mockResolvedValue([]);
   mocks.registration.createMany.mockResolvedValue({ count: 1 });
   mocks.registration.create.mockResolvedValue({});
@@ -280,7 +290,11 @@ describe("POST /api/stripe/webhook", () => {
     expect(mocks.registration.createMany).toHaveBeenCalledTimes(1);
     const created = mocks.registration.createMany.mock.calls[0][0].data[0];
     expect(created.status).toBe("CANCELLED");
-    expect(created.stripeRefundId).toBe("re_123");
+    expect(created.stripeRefundId).toBeNull();
+    expect(mocks.registration.updateMany).toHaveBeenCalledWith({
+      where: { stripePaymentIntentId: "pi_123", stripeRefundId: null },
+      data: { stripeRefundId: "re_123" },
+    });
     expect(mocks.notification.create).not.toHaveBeenCalled();
     expect(mocks.refundCreate).toHaveBeenCalledWith(
       expect.objectContaining({ payment_intent: "pi_123" }),
@@ -312,13 +326,10 @@ describe("POST /api/stripe/webhook", () => {
       cap: 1,
       waves: [{ label: "General", price: "100.00", qty: 1 }],
     });
-    // Fast-path idempotency 0, idempotency under the lock 0, capacity 1 already
-    // confirmed, then 0 rows for this payment when the refusal is recorded.
+    // Idempotency under the lock sees nothing, then the event is already full.
     mocks.registration.count
       .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(1)
-      .mockResolvedValue(0);
+      .mockResolvedValueOnce(1);
     mocks.registration.groupBy.mockResolvedValue([{ waveLabel: "General", _count: { _all: 1 } }]);
     signedEvent({
       id: "pi_123",
@@ -340,11 +351,12 @@ describe("POST /api/stripe/webhook", () => {
 
   it("is idempotent — skips a PaymentIntent that was already processed", async () => {
     signedEvent({ id: "pi_123", metadata: metadata({}) });
-    mocks.registration.count.mockResolvedValue(1);
+    mocks.registration.findMany.mockResolvedValue([{ status: "CONFIRMED", stripeRefundId: "re_old" }]);
 
     await post({ id: "pi_123" });
     expect(mocks.registration.createMany).not.toHaveBeenCalled();
     expect(mocks.notification.create).not.toHaveBeenCalled();
+    expect(mocks.refundCreate).not.toHaveBeenCalled();
   });
 
   it("creates a CANCELLED registration when participant metadata is missing", async () => {
@@ -375,7 +387,7 @@ describe("POST /api/stripe/webhook", () => {
 
   it("skips announcing when another delivery recorded the payment under the lock", async () => {
     // Fast path sees nothing; the check under the event lock finds the rows.
-    mocks.registration.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    mocks.registration.count.mockResolvedValueOnce(1);
     signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
 
     const res = await post({ id: "pi_123" });
@@ -422,7 +434,38 @@ describe("POST /api/stripe/webhook", () => {
 
     const res = await post({ id: "pi_123" });
     expect(res.status).toBe(500);
+    // The claim is what stops a concurrent delivery confirming. The refund id
+    // is not written, so the retry finishes the refund instead of confirming.
+    expect(mocks.registration.createMany).toHaveBeenCalledTimes(1);
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].stripeRefundId).toBeNull();
+    expect(mocks.registration.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not refund a payment another delivery already confirmed", async () => {
+    mocks.event.findUnique.mockResolvedValue({ ...approvedEvent, status: "REJECTED" });
+    mocks.registration.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ status: "CONFIRMED", stripeRefundId: null }]);
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+
+    const res = await post({ id: "pi_123" });
+    expect(res.status).toBe(200);
+    expect(mocks.refundCreate).not.toHaveBeenCalled();
     expect(mocks.registration.createMany).not.toHaveBeenCalled();
+  });
+
+  it("finishes a claimed refund that the previous delivery did not complete", async () => {
+    mocks.registration.findMany.mockResolvedValue([{ status: "CANCELLED", stripeRefundId: null }]);
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) });
+
+    const res = await post({ id: "pi_123" });
+    expect(res.status).toBe(200);
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.registration.createMany).not.toHaveBeenCalled();
+    expect(mocks.registration.updateMany).toHaveBeenCalledWith({
+      where: { stripePaymentIntentId: "pi_123", stripeRefundId: null },
+      data: { stripeRefundId: "re_123" },
+    });
   });
 
   it("ignores events from a connected account", async () => {

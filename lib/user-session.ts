@@ -59,12 +59,71 @@ export async function resolveUserRow(identity: SessionIdentity): Promise<Resolve
   const claimed = byEmail?.cognitoSub;
   if (byEmail && claimed && claimed !== sub && !isBypass) return null;
 
-  return prisma.user.upsert({
-    where: { email },
-    update: { cognitoSub: sub },
-    create: { cognitoSub: sub, email, name },
-    select: { id: true, email: true, name: true },
+  // Dev bypass identities adopt the seeded row, including re-pointing its sub.
+  if (isBypass) {
+    return prisma.user.upsert({
+      where: { email },
+      update: { cognitoSub: sub },
+      create: { cognitoSub: sub, email, name },
+      select: { id: true, email: true, name: true },
+    });
+  }
+
+  // The read above is not the write. Two verified sign-ins for the same email
+  // can both see an unbound row; only a conditional update may bind it, and a
+  // ban that lands in between is not returned as a session.
+  return claimEmail(sub, email, name);
+}
+
+async function claimEmail(
+  sub: string,
+  email: string,
+  name: string | undefined,
+): Promise<ResolvedUser | null> {
+  const claimed = await prisma.user.updateMany({
+    where: {
+      email,
+      isBanned: false,
+      OR: [{ cognitoSub: null }, { cognitoSub: sub }],
+    },
+    data: { cognitoSub: sub },
   });
+  if (claimed.count === 1) return readClaimed(email, sub);
+
+  try {
+    return await prisma.user.create({
+      data: { cognitoSub: sub, email, name },
+      select: { id: true, email: true, name: true },
+    });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+  }
+
+  // The other sign-in created or bound the row first. Take it only if it is
+  // still unbound (or already ours) and not banned.
+  const again = await prisma.user.updateMany({
+    where: {
+      email,
+      isBanned: false,
+      OR: [{ cognitoSub: null }, { cognitoSub: sub }],
+    },
+    data: { cognitoSub: sub },
+  });
+  if (again.count !== 1) return null;
+  return readClaimed(email, sub);
+}
+
+async function readClaimed(email: string, sub: string): Promise<ResolvedUser | null> {
+  const row = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, name: true, isBanned: true, cognitoSub: true },
+  });
+  if (!row || row.isBanned || row.cognitoSub !== sub) return null;
+  return withoutBan(row);
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2002";
 }
 
 function withoutBan(user: ResolvedUser & { isBanned: boolean }): ResolvedUser {

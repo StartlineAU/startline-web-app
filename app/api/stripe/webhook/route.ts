@@ -69,12 +69,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
-  // Fast path for a redelivery. The authoritative check runs again under the
-  // event lock, inside the transaction that writes the rows.
-  const recorded = await prisma.registration.count({
+  // Fast path for a redelivery. A claim that was written and then failed to
+  // refund still owes the athlete their money; a confirmed payment does not.
+  const existing = await prisma.registration.findMany({
     where: { stripePaymentIntentId: paymentIntent.id },
+    select: { status: true, stripeRefundId: true },
   });
-  if (recorded > 0) return;
+  if (existing.length > 0) {
+    if (refusalStillOwed(existing)) await finishRefusedRefund(paymentIntent);
+    return;
+  }
 
   const participants = parseParticipantsFromMetadata(meta);
 
@@ -92,19 +96,22 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     },
   });
 
-  // Every refusal gives the money back first. Recording comes second, so a
-  // failed refund throws, Stripe retries the webhook, and the retry is not
-  // stopped by a row this attempt already wrote.
+  // Claim the refusal under the event lock before refunding. A concurrent
+  // delivery may already be confirming this payment; refunding first would
+  // give the athlete the money back and the entries. A failed refund leaves
+  // the claim without a refund id, so the retry finishes the refund instead
+  // of confirming.
   const refuse = async (reason: string, detail?: Record<string, unknown>) => {
     console.error(`PaymentIntent refused (${reason}), refunding:`, paymentIntent.id, detail ?? "");
-    const refundId = await refundRefusedPayment(paymentIntent);
-    if (!event || event.organiserId !== organiserId) return;
-    await recordRefused({
+    if (!event || event.organiserId !== organiserId) {
+      await refundRefusedPayment(paymentIntent);
+      return;
+    }
+    const claim = await claimRefusal({
       eventId: event.id,
       organiserId,
       feeStructure: event.feeStructure,
       paymentIntentId: paymentIntent.id,
-      refundId,
       people: participants.length > 0
         ? participants.map((participant) => ({
             name: athleteNameFromParticipant(participant),
@@ -112,35 +119,20 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
           }))
         : [{ name: meta.userName || "Unknown", email: meta.userEmail || "" }],
     });
+    if (claim === "skip") return;
+    await finishRefusedRefund(paymentIntent);
   };
 
-  // Refuse intents that don't match a real, approved, self-hosted event.
-  if (!event || event.organiserId !== organiserId) {
-    await refuse("unknown or mismatched event");
+  // Fail fast, before guest-account creation. The same check runs again under
+  // the event lock (beforeInsert) because the event can change during that wait.
+  // A payment started before the event began can settle while it is in progress;
+  // new registrations are already blocked at the start by checkout.
+  const earlyRefusal = paymentRefusalReason(event, organiserId, paymentIntent, participants);
+  if (earlyRefusal) {
+    await refuse(earlyRefusal);
     return;
   }
-  // A payment started before the event began can settle while the event is in
-  // progress. New registrations are already blocked at the start by checkout;
-  // this exception is only for money that was legitimately taken beforehand.
-  if (
-    (event.status !== "APPROVED" && event.status !== "IN_PROGRESS") ||
-    event.registrationType !== "startline"
-  ) {
-    await refuse("event not bookable", { status: event.status });
-    return;
-  }
-  if (event.organiser.status !== "APPROVED") {
-    await refuse("organisation suspended");
-    return;
-  }
-  if (paymentIntent.currency !== "aud") {
-    await refuse("unexpected currency", { currency: paymentIntent.currency });
-    return;
-  }
-  if (participants.length === 0) {
-    await refuse("no participant data");
-    return;
-  }
+  if (!event) return;
 
   // Price every ticket from the DB wave definitions, never from metadata. A
   // free tier is priced at zero rather than rejected, so a mixed cart (a free
@@ -160,25 +152,10 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   };
 
   const priced = participants.map(priceEntry);
-
-  // The charged amount must match what the DB pricing implies: a price or tier
-  // can change while the athlete is paying. Stripe reports amount_received in
-  // the minor currency unit, same as our cents.
-  const expectedTotalCents = priced.reduce((sum, entry) => {
-    if (!entry) return sum;
-    return sum + (event.feeStructure === "athlete"
-      ? entry.priceCents + entry.platformFeeCents
-      : entry.priceCents);
-  }, 0);
-
-  if (paymentIntent.amount_received !== expectedTotalCents || priced.some((entry) => !entry)) {
-    await refuse("amount does not match pricing", {
-      expectedTotalCents,
-      amountReceived: paymentIntent.amount_received,
-    });
+  if (priced.some((entry) => !entry)) {
+    await refuse("amount does not match pricing");
     return;
   }
-
   const pricedEntries = priced as PricedEntry[];
 
   // The Stripe fee the organiser absorbs is whatever the application fee took
@@ -212,6 +189,23 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     stripePaymentIntentId: paymentIntent.id,
     // Written by /api/checkout/accept-terms just before the card is charged.
     termsAccepted: Boolean(meta.termsAcceptedAt),
+    // Guest account creation sits outside the lock and can outlast a webhook
+    // retry. Re-read the event before inserting, or a price or status change
+    // in that window confirms an order the other delivery is refunding.
+    beforeInsert: async (tx) => {
+      const fresh = await tx.event.findUnique({
+        where: { id: eventId },
+        select: {
+          status: true,
+          registrationType: true,
+          feeStructure: true,
+          waves: true,
+          organiserId: true,
+          organiser: { select: { status: true } },
+        },
+      });
+      return paymentRefusalReason(fresh, organiserId, paymentIntent, participants);
+    },
   });
 
   if (!outcome.ok) {
@@ -224,26 +218,34 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   await announceRegistrations(event, organiserId, entries);
 }
 
+type PaymentRow = { status: string; stripeRefundId: string | null };
+
+/** A refused payment still needs its refund. A confirmed one must not be refunded. */
+function refusalStillOwed(rows: PaymentRow[]): boolean {
+  if (rows.some((row) => row.status === "CONFIRMED")) return false;
+  return rows.some((row) => !row.stripeRefundId);
+}
+
 /**
- * Keep a record of a refused, refunded payment: one CANCELLED row per person,
- * carrying the refund id. Written under the same event lock as confirmations
- * and skipped if rows for this PaymentIntent already exist, so a redelivery
- * does not duplicate them.
+ * Reserve this PaymentIntent under the same lock confirmations take.
+ * "refund" means this delivery should refund (it wrote the claim, or an
+ * earlier claim never got its refund id). "skip" means another delivery
+ * already confirmed, or the refund is already recorded.
  */
-async function recordRefused(opts: {
+async function claimRefusal(opts: {
   eventId: string;
   organiserId: string;
   feeStructure: string;
   paymentIntentId: string;
-  refundId: string | null;
   people: { name: string; email: string }[];
-}) {
-  await prisma.$transaction(async (tx) => {
+}): Promise<"refund" | "skip"> {
+  return prisma.$transaction(async (tx) => {
     await lockEventEntries(tx, opts.eventId);
-    const existing = await tx.registration.count({
+    const existing = await tx.registration.findMany({
       where: { stripePaymentIntentId: opts.paymentIntentId },
+      select: { status: true, stripeRefundId: true },
     });
-    if (existing > 0) return;
+    if (existing.length > 0) return refusalStillOwed(existing) ? "refund" : "skip";
     await tx.registration.createMany({
       data: opts.people.map((person) => ({
         eventId: opts.eventId,
@@ -255,10 +257,66 @@ async function recordRefused(opts: {
         feeStructure: opts.feeStructure,
         status: "CANCELLED" as const,
         stripePaymentIntentId: opts.paymentIntentId,
-        stripeRefundId: opts.refundId,
+        stripeRefundId: null,
       })),
     });
+    return "refund";
   });
+}
+
+async function finishRefusedRefund(paymentIntent: Stripe.PaymentIntent): Promise<void> {
+  const refundId = await refundRefusedPayment(paymentIntent);
+  if (!refundId) return;
+  await prisma.registration.updateMany({
+    where: { stripePaymentIntentId: paymentIntent.id, stripeRefundId: null },
+    data: { stripeRefundId: refundId },
+  });
+}
+
+type BookableEvent = {
+  status: string;
+  registrationType: string;
+  feeStructure: string;
+  waves: unknown;
+  organiserId: string;
+  organiser: { status: string };
+};
+
+/** Why this payment cannot become entries, or null when it still can. */
+function paymentRefusalReason(
+  event: BookableEvent | null,
+  organiserId: string,
+  paymentIntent: Stripe.PaymentIntent,
+  participants: CompactParticipant[],
+): string | null {
+  if (!event || event.organiserId !== organiserId) return "unknown or mismatched event";
+  if (
+    (event.status !== "APPROVED" && event.status !== "IN_PROGRESS") ||
+    event.registrationType !== "startline"
+  ) {
+    return "event not bookable";
+  }
+  if (event.organiser.status !== "APPROVED") return "organisation suspended";
+  if (paymentIntent.currency !== "aud") return "unexpected currency";
+  if (participants.length === 0) return "no participant data";
+
+  const waves = Array.isArray(event.waves)
+    ? event.waves as { label: string; price: string }[]
+    : [];
+  const priced = participants.map((participant) => {
+    const label = participant.wav || paymentIntent.metadata.waveLabel || null;
+    const wave = label ? waves.find((item) => item.label === label) : undefined;
+    if (!wave) return null;
+    const priceCents = Math.round(parseFloat(wave.price || "0") * 100);
+    if (!Number.isFinite(priceCents) || priceCents < 0) return null;
+    const { platformFeeCents } = calculateTotalWithFee(priceCents, event.feeStructure);
+    return event.feeStructure === "athlete" ? priceCents + platformFeeCents : priceCents;
+  });
+  const expectedTotalCents = priced.reduce<number>((sum, cents) => sum + (cents ?? 0), 0);
+  if (paymentIntent.amount_received !== expectedTotalCents || priced.some((cents) => cents == null)) {
+    return "amount does not match pricing";
+  }
+  return null;
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {

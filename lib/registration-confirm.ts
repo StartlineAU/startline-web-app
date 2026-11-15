@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { RegistrationStatus } from "@prisma/client";
+import type { Prisma, RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
 import { formatEmailPlace, googleCalendarUrl } from "@/lib/email-format";
@@ -180,7 +180,7 @@ export type ConfirmOutcome =
   // alreadyRecorded: rows for this PaymentIntent already exist (a webhook
   // redelivery), so nothing was written and nothing should be announced.
   | { ok: true; registrationIds: string[]; alreadyRecorded?: boolean }
-  | { ok: false; error: string; reason: "capacity" | "duplicate" };
+  | { ok: false; error: string; reason: "capacity" | "duplicate" | "stale" };
 
 /**
  * Write the registrations for an order.
@@ -223,6 +223,13 @@ export async function insertConfirmedRegistrations(opts: {
    * already been cancelled or refunded no longer blocks a fresh RSVP.
    */
   duplicateStatuses?: RegistrationStatus[];
+  /**
+   * Runs under the event lock, after the PaymentIntent idempotency check and
+   * before anything is inserted. The paid webhook re-reads the event here: a
+   * price or status change while guest accounts are being created must refuse
+   * the order, not confirm it. Return an error to abort without writing.
+   */
+  beforeInsert?: (tx: Prisma.TransactionClient) => Promise<string | null>;
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
@@ -241,6 +248,11 @@ export async function insertConfirmedRegistrations(opts: {
     if (stripePaymentIntentId) {
       const recorded = await tx.registration.count({ where: { stripePaymentIntentId } });
       if (recorded > 0) return { ok: true as const, registrationIds: [], alreadyRecorded: true };
+    }
+
+    if (opts.beforeInsert) {
+      const stale = await opts.beforeInsert(tx);
+      if (stale) return { ok: false as const, reason: "stale" as const, error: stale };
     }
 
     if (opts.rejectExistingUserEntries && buyerUserId) {

@@ -4,6 +4,7 @@ const mocks = {
   findUnique: vi.fn(),
   upsert: vi.fn(),
   create: vi.fn(),
+  updateMany: vi.fn(),
 };
 
 vi.mock("@/lib/prisma", () => ({
@@ -12,6 +13,7 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: (...args: unknown[]) => mocks.findUnique(...args),
       upsert: (...args: unknown[]) => mocks.upsert(...args),
       create: (...args: unknown[]) => mocks.create(...args),
+      updateMany: (...args: unknown[]) => mocks.updateMany(...args),
     },
   },
 }));
@@ -22,6 +24,7 @@ beforeEach(() => {
   mocks.findUnique.mockReset();
   mocks.upsert.mockReset();
   mocks.create.mockReset();
+  mocks.updateMany.mockReset();
 });
 
 describe("resolveUserRow", () => {
@@ -36,13 +39,20 @@ describe("resolveUserRow", () => {
   it("adopts a row that has no sub yet, so guest and seed rows link up", async () => {
     mocks.findUnique
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: "u2", cognitoSub: null });
-    mocks.upsert.mockResolvedValueOnce({ id: "u2", email: "b@example.com", name: "B" });
+      .mockResolvedValueOnce({ id: "u2", cognitoSub: null, isBanned: false })
+      .mockResolvedValueOnce({ id: "u2", email: "b@example.com", name: "B", isBanned: false, cognitoSub: "sub-2" });
+    mocks.updateMany.mockResolvedValueOnce({ count: 1 });
 
     expect(await resolveUserRow({ sub: "sub-2", email: "b@example.com", emailTrusted: true })).toEqual({ id: "u2", email: "b@example.com", name: "B" });
-    expect(mocks.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: "b@example.com" }, update: { cognitoSub: "sub-2" } }),
-    );
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: {
+        email: "b@example.com",
+        isBanned: false,
+        OR: [{ cognitoSub: null }, { cognitoSub: "sub-2" }],
+      },
+      data: { cognitoSub: "sub-2" },
+    });
+    expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
   it("refuses a row already bound to a different sub (account takeover)", async () => {
@@ -52,6 +62,7 @@ describe("resolveUserRow", () => {
 
     expect(await resolveUserRow({ sub: "google_123", email: "victim@example.com", emailTrusted: true })).toBeNull();
     expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 
   it("still lets a dev bypass identity adopt its seeded row", async () => {
@@ -66,12 +77,14 @@ describe("resolveUserRow", () => {
 
   it("creates a row when nothing matches", async () => {
     mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-    mocks.upsert.mockResolvedValueOnce({ id: "u5", email: "new@example.com", name: null });
+    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
+    mocks.create.mockResolvedValueOnce({ id: "u5", email: "new@example.com", name: null });
 
     expect(await resolveUserRow({ sub: "sub-5", email: "new@example.com", emailTrusted: true })).toEqual({ id: "u5", email: "new@example.com", name: null });
-    expect(mocks.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: "new@example.com" } }),
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { cognitoSub: "sub-5", email: "new@example.com" } }),
     );
+    expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
   it("creates a row keyed by the sub when the session carries no email", async () => {
@@ -105,6 +118,19 @@ describe("resolveUserRow", () => {
       .mockResolvedValueOnce({ id: "u9", cognitoSub: null, isBanned: true });
 
     expect(await resolveUserRow({ sub: "sub-9", email: "b@example.com", emailTrusted: true })).toBeNull();
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a sub another sign-in bound first", async () => {
+    mocks.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "u10", cognitoSub: null, isBanned: false });
+    mocks.updateMany.mockResolvedValue({ count: 0 });
+    mocks.create.mockRejectedValueOnce({ code: "P2002" });
+
+    expect(await resolveUserRow({ sub: "sub-10", email: "shared@example.com", emailTrusted: true })).toBeNull();
+    expect(mocks.updateMany).toHaveBeenCalledTimes(2);
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 });

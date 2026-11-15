@@ -9,6 +9,7 @@ describe("isAllowedAssetUrl", () => {
     expect(isAllowedAssetUrl("https://cdn.startlineau.com/uploads/org/photo/a.jpg")).toBe(true);
     expect(isAllowedAssetUrl("https://d1abc.cloudfront.net/uploads/org/photo/a.jpg")).toBe(true);
     expect(isAllowedAssetUrl("/uploads/photo/a.jpg")).toBe(true);
+    expect(isAllowedAssetUrl("/images/logo.svg")).toBe(true);
     expect(isAllowedAssetUrl("https://images.unsplash.com/photo-1?w=1200")).toBe(true);
     expect(isAllowedAssetUrl("")).toBe(true);
   });
@@ -19,6 +20,8 @@ describe("isAllowedAssetUrl", () => {
     expect(isAllowedAssetUrl("http://cdn.startlineau.com/uploads/a.jpg")).toBe(false);
     expect(isAllowedAssetUrl("//evil.example/a.jpg")).toBe(false);
     expect(isAllowedAssetUrl("/\\evil.example/a.jpg")).toBe(false);
+    expect(isAllowedAssetUrl("/api/user/account")).toBe(false);
+    expect(isAllowedAssetUrl("/uploads/../api/user")).toBe(false);
     expect(isAllowedAssetUrl("javascript:alert(1)")).toBe(false);
     expect(isAllowedAssetUrl("https://user:pw@cdn.startlineau.com/uploads/a.jpg")).toBe(false);
   });

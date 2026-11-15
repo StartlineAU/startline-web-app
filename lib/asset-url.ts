@@ -8,7 +8,7 @@ import { z } from "zod";
  * site. Accepted now:
  *
  *   - our own uploads: the CDN or bucket, under /uploads/
- *   - same-site paths ("/uploads/…" from local dev, "/images/…" seed assets)
+ *   - same-site paths under /uploads/ (local dev) or /images/ (seed assets)
  *   - images.unsplash.com, which the seed data uses
  *   - "" or null, meaning none
  */
@@ -36,13 +36,25 @@ function uploadHosts(): Set<string> {
 }
 
 const STOCK_IMAGE_HOSTS = new Set(["images.unsplash.com"]);
+const SAME_SITE_PREFIXES = ["/uploads/", "/images/"];
+
+function isSameSiteAssetPath(value: string): boolean {
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return false;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return false;
+  let url: URL;
+  try {
+    url = new URL(value, "https://assets.invalid");
+  } catch {
+    return false;
+  }
+  if (url.origin !== "https://assets.invalid") return false;
+  // Normalise so /uploads/../api/user is not accepted as an upload.
+  return SAME_SITE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix));
+}
 
 export function isAllowedAssetUrl(value: string, { allowStock = true } = {}): boolean {
   if (value === "") return true;
-  if (value.startsWith("/")) {
-    // Same-site path, not protocol-relative, no backslash tricks.
-    return !value.startsWith("//") && !value.includes("\\");
-  }
+  if (value.startsWith("/")) return isSameSiteAssetPath(value);
   let url: URL;
   try {
     url = new URL(value);
