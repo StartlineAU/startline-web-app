@@ -9,12 +9,9 @@ describe("event status labels", () => {
 });
 
 describe("competition types", () => {
-  it("includes all supported disciplines", () => {
-    const types = ["crossfit", "running", "hybrid", "swimming", "cycling", "triathlon"];
-    expect(types).toHaveLength(6);
-    types.forEach((t) => {
-      expect(["crossfit", "running", "hybrid", "swimming", "cycling", "triathlon"]).toContain(t);
-    });
+  it("lists only running, run clubs and other (#536)", () => {
+    expect(EVENT_TYPE_OPTIONS.map((o) => o.value)).toEqual(["running", "run_club", "other"]);
+    expect(Object.keys(EVENT_TYPE_LABELS).sort()).toEqual(["other", "run_club", "running"]);
   });
 });
 

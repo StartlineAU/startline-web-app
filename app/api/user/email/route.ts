@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
 import {
   GetUserCommand,
   UpdateUserAttributesCommand,
@@ -25,9 +26,12 @@ const emailActionSchema = z.discriminatedUnion("action", [
 //                                  user_attribute_update_settings in Terraform).
 //   { action: "confirm", code }  - Cognito switches the address, and our own
 //                                  records follow what Cognito now reports.
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  // Each request makes Cognito email a code to an address the caller chooses.
+  const limited = await rateLimit(req, { prefix: "user-email-change", limit: 5, windowSeconds: 900, identifier: session.sub });
+  if (limited) return limited;
 
   const cognitoSession = await getServerSession();
   if (!cognitoSession) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });

@@ -39,7 +39,7 @@ const pendingEvent = {
   eventDate: "2026-09-26",
   city: "Melbourne",
   state: "vic",
-  discipline: "crossfit",
+  discipline: "running",
   registrationType: "startline",
   organiser,
 };
