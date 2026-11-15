@@ -545,10 +545,27 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
           const teamSizeBad = isTeam && teamSize === null && (!!missing || w.teamSize.length > 0);
           return (
             <div key={i} data-testid="ticket-row" className="bg-dark rounded-xl border border-dark-lighter p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">
-                  Ticket {i + 1}
-                </span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3 min-w-0">
+                  <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">
+                    Ticket {i + 1}
+                  </span>
+                  {/* Who the ticket is for. The event's format follows from these. */}
+                  <div role="radiogroup" aria-label="Who this ticket is for" className="inline-flex rounded-md border border-dark-lighter p-0.5">
+                    {([["individual", "Individual"], ["team", "Team"]] as const).map(([v, l]) => {
+                      const on = v === "team" ? isTeam : !isTeam;
+                      return (
+                        <button key={v} type="button" role="radio" aria-checked={on}
+                          onClick={() => updateWave(i, { teamSize: v === "team" ? (w.teamSize || "2") : "" })}
+                          className={`rounded px-3 py-1 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                            on ? "bg-primary text-darker" : "text-muted hover:text-primary"
+                          }`}>
+                          {l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 {form.waves.length > 1 && (
                   <button type="button" onClick={() => removeWave(i)} aria-label="Remove this ticket category"
                     className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors">
@@ -588,22 +605,8 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                 </TicketField>
               </div>
 
-              <div className="space-y-3" data-testid="ticket-team">
-                <div role="radiogroup" aria-label="Who this ticket is for" className="inline-flex rounded-md border border-dark-lighter p-0.5">
-                  {([["individual", "Individual"], ["team", "Team"]] as const).map(([v, l]) => {
-                    const on = v === "team" ? isTeam : !isTeam;
-                    return (
-                      <button key={v} type="button" role="radio" aria-checked={on}
-                        onClick={() => updateWave(i, { teamSize: v === "team" ? (w.teamSize || "2") : "" })}
-                        className={`rounded px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                          on ? "bg-primary text-darker" : "text-muted hover:text-primary"
-                        }`}>
-                        {l}
-                      </button>
-                    );
-                  })}
-                </div>
-                {isTeam && (
+              {isTeam && (
+                <div data-testid="ticket-team">
                   <TicketField label="People per team" htmlFor={`${id}-team-size`} required className="sm:max-w-[260px]"
                     info={`How many athletes make up one team, from ${MIN_TEAM_SIZE} to ${MAX_TEAM_SIZE}. Two is shown to athletes as Pairs. The buyer names the first member at checkout and can add the rest later.`}>
                     <input id={`${id}-team-size`} value={w.teamSize} inputMode="numeric" placeholder="e.g. 4" aria-label="People per team"
@@ -613,8 +616,8 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                       <p className="mt-1.5 text-[12px] text-orange-300">Teams can have {MIN_TEAM_SIZE} to {MAX_TEAM_SIZE} people. For one person, choose Individual.</p>
                     )}
                   </TicketField>
-                )}
-              </div>
+                </div>
+              )}
 
               <TicketField label={isTeam ? "Teams available" : "Tickets available"} htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
                 info={isTeam
