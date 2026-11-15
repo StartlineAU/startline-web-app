@@ -377,4 +377,20 @@ test.describe("team registration", () => {
     await expect(ticket.getByText("Teams available")).toBeVisible();
     await expect(page.getByTestId("fee-breakdown-team")).toContainText(/a team of 4 pays/i);
   });
+
+  test("choosing the Team format turns an existing ticket into a team ticket", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/new-listing");
+
+    // The first ticket exists before any format is picked.
+    const ticket = page.getByTestId("ticket-row").first();
+    await expect(ticket.getByText("Tickets available")).toBeVisible();
+
+    await page.getByRole("button", { name: "Edit format" }).click();
+    await page.getByRole("button", { name: /Team \/ Pairs/ }).click();
+
+    await expect(ticket.getByLabel("People per team", { exact: true })).toHaveValue("2");
+    await expect(ticket.getByText("Price per person")).toBeVisible();
+    await expect(ticket.getByText("Teams available")).toBeVisible();
+  });
 });

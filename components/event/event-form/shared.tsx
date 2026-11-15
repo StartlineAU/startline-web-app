@@ -108,6 +108,20 @@ export interface Wave {
 
 export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "", teamSize: "" };
 
+/**
+ * The tickets as they should be once the event's format changes. A Team
+ * event sells only team tickets, so any ticket without a size becomes pairs
+ * (the organiser can change the size); an Individual event sells none, so
+ * every size is cleared. Individual & Team leaves each ticket as it is.
+ * Without this, a ticket created before the format was picked stayed
+ * individual on a Team event with no control to change it.
+ */
+export function wavesForFormat(waves: Wave[], format: Format): Wave[] {
+  if (format === "team") return waves.map((w) => (w.teamSize === "" ? { ...w, teamSize: "2" } : w));
+  if (format === "individual") return waves.map((w) => (w.teamSize === "" ? w : { ...w, teamSize: "" }));
+  return waves;
+}
+
 /** A ticket category's team size, or null for an individual ticket. */
 export function waveTeamSize(w: Pick<Wave, "teamSize">): number | null {
   return teamSizeOf({ teamSize: w.teamSize === "" ? undefined : Number(w.teamSize) });

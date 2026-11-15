@@ -7,6 +7,7 @@ import {
   teamTierChangeError,
 } from "@/lib/team-tickets";
 import { findTeamResultConflict, pickTeamResult } from "@/lib/team-results";
+import { EMPTY_WAVE, wavesForFormat } from "@/components/event/event-form/shared";
 
 describe("teamTierChangeError (#541)", () => {
   const pairs = { label: "Pairs", price: "40", teamSize: 2 };
@@ -162,5 +163,23 @@ describe("members left for later (#541)", () => {
     const numbers = pendingMemberNumbers(teams, (i) => i === 3 || i === 4);
     expect([...numbers]).toEqual([[3, 2], [4, 3]]);
     expect(pendingMemberName(2)).toBe("Team member 2");
+  });
+});
+
+describe("wavesForFormat (#541)", () => {
+  const ticket = (teamSize: string) => ({ ...EMPTY_WAVE, label: "General", price: "40", teamSize });
+
+  it("makes every ticket a team ticket when the event becomes Team", () => {
+    // The ticket made before the format was picked had no size and, on a
+    // Team event, no control to give it one.
+    expect(wavesForFormat([ticket(""), ticket("4")], "team").map((w) => w.teamSize)).toEqual(["2", "4"]);
+  });
+
+  it("clears team sizes when the event becomes Individual", () => {
+    expect(wavesForFormat([ticket("2"), ticket("")], "individual").map((w) => w.teamSize)).toEqual(["", ""]);
+  });
+
+  it("leaves each ticket alone on Individual & Team", () => {
+    expect(wavesForFormat([ticket("2"), ticket("")], "both").map((w) => w.teamSize)).toEqual(["2", ""]);
   });
 });

@@ -32,7 +32,7 @@ import {
 import { STATE_LABELS } from "@/types";
 import {
   DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, FORMATS, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
-  waveTeamSize, eventCap,
+  waveTeamSize, wavesForFormat, eventCap,
   type AusState, type Discipline, type FormState, type RegionId, type Wave,
 } from "./shared";
 
@@ -544,7 +544,9 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
           // Shown whenever the ticket carries a size, so a leftover team ticket
           // on an Individual event can still be switched back.
           const showTeam = teamsAllowed || w.teamSize !== "";
-          const isTeam = w.teamSize !== "";
+          // Every ticket on a Team event is a team ticket, even one saved
+          // before it had a size, so its size field always shows there.
+          const isTeam = form.format === "team" || w.teamSize !== "";
           const teamSizeBad = isTeam && teamSize === null && (!!missing || w.teamSize.length > 0);
           return (
             <div key={i} data-testid="ticket-row" className="bg-dark rounded-xl border border-dark-lighter p-4 sm:p-5 space-y-4">
@@ -936,7 +938,9 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
           {FORMATS.map(f => {
             const on = form.format === f.v;
             return (
-              <button key={f.v} type="button" aria-pressed={on} onClick={() => update({ format: f.v })} className={optionCard(on)}>
+              <button key={f.v} type="button" aria-pressed={on}
+                onClick={() => update({ format: f.v, waves: wavesForFormat(form.waves, f.v) })}
+                className={optionCard(on)}>
                 <span className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{f.l}</span>
                 <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{f.d}</span>
               </button>
