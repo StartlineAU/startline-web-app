@@ -3,17 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, CheckCheck, Clock } from "lucide-react";
+import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserEvent } from "@/types";
 import type { PublicEvent } from "@/lib/event-types";
 import { getRegisteredEventIds, fetchSavedEventIds } from "@/lib/client-lists";
 import { toUserEvents } from "@/lib/user-events";
 import { useApiResource } from "@/hooks/useApiResource";
-import { formatInEventTimeZone } from "@/lib/event-time";
-import type { CheckInState } from "@/lib/check-in-window";
 import { useAuthContext } from "@/context/AuthContext";
 import EventCard from "@/components/EventCard";
+import TicketDialog from "@/components/activity/TicketDialog";
+import type { RegMeta, RegStatus } from "@/components/activity/registration-meta";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -29,25 +29,6 @@ type FollowingOrganiser = {
   followers: number;
   eventsHosted: number;
   registrations: number;
-};
-
-type RegStatus = "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED";
-type RegMeta = {
-  id: string;
-  eventId: string;
-  status: RegStatus;
-  athleteName: string;
-  wave: string | null;
-  bibNumber: string | null;
-  checkedInAt: string | null;
-  checkInState: CheckInState;
-  checkInOpensAt: string | null;
-  checkInClosesAt: string | null;
-  timeZone: string;
-  paidCents: number;
-  refundAmountCents: number;
-  refundPercent: number;
-  outsidePolicy: boolean;
 };
 
 type UserNotif = {
@@ -145,76 +126,17 @@ function NotificationsPanel({
   );
 }
 
-function currentCheckInState(meta: RegMeta, now: Date): CheckInState {
-  if (meta.checkInState === "unavailable") return "unavailable";
-  if (!meta.checkInOpensAt || !meta.checkInClosesAt) return meta.checkInState;
-  const opensAt = Date.parse(meta.checkInOpensAt);
-  const closesAt = Date.parse(meta.checkInClosesAt);
-  if (Number.isNaN(opensAt) || Number.isNaN(closesAt)) return "unavailable";
-  if (now.getTime() >= closesAt) return "closed";
-  if (now.getTime() < opensAt) return "before";
-  return "open";
-}
-
-function formatCheckInTime(iso: string, timeZone: string) {
-  return formatInEventTimeZone(new Date(iso), timeZone, {
-    weekday: "short", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit",
-  });
-}
-
-function CheckInAction({ meta, now }: { meta: RegMeta; now: Date }) {
-  if (meta.status !== "CONFIRMED") return null;
-
-  if (meta.checkedInAt) {
-    return (
-      <span className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-primary">
-        <CheckCheck className="w-3.5 h-3.5" />
-        Checked in {formatCheckInTime(meta.checkedInAt, meta.timeZone)}
-      </span>
-    );
-  }
-
-  const state = currentCheckInState(meta, now);
-  if (state === "open") {
-    return (
-      <Link
-        href={`/checkin/${meta.eventId}?registration=${encodeURIComponent(meta.id)}`}
-        data-testid="activity-check-in"
-        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 font-headline text-[10px] font-black uppercase tracking-widest text-dark hover:bg-primary-light transition-colors"
-      >
-        <UserCheck className="w-3.5 h-3.5" /> Check in
-      </Link>
-    );
-  }
-  if (state === "before" && meta.checkInOpensAt) {
-    return (
-      <span className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-muted">
-        <Clock className="w-3.5 h-3.5" />
-        Check-in opens {formatCheckInTime(meta.checkInOpensAt, meta.timeZone)}
-      </span>
-    );
-  }
-  if (state === "closed") {
-    return (
-      <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
-        Check-in closed
-      </span>
-    );
-  }
-  return null;
-}
-
+/* The card is the event and nothing else (#552): wave, bib, check-in and
+   withdrawal all live on the ticket it opens. No heart either, since saving an
+   event you are already entered in does nothing for you. */
 function RegisteredCard({
   event,
   metas,
-  now,
-  onRequestRefund,
+  onOpenTicket,
 }: {
   event: UserEvent;
   metas: RegMeta[];
-  now: Date;
-  onRequestRefund: (meta: RegMeta) => void;
+  onOpenTicket: () => void;
 }) {
   const cardStatus = metas.length === 0
     ? "CONFIRMED"
@@ -229,131 +151,14 @@ function RegisteredCard({
       data-event-id={event.id}
       data-registration-status={cardStatus}
     >
+      {/* Registered interest with no entry behind it has no ticket, so it
+          keeps the event page. */}
       <EventCard
         event={event}
-        cardClassName="rounded-b-none border-b-0 group-hover:ring-0"
+        onOpen={metas.length > 0 ? onOpenTicket : undefined}
+        hideSave
+        hidePrice
       />
-      <div className="bg-dark-light border border-dark-lighter rounded-b-xl px-4 py-3">
-        {metas.length === 0 && (
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-                Your Wave
-              </p>
-              <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-light mt-1 truncate">
-                —
-              </p>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-                Bib
-              </p>
-              <p className="font-headline text-[13px] font-black mt-1 text-muted-dark">—</p>
-            </div>
-          </div>
-        )}
-
-        {metas.map((meta, index) => {
-          const withdrawn = meta.status !== "CONFIRMED";
-          const refunded = meta.status === "REFUNDED";
-          const freeEntry = meta.paidCents === 0;
-          const refundIssued = refunded && !freeEntry;
-
-          // Withdrawal is the athlete's action, so the copy names them rather than
-          // saying "cancelled", which can be mistaken for the event being cancelled.
-          const withdrawnHeading = refundIssued
-            ? "Refund issued."
-            : freeEntry
-              ? "You withdrew from this event."
-              : "You withdrew.";
-          const withdrawnDetail = refundIssued
-            ? null
-            : freeEntry
-              ? "Your spot has been released."
-              : "Your refund request is awaiting the organiser’s decision.";
-
-          return (
-            <div
-              key={meta.id}
-              className={index > 0 ? "mt-3 pt-3 border-t border-dashed border-dark-lighter" : undefined}
-            >
-              {metas.length > 1 && (
-                <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-light mb-2">
-                  {meta.athleteName}
-                </p>
-              )}
-
-              {withdrawn ? (
-                <div className="flex items-start gap-3">
-                  <span
-                    className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg ${
-                      refundIssued ? "bg-primary/10 text-primary" : "bg-amber-400/10 text-amber-300"
-                    }`}
-                  >
-                    {refundIssued ? (
-                      <Banknote className="w-4 h-4" strokeWidth={2.5} />
-                    ) : (
-                      <Undo2 className="w-4 h-4" strokeWidth={2.5} />
-                    )}
-                  </span>
-                  <div className="min-w-0">
-                    <p
-                      className={`font-headline text-[11px] font-bold uppercase tracking-widest ${
-                        refundIssued ? "text-primary" : "text-amber-300"
-                      }`}
-                    >
-                      {withdrawnHeading}
-                    </p>
-                    {withdrawnDetail && (
-                      <p className="text-[12px] text-muted leading-relaxed mt-1">{withdrawnDetail}</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-                        Your Wave
-                      </p>
-                      <p className="font-headline text-[12px] font-bold uppercase tracking-widest text-light mt-1 truncate">
-                        {meta.wave || "—"}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark leading-none">
-                        Bib
-                      </p>
-                      <p className={`font-headline text-[13px] font-black mt-1 ${meta.bibNumber ? "text-primary" : "text-muted-dark"}`}>
-                        {meta.bibNumber ? `#${meta.bibNumber}` : "—"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                    <CheckInAction meta={meta} now={now} />
-                    {freeEntry ? (
-                      <button
-                        type="button"
-                        onClick={() => onRequestRefund(meta)}
-                        className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-red-300 transition-colors"
-                      >
-                        Withdraw my entry
-                      </button>
-                    ) : (
-                      <Link
-                        href="/support"
-                        className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-light transition-colors"
-                      >
-                        Request a refund
-                      </Link>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -477,6 +282,7 @@ export default function ActivityPage() {
   const [refundTarget, setRefundTarget] = useState<{ meta: RegMeta; title: string } | null>(null);
   const [refunding, setRefunding] = useState(false);
   const [refundError, setRefundError] = useState("");
+  const [ticketTarget, setTicketTarget] = useState<{ eventId: string; title: string } | null>(null);
 
   const confirmRefund = async () => {
     if (!refundTarget) return;
@@ -738,11 +544,7 @@ export default function ActivityPage() {
                     key={event.id}
                     event={event}
                     metas={confirmedMetas(String(event.id))}
-                    now={now}
-                    onRequestRefund={(meta) => {
-                      setRefundError("");
-                      setRefundTarget({ meta, title: event.title });
-                    }}
+                    onOpenTicket={() => setTicketTarget({ eventId: String(event.id), title: event.title })}
                   />
                 ))}
               </div>
@@ -770,11 +572,7 @@ export default function ActivityPage() {
                       key={event.id}
                       event={event}
                       metas={withdrawnMetas(String(event.id))}
-                      now={now}
-                      onRequestRefund={(meta) => {
-                        setRefundError("");
-                        setRefundTarget({ meta, title: event.title });
-                      }}
+                      onOpenTicket={() => setTicketTarget({ eventId: String(event.id), title: event.title })}
                     />
                   ))}
                 </div>
@@ -794,6 +592,21 @@ export default function ActivityPage() {
           </div>
         )}
       </div>
+
+      <TicketDialog
+        eventId={ticketTarget?.eventId ?? null}
+        eventTitle={ticketTarget?.title ?? ""}
+        metas={ticketTarget ? metasFor(ticketTarget.eventId) : []}
+        now={now}
+        onClose={() => setTicketTarget(null)}
+        onWithdraw={(meta) => {
+          // One dialog at a time: the confirmation replaces the ticket.
+          const title = ticketTarget?.title ?? "";
+          setTicketTarget(null);
+          setRefundError("");
+          setRefundTarget({ meta, title });
+        }}
+      />
 
       <Dialog open={!!refundTarget} onOpenChange={(open) => { if (!open) setRefundTarget(null); }}>
         <DialogContent>

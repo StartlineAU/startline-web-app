@@ -433,18 +433,23 @@ test.describe("free event RSVP", () => {
     await expect(entry).toBeVisible();
     const before = Number(await registeredTab.locator("span").innerText());
 
-    await entry.getByRole("button", { name: /withdraw my entry/i }).click();
+    // Withdrawal lives on the ticket the card opens (#552).
+    await entry.getByTestId("event-card").click();
+    await page.getByTestId("ticket-dialog").getByRole("button", { name: /withdraw my entry/i }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: /withdraw your entry/i })).toBeVisible();
     await dialog.getByRole("button", { name: /withdraw my entry/i }).click();
 
-    await expect(page.getByText("You withdrew from this event.")).toBeVisible();
-    await expect(page.getByText("Your spot has been released.")).toBeVisible();
     await expect(registeredTab.locator("span")).toHaveText(String(before - 1));
 
     const withdrawn = page.getByRole("region", { name: /withdrawn entries/i });
     await expect(withdrawn.getByText("Free RSVP Single Tier")).toBeVisible();
-    await expect(withdrawn.getByRole("button", { name: /withdraw my entry/i })).toHaveCount(0);
+
+    await withdrawn.getByTestId("event-card").filter({ hasText: "Free RSVP Single Tier" }).click();
+    const ticket = page.getByTestId("ticket-dialog");
+    await expect(ticket.getByText("You withdrew from this event.")).toBeVisible();
+    await expect(ticket.getByText("Your spot has been released.")).toBeVisible();
+    await expect(ticket.getByRole("button", { name: /withdraw my entry/i })).toHaveCount(0);
   });
 
   // Issue #477: reopening the wizard used to show the review step and an

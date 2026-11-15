@@ -249,7 +249,12 @@ test("Activity opens the athlete's registration-specific check-in page", async (
   await setBypass(page, "member");
   await page.goto("/activity");
 
-  const checkIn = page.getByTestId("activity-check-in");
+  // Check-in lives on the ticket the card opens (#552).
+  await page
+    .locator(`[data-testid="registration-entry"][data-event-id="${EVENT_ID}"]`)
+    .getByTestId("event-card")
+    .click();
+  const checkIn = page.getByTestId("ticket-dialog").getByTestId("activity-check-in");
   await expect(checkIn).toBeVisible();
   await checkIn.click();
 
