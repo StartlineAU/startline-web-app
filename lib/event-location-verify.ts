@@ -44,25 +44,32 @@ export async function verifyEventLocation(fields: LocationFields): Promise<strin
     geocodeLookup(`${address}, ${city} ${STATE}`),
   ]);
 
-  // No geocoder (local dev, CI, an AWS outage): the shape check above is all
-  // that can be done, and refusing every submit would be worse.
-  if (cityLookup.status === "unavailable" || addressLookup.status === "unavailable") return null;
+  // No geocoder at all (local dev, CI, an AWS outage): the shape check above
+  // is all that can be done, and refusing every submit would be worse. One
+  // call failing does not excuse a miss from the other.
+  if (cityLookup.status === "unavailable" && addressLookup.status === "unavailable") return null;
 
   const cityResult = cityLookup.status === "found" ? cityLookup.result : null;
   const addressResult = addressLookup.status === "found" ? addressLookup.result : null;
+  const addressMiss = `We couldn't find that street address in ${STATE}. Pick it from the suggestions as you type.`;
+  const cityMiss = `We couldn't find ${city} in ${STATE}. Check the city and state.`;
 
   // A suburb inside a metro city geocodes as a district of it: St Kilda's
-  // locality is Melbourne (#352). Either name counts, from either lookup.
+  // locality is Melbourne (#352). Either name counts, from either lookup that
+  // actually answered.
   const names = (r: typeof cityResult) =>
     r && r.stateCode === state ? [r.city, r.district].filter(Boolean) : [];
   const cityFound = [...names(cityResult), ...names(addressResult)].some((n) => sameText(n, city));
-  if (!cityFound) {
-    return `We couldn't find ${city} in ${STATE}. Check the city and state.`;
+  if (!cityFound && cityLookup.status !== "unavailable") return cityMiss;
+  if (!cityFound && addressLookup.status !== "unavailable") {
+    if (!addressResult || addressResult.stateCode !== state) return addressMiss;
+    return cityMiss;
   }
 
-  if (!addressResult || addressResult.stateCode !== state) {
-    return `We couldn't find that street address in ${STATE}. Pick it from the suggestions as you type.`;
-  }
+  // The city was named. An address lookup that could not be asked is not a
+  // miss; one that answered and is not in the state is.
+  if (addressLookup.status === "unavailable") return null;
+  if (!addressResult || addressResult.stateCode !== state) return addressMiss;
 
   return null;
 }

@@ -147,19 +147,23 @@ export default function EventPageEditor({
   // The browser's Back button skipped the leave prompt and dropped the event
   // without a word (#529). While there are unsaved edits, an extra history
   // entry for this same page sits on top, so Back lands on this page again
-  // and opens the prompt instead. Closing or reloading the tab gets the
-  // browser's own "leave site?" check.
+  // and opens the prompt instead. That entry is put back immediately: the
+  // first Back does not change the URL, and a second press would otherwise
+  // leave. Closing or reloading the tab gets the browser's own "leave site?"
+  // check.
   const backGuarded = useRef(false);
   const leaving = useRef(false);
+  const armBackGuard = () => {
+    window.history.pushState(window.history.state, "", window.location.href);
+    backGuarded.current = true;
+  };
   useEffect(() => {
     if (!dirty) return;
-    if (!backGuarded.current) {
-      window.history.pushState(window.history.state, "", window.location.href);
-      backGuarded.current = true;
-    }
+    if (!backGuarded.current) armBackGuard();
     const onPopState = () => {
       if (leaving.current || !backGuarded.current) return;
       backGuarded.current = false;
+      armBackGuard();
       setLeaveTo(LEAVE_BACK);
       setShowCancelModal(true);
     };
@@ -180,7 +184,29 @@ export default function EventPageEditor({
    *  history does not keep a second copy of the editor behind the new page. */
   const leave = (destination: string) => {
     leaving.current = true;
-    if (destination === LEAVE_BACK) { window.history.back(); return; }
+    if (destination === LEAVE_BACK) {
+      const fallback = returnPath() ?? cancelRedirect;
+      // The guard entry is current. One step back only returns to this same
+      // page. Two steps reaches whatever was open before the editor. With no
+      // such page (a new tab, a bookmark), go to the usual redirect.
+      if (!backGuarded.current || window.history.length <= 2) {
+        backGuarded.current = false;
+        router.push(fallback);
+        return;
+      }
+      backGuarded.current = false;
+      const here = window.location.href;
+      let giveUp = 0;
+      const onLeft = () => {
+        window.clearTimeout(giveUp);
+        window.removeEventListener("popstate", onLeft);
+        if (window.location.href === here) router.push(fallback);
+      };
+      giveUp = window.setTimeout(onLeft, 300);
+      window.addEventListener("popstate", onLeft);
+      window.history.go(-2);
+      return;
+    }
     if (backGuarded.current) { backGuarded.current = false; router.replace(destination); return; }
     router.push(destination);
   };

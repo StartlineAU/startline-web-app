@@ -16,6 +16,8 @@ describe("locationFieldErrors", () => {
 
   it.each([
     "St Kilda", "O'Connor", "Kalgoorlie-Boulder", "Mt. Isa", "Wagga Wagga", "Tāmaki", "Ōtautahi",
+    // Real localities. A postcode is shape-valid too; submit asks the geocoder.
+    "1770", "A1 Mine Settlement", "3000",
   ])("accepts the place name %s", (city) => {
     expect(locationFieldErrors({ ...REAL, city }).city).toBeUndefined();
   });
@@ -24,8 +26,6 @@ describe("locationFieldErrors", () => {
     ["spaces", "   "],
     ["symbols", "!!!"],
     ["punctuation only", "-.'"],
-    ["digits", "3000"],
-    ["mixed junk", "Melb0urne"],
     ["a leading symbol", "#Melbourne"],
   ])("refuses a city of %s", (_, city) => {
     const errors = locationFieldErrors({ ...REAL, city }, { required: true });
@@ -124,5 +124,33 @@ describe("verifyEventLocation", () => {
   it("falls back to the shape check when the geocoder is unavailable", async () => {
     mocks.geocodeLookup.mockResolvedValue({ status: "unavailable" });
     await expect(verifyEventLocation({ ...REAL, city: "Fakeville" })).resolves.toBeNull();
+  });
+
+  it("does not ignore a city miss when the address lookup cannot be asked", async () => {
+    mocks.geocodeLookup
+      .mockResolvedValueOnce({ status: "none" })
+      .mockResolvedValueOnce({ status: "unavailable" });
+    await expect(verifyEventLocation({ ...REAL, city: "Fakeville" })).resolves.toMatch(/couldn't find Fakeville/);
+  });
+
+  it("refuses a guessed city even if the address lookup is down", async () => {
+    mocks.geocodeLookup
+      .mockResolvedValueOnce(found("Melbourne", "vic"))
+      .mockResolvedValueOnce({ status: "unavailable" });
+    await expect(verifyEventLocation({ ...REAL, city: "Fakeville" })).resolves.toMatch(/couldn't find Fakeville/);
+  });
+
+  it("does not ignore an address miss when the city lookup cannot be asked", async () => {
+    mocks.geocodeLookup
+      .mockResolvedValueOnce({ status: "unavailable" })
+      .mockResolvedValueOnce({ status: "none" });
+    await expect(verifyEventLocation(REAL)).resolves.toMatch(/street address/);
+  });
+
+  it("accepts a named city when only the address lookup is down", async () => {
+    mocks.geocodeLookup
+      .mockResolvedValueOnce(found("Melbourne", "vic"))
+      .mockResolvedValueOnce({ status: "unavailable" });
+    await expect(verifyEventLocation(REAL)).resolves.toBeNull();
   });
 });

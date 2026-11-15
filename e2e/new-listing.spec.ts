@@ -550,10 +550,15 @@ test.describe("new listing editor: browser Back", () => {
     await page.goto("/organiser/new-listing");
     await page.getByRole("textbox", { name: "Event title" }).fill(TITLE);
 
-    // Back stays on the editor and asks.
+    // Back stays on the editor and asks. The URL does not change, so a second
+    // Back is the usual next press and must not leave either.
     await page.goBack();
     await expect(page.getByText(/leave without saving/i)).toBeVisible();
     await expect(page).toHaveURL(/\/organiser\/new-listing/);
+    await page.goBack();
+    await expect(page.getByText(/leave without saving/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/organiser\/new-listing/);
+    await expect(page.getByRole("textbox", { name: "Event title" })).toHaveValue(TITLE);
 
     // Keep editing keeps what was typed, and Back still asks afterwards.
     await page.getByRole("button", { name: /keep editing/i }).click();

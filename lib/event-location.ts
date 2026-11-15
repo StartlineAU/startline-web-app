@@ -29,11 +29,11 @@ export function tidyLocationText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
-// Letters in any script (Māori, accented and Indigenous place names), spaces,
-// apostrophes, hyphens and full stops: "St Kilda", "O'Connor",
-// "Kalgoorlie-Boulder". It starts and ends with a letter (or a closing "."
-// as in "Mt."). No digits: no Australian locality has one.
-const CITY = /^\p{L}[\p{L}\p{M} '’.-]*[\p{L}\p{M}.]$|^\p{L}$/u;
+// Letters in any script (Māori, accented and Indigenous place names), digits,
+// spaces, apostrophes, hyphens and full stops: "St Kilda", "O'Connor",
+// "Kalgoorlie-Boulder", "1770", "A1 Mine Settlement". It starts and ends with
+// a letter or digit (or a closing "." as in "Mt.").
+const CITY = /^[\p{L}\p{N}][\p{L}\p{M}\p{N} '’.-]*[\p{L}\p{M}\p{N}.]$|^[\p{L}\p{N}]$/u;
 // A street address adds digits and the usual separators: "Unit 4/12 Smith St".
 const ADDRESS_CHARS = /^[\p{L}\p{M}\p{N} '’.,\-/#&()]+$/u;
 const LETTER = /\p{L}/u;
@@ -62,7 +62,7 @@ export function locationFieldErrors(
   if (!city) {
     if (required) errors.city = "Add the city or suburb.";
   } else if (city.length < 2 || city.length > 60 || !CITY.test(city)) {
-    errors.city = "Enter a real city or suburb, using letters only.";
+    errors.city = "Enter a real city or suburb.";
   }
 
   if (!state) {
