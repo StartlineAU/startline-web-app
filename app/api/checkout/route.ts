@@ -12,6 +12,11 @@ import {
 } from "@/lib/checkout-order";
 
 export async function POST(req: NextRequest) {
+  // Every accepted request creates a Stripe PaymentIntent and holds capacity
+  // checks against the database. Turnstile stops bots; this caps one source.
+  const limited = await rateLimit(req, { prefix: "checkout", limit: 20, windowSeconds: 60 });
+  if (limited) return limited;
+
   try {
     const parsedBody = checkoutSchema.safeParse(await req.json());
     if (!parsedBody.success) {

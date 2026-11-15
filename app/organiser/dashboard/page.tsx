@@ -16,6 +16,7 @@ import CapacityBar from "@/components/ui/CapacityBar";
 import { formatAudFromCents } from "@/lib/organiser-dashboard";
 import { useApiResource } from "@/hooks/useApiResource";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
+import { formatEventArea } from "@/lib/event-place";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
@@ -298,8 +299,7 @@ export default function DashboardPage() {
                             </Badge>
                           </div>
                           <div className="flex items-center gap-1 font-headline text-[10px] text-muted-dark uppercase tracking-widest mb-1">
-                            <MapPin className="w-3 h-3 text-primary shrink-0" /> {e.city},{" "}
-                            {e.state.toUpperCase()}
+                            <MapPin className="w-3 h-3 text-primary shrink-0" /> {formatEventArea(e.city, e.state.toUpperCase())}
                           </div>
                           <div className="flex items-center justify-between gap-3">
                             <div className="font-headline text-[11px] text-muted">
@@ -357,8 +357,7 @@ export default function DashboardPage() {
                               {e.title}
                             </div>
                             <div className="flex items-center gap-1 font-headline text-[11px] text-muted-dark uppercase tracking-widest mt-0.5">
-                              <MapPin className="w-3 h-3 text-primary" /> {e.city},{" "}
-                              {e.state.toUpperCase()}
+                              <MapPin className="w-3 h-3 text-primary" /> {formatEventArea(e.city, e.state.toUpperCase())}
                             </div>
                           </div>
                         </div>

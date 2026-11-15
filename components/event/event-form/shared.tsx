@@ -5,6 +5,7 @@ import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { firstLocationError } from "@/lib/event-location";
 
 /**
  * The parts of the listing page an organiser fills in. Each is an element id
@@ -59,8 +60,10 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   check("Date", "date", !!form.date, "Choose the event date");
   check("Start time", "time", !!form.startTime && !timeOrderBad,
     timeOrderBad ? "Cut-off time must be after the start time" : "Set a start time");
-  check("Venue address", "location", !!(form.address.trim() && form.city.trim() && form.state),
-    "Add the street address, city and state");
+  // The same rules the server applies (#530): spaces or symbols are not a place.
+  const locationError = firstLocationError(form, { required: true });
+  check("Venue address", "location", !locationError,
+    locationError ?? "Add the street address, city and state");
   check("Format", "format", !!form.format, "Choose a format");
   if (DISCIPLINE_CATS[form.discipline as Discipline]) {
     check("Divisions", "divisions", form.categories.length > 0, "Choose at least one division");
@@ -78,7 +81,7 @@ export function missingRequirements(form: FormState): Requirement[] {
   return requirementChecks(form).filter((c) => !c.done).map(({ row, region, message }) => ({ row, region, message }));
 }
 
-export type Discipline = "crossfit" | "running" | "hybrid" | "cycling" | "swimming" | "other" | "";
+export type Discipline = "running" | "run_club" | "other" | "";
 export type Format     = "individual" | "team" | "both" | "";
 export type Intensity  = "low" | "moderate" | "high" | "extreme" | "";
 export type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
@@ -273,18 +276,13 @@ export function RichTextEditor({ value, onChange, invalid = false }: { value: st
 
 /* ── Option lists ───────────────────────────────────────────── */
 export const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
-  { v: "crossfit",  l: "CrossFit",  d: "Functional fitness comp"    },
   { v: "running",   l: "Running",   d: "5km · 10km · Half · Marathon" },
-  { v: "hybrid",    l: "Hybrid",    d: "Multi-discipline / OCR"     },
-  { v: "cycling",   l: "Cycling",   d: "Road · Criterium · Gravel"  },
-  { v: "swimming",  l: "Swimming",  d: "Pool · Open water events"   },
-  { v: "other",     l: "Other",     d: "Another discipline"         },
+  { v: "run_club",  l: "Run Club",  d: "Group runs & club sessions"   },
+  { v: "other",     l: "Other",     d: "Another discipline"           },
 ];
 
 export const DISCIPLINE_CATS: Partial<Record<Discipline, string[]>> = {
   running:  ["5K", "10K", "Half Marathon", "Marathon", "Ultra"],
-  cycling:  ["Road Race", "Criterium", "Time Trial", "Gran Fondo", "Mountain Bike", "Gravel"],
-  swimming: ["50m", "100m", "200m", "400m", "800m", "1500m", "Open Water"],
 };
 
 export const FORMATS: { v: Format; l: string; d: string }[] = [

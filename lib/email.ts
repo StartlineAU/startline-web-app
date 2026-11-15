@@ -14,7 +14,8 @@ import { RefundRequestEmail } from "@/emails/refund-request";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
 import { SUPPORT_EMAIL } from "@/lib/contact";
-import { formatEmailDate, formatEmailTime, formatEmailPlace } from "@/lib/email-format";
+import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
+import { formatEventPlace } from "@/lib/event-place";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
 
 // Every email is a React Email template under emails/, rendered to HTML plus
@@ -48,6 +49,45 @@ async function sendOne(to: string | string[], { subject, html, text }: BuiltEmai
   await resend.emails.send({ from: getEmailFrom(), to, subject, html, text });
 }
 
+/** Resend's batch endpoint takes at most this many messages per call. */
+const BATCH_LIMIT = 100;
+
+/**
+ * Send a set of personalised emails with one Resend call per 100 messages.
+ *
+ * Fan-outs (followers, entrants, wave changes) used to send one request per
+ * person. That held the organiser's request open for every send, and a burst
+ * over Resend's per-second limit dropped the rest with a 429. A failed chunk is
+ * logged and skipped so the next chunk still goes. Returns how many were
+ * accepted.
+ */
+export async function sendEmailBatch(
+  messages: { to: string; email: BuiltEmail }[],
+  what: string,
+): Promise<number> {
+  if (messages.length === 0) return 0;
+  const resend = getResend();
+  if (!resend) {
+    console.warn(`RESEND_API_KEY not configured — skipping ${what}`);
+    return 0;
+  }
+  const from = getEmailFrom();
+  let sent = 0;
+  for (let i = 0; i < messages.length; i += BATCH_LIMIT) {
+    const chunk = messages.slice(i, i + BATCH_LIMIT);
+    try {
+      const result = await resend.batch.send(
+        chunk.map(({ to, email: { subject, html, text } }) => ({ from, to, subject, html, text })),
+      );
+      if (result.error) throw new Error(result.error.message);
+      sent += chunk.length;
+    } catch (err) {
+      console.error(`Resend batch failed for ${what}:`, err);
+    }
+  }
+  return sent;
+}
+
 // ── Registration Confirmation ─────────────────────────────────────────────────
 export interface RegistrationEmailData {
   eventId: string;
@@ -58,7 +98,7 @@ export interface RegistrationEmailData {
   /** `HH:mm` as stored, or already formatted. */
   startTime: string;
   category: string;
-  /** Display-ready; see formatEmailPlace. */
+  /** Display-ready; see formatEventPlace. */
   location: string;
   bib?: string;
   registrationFee: string;
@@ -148,7 +188,7 @@ export async function buildEventSubmittedForReviewEmail(
       eventTitle: data.eventTitle,
       organiserName: data.organiserName,
       eventDate: formatEmailDate(data.eventDate),
-      location: formatEmailPlace({ city: data.city, state: data.state }) || null,
+      location: formatEventPlace({ city: data.city, state: data.state }) || null,
       discipline: data.discipline,
       blocker: data.blocker,
       previewUrl: adminUrl(`/admin/events/${encodeURIComponent(data.eventId)}`, siteUrl),
@@ -179,8 +219,8 @@ async function sendToEachAdmin(recipients: string[], { subject, html, text }: Bu
     return;
   }
   const from = getEmailFrom();
-  for (let i = 0; i < recipients.length; i += 100) {
-    const chunk = recipients.slice(i, i + 100);
+  for (let i = 0; i < recipients.length; i += BATCH_LIMIT) {
+    const chunk = recipients.slice(i, i + BATCH_LIMIT);
     const result = await resend.batch.send(chunk.map((to) => ({ from, to, subject, html, text })));
     if (result.error) throw new Error(`Resend error: ${result.error.message}`);
   }
@@ -253,9 +293,12 @@ export async function buildWaveUpdateEmail(
   return { subject: `Your start wave for ${data.eventTitle}`, ...rendered };
 }
 
-export async function sendWaveUpdateEmail(to: string, data: WaveUpdateEmailData) {
-  if (!getResend()) return;
-  await sendOne(to, await buildWaveUpdateEmail(to, data));
+export async function sendWaveUpdateEmails(items: { to: string; data: WaveUpdateEmailData }[]) {
+  if (items.length === 0 || !getResend()) return 0;
+  const messages = await Promise.all(
+    items.map(async ({ to, data }) => ({ to, email: await buildWaveUpdateEmail(to, data) })),
+  );
+  return sendEmailBatch(messages, "wave update emails");
 }
 
 // ── Followed organiser event live ─────────────────────────────────────────────
@@ -287,9 +330,14 @@ export async function buildFollowedOrganiserEventEmail(
   return { subject: `${data.organiserName} posted ${data.eventTitle}`, ...rendered };
 }
 
-export async function sendFollowedOrganiserEventEmail(to: string, data: FollowedOrganiserEventEmailData) {
-  if (!getResend()) return;
-  await sendOne(to, await buildFollowedOrganiserEventEmail(to, data));
+export async function sendFollowedOrganiserEventEmails(
+  items: { to: string; data: FollowedOrganiserEventEmailData }[],
+) {
+  if (items.length === 0 || !getResend()) return 0;
+  const messages = await Promise.all(
+    items.map(async ({ to, data }) => ({ to, email: await buildFollowedOrganiserEventEmail(to, data) })),
+  );
+  return sendEmailBatch(messages, "followed organiser event emails");
 }
 
 // ── Event changed (athlete) ───────────────────────────────────────────────────
@@ -327,9 +375,12 @@ export async function buildEventChangedEmail(
   return { subject: `${data.eventTitle} has changed`, ...rendered };
 }
 
-export async function sendEventChangedEmail(to: string, data: EventChangedEmailData) {
-  if (!getResend()) return;
-  await sendOne(to, await buildEventChangedEmail(data));
+export async function sendEventChangedEmails(items: { to: string; data: EventChangedEmailData }[]) {
+  if (items.length === 0 || !getResend()) return 0;
+  const messages = await Promise.all(
+    items.map(async ({ to, data }) => ({ to, email: await buildEventChangedEmail(data) })),
+  );
+  return sendEmailBatch(messages, "event changed emails");
 }
 
 // ── Edit of a published event waiting for review (admins) ─────────────────────

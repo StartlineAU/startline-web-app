@@ -7,6 +7,8 @@ import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
 import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
 import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
@@ -105,6 +107,10 @@ export async function PATCH(
       }
     }
 
+    // A real place, not spaces or symbols (#530).
+    const locationError = await checkEventLocation(data, { submit, saved: existing });
+    if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
+
     // Live events stay live after an admin edit; everything else re-enters the
     // review queue. Archived events stay archived rather than reopening.
     const submittedAs = submit
@@ -132,9 +138,9 @@ export async function PATCH(
       endDate:           data.endDate !== undefined ? data.endDate : undefined,
       startTime:         data.startTime         ?? undefined,
       endTime:           data.endTime           ?? undefined,
-      venue:             data.venue             ?? undefined,
-      address:           data.address           ?? undefined,
-      city:              data.city              ?? undefined,
+      venue:             data.venue   != null ? tidyLocationText(data.venue) : undefined,
+      address:           data.address != null ? tidyLocationText(data.address) || null : undefined,
+      city:              data.city    != null ? tidyLocationText(data.city) : undefined,
       state:             data.state             ?? undefined,
       latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
       longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),

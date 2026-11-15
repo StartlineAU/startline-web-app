@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 import { getServerSession } from "@/lib/amplify-server";
 import {
@@ -16,9 +17,11 @@ const setPasswordSchema = z.object({
 // POST /api/user/password
 // Adds a password to a profile that only has a Google or Apple sign-in. The
 // existing Cognito profile is reused, so the app account and its data stay put.
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const limited = await rateLimit(req, { prefix: "user-password", limit: 5, windowSeconds: 900, identifier: session.sub });
+  if (limited) return limited;
   if (!session.username) {
     return NextResponse.json(
       { error: "Sign-in methods cannot be managed in this environment." },

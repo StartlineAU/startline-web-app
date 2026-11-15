@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
+import { rateLimit } from "@/lib/rate-limit";
 import { idParams } from "@/lib/schemas";
 import { entryPaidCents } from "@/lib/stripe-refunds";
 
@@ -15,6 +16,8 @@ export async function POST(
 ) {
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  const limited = await rateLimit(_req, { prefix: "refund-request", limit: 10, windowSeconds: 3600, identifier: session.sub });
+  if (limited) return limited;
 
   const parsedParams = idParams.safeParse(await params);
   if (!parsedParams.success) {
