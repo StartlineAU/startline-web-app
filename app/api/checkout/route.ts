@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
+import { rateLimit } from "@/lib/rate-limit";
 import { assertMetadataBudget } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
@@ -10,6 +11,11 @@ import {
 } from "@/lib/checkout-order";
 
 export async function POST(req: NextRequest) {
+  // Every accepted request creates a Stripe PaymentIntent and holds capacity
+  // checks against the database. Turnstile stops bots; this caps one source.
+  const limited = await rateLimit(req, { prefix: "checkout", limit: 20, windowSeconds: 60 });
+  if (limited) return limited;
+
   try {
     const parsedBody = checkoutSchema.safeParse(await req.json());
     if (!parsedBody.success) {

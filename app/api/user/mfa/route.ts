@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
 import { AssociateSoftwareTokenCommand, VerifySoftwareTokenCommand, SetUserMFAPreferenceCommand, ChangePasswordCommand } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "@/lib/amplify-server";
@@ -40,9 +41,12 @@ function stepUpError(error: unknown) {
   return NextResponse.json({ error: "Could not check your password and code." }, { status: 500 });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+  // Verifying a code and changing a password both take guesses; cap them.
+  const limited = await rateLimit(req, { prefix: "user-mfa", limit: 10, windowSeconds: 900, identifier: session.sub });
+  if (limited) return limited;
 
   const parsed = mfaActionSchema.safeParse(await req.json());
   if (!parsed.success) {

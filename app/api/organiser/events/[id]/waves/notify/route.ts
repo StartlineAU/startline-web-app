@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { sendWaveUpdateEmail } from "@/lib/email";
+import { sendWaveUpdateEmails } from "@/lib/email";
 import { idParams } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -77,36 +77,42 @@ export async function POST(
     }));
 
   // Record in-app notifications and advance each athlete's last-notified marker
-  // atomically, so a re-send only ever reaches people who changed again.
+  // atomically, so a re-send only ever reaches people who changed again. One
+  // update per wave rather than per athlete: a field of 500 is a handful of
+  // statements, not 500.
+  const idsByWave = new Map<string, string[]>();
+  for (const r of changed) {
+    idsByWave.set(r.startWaveLabel!, [...(idsByWave.get(r.startWaveLabel!) ?? []), r.id]);
+  }
   await prisma.$transaction([
     ...(inAppRows.length ? [prisma.userNotification.createMany({ data: inAppRows })] : []),
-    ...changed.map((r) =>
-      prisma.registration.update({
-        where: { id: r.id },
-        data: { waveNotifiedLabel: r.startWaveLabel },
+    ...[...idsByWave].map(([label, ids]) =>
+      prisma.registration.updateMany({
+        where: { id: { in: ids } },
+        data: { waveNotifiedLabel: label },
       }),
     ),
   ]);
 
   // Best-effort email; a mail failure must never fail the request or the record.
   let emailed = 0;
-  await Promise.all(
-    changed.map(async (r) => {
-      try {
-        await sendWaveUpdateEmail(r.athleteEmail, {
+  try {
+    emailed = await sendWaveUpdateEmails(
+      changed.map((r) => ({
+        to: r.athleteEmail,
+        data: {
           athleteName: r.athleteName,
           eventTitle: event.title,
           eventId: id,
           waveLabel: r.startWaveLabel!,
           waveTime: waveTime(r.startWaveLabel!),
           eventDate: event.eventDate,
-        });
-        emailed += 1;
-      } catch {
-        /* swallow — the in-app notification is already recorded */
-      }
-    }),
-  );
+        },
+      })),
+    );
+  } catch (err) {
+    console.error("Wave update emails failed:", err);
+  }
 
   return NextResponse.json({ notified: changed.length, inApp: inAppRows.length, emailed });
 }
