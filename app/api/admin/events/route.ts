@@ -12,6 +12,7 @@ import { syncEventSchedules } from "@/lib/event-scheduler";
 import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 import { z } from "zod";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { withTicketFormat } from "@/lib/team-tickets";
 
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
@@ -127,7 +128,8 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const body = parsed.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsed.data);
   const { submit, organiserId } = body;
 
   if (!organiserId) {

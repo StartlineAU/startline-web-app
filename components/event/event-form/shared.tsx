@@ -54,13 +54,10 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   check("Description", "description", stripHtml(form.description).length > 0, "Write the event description");
   check("Tickets & prices", "tickets", form.waves.length > 0 && form.waves.every(waveIsComplete),
     "Every ticket category needs a name and a price");
-  // A Team event sells only team tickets; an Individual one sells none.
-  if (form.format === "team") {
-    check("Team tickets", "tickets", form.waves.every((w) => waveTeamSize(w) !== null),
-      "Set a team size on every ticket: this event's format is Team");
-  } else if (form.format === "individual" && form.waves.some((w) => waveTeamSize(w) !== null)) {
-    check("Team tickets", "tickets", false,
-      "Individual events cannot sell team tickets. Change the format or remove the team size");
+  // A team ticket needs a size; the format then follows from the tickets.
+  if (form.waves.some((w) => w.teamSize !== "")) {
+    check("Team tickets", "tickets", form.waves.every((w) => w.teamSize === "" || waveTeamSize(w) !== null),
+      "Give every team ticket 2 to 10 people per team");
   }
   if (form.registrationType !== "startline") {
     check("Registration link", "registration", !!form.registrationUrl.trim(), "Add your registration link");
@@ -70,7 +67,6 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
     timeOrderBad ? "Cut-off time must be after the start time" : "Set a start time");
   check("Venue address", "location", !!(form.address.trim() && form.city.trim() && form.state),
     "Add the street address, city and state");
-  check("Format", "format", !!form.format, "Choose a format");
   if (DISCIPLINE_CATS[form.discipline as Discipline]) {
     check("Divisions", "divisions", form.categories.length > 0, "Choose at least one division");
   }
@@ -107,20 +103,6 @@ export interface Wave {
 }
 
 export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "", teamSize: "" };
-
-/**
- * The tickets as they should be once the event's format changes. A Team
- * event sells only team tickets, so any ticket without a size becomes pairs
- * (the organiser can change the size); an Individual event sells none, so
- * every size is cleared. Individual & Team leaves each ticket as it is.
- * Without this, a ticket created before the format was picked stayed
- * individual on a Team event with no control to change it.
- */
-export function wavesForFormat(waves: Wave[], format: Format): Wave[] {
-  if (format === "team") return waves.map((w) => (w.teamSize === "" ? { ...w, teamSize: "2" } : w));
-  if (format === "individual") return waves.map((w) => (w.teamSize === "" ? w : { ...w, teamSize: "" }));
-  return waves;
-}
 
 /** A ticket category's team size, or null for an individual ticket. */
 export function waveTeamSize(w: Pick<Wave, "teamSize">): number | null {

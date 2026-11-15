@@ -5,9 +5,12 @@ import {
   pendingMemberName,
   pendingMemberNumbers,
   teamTierChangeError,
+  formatFromTickets,
+  ticketFormatLabel,
+  withTicketFormat,
 } from "@/lib/team-tickets";
 import { findTeamResultConflict, pickTeamResult } from "@/lib/team-results";
-import { EMPTY_WAVE, wavesForFormat } from "@/components/event/event-form/shared";
+import { formatCompetitionFormat } from "@/lib/utils";
 
 describe("teamTierChangeError (#541)", () => {
   const pairs = { label: "Pairs", price: "40", teamSize: 2 };
@@ -166,20 +169,39 @@ describe("members left for later (#541)", () => {
   });
 });
 
-describe("wavesForFormat (#541)", () => {
-  const ticket = (teamSize: string) => ({ ...EMPTY_WAVE, label: "General", price: "40", teamSize });
+describe("format from tickets (#541)", () => {
+  const solo = { label: "Solo", price: "40" };
+  const pairs = { label: "Pairs", price: "40", teamSize: 2 };
+  const squad = { label: "Squad", price: "40", teamSize: 4 };
+  const trio = { label: "Trio", price: "40", teamSize: 3 };
 
-  it("makes every ticket a team ticket when the event becomes Team", () => {
-    // The ticket made before the format was picked had no size and, on a
-    // Team event, no control to give it one.
-    expect(wavesForFormat([ticket(""), ticket("4")], "team").map((w) => w.teamSize)).toEqual(["2", "4"]);
+  it("stores individual, team or both from what the tickets are", () => {
+    expect(formatFromTickets([solo])).toBe("individual");
+    expect(formatFromTickets([pairs, squad])).toBe("team");
+    expect(formatFromTickets([solo, pairs])).toBe("both");
   });
 
-  it("clears team sizes when the event becomes Individual", () => {
-    expect(wavesForFormat([ticket("2"), ticket("")], "individual").map((w) => w.teamSize)).toEqual(["", ""]);
+  it("says Pairs for teams of two and Team for three or more", () => {
+    expect(ticketFormatLabel([solo])).toBe("Individual");
+    expect(ticketFormatLabel([pairs])).toBe("Pairs");
+    expect(ticketFormatLabel([squad])).toBe("Team");
+    expect(ticketFormatLabel([trio, squad])).toBe("Team");
   });
 
-  it("leaves each ticket alone on Individual & Team", () => {
-    expect(wavesForFormat([ticket("2"), ticket("")], "both").map((w) => w.teamSize)).toEqual(["2", ""]);
+  it("names every kind on offer when the tickets are mixed", () => {
+    expect(ticketFormatLabel([solo, pairs])).toBe("Individual & Pairs");
+    expect(ticketFormatLabel([pairs, squad])).toBe("Pairs & Team");
+    expect(ticketFormatLabel([squad, solo, pairs])).toBe("Individual, Pairs & Team");
+    expect(ticketFormatLabel([])).toBeNull();
+  });
+
+  it("writes the format into a payload that carries tickets, and leaves others alone", () => {
+    expect(withTicketFormat({ format: "individual", waves: [pairs] }).format).toBe("team");
+    expect(withTicketFormat({ format: "team", title: "Only a title" }).format).toBe("team");
+  });
+
+  it("shows the tickets' description on event pages, with the stored value as fallback", () => {
+    expect(formatCompetitionFormat("individual", [solo, pairs])).toBe("Individual & Pairs");
+    expect(formatCompetitionFormat("both")).toBe("Individual & Team");
   });
 });

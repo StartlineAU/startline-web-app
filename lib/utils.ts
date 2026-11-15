@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge";
 import { format, parseISO, isAfter, isBefore, startOfDay, addMonths, endOfMonth } from "date-fns";
 import type { UserEvent, FilterState, SortOption, ExperienceLevel } from "@/types";
 import { eventDistance } from "@/lib/distance";
+import { ticketFormatLabel } from "@/lib/team-tickets";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -32,7 +33,13 @@ export function formatTime(timeString: string): string {
   return `${hour12}:${minutes} ${ampm}`;
 }
 
-export function formatCompetitionFormat(format: string): string {
+/**
+ * The event's format for display. Given its tickets, says what they offer
+ * ("Pairs", "Individual & Team"...); the stored value is the fallback.
+ */
+export function formatCompetitionFormat(format: string, tickets?: unknown): string {
+  const fromTickets = ticketFormatLabel(tickets);
+  if (fromTickets) return fromTickets;
   if (format === "team") return "Team";
   if (format === "both") return "Individual & Team";
   return "Individual";

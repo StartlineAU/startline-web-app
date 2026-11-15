@@ -25,6 +25,7 @@ import {
   GalleryEditor, InformationEditor, PrizePoolEditor, RefundCard, RegistrationEditor,
   ReviewsPlaceholder, TicketsEditor, TitleInput, useObjectUrls,
 } from "./event-form/regions";
+import { formatFromTickets } from "@/lib/team-tickets";
 
 // Shown when an upload or the event save comes back 401. submitToApi refreshes
 // the token first, so landing here means the refresh token itself is gone.
@@ -32,7 +33,8 @@ const SESSION_EXPIRED_MESSAGE =
   "Your session has expired and nothing was saved. Please sign in again, then retry. Keep this tab open so you don't lose your event details.";
 
 /** Rows of the Event Details card, in order. Each opens in place rather than all at once. */
-const DETAIL_ROWS: RegionId[] = ["date", "time", "location", "format", "divisions", "intensity"];
+// Format is not a row to fill in: it follows the tickets (#541).
+const DETAIL_ROWS: RegionId[] = ["date", "time", "location", "divisions", "intensity"];
 const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
   date: "Date", time: "Time", location: "Location", format: "Format",
   divisions: "Divisions", intensity: "Intensity",
@@ -43,7 +45,7 @@ const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
  * are complete before their optional fields (cut-off time, venue name) are
  * reached, so moving on would cut those off.
  */
-const AUTO_ADVANCE = new Set<RegionId>(["date", "format", "intensity"]);
+const AUTO_ADVANCE = new Set<RegionId>(["date", "intensity"]);
 /** A picker or suggestion list still open inside a row: the organiser is mid-choice. */
 const OPEN_PICKER = '[aria-haspopup][aria-expanded="true"], [role="combobox"][aria-expanded="true"]';
 
@@ -372,7 +374,7 @@ export default function EventPageEditor({
         state:             form.state,
         latitude:          form.latitude,
         longitude:         form.longitude,
-        format:            form.format,
+        format:            formatFromTickets(form.waves),
         level:             form.level,
         categories:        form.categories,
         // The total of the ticket quantities, which every capacity check reads.

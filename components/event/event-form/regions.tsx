@@ -1,6 +1,6 @@
 "use client";
 
-import { MIN_TEAM_SIZE, MAX_TEAM_SIZE } from "@/lib/team-tickets";
+import { MIN_TEAM_SIZE, MAX_TEAM_SIZE, ticketFormatLabel } from "@/lib/team-tickets";
 import { useEffect, useLayoutEffect, useRef, useState, startTransition, type ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -32,7 +32,7 @@ import {
 import { STATE_LABELS } from "@/types";
 import {
   DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, FORMATS, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
-  waveTeamSize, wavesForFormat, eventCap,
+  waveTeamSize, eventCap,
   type AusState, type Discipline, type FormState, type RegionId, type Wave,
 } from "./shared";
 
@@ -513,9 +513,7 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
     update({ waves: form.waves.filter((_, j) => j !== i) });
     setExpanded(new Set());
   };
-  // A Team event only sells team tickets, so a new one starts as pairs.
-  const addWave = () => update({ waves: [...form.waves, { ...EMPTY_WAVE, teamSize: form.format === "team" ? "2" : "" }] });
-  const teamsAllowed = form.format === "team" || form.format === "both";
+  const addWave = () => update({ waves: [...form.waves, EMPTY_WAVE] });
   const toggle = (i: number) => setExpanded(prev => {
     const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next;
   });
@@ -541,12 +539,9 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
           const priceMissing = !!missing && !free && !(parseFloat(w.price) >= 0);
           const id = `ticket-${i}`;
           const teamSize = waveTeamSize(w);
-          // Shown whenever the ticket carries a size, so a leftover team ticket
-          // on an Individual event can still be switched back.
-          const showTeam = teamsAllowed || w.teamSize !== "";
-          // Every ticket on a Team event is a team ticket, even one saved
-          // before it had a size, so its size field always shows there.
-          const isTeam = form.format === "team" || w.teamSize !== "";
+          // Each ticket says who it is for. The event's format follows from
+          // the tickets, so there is nothing to pick first.
+          const isTeam = w.teamSize !== "";
           const teamSizeBad = isTeam && teamSize === null && (!!missing || w.teamSize.length > 0);
           return (
             <div key={i} data-testid="ticket-row" className="bg-dark rounded-xl border border-dark-lighter p-4 sm:p-5 space-y-4">
@@ -593,37 +588,33 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                 </TicketField>
               </div>
 
-              {showTeam && (
-                <div className="space-y-3" data-testid="ticket-team">
-                  {form.format !== "team" && (
-                    <div role="radiogroup" aria-label="Who this ticket is for" className="inline-flex rounded-md border border-dark-lighter p-0.5">
-                      {([["individual", "Individual"], ["team", "Team"]] as const).map(([v, l]) => {
-                        const on = v === "team" ? isTeam : !isTeam;
-                        return (
-                          <button key={v} type="button" role="radio" aria-checked={on}
-                            onClick={() => updateWave(i, { teamSize: v === "team" ? (w.teamSize || "2") : "" })}
-                            className={`rounded px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                              on ? "bg-primary text-darker" : "text-muted hover:text-primary"
-                            }`}>
-                            {l}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {isTeam && (
-                    <TicketField label="People per team" htmlFor={`${id}-team-size`} required className="sm:max-w-[260px]"
-                      info={`How many athletes make up one team, from ${MIN_TEAM_SIZE} to ${MAX_TEAM_SIZE}. The buyer enters every member's details at checkout.`}>
-                      <input id={`${id}-team-size`} value={w.teamSize} inputMode="numeric" placeholder="e.g. 4" aria-label="People per team"
-                        onChange={e => updateWave(i, { teamSize: e.target.value.replace(/\D/g, "").slice(0, 2) })}
-                        className={`${ticketInput} tabular-nums ${teamSizeBad ? "!border-orange-400/70" : ""}`} />
-                      {teamSizeBad && (
-                        <p className="mt-1.5 text-[12px] text-orange-300">Teams can have {MIN_TEAM_SIZE} to {MAX_TEAM_SIZE} people.</p>
-                      )}
-                    </TicketField>
-                  )}
+              <div className="space-y-3" data-testid="ticket-team">
+                <div role="radiogroup" aria-label="Who this ticket is for" className="inline-flex rounded-md border border-dark-lighter p-0.5">
+                  {([["individual", "Individual"], ["team", "Team"]] as const).map(([v, l]) => {
+                    const on = v === "team" ? isTeam : !isTeam;
+                    return (
+                      <button key={v} type="button" role="radio" aria-checked={on}
+                        onClick={() => updateWave(i, { teamSize: v === "team" ? (w.teamSize || "2") : "" })}
+                        className={`rounded px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                          on ? "bg-primary text-darker" : "text-muted hover:text-primary"
+                        }`}>
+                        {l}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+                {isTeam && (
+                  <TicketField label="People per team" htmlFor={`${id}-team-size`} required className="sm:max-w-[260px]"
+                    info={`How many athletes make up one team, from ${MIN_TEAM_SIZE} to ${MAX_TEAM_SIZE}. Two is shown to athletes as Pairs. The buyer names the first member at checkout and can add the rest later.`}>
+                    <input id={`${id}-team-size`} value={w.teamSize} inputMode="numeric" placeholder="e.g. 4" aria-label="People per team"
+                      onChange={e => updateWave(i, { teamSize: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+                      className={`${ticketInput} tabular-nums ${teamSizeBad ? "!border-orange-400/70" : ""}`} />
+                    {teamSizeBad && (
+                      <p className="mt-1.5 text-[12px] text-orange-300">Teams can have {MIN_TEAM_SIZE} to {MAX_TEAM_SIZE} people. For one person, choose Individual.</p>
+                    )}
+                  </TicketField>
+                )}
+              </div>
 
               <TicketField label={isTeam ? "Teams available" : "Tickets available"} htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
                 info={isTeam
@@ -932,22 +923,17 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
         </div>
       </EditableDetail>
 
-      <EditableDetail {...row("format")} label="Format" placeholder="Choose a format"
-        value={form.format ? <DetailValue>{formatCompetitionFormat(form.format)}</DetailValue> : null}>
-        <div className="grid grid-cols-1 gap-2">
-          {FORMATS.map(f => {
-            const on = form.format === f.v;
-            return (
-              <button key={f.v} type="button" aria-pressed={on}
-                onClick={() => update({ format: f.v, waves: wavesForFormat(form.waves, f.v) })}
-                className={optionCard(on)}>
-                <span className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{f.l}</span>
-                <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{f.d}</span>
-              </button>
-            );
-          })}
+      {/* Not chosen: it follows the tickets, each set to Individual or Team
+          under Pricing (#541). */}
+      <Region id="format">
+        <div className="-mx-3 px-3 py-2" data-testid="event-format">
+          <DetailLabel>Format</DetailLabel>
+          <DetailValue>{ticketFormatLabel(form.waves) ?? "Individual"}</DetailValue>
+          <p className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">
+            Set by your tickets
+          </p>
         </div>
-      </EditableDetail>
+      </Region>
 
       {showDivisions && (
         <EditableDetail {...row("divisions")} label="Divisions" placeholder="Choose the divisions" required={!!disciplineCats}

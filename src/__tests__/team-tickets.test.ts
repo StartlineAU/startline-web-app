@@ -159,13 +159,15 @@ describe("event payload team sizes", () => {
     expect(parsed.success).toBe(false);
   });
 
-  it("rejects team tickets on an individual event", () => {
+  // The format follows the tickets (#541): a stale "individual" is accepted
+  // here and rewritten from the tickets by withTicketFormat on save.
+  it("accepts a team ticket whatever format the payload claims", () => {
     const parsed = eventPayloadSchema.safeParse({
       ...base,
       format: "individual",
       waves: [{ label: "Pairs", price: "50", teamSize: 2 }],
     });
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
   });
 });
 
@@ -182,14 +184,21 @@ describe("listing editor team tickets", () => {
     expect(waveTeamSize(form.waves[1])).toBe(4);
   });
 
-  it("asks for a team size on every ticket of a Team event", () => {
+  it("asks for a valid size on a ticket marked Team, and nothing of individual ones", () => {
     const form = {
       ...INITIAL,
-      format: "team" as const,
-      waves: [{ ...EMPTY_WAVE, label: "General", price: "40" }],
+      waves: [
+        { ...EMPTY_WAVE, label: "Solo", price: "40" },
+        { ...EMPTY_WAVE, label: "Squad", price: "40", teamSize: "11" },
+      ],
     };
     expect(missingRequirements(form).map((r) => r.row)).toContain("Team tickets");
-    const fixed = { ...form, waves: [{ ...form.waves[0], teamSize: "2" }] };
+    const fixed = { ...form, waves: [form.waves[0], { ...form.waves[1], teamSize: "4" }] };
     expect(missingRequirements(fixed).map((r) => r.row)).not.toContain("Team tickets");
+  });
+
+  it("no longer asks for a format: it follows the tickets", () => {
+    const rows = missingRequirements({ ...INITIAL, format: "" }).map((r) => r.row);
+    expect(rows).not.toContain("Format");
   });
 });

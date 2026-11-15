@@ -378,19 +378,28 @@ test.describe("team registration", () => {
     await expect(page.getByTestId("fee-breakdown-team")).toContainText(/a team of 4 pays/i);
   });
 
-  test("choosing the Team format turns an existing ticket into a team ticket", async ({ page }) => {
+  test("each ticket is set to Individual or Team, and the format follows", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
 
-    // The first ticket exists before any format is picked.
-    const ticket = page.getByTestId("ticket-row").first();
-    await expect(ticket.getByText("Tickets available")).toBeVisible();
+    // Every ticket has the switch, with no format to choose first.
+    const format = page.getByTestId("event-format");
+    await expect(format).toContainText("Individual");
+    const first = page.getByTestId("ticket-row").first();
+    await first.getByRole("radio", { name: "Team" }).click();
 
-    await page.getByRole("button", { name: "Edit format" }).click();
-    await page.getByRole("button", { name: /Team \/ Pairs/ }).click();
+    // Two people per team reads as Pairs.
+    await expect(first.getByLabel("People per team", { exact: true })).toHaveValue("2");
+    await expect(first.getByText("Price per person")).toBeVisible();
+    await expect(first.getByText("Teams available")).toBeVisible();
+    await expect(format).toContainText("Pairs");
 
-    await expect(ticket.getByLabel("People per team", { exact: true })).toHaveValue("2");
-    await expect(ticket.getByText("Price per person")).toBeVisible();
-    await expect(ticket.getByText("Teams available")).toBeVisible();
+    // Three or more reads as Team.
+    await first.getByLabel("People per team", { exact: true }).fill("4");
+    await expect(format).toContainText("Team");
+
+    // A second, individual ticket makes it a mix.
+    await page.getByRole("button", { name: /add another ticket/i }).click();
+    await expect(format).toContainText("Individual & Team");
   });
 });

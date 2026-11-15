@@ -81,7 +81,7 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
           </div>
           <div className="flex items-center gap-2 font-headline text-[10px] font-medium uppercase tracking-widest text-muted">
             <Users className="w-3 h-3 text-primary flex-shrink-0" />
-            <span>{formatCompetitionFormat(event.format)}</span>
+            <span>{formatCompetitionFormat(event.format, event.ticketDrops)}</span>
           </div>
         </div>
 

@@ -255,3 +255,46 @@ export function pendingMemberNumbers(teams: OrderTeam[], pending: (index: number
 export function pendingMemberName(memberNumber: number): string {
   return `Team member ${memberNumber}`;
 }
+
+/**
+ * An event's format, worked out from its tickets rather than chosen: every
+ * ticket individual is "individual", every ticket a team is "team", a mix is
+ * "both". Search filters and listings still read the stored value, so every
+ * save writes it from the tickets (#541).
+ */
+export function formatFromTickets(waves: unknown): "individual" | "team" | "both" {
+  const list = Array.isArray(waves) ? waves : [];
+  const team = list.filter((w) => teamSizeOf(w as { teamSize?: unknown }) !== null).length;
+  if (team === 0) return "individual";
+  return team === list.length ? "team" : "both";
+}
+
+/**
+ * What an event's tickets offer, in words: "Individual", "Pairs" (teams of
+ * two), "Team" (three or more), or a mix such as "Individual & Pairs" or
+ * "Individual, Pairs & Team". Null when there are no tickets to read.
+ */
+export function ticketFormatLabel(waves: unknown): string | null {
+  const list = Array.isArray(waves) ? waves : [];
+  if (list.length === 0) return null;
+  const kinds = new Set<string>();
+  for (const w of list) {
+    const size = teamSizeOf(w as { teamSize?: unknown });
+    kinds.add(size === null ? "Individual" : size === 2 ? "Pairs" : "Team");
+  }
+  const ordered = ["Individual", "Pairs", "Team"].filter((k) => kinds.has(k));
+  return ordered.length === 1
+    ? ordered[0]
+    : `${ordered.slice(0, -1).join(", ")} & ${ordered[ordered.length - 1]}`;
+}
+
+/**
+ * An event payload with its format set from its tickets, when it carries
+ * tickets. Every route that saves an event runs its payload through this, so
+ * the stored format can never disagree with what is on sale.
+ */
+export function withTicketFormat<T extends { waves?: unknown; format?: string | null }>(data: T): T {
+  return Array.isArray(data.waves) && data.waves.length > 0
+    ? { ...data, format: formatFromTickets(data.waves) }
+    : data;
+}

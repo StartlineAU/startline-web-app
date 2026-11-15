@@ -100,8 +100,8 @@ export const eventPayloadSchema = z
         message: "End time must be after start time.",
       });
     }
-    // Team tickets: a whole-number team size in range, and only on an event
-    // whose format includes teams.
+    // Team tickets: a whole-number team size in range. The format is set from
+    // the tickets on save (withTicketFormat), so it never has to agree here.
     if (Array.isArray(data.waves)) {
       data.waves.forEach((w: unknown, i: number) => {
         if (!w || typeof w !== "object" || !("teamSize" in w)) return;
@@ -112,12 +112,6 @@ export const eventPayloadSchema = z
             code: z.ZodIssueCode.custom,
             path: ["waves", i, "teamSize"],
             message: `A team ticket needs between ${MIN_TEAM_SIZE} and ${MAX_TEAM_SIZE} people per team.`,
-          });
-        } else if (data.format === "individual") {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["waves", i, "teamSize"],
-            message: "An individual event cannot sell team tickets. Change the format to Team or Individual & Team.",
           });
         }
       });

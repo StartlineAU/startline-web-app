@@ -67,11 +67,6 @@ test.describe("new listing editor", () => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
 
-    await openDetail(page, "format");
-    await page.getByRole("button", { name: /individual solo athletes/i }).click();
-    await expect(page.locator("#region-intensity button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator("#region-format button[aria-expanded]").first()).toHaveAttribute("aria-expanded", "false");
-
     // A date range is not cut short: the row waits until the picker closes.
     await openDetail(page, "date");
     await page.getByText("Pick start date").click();
@@ -257,8 +252,8 @@ test.describe("new listing editor", () => {
     await openDetail(page, "location");
     await page.getByPlaceholder(/start typing an address/i).fill("1 Test St, Sydney NSW 2000");
     await page.getByPlaceholder("Sydney Olympic Park").fill("Centennial Park");
-    await openDetail(page, "format");
-    await page.getByRole("button", { name: /individual solo athletes/i }).click();
+    // No format to pick: one individual ticket makes the event Individual (#541).
+    await expect(page.getByTestId("event-format")).toContainText("Individual");
     await openDetail(page, "divisions");
     await page.getByRole("button", { name: /^10km$/i }).click();
     await openDetail(page, "intensity");

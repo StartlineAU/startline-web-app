@@ -27,6 +27,7 @@ import { notifyAdminsEventEditPending } from "@/lib/notify-event-revision";
 import {
   definedPayload, pendingRevision, publishedEditNeedsReview, queueEventRevision,
 } from "@/lib/event-revision";
+import { withTicketFormat } from "@/lib/team-tickets";
 
 export async function GET(
   _req: NextRequest,
@@ -100,7 +101,8 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const body = parsedBody.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsedBody.data);
   const { submit, ...data } = body;
 
   try {

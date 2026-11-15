@@ -19,6 +19,7 @@ import {
 import { notifyEventChange } from "@/lib/notify-event-change";
 import { supersedePendingRevision } from "@/lib/event-revision";
 import { notifyOrganiserRevisionSuperseded } from "@/lib/notify-event-revision";
+import { withTicketFormat } from "@/lib/team-tickets";
 
 const AUDIT_FIELDS = [
   "title", "discipline", "description", "eventDate", "endDate", "startTime", "endTime",
@@ -82,7 +83,8 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const body = parsedBody.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsedBody.data);
   const { submit, ...data } = body;
 
   try {

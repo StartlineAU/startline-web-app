@@ -437,7 +437,7 @@ export default function EventDetailView({
                   </div>
                   <div>
                     <DetailLabel>Format</DetailLabel>
-                    <DetailValue>{formatCompetitionFormat(event.format)}</DetailValue>
+                    <DetailValue>{formatCompetitionFormat(event.format, event.ticketDrops)}</DetailValue>
                   </div>
                   {event.categories && event.categories.length > 0 && (
                     <div>
