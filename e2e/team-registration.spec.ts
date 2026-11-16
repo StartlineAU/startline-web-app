@@ -372,6 +372,9 @@ test.describe("team registration", () => {
     await page.goto(`/organiser/new-listing?id=${PAID_TEAM_ID}`);
 
     const ticket = page.getByTestId("ticket-row").first();
+    // The editor starts on a blank individual ticket and swaps in the saved
+    // one when the event loads, which can be slow on a cold CI server.
+    await expect(ticket.getByLabel("Ticket category name")).toHaveValue("Squad", { timeout: 30000 });
     await expect(ticket.getByLabel("People per team", { exact: true })).toHaveValue("4");
     await expect(ticket.getByText("Price per person")).toBeVisible();
     await expect(ticket.getByText("Teams available")).toBeVisible();
