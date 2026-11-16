@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import Image from "next/image";
 import { MapPin, ChevronLeft, ChevronRight, Bookmark, BookmarkCheck } from "lucide-react";
+import { formatEventArea } from "@/lib/event-place";
 
 type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
 
@@ -152,7 +153,7 @@ export default function EventCarousel({ events, pinnedIds, isOrganiser, onPin }:
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1 font-headline text-[10px] text-muted uppercase tracking-widest">
                     <MapPin className="w-2.5 h-2.5 text-primary shrink-0" />
-                    {e.city}, {e.state.toUpperCase()}
+                    {formatEventArea(e.city, e.state.toUpperCase())}
                   </div>
                   {price && <span className="font-headline text-[11px] font-bold text-light">{price}</span>}
                 </div>

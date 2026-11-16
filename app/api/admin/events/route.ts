@@ -13,6 +13,8 @@ import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 import { z } from "zod";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { withTicketFormat } from "@/lib/team-tickets";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
@@ -159,6 +161,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // A real place, not spaces or symbols (#530).
+  const locationError = await checkEventLocation(body, { submit });
+  if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
+
   const eventStatus = submit ? (organiser.verified ? "APPROVED" : "PENDING") : "DRAFT";
   const times = eventTimeData({
     eventDate: body.eventDate ?? "",
@@ -187,9 +193,9 @@ export async function POST(req: NextRequest) {
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
         endTime:          body.endTime           || "",
-        venue:            body.venue             ?? "",
-        address:          body.address           ?? null,
-        city:             body.city              ?? "",
+        venue:            tidyLocationText(body.venue),
+        address:          tidyLocationText(body.address) || null,
+        city:             tidyLocationText(body.city),
         state:            body.state             ?? "",
         latitude:         body.latitude          ?? (body.city && body.state ? getEventCoords(body.city, body.state)[0] : null),
         longitude:        body.longitude         ?? (body.city && body.state ? getEventCoords(body.city, body.state)[1] : null),

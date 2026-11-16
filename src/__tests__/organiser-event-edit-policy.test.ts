@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/organiser-api-auth", () => ({
   requireOrganiser: async () => ({ error: null, session: await mocks.session() }),
 }));
+// The real-place check (#530) has its own tests; here the geocoder is out of reach.
+vi.mock("@/lib/geocode", () => ({ geocodeLookup: async () => ({ status: "unavailable" }) }));
 vi.mock("@/lib/prisma", () => {
   const client: Record<string, unknown> = {
     event: {
@@ -80,6 +82,7 @@ const submitPayload = {
   discipline: "running",
   eventDate,
   startTime: "07:00",
+  address: "Aughtie Dr, Albert Park",
   city: "Melbourne",
   state: "VIC",
   format: "Road",
@@ -222,6 +225,7 @@ describe("PATCH /api/organiser/events/[id] — change log and full-refund handsh
     format: "Road",
     level: "All levels",
     venue: "Albert Park",
+    address: "Aughtie Dr, Albert Park",
     city: "Melbourne",
     title: "Original title",
     cap: 300,

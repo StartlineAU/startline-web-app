@@ -10,6 +10,7 @@ import type { UserEvent } from "@/types";
 import { EVENT_TYPE_LABELS, STATE_LABELS } from "@/types";
 import { formatEventDate, formatTime } from "@/lib/utils";
 import { eventLngLat } from "@/lib/map-events";
+import { formatEventArea } from "@/lib/event-place";
 
 const AUSTRALIA_VIEW = {
   latitude: -25.2744,
@@ -60,7 +61,7 @@ function EventPinCard({ event, expanded }: { event: UserEvent; expanded: boolean
           {event.title}
         </p>
         <p className="font-headline text-[11px] uppercase tracking-widest text-muted">
-          {event.city}, {STATE_LABELS[event.state]}
+          {formatEventArea(event.city, STATE_LABELS[event.state])}
         </p>
         <p className="font-headline text-[11px] uppercase tracking-widest text-muted mt-1">
           {formatEventDate(event.date)}
