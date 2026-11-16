@@ -156,6 +156,21 @@ jobs:
         run: |
           # The app needs a non-empty pool and client id to build an authorize
           # URL at all; social-sign-in.spec.ts then intercepts the redirect.
-          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 &
+          #
+          # next dev restarts its server once the heap passes 80% of the limit,
+          # which it sets to half the runner's memory. Late in the suite that
+          # dropped connections mid-test (ECONNRESET, then ECONNREFUSED until it
+          # came back). A larger heap keeps it up for the whole run.
+          #
+          # The server's output only reaches the log while this step runs, so it
+          # goes to a file that the last step prints.
+          NODE_OPTIONS=--max-old-space-size=10240 NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 > dev-server.log 2>&1 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
       - run: pnpm test:e2e
+      - name: Dev server log
+        if: always()
+        shell: bash
+        run: |
+          grep -nE "memory threshold|Restarting|Error|⨯" dev-server.log | head -100 || true
+          echo "---- last 200 lines ----"
+          tail -n 200 dev-server.log || true
