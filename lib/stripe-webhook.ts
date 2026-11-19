@@ -42,9 +42,13 @@ export const STRIPE_METADATA_MAX_VALUE_CHARS = 500;
  * checkout request cleanly; discovering it from Stripe would mean an athlete
  * watching a card form die for no stated reason.
  */
+// Keys added to the PaymentIntent after checkout creates it: termsAcceptedAt,
+// written by /api/checkout/accept-terms.
+const METADATA_KEYS_ADDED_LATER = 1;
+
 export function assertMetadataBudget(meta: Record<string, string>): void {
   const keys = Object.keys(meta);
-  if (keys.length > STRIPE_METADATA_MAX_KEYS) {
+  if (keys.length > STRIPE_METADATA_MAX_KEYS - METADATA_KEYS_ADDED_LATER) {
     throw new Error(
       `PaymentIntent metadata needs ${keys.length} keys, over Stripe's limit of ${STRIPE_METADATA_MAX_KEYS}.`,
     );

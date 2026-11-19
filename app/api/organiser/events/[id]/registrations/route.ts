@@ -5,8 +5,9 @@ import { wavesWithCounts } from "@/lib/start-waves";
 import type { RegistrationStatus, Prisma } from "@prisma/client";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
-
-const STATUSES = new Set(["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "CANCELLED"]);
+import { getCapacityError } from "@/lib/registration-capacity";
+import { lockEventEntries } from "@/lib/event-entry-lock";
+import { isFreeEntry, organiserStatusChange } from "@/lib/registration-status-policy";
 
 const registrationPatchRowSchema = z.object({
   registrationId: z.string().min(1).max(255),
@@ -18,13 +19,14 @@ const registrationPatchRowSchema = z.object({
 });
 
 const registrationPatchSchema = z.object({
-  registrations: z.array(registrationPatchRowSchema).min(1),
+  // An event's whole field in one save (wave sorting) stays well under this.
+  registrations: z.array(registrationPatchRowSchema).min(1).max(5000),
 });
 
 async function assertOwnedEvent(eventId: string, organiserId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organiserId: true, waves: true, title: true },
+    select: { id: true, organiserId: true, waves: true, title: true, cap: true },
   });
   if (!event) return { error: NextResponse.json({ error: "Not found." }, { status: 404 }) };
   if (event.organiserId !== organiserId) {
@@ -68,6 +70,7 @@ export async function GET(
       checkedInAt: true,
       amountCents: true,
       platformFeeCents: true,
+      stripePaymentIntentId: true,
       refundAmountCents: true,
       refundPercent: true,
       refundRequestedAt: true,
@@ -115,6 +118,9 @@ export async function GET(
       refundRequestedAt: r.refundRequestedAt,
       refundOutsidePolicy: r.refundOutsidePolicy,
       createdAt: r.createdAt,
+      // Only a free entry's status is the organiser's to change; see
+      // lib/registration-status-policy.ts.
+      statusEditable: isFreeEntry(r),
       resultDistance: r.resultDistance,
       resultTime: r.resultTime,
       resultPlacement: r.resultPlacement,
@@ -155,7 +161,10 @@ export async function PATCH(
 
   const existing = await prisma.registration.findMany({
     where: { eventId: id },
-    select: { id: true, bibNumber: true },
+    select: {
+      id: true, bibNumber: true, status: true, waveLabel: true,
+      amountCents: true, platformFeeCents: true, stripePaymentIntentId: true,
+    },
   });
   const byId = new Map(existing.map((r) => [r.id, r]));
 
@@ -166,6 +175,8 @@ export async function PATCH(
   }
 
   const updates: { id: string; data: Prisma.RegistrationUncheckedUpdateInput }[] = [];
+  // Cancelled free entries being reinstated, which take capacity back.
+  const reinstated: { id: string; waveLabel: string | null }[] = [];
   const unmatched: string[] = [];
 
   for (const row of rows) {
@@ -216,10 +227,15 @@ export async function PATCH(
     }
 
     if ("status" in row && row.status != null) {
-      if (!STATUSES.has(row.status)) {
-        return NextResponse.json({ error: `Invalid status "${row.status}".` }, { status: 400 });
+      const current = byId.get(row.registrationId)!;
+      const decision = organiserStatusChange(current, row.status as RegistrationStatus);
+      if (!decision.ok) {
+        return NextResponse.json({ error: decision.error, code: "STATUS_LOCKED" }, { status: 403 });
       }
-      data.status = row.status as RegistrationStatus;
+      if (decision.change) {
+        data.status = row.status as RegistrationStatus;
+        if (decision.reinstating) reinstated.push({ id: row.registrationId, waveLabel: current.waveLabel });
+      }
     }
 
     if ("estimatedFinishMinutes" in row) {
@@ -235,10 +251,68 @@ export async function PATCH(
   }
 
   if (updates.length > 0) {
-    await prisma.$transaction(
-      updates.map((u) => prisma.registration.update({ where: { id: u.id }, data: u.data }))
-    );
+    const event = owned.event!;
+    const capacityError = await prisma.$transaction(async (tx) => {
+      if (reinstated.length > 0) {
+        // Reinstating takes a place, so it obeys the same cap as a new entry
+        // and the same lock as the checkout confirmation.
+        await lockEventEntries(tx, id);
+        const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
+        const requestedByWave: Record<string, number> = {};
+        for (const r of reinstated) {
+          if (r.waveLabel) requestedByWave[r.waveLabel] = (requestedByWave[r.waveLabel] ?? 0) + 1;
+        }
+        const [confirmedTotal, grouped] = await Promise.all([
+          tx.registration.count({ where: { eventId: id, status: "CONFIRMED" } }),
+          tx.registration.groupBy({
+            by: ["waveLabel"],
+            where: { eventId: id, status: "CONFIRMED" },
+            _count: { _all: true },
+          }),
+        ]);
+        const confirmedByWave: Record<string, number> = {};
+        for (const g of grouped) if (g.waveLabel) confirmedByWave[g.waveLabel] = g._count._all;
+        const error = getCapacityError({
+          cap: event.cap,
+          confirmedTotal,
+          requestedTotal: reinstated.length,
+          waves,
+          usedLabels: Object.keys(requestedByWave),
+          confirmedByWave,
+          requestedByWave,
+        });
+        if (error) return error;
+      }
+
+      for (const u of updates) {
+        // The status the decision was made against must still hold, or a refund
+        // that landed meanwhile could be overwritten.
+        const expected = byId.get(u.id)!.status;
+        const result = await tx.registration.updateMany({
+          where: { id: u.id, eventId: id, status: expected },
+          data: u.data as Prisma.RegistrationUncheckedUpdateManyInput,
+        });
+        if (result.count !== 1) throw new StaleRegistrationError();
+      }
+      return null;
+    }).catch((err: unknown) => {
+      if (err instanceof StaleRegistrationError) return STALE;
+      throw err;
+    });
+
+    if (capacityError === STALE) {
+      return NextResponse.json(
+        { error: "An entry changed while you were editing. Refresh and try again." },
+        { status: 409 },
+      );
+    }
+    if (capacityError) {
+      return NextResponse.json({ error: `Can't reinstate: ${capacityError}` }, { status: 409 });
+    }
   }
 
   return NextResponse.json({ updated: updates.length, unmatched });
 }
+
+const STALE = "__stale__";
+class StaleRegistrationError extends Error {}

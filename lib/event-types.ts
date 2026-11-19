@@ -68,7 +68,6 @@ export interface PublicEvent {
     id: string;
     orgName: string | null;
     logoUrl: string | null;
-    stripeAccountId: string | null;
     stripeOnboardingComplete: boolean;
     rating?: { average: number; count: number } | null;
   };

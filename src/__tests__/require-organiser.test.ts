@@ -74,4 +74,15 @@ describe("requireOrganiser", () => {
     expect(body.code).toBe("UNAVAILABLE");
     expect(body.error).not.toContain("organiser profile");
   });
+
+  it("answers 403 SUSPENDED for a suspended organisation", async () => {
+    mocks.getServerSession.mockResolvedValue(COGNITO);
+    mocks.resolveOrganiserSession.mockResolvedValue({ ...ORGANISER, status: "SUSPENDED" });
+
+    const auth = await requireOrganiser();
+
+    expect(auth.session).toBeNull();
+    expect(auth.error?.status).toBe(403);
+    await expect(auth.error!.json()).resolves.toMatchObject({ code: "SUSPENDED" });
+  });
 });

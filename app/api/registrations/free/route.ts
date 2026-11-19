@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
       );
     }
     const body = parsedBody.data;
+    // This endpoint commits the entry, so it is the point of acceptance.
+    if (body.acceptedTerms !== true) {
+      return NextResponse.json(
+        { error: "Accept the terms and the event waiver to register." },
+        { status: 400 },
+      );
+    }
 
     const botBlocked = await assertTurnstile(req, body, "free-registration");
     if (botBlocked) return botBlocked;
@@ -84,6 +91,7 @@ export async function POST(req: NextRequest) {
       buyerUserId,
       userIdByEmail,
       stripePaymentIntentId: null,
+      termsAccepted: true,
       rejectExistingEntries: true,
     });
 

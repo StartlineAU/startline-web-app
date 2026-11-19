@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getOrganiserSession, getAdminSession, getUserSession } from "@/lib/amplify-server";
+import { uploadOwner } from "@/lib/upload-access";
 import { matchesMagicBytes } from "@/lib/upload-magic-bytes";
 import { uploadSizeError, TYPE_MIMES, MIME_EXT, isUploadType } from "@/lib/upload-limits";
 import { s3, S3_BUCKET, S3_PUBLIC_BASE_URL, UPLOADS_USE_S3 } from "@/lib/s3";
@@ -37,10 +37,15 @@ if (
 }
 
 export async function POST(req: NextRequest) {
-  const session =
-    (await getOrganiserSession()) ??
-    (await getAdminSession()) ??
-    (await getUserSession());
+  const formData = await req.formData().catch(() => null);
+  if (!formData) return NextResponse.json({ error: "No file provided." }, { status: 400 });
+  const file = formData.get("file") as File | null;
+  const type = formData.get("type") as string;
+  if (!isUploadType(type)) {
+    return NextResponse.json({ error: "Invalid upload type." }, { status: 400 });
+  }
+
+  const session = await uploadOwner(type);
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   // Limited on its own budget rather than sharing the presign one, so a
@@ -55,14 +60,7 @@ export async function POST(req: NextRequest) {
   });
   if (blocked) return blocked;
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  const type = formData.get("type") as string;
-
   if (!file) return NextResponse.json({ error: "No file provided." }, { status: 400 });
-  if (!isUploadType(type)) {
-    return NextResponse.json({ error: "Invalid upload type." }, { status: 400 });
-  }
   if (!TYPE_MIMES[type].includes(file.type)) {
     return NextResponse.json({ error: "File type not allowed for this upload." }, { status: 400 });
   }
@@ -95,6 +93,7 @@ export async function POST(req: NextRequest) {
           Key: key,
           Body: buffer,
           ContentType: file.type,
+          ...(type === "document" ? { ContentDisposition: "attachment" } : {}),
         })
       );
       return NextResponse.json({ fileUrl: `${S3_PUBLIC_BASE_URL}/${key}` });

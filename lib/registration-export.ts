@@ -1,4 +1,5 @@
 import { calcAgeFromIsoDate } from "@/lib/registration-form";
+import { escapeCsvCell } from "@/lib/csv-cell";
 import { formatTime } from "@/lib/utils";
 
 /** Raw registration fields needed for organiser exports. */
@@ -261,12 +262,6 @@ export function mapAndSortExportRows(rows: ExportRegistrationInput[]): ExportReg
   return rows.map(toExportRow).sort(compareExportRows);
 }
 
-function escapeCsvCell(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 /** Advanced machine CSV from mapped rows. Optional column filter (Name always included). */
 export function exportRowsToCsv(

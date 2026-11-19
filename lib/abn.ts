@@ -94,3 +94,20 @@ export function hasAbn(abn: string | null | undefined): boolean {
 // all describe the same gap the same way.
 export const ABN_REQUIRED_MESSAGE =
   "An ABN is required to host paid events on Startline. Add your ABN in Payments or onboarding, or use external registration.";
+
+const ABN_WEIGHTS = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+
+/**
+ * Whether `abn` is a well-formed Australian Business Number: 11 digits that
+ * pass the ABR's checksum (subtract 1 from the first digit, weight the digits,
+ * and the sum must divide by 89). Checked when an ABN is saved. Any 9 digits
+ * used to pass, and an ABN is what lets an organisation take payments.
+ */
+export function isValidAbn(abn: string): boolean {
+  const digits = abn.replace(/\s/g, "");
+  if (!/^\d{11}$/.test(digits)) return false;
+  const values = digits.split("").map(Number);
+  values[0] -= 1;
+  const sum = values.reduce((total, digit, index) => total + digit * ABN_WEIGHTS[index], 0);
+  return sum % 89 === 0;
+}

@@ -21,7 +21,11 @@ export async function buildRegistrationsXlsx(opts: {
   const headers = excelHeadersFor(opts.columns);
   const widths = excelWidthsFor(opts.columns);
 
-  const sheetName = opts.eventTitle.slice(0, 31) || "Registrations";
+  // Excel forbids : \ / ? * [ ] in sheet names and a leading or trailing
+  // apostrophe; ExcelJS throws on them, which failed the whole export.
+  const sheetName =
+    opts.eventTitle.replace(/[:\\/?*[\]]/g, " ").replace(/^'+|'+$/g, "").trim().slice(0, 31).trim() ||
+    "Registrations";
   const sheet = workbook.addWorksheet(sheetName, {
     views: [{ state: "frozen", ySplit: 1 }],
   });

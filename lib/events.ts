@@ -1,6 +1,6 @@
 import type { EventStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { publicDiscoveryWhere } from "@/lib/event-lifecycle";
+import { ACTIVE_ORGANISER_WHERE, publicDiscoveryWhere } from "@/lib/event-lifecycle";
 import { getOrganiserRatings } from "@/lib/reviews";
 import { lowestPrice, normaliseInformationPdfs, type PublicEvent, type PublicWave } from "./event-types";
 
@@ -45,7 +45,7 @@ export async function getAllEvents() {
         feeStructure: true,
         organiserId: true,
         organiser: {
-          select: { id: true, orgName: true, logoUrl: true, stripeAccountId: true, stripeOnboardingComplete: true },
+          select: { id: true, orgName: true, logoUrl: true, stripeOnboardingComplete: true },
         },
         _count: {
           select: { registrations: true },
@@ -106,7 +106,7 @@ const publicEventSelect = {
   feeStructure: true,
   organiserId: true,
   organiser: {
-    select: { id: true, orgName: true, logoUrl: true, stripeAccountId: true, stripeOnboardingComplete: true },
+    select: { id: true, orgName: true, logoUrl: true, stripeOnboardingComplete: true },
   },
   _count: {
     select: { registrations: true },
@@ -126,6 +126,7 @@ export async function getPublicEventsByIds(ids: string[]): Promise<PublicEvent[]
       where: {
         id: { in: ids },
         status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] as EventStatus[] },
+        ...ACTIVE_ORGANISER_WHERE,
       },
       orderBy: { eventDate: "asc" },
       select: publicEventSelect,
@@ -169,7 +170,10 @@ async function findEventById(
       where: {
         OR: [{ id }, { slug: id }],
         ...(publicOnly
-          ? { status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] as EventStatus[] } }
+          ? {
+              status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] as EventStatus[] },
+              ...ACTIVE_ORGANISER_WHERE,
+            }
           : {}),
       },
       select: publicEventSelect,
@@ -199,6 +203,7 @@ export async function getOrganiserPastEvents(organiserId: string, limit = 20): P
     const events = await prisma.event.findMany({
       where: {
         organiserId,
+        ...ACTIVE_ORGANISER_WHERE,
         OR: [
           { status: "ARCHIVED" },
           { status: { in: ["APPROVED", "IN_PROGRESS"] }, endsAtUtc: { lte: now } },

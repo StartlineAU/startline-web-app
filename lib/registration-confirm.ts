@@ -1,10 +1,11 @@
 import { randomUUID } from "crypto";
-import type { RegistrationStatus } from "@prisma/client";
+import type { Prisma, RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sendRegistrationConfirmationEmail } from "@/lib/email";
 import { googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
+import { lockEventEntries } from "@/lib/event-entry-lock";
 import {
   createEmptyParticipant,
   expandCompactParticipant,
@@ -133,38 +134,54 @@ export async function findBlockingRsvpRegistration(opts: {
 }
 
 /**
- * Give every guest participant a Cognito account and a User row, so the entry
- * shows up under their account on Activity. Returns email to User id. Failures
- * are logged and skipped: a registration is never lost over account creation.
+ * Give each guest participant who has no account yet a Cognito user and a User
+ * row, so the entry shows on their Activity once they sign in. Returns email to
+ * User id for the accounts created here.
+ *
+ * Nobody checks that a guest owns the addresses they type, so an address that
+ * already has an account is left completely alone: its name, its Cognito link
+ * and its entries list are not touched, and the entry is not linked to it. The
+ * owner still sees the entry, because Activity and check-in also match entries
+ * by the account's verified email.
+ *
+ * Failures are logged and skipped: a registration is never lost over account
+ * creation.
  */
 export async function ensureParticipantUsers(
   entries: PricedEntry[],
 ): Promise<Record<string, string>> {
   const userIdByEmail: Record<string, string> = {};
+  const seen = new Set<string>();
   for (const { participant } of entries) {
     const email = normalizeEmail(participant.em);
-    if (!email || userIdByEmail[email]) continue;
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
 
-    let cognitoSub: string | null = null;
     try {
-      cognitoSub = await ensureAthleteCognitoUser(email);
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (existing) continue;
+
+      const cognitoSub = await ensureAthleteCognitoUser(email);
+      if (!cognitoSub) continue;
+
+      const name = athleteNameFromParticipant(participant);
+      const user = await prisma.user.create({
+        data: { email, name: name || undefined, cognitoSub },
+        select: { id: true },
+      });
+      userIdByEmail[email] = user.id;
     } catch (err) {
-      console.error(`Cognito creation failed for ${email}:`, err);
+      console.error("Guest account creation failed:", err);
     }
-    const name = athleteNameFromParticipant(participant);
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: { ...(cognitoSub && { cognitoSub }), name: name || undefined },
-      create: { email, name: name || undefined, ...(cognitoSub ? { cognitoSub } : {}) },
-    });
-    userIdByEmail[email] = user.id;
   }
   return userIdByEmail;
 }
 
 export type ConfirmOutcome =
-  | { ok: true; registrationIds: string[] }
-  | { ok: false; error: string; reason: "capacity" | "duplicate" };
+  // alreadyRecorded: rows for this PaymentIntent already exist (a webhook
+  // redelivery), so nothing was written and nothing should be announced.
+  | { ok: true; registrationIds: string[]; alreadyRecorded?: boolean }
+  | { ok: false; error: string; reason: "capacity" | "duplicate" | "stale" };
 
 /**
  * Write the registrations for an order.
@@ -181,6 +198,12 @@ export async function insertConfirmedRegistrations(opts: {
   /** Guest accounts created by ensureParticipantUsers, keyed by email. */
   userIdByEmail: Record<string, string>;
   stripePaymentIntentId: string | null;
+  /**
+   * Whether the athlete accepted the terms and the event waiver for this order,
+   * as recorded by the server: the free paths require it in the request, a paid
+   * order carries it on its PaymentIntent. Stored as is, never assumed.
+   */
+  termsAccepted: boolean;
   /**
    * Refuse an entry for someone who already holds one for this event. A paid
    * order is protected from double submission by its PaymentIntent, which is
@@ -201,6 +224,13 @@ export async function insertConfirmedRegistrations(opts: {
    * already been cancelled or refunded no longer blocks a fresh RSVP.
    */
   duplicateStatuses?: RegistrationStatus[];
+  /**
+   * Runs under the event lock, after the PaymentIntent idempotency check and
+   * before anything is inserted. The paid webhook re-reads the event here: a
+   * price or status change while guest accounts are being created must refuse
+   * the order, not confirm it. Return an error to abort without writing.
+   */
+  beforeInsert?: (tx: Prisma.TransactionClient) => Promise<string | null>;
 }): Promise<ConfirmOutcome> {
   const { event, organiserId, entries, buyerUserId, userIdByEmail, stripePaymentIntentId } = opts;
   const waves = Array.isArray(event.waves) ? (event.waves as { label: string; qty?: number }[]) : [];
@@ -210,6 +240,22 @@ export async function insertConfirmedRegistrations(opts: {
     : { not: "CANCELLED" as const };
 
   return prisma.$transaction(async (tx) => {
+    // Without this, concurrent confirmations both pass the capacity count below
+    // and oversell the event.
+    await lockEventEntries(tx, event.id);
+
+    // A PaymentIntent belongs to one event, so under that event's lock this
+    // check cannot race another delivery of the same payment.
+    if (stripePaymentIntentId) {
+      const recorded = await tx.registration.count({ where: { stripePaymentIntentId } });
+      if (recorded > 0) return { ok: true as const, registrationIds: [], alreadyRecorded: true };
+    }
+
+    if (opts.beforeInsert) {
+      const stale = await opts.beforeInsert(tx);
+      if (stale) return { ok: false as const, reason: "stale" as const, error: stale };
+    }
+
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({
         where: { eventId: event.id, userId: buyerUserId, status: duplicateStatus },
@@ -304,7 +350,7 @@ export async function insertConfirmedRegistrations(opts: {
           emergencyContactName: expanded.emergencyContactName,
           emergencyContactPhone: expanded.emergencyContactPhone,
           medicalNotes: expanded.medicalNotes || null,
-          waiverAccepted: true,
+          waiverAccepted: opts.termsAccepted,
           estimatedFinishMinutes: participant.eft ?? null,
           waveLabel,
           amountCents: priceCents,

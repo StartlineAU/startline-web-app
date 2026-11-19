@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getOrganiserSession, getAdminSession, getUserSession } from "@/lib/amplify-server";
+import { CopyObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { PENDING_PREFIX, servedKeyFor, uploadOwner } from "@/lib/upload-access";
 import { matchesMagicBytes } from "@/lib/upload-magic-bytes";
 import { TYPE_MIMES, isUploadType } from "@/lib/upload-limits";
 import { s3, S3_BUCKET, S3_PUBLIC_BASE_URL, UPLOADS_USE_S3 } from "@/lib/s3";
@@ -15,10 +15,15 @@ import { rateLimit } from "@/lib/rate-limit";
 const MAGIC_BYTE_RANGE = "bytes=0-15";
 
 export async function POST(req: NextRequest) {
-  const session =
-    (await getOrganiserSession()) ??
-    (await getAdminSession()) ??
-    (await getUserSession());
+  const body: { key?: unknown; type?: unknown; contentType?: unknown } = await req
+    .json()
+    .catch(() => ({}));
+  const { key, type, contentType } = body;
+  if (typeof key !== "string" || !isUploadType(type) || typeof contentType !== "string") {
+    return NextResponse.json({ error: "Invalid upload." }, { status: 400 });
+  }
+
+  const session = await uploadOwner(type);
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   // Deliberately far looser than the presign limit. By the time the browser
@@ -39,21 +44,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Direct uploads are not configured." }, { status: 400 });
   }
 
-  const body: { key?: unknown; type?: unknown; contentType?: unknown } = await req
-    .json()
-    .catch(() => ({}));
-  const { key, type, contentType } = body;
-
-  if (typeof key !== "string" || !isUploadType(type) || typeof contentType !== "string") {
-    return NextResponse.json({ error: "Invalid upload." }, { status: 400 });
-  }
   if (!TYPE_MIMES[type].includes(contentType)) {
     return NextResponse.json({ error: "File type not allowed for this upload." }, { status: 400 });
   }
-  // The presign route keys every object under the caller's own sub. Re-deriving
-  // that prefix here stops one signed-in user naming another user's object and
-  // having the failure path delete it.
-  if (key !== `uploads/${session.sub}/${type}/${key.split("/").pop()}`) {
+  // The presign route keys every object under the caller's own id in the
+  // pending prefix. Re-deriving that here stops anyone naming another caller's
+  // object, and this route only ever deletes pending objects, never a served
+  // file a listing already uses.
+  const filename = key.split("/").pop() ?? "";
+  if (!/^[0-9a-f-]{36}\.[a-z0-9]+$/.test(filename) || key !== `${PENDING_PREFIX}/${session.sub}/${type}/${filename}`) {
     return NextResponse.json({ error: "Invalid upload." }, { status: 400 });
   }
 
@@ -70,12 +69,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Upload could not be verified. Please try again." }, { status: 400 });
   }
 
-  if (!matchesMagicBytes(Buffer.from(head), contentType)) {
-    await s3
+  const discard = () =>
+    s3
       .send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: key }))
-      .catch(err => console.error("Upload verify: could not delete rejected object", { key }, err));
+      .catch(err => console.error("Upload verify: could not delete pending object", { key }, err));
+
+  if (!matchesMagicBytes(Buffer.from(head), contentType)) {
+    await discard();
     return NextResponse.json({ error: "File content does not match its type." }, { status: 400 });
   }
 
-  return NextResponse.json({ fileUrl: `${S3_PUBLIC_BASE_URL}/${key}` });
+  // Copy the checked object to where the CDN serves it. The type and, for a
+  // PDF, a download disposition are set by us here, not taken from the upload.
+  const servedKey = servedKeyFor(key);
+  try {
+    await s3.send(new CopyObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: servedKey,
+      CopySource: `${S3_BUCKET}/${encodeURI(key)}`,
+      MetadataDirective: "REPLACE",
+      ContentType: contentType,
+      ...(type === "document" ? { ContentDisposition: "attachment" } : {}),
+    }));
+  } catch (err) {
+    console.error("Upload verify: could not publish object", { key }, err);
+    return NextResponse.json({ error: "Upload could not be saved. Please try again." }, { status: 500 });
+  }
+  await discard();
+
+  return NextResponse.json({ fileUrl: `${S3_PUBLIC_BASE_URL}/${servedKey}` });
 }

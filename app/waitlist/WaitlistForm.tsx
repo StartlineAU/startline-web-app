@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import TurnstileWidget from "@/components/TurnstileWidget";
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 
 export function WaitlistForm() {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "duplicate">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -16,7 +20,7 @@ export function WaitlistForm() {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, turnstileToken: turnstileToken ?? undefined }),
       });
 
       const data = await res.json();
@@ -24,9 +28,6 @@ export function WaitlistForm() {
       if (res.ok) {
         setStatus("success");
         setEmail("");
-      } else if (res.status === 409) {
-        setStatus("duplicate");
-        setMessage(data.error ?? "You're already on the list.");
       } else {
         setStatus("error");
         setMessage(data.error || "Something went wrong. Please try again.");
@@ -75,8 +76,10 @@ export function WaitlistForm() {
       </form>
 
       <p className="waitlist-hint">Be first in line. Unsubscribe anytime.</p>
+      {/* Invisible widget: renders nothing without a site key (dev, E2E). */}
+      <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onTokenChange={setTurnstileToken} />
 
-      {(status === "error" || status === "duplicate") && (
+      {status === "error" && (
         <p className="mt-3 text-[13.5px] text-center text-red-400">
           {message}
         </p>

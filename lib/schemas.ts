@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assetUrl, documentUrl, externalUrl } from "@/lib/asset-url";
 
 // Path params — untrusted input, whitelisted before it reaches Prisma.
 export const idParams = z.object({ id: z.string().min(1).max(255) });
@@ -61,20 +62,20 @@ export const eventPayloadSchema = z
     refundPolicy: z.string().max(10000).nullable().optional(),
     registrationType: z.enum(["startline", "external"]).optional(),
     feeStructure: z.enum(["athlete", "organiser"]).optional(),
-    registrationUrl: z.string().max(2000).nullable().optional(),
+    registrationUrl: externalUrl(2000).nullable().optional(),
     accessibilityInfo: z.string().max(10000).nullable().optional(),
-    coverImageUrl: z.string().max(2000).nullable().optional(),
+    coverImageUrl: assetUrl(2000).nullable().optional(),
     informationPdfs: z
       .array(
         z.object({
-          url: z.string().max(2000),
+          url: documentUrl(2000),
           label: z.string().max(120).nullable().optional(),
           name: z.string().max(255).nullable().optional(),
         }),
       )
       .max(20)
       .optional(),
-    photos: z.array(z.string().max(3000)).optional(),
+    photos: z.array(assetUrl(3000)).max(50).optional(),
   })
   .superRefine((data, ctx) => {
     // Cross-field ordering checks (only when both values are present, so
