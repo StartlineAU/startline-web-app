@@ -3,8 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   Upload, Download,
-  AlertCircle, RefreshCw, CheckCircle2, Circle, Plus, Bell,
-  Clock, SlidersHorizontal, Trash2, FileSpreadsheet, FileText,
+  RefreshCw, CheckCircle2, Circle, Bell,
+  SlidersHorizontal, FileSpreadsheet, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
 import ResultsImportDialog from "@/components/organiser/ResultsImportDialog";
+import WaveBuilderDialog from "@/components/organiser/WaveBuilderDialog";
 import {
   DEFAULT_EXPORT_COLUMN_KEYS,
   EXPORT_COLUMNS,
@@ -34,8 +35,6 @@ import {
 import { useApiResource } from "@/hooks/useApiResource";
 import ExportMenu from "@/components/organiser/race-management/ExportMenu";
 import type { PageData, Registration, StartWave } from "@/components/organiser/race-management/types";
-
-const GENDER_CHOICES = ["Male", "Female", "Non-binary", "Other"];
 
 const STATUS_STYLE: Record<Registration["status"], string> = {
   CONFIRMED:        "bg-primary/10 text-primary border-primary/30",
@@ -302,36 +301,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     // Deep copy so edits in the builder don't mutate the loaded data.
     setBuilderWaves((data?.event.startWaves ?? []).map((w) => ({ ...w, genders: [...(w.genders ?? [])] })));
     setManageOpen(true);
-  };
-
-  const addWave = () => {
-    setBuilderWaves((waves) => {
-      const n = waves.length + 1;
-      return [...waves, {
-        id: `wave-${Date.now()}-${n}`,
-        label: `Wave ${String.fromCharCode(64 + n)}`, // Wave A, B, C…
-        startTime: "",
-        capacity: null,
-        finishMin: null, finishMax: null, genders: [], ageMin: null, ageMax: null,
-      }];
-    });
-  };
-
-  const updateWave = (waveId: string, patch: Partial<WaveDef>) => {
-    setBuilderWaves((waves) => waves.map((w) => (w.id === waveId ? { ...w, ...patch } : w)));
-  };
-
-  const removeWave = (waveId: string) => {
-    setBuilderWaves((waves) => waves.filter((w) => w.id !== waveId));
-  };
-
-  const toggleWaveGender = (waveId: string, gender: string) => {
-    setBuilderWaves((waves) => waves.map((w) => {
-      if (w.id !== waveId) return w;
-      const set = new Set(w.genders ?? []);
-      set.has(gender) ? set.delete(gender) : set.add(gender);
-      return { ...w, genders: [...set] };
-    }));
   };
 
   // Persist the wave definitions, then sort confirmed athletes into them.
@@ -919,149 +888,16 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* Wave builder: create waves with conditions + capacity, then sort athletes in */}
-      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Build start waves</DialogTitle>
-            <DialogDescription>
-              Create your start waves and set each one&apos;s time, size, and who it&apos;s for. Save to sort
-              athletes in automatically. This is separate from the ticket tiers people bought.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1 space-y-3">
-            {builderWaves.length === 0 ? (
-              <div className="text-center py-10 px-4 rounded-xl border border-dashed border-dark-lighter">
-                <p className="font-headline text-[13px] font-bold text-light mb-1">No start waves yet</p>
-                <p className="text-[12.5px] text-muted-dark mb-4">Add a wave, set who it&apos;s for, then save to seed athletes in.</p>
-                <Button variant="outline" size="sm" onClick={addWave}>
-                  <Plus className="w-4 h-4" /> Add your first wave
-                </Button>
-              </div>
-            ) : builderWaves.map((w) => {
-              const count = assignPreview?.perWave[w.label] ?? 0;
-              return (
-                <div key={w.id} className="rounded-xl border border-dark-lighter bg-dark p-3.5">
-                  {/* Name / time / capacity / remove */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <input
-                      value={w.label}
-                      onChange={(e) => updateWave(w.id, { label: e.target.value })}
-                      placeholder="Wave name"
-                      aria-label={`Wave name for ${w.label || "new wave"}`}
-                      className="flex-1 min-w-0 bg-dark-light border border-dark-lighter rounded-lg px-2.5 py-2 text-[14px] font-headline font-bold text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
-                    />
-                    <div className="flex items-center gap-1.5" title="Start time">
-                      <Clock className="w-3.5 h-3.5 text-muted-dark shrink-0" />
-                      <input
-                        type="time"
-                        value={w.startTime ?? ""}
-                        onChange={(e) => updateWave(w.id, { startTime: e.target.value })}
-                        aria-label={`Start time for ${w.label || "new wave"}`}
-                        className="bg-dark-light border border-dark-lighter rounded-lg px-2 py-2 text-[13px] text-light focus:border-primary focus:outline-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeWave(w.id)}
-                      className="shrink-0 p-2 text-muted-dark hover:text-red-400 transition-colors"
-                      aria-label={`Remove ${w.label || "wave"}`}
-                      title="Remove wave"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Conditions */}
-                  <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark mb-2">Who goes in this wave</p>
-                  <div className="grid sm:grid-cols-3 gap-2.5">
-                    <div>
-                      <label htmlFor={`${w.id}-finish-min`} className="text-[11px] text-muted-dark block mb-1">Finish time (mins)</label>
-                      <div className="flex items-center gap-1.5">
-                        <input type="number" min={0} value={w.finishMin ?? ""} placeholder="min"
-                          id={`${w.id}-finish-min`} aria-label={`Minimum finish minutes for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { finishMin: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                        <span className="text-muted-dark text-[12px]">-</span>
-                        <input type="number" min={0} value={w.finishMax ?? ""} placeholder="max"
-                          aria-label={`Maximum finish minutes for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { finishMax: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor={`${w.id}-age-min`} className="text-[11px] text-muted-dark block mb-1">Age</label>
-                      <div className="flex items-center gap-1.5">
-                        <input type="number" min={0} value={w.ageMin ?? ""} placeholder="min"
-                          id={`${w.id}-age-min`} aria-label={`Minimum age for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { ageMin: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                        <span className="text-muted-dark text-[12px]">-</span>
-                        <input type="number" min={0} value={w.ageMax ?? ""} placeholder="max"
-                          aria-label={`Maximum age for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { ageMax: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor={`${w.id}-capacity`} className="text-[11px] text-muted-dark block mb-1">Max athletes</label>
-                      <input type="number" min={0} value={w.capacity ?? ""} placeholder="Any"
-                        id={`${w.id}-capacity`} aria-label={`Maximum athletes in ${w.label || "this wave"}`}
-                        onChange={(e) => updateWave(w.id, { capacity: e.target.value === "" ? null : Number(e.target.value) })}
-                        className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                    </div>
-                  </div>
-
-                  {/* Gender + live count */}
-                  <div className="flex items-center justify-between gap-3 mt-2.5 flex-wrap">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[11px] text-muted-dark mr-0.5">Gender:</span>
-                      {GENDER_CHOICES.map((g) => {
-                        const on = (w.genders ?? []).includes(g);
-                        return (
-                          <button key={g} type="button" onClick={() => toggleWaveGender(w.id, g)}
-                            className={`px-2 py-1 rounded-md text-[11px] font-headline font-bold uppercase tracking-wide border transition-colors ${
-                              on ? "bg-primary/15 border-primary/40 text-primary" : "bg-dark-light border-dark-lighter text-muted-dark hover:text-light"
-                            }`}>
-                            {g}
-                          </button>
-                        );
-                      })}
-                      {(w.genders ?? []).length === 0 && <span className="text-[11px] text-muted-dark">any</span>}
-                    </div>
-                    <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                      <span className="text-primary font-black italic">{count}</span> athlete{count === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {builderWaves.length > 0 && (
-              <button type="button" onClick={addWave}
-                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-dark-lighter py-2.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary hover:border-primary/40 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Add another wave
-              </button>
-            )}
-          </div>
-
-          {assignPreview && builderWaves.length > 0 && assignPreview.unassigned > 0 && (
-            <p className="flex items-center gap-2 text-[12.5px] text-muted-light bg-dark border border-dark-lighter rounded-lg px-3 py-2 mt-1">
-              <AlertCircle className="w-4 h-4 text-amber-300 shrink-0" />
-              {assignPreview.unassigned} athlete{assignPreview.unassigned === 1 ? "" : "s"} match no wave and will stay unassigned.
-            </p>
-          )}
-          {assignMsg && <p className="text-[13px] text-muted-light mt-1">{assignMsg}</p>}
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setManageOpen(false)}>Close</Button>
-            <Button onClick={saveAndAssign} disabled={assignSaving || builderWaves.length === 0} className="shadow-machined">
-              {assignSaving ? "Saving…" : "Save & sort athletes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <WaveBuilderDialog
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        waves={builderWaves}
+        onWavesChange={setBuilderWaves}
+        preview={assignPreview}
+        message={assignMsg}
+        saving={assignSaving}
+        onSave={saveAndAssign}
+      />
     </div>
   );
 }

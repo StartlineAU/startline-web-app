@@ -35,6 +35,42 @@ test.describe("race management", () => {
     await expect(page.getByText("Bree Collins")).toHaveCount(0);
   });
 
+  test("wave builder keeps rules tucked away until asked for (#554)", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto(MANAGE);
+    await page.getByRole("button", { name: /manage waves/i }).click();
+
+    const dialog = page.getByRole("dialog", { name: /build start waves/i });
+    await expect(dialog).toBeVisible();
+
+    // Seeded waves are banded by finish time, so their rules open and summarise.
+    await expect(dialog.getByText("finish up to 50 min")).toBeVisible();
+    await expect(dialog.getByLabel("Minimum finish minutes for Wave A")).toBeVisible();
+
+    // A new wave shows only the essentials: name, time, size. Rules stay closed.
+    await dialog.getByRole("button", { name: /add another wave/i }).click();
+    await expect(dialog.getByLabel("Wave name for Wave D")).toBeVisible();
+    await expect(dialog.getByLabel("Maximum athletes in Wave D")).toBeVisible();
+    await expect(dialog.getByLabel("Minimum finish minutes for Wave D")).toHaveCount(0);
+    const rulesToggle = dialog.getByRole("button", { name: /add rules/i });
+    await expect(rulesToggle).toHaveAttribute("aria-expanded", "false");
+
+    // Opening rules and picking a gender updates the one-line summary.
+    await rulesToggle.click();
+    await expect(dialog.getByLabel("Minimum finish minutes for Wave D")).toBeVisible();
+    await dialog.getByRole("button", { name: "Female", exact: true }).click();
+    await expect(dialog.getByText(/^For: Female/)).toBeVisible();
+
+    // Clearing the rules puts the wave back to "Anyone".
+    // Seeded waves have rules too, so take the new (last) wave's button.
+    await dialog.getByRole("button", { name: /clear rules/i }).last().click();
+    await expect(dialog.getByText(/^For: Anyone/)).toBeVisible();
+
+    // Close without saving so the seeded waves stay as other tests expect.
+    await dialog.getByRole("button", { name: /^close$/i }).first().click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("moves an athlete into a wave in bulk", async ({ page }) => {
     await organiserLogin(page);
     // Restore the seeded state: Oscar is unassigned until this test moves him.
