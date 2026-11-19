@@ -2,21 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { isValidAbn } from "@/lib/abn";
+import { assetUrl } from "@/lib/asset-url";
 import { parseTiers } from "@/lib/refund-policy";
 import { saveOrganisationRefundPolicy } from "@/lib/organisation-refund-policy";
 
 const organiserProfileSchema = z.object({
   orgName: z.string().max(200),
   contactName: z.string().max(200),
-  contactEmail: z.string().max(255),
+  contactEmail: z.string().trim().max(255).email("Enter a valid contact email."),
   phone: z.string().max(50),
-  abn: z.string().max(20).nullable().optional(),
+  // Checked only when one is given: clearing it stays possible, and values
+  // stored before the checksum existed are not re-validated until edited.
+  abn: z
+    .string()
+    .max(20)
+    .refine((value) => value.trim() === "" || isValidAbn(value), { message: "Enter a valid 11-digit ABN." })
+    .nullable()
+    .optional(),
   bio: z.string().max(5000).nullable().optional(),
-  logoUrl: z.string().max(3000).nullable().optional(),
+  logoUrl: assetUrl().nullable().optional(),
   logoPosition: z.string().max(100).nullable().optional(),
-  coverImageUrl: z.string().max(3000).nullable().optional(),
+  coverImageUrl: assetUrl().nullable().optional(),
   coverPosition: z.string().max(100).nullable().optional(),
-  photos: z.array(z.string().max(3000)).optional(),
+  photos: z.array(assetUrl()).max(50).optional(),
   legalName: z.string().max(300).nullable().optional(),
   dob: z.string().max(20).nullable().optional(),
 });
@@ -29,9 +38,9 @@ const settingsPatchSchema = z.object({
   notifyEventApproved:   z.boolean().optional(),
   notifyEventRejected:   z.boolean().optional(),
   notifyNewRegistration: z.boolean().optional(),
-  logoUrl:        z.string().max(3000).nullable().optional(),
+  logoUrl:        assetUrl().nullable().optional(),
   logoPosition:   z.string().max(100).nullable().optional(),
-  coverImageUrl:  z.string().max(3000).nullable().optional(),
+  coverImageUrl:  assetUrl().nullable().optional(),
   coverPosition:  z.string().max(100).nullable().optional(),
   refundTiers:    z.array(z.object({
     daysBefore: z.number().int().min(0).max(3650),
@@ -110,6 +119,22 @@ export async function PUT(req: NextRequest) {
       { error: "Only an Owner can update legal identity details." },
       { status: 403 },
     );
+  }
+
+  // Event review emails go to the contact address, so changing it decides who
+  // hears from Startline on the organisation's behalf. Owner only, like the
+  // other settings that decide who is told what.
+  if (session.role !== "OWNER") {
+    const current = await prisma.organiser.findUnique({
+      where: { id: session.sub },
+      select: { contactEmail: true },
+    });
+    if ((current?.contactEmail ?? "").toLowerCase() !== contactEmail.toLowerCase()) {
+      return NextResponse.json(
+        { error: "Only an Owner can change the contact email." },
+        { status: 403 },
+      );
+    }
   }
 
   try {

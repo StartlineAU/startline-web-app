@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
+import { lockEventEntries } from "@/lib/event-entry-lock";
 import { MAX_TEAM_NAME_LENGTH, normaliseTeamName } from "@/lib/team-tickets";
 import { findTakenTeamNames, holdsTeamPlace, TEAM_HELD_STATUSES } from "@/lib/team-entries";
 import {
@@ -174,7 +175,7 @@ export async function PATCH(
     swapped = await prisma.$transaction(async (tx) => {
       // The confirm transaction takes the same lock, so a checkout cannot take
       // this name, or enter this person, between the checks and the writes.
-      await tx.$queryRaw`SELECT id FROM "events" WHERE id = ${id} FOR UPDATE`;
+      await lockEventEntries(tx, id);
 
       if (nextName) {
         if (nextName.toLowerCase() !== team.name.toLowerCase()) {

@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
 import { isFreeEvent, waveIsOpen, type PublicWave } from "@/lib/event-types";
 import { teamSizeOf } from "@/lib/team-tickets";
+import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 import {
   compactParticipant,
   athleteNameFromParticipant,
@@ -100,7 +101,8 @@ export async function POST(req: NextRequest) {
     if (blocked) return blocked;
 
     const event = await prisma.event.findUnique({
-      where: { id: body.eventId },
+      // A suspended organisation takes no new entries.
+      where: { id: body.eventId, ...ACTIVE_ORGANISER_WHERE },
       select: {
         id: true,
         title: true,
@@ -121,7 +123,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
-    if (event.status !== "APPROVED") {
+    // Same rule as checkout: closed once the event starts, whether or not the
+    // background worker has moved the row to IN_PROGRESS yet.
+    if (!registrationOpenAt(event)) {
       return NextResponse.json(
         { error: "This event is not currently accepting registrations." },
         { status: 409 },
@@ -176,6 +180,8 @@ export async function POST(req: NextRequest) {
       buyerUserId: session.sub,
       userIdByEmail: {},
       stripePaymentIntentId: null,
+      // The request schema requires acceptedTerms to be true.
+      termsAccepted: true,
       rejectExistingEntries: true,
       rejectExistingUserEntries: true,
       duplicateStatuses: RSVP_DUPLICATE_STATUSES,

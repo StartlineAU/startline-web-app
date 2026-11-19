@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   paymentIntentCreate: vi.fn(),
   registrationFindUnique: vi.fn(),
   userNotificationCreate: vi.fn(),
-  queryRaw: vi.fn(async (_sql: TemplateStringsArray, ..._values: unknown[]) => []),
+  executeRaw: vi.fn(async (_sql: TemplateStringsArray, ..._values: unknown[]) => 0),
 }));
 
 const prismaMock = vi.hoisted(() => {
@@ -36,7 +36,8 @@ const prismaMock = vi.hoisted(() => {
     organiser: { findUnique: async () => ({ notifyNewRegistration: true }) },
     notification: { create: mocks.notificationCreate },
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
-    $queryRaw: mocks.queryRaw,
+    // The per-event advisory lock the confirm transaction takes first.
+    $executeRaw: mocks.executeRaw,
   };
   return client;
 });
@@ -99,6 +100,8 @@ const post = (handler: (req: NextRequest) => Promise<Response>, path: string, bo
 
 const pairOrder = (over: Record<string, unknown> = {}) => ({
   eventId: "evt-team",
+  // The free path refuses an order without it; checkout ignores it.
+  acceptedTerms: true,
   teams: [{ name: "Fast Feet" }],
   participants: [
     { ...person(1), waveLabel: "Pairs", team: 0 },
@@ -207,21 +210,21 @@ describe("free team registration (#541)", () => {
     expect(emails[0][1].team).toBe("Fast Feet (team of 2)");
   });
 
-  it("locks the event row before checking team names and capacity", async () => {
+  it("locks the event before checking team names and capacity", async () => {
     mocks.eventFindUnique.mockResolvedValue(freeTeamEvent());
     const res = await post(registerFree, "/api/registrations/free", pairOrder());
     expect(res.status).toBe(200);
 
     // Two confirms for one event must not both pass the name and capacity
     // checks, so the lock is the first thing the transaction does.
-    expect(mocks.queryRaw).toHaveBeenCalled();
-    const sql = mocks.queryRaw.mock.calls[0][0].join("?");
-    expect(sql).toMatch(/FOR UPDATE/);
+    expect(mocks.executeRaw).toHaveBeenCalled();
+    const sql = mocks.executeRaw.mock.calls[0][0].join("?");
+    expect(sql).toMatch(/pg_advisory_xact_lock/);
     // The order resolver checks names once up front, outside the transaction;
     // the authoritative check is the last one, and it runs under the lock.
     const nameChecks = mocks.teamFindMany.mock.invocationCallOrder;
-    expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(nameChecks[nameChecks.length - 1]);
-    expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mocks.executeRaw.mock.invocationCallOrder[0]).toBeLessThan(nameChecks[nameChecks.length - 1]);
+    expect(mocks.executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.registrationCreateMany.mock.invocationCallOrder[0],
     );
   });

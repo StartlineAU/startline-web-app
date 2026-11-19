@@ -147,6 +147,8 @@ export default function OrganisationSection() {
   const [saved,     setSaved]     = useState(false);
   const [error,     setError]     = useState("");
   const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
+  // Only an owner can change the contact email; the server enforces it too.
+  const [isOwner,   setIsOwner]   = useState(false);
   const logoRef  = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
 
@@ -159,6 +161,7 @@ export default function OrganisationSection() {
       .then(data => {
         if (cancelled) return;
         if (!data) { setLoadState("failed"); return; }
+        setIsOwner(data.role === "OWNER");
         setForm({
           orgName:       data.orgName       ?? "",
           bio:           data.bio           ?? "",
@@ -338,8 +341,14 @@ export default function OrganisationSection() {
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
                 <input id="settings-org-email" className={`${inputCls} pl-9`} type="email" value={form.contactEmail}
+                  readOnly={!isOwner} aria-describedby={isOwner ? undefined : "settings-org-email-note"}
                   onChange={e => patch({ contactEmail: e.target.value })} placeholder="events@yourorg.com.au" />
               </div>
+              {!isOwner && (
+                <p id="settings-org-email-note" className="text-[12px] text-muted-dark mt-1.5">
+                  Only an Owner can change the contact email.
+                </p>
+              )}
             </div>
             <div>
               <FieldLabel label="Contact phone" required htmlFor="settings-org-phone" />

@@ -8,6 +8,7 @@ import {
 import prisma from "@/lib/prisma";
 import { getServerSession, getUserSession } from "@/lib/amplify-server";
 import { canChangeEmail } from "@/lib/sign-in-methods";
+import { sendAccountSecurityNotice } from "@/lib/email";
 import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
@@ -97,6 +98,8 @@ export async function POST(req: NextRequest) {
 
     const previous = session.email;
     await prisma.user.update({ where: { id: session.sub }, data: { email } });
+    // The old address is the one the owner still reads if this was not them.
+    await sendAccountSecurityNotice(previous, `Your sign-in email was changed to ${email}.`);
     // An organisation records its creator's login email and is notified on it.
     // Best effort: it is unique, so it stays put if the new address is taken.
     await prisma.organiser

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { lockEventEntries } from "@/lib/event-entry-lock";
 import { getUserSession } from "@/lib/amplify-server";
 import { idParams } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
@@ -137,7 +138,7 @@ export async function POST(
     await prisma.$transaction(async (tx) => {
       // The confirm transaction takes the same lock, so a checkout cannot
       // enter this person between the check and the write.
-      await tx.$queryRaw`SELECT id FROM "events" WHERE id = ${registration.eventId} FOR UPDATE`;
+      await lockEventEntries(tx, registration.eventId);
 
       const updated = await tx.registration.updateMany({
         where: { id: registration.id, detailsPending: true, status: { in: TEAM_HELD_STATUSES } },

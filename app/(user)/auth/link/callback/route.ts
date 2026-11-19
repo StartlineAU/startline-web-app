@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { getServerSession } from "@/lib/amplify-server";
+import { sendAccountSecurityNotice } from "@/lib/email";
 import {
   completeProviderLink,
-  getSignInMethods,
   SignInMethodError,
 } from "@/lib/cognito-sign-in-methods";
 import {
@@ -70,10 +70,9 @@ export async function GET(req: NextRequest) {
   if (!session?.username) return failure(req, returnTo, "unavailable");
 
   try {
-    // An account with an authenticator app is only linked with the grant that the
-    // password-and-code check issued, and only for this state and person.
-    const current = await getSignInMethods(session.username, enabledSocialProviders());
-    if (current.mfaRequired && !verifyLinkGrant(store.get(LINK_COOKIES.grant)?.value, {
+    // Only linked with the grant that the proof in /api/user/sign-in-methods
+    // issued, and only for this state and person.
+    if (!verifyLinkGrant(store.get(LINK_COOKIES.grant)?.value, {
       state,
       sub: session.sub,
       provider,
@@ -111,6 +110,10 @@ export async function GET(req: NextRequest) {
       resultEmail: typeof payload.email === "string" ? payload.email : undefined,
       enabledProviders: enabledSocialProviders(),
     });
+    await sendAccountSecurityNotice(
+      session.email,
+      `${provider === "google" ? "Google" : "Apple"} sign-in was connected to your account.`,
+    );
 
     return success(req, returnTo, provider);
   } catch (error) {

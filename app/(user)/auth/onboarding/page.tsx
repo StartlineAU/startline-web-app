@@ -10,14 +10,14 @@ import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import { calcAge, MIN_AGE } from "@/lib/age";
 import { validateUsername } from "@/lib/username-validation";
+import { safeReturnPath } from "@/lib/safe-return-path";
 
 // First sign-in through Google or Apple lands here. The modal's sign-up flow
 // asks for these before it creates the account; a provider sign-up never saw
 // that step, so without this the age gate and terms are simply skipped.
 
 function safeReturnTo(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/auth/")) return "/";
-  return value;
+  return safeReturnPath(value, { blockedPrefixes: ["/auth/"] });
 }
 
 function OnboardingForm() {

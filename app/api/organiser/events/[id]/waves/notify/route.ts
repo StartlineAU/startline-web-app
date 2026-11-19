@@ -31,12 +31,23 @@ export async function POST(
   if (auth.error) return auth.error;
   const session = auth.session;
 
-  const blocked = await rateLimit(_req, {
-    prefix: "wave-notify",
-    limit: 5,
-    windowSeconds: 60,
-    identifier: session.sub,
-  });
+  // Every notify emails athletes, so it fails closed, and an organisation gets
+  // a daily allowance as well as the per-minute one.
+  const blocked =
+    (await rateLimit(_req, {
+      prefix: "wave-notify",
+      limit: 5,
+      windowSeconds: 60,
+      identifier: session.sub,
+      failClosed: true,
+    })) ??
+    (await rateLimit(_req, {
+      prefix: "wave-notify-day",
+      limit: 20,
+      windowSeconds: 24 * 60 * 60,
+      identifier: session.sub,
+      failClosed: true,
+    }));
   if (blocked) return blocked;
 
   const parsedParams = idParams.safeParse(await params);
