@@ -29,6 +29,11 @@ import {
   formatCompetitionFormat, formatDiscipline, formatEventDate, formatEventDateRange, formatLevel, formatLongDate,
 } from "@/lib/utils";
 import { STATE_LABELS } from "@/types";
+import OrganiserContactDetails from "@/components/OrganiserContactDetails";
+import {
+  CONTACT_FIELDS, NO_CONTACT_OVERRIDE, effectiveVisibility,
+  type ContactField, type ContactVisibility, type OrganiserContact,
+} from "@/lib/organiser-contact";
 import {
   DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, FORMATS, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
   type AusState, type Discipline, type FormState, type RegionId, type Wave,
@@ -685,6 +690,87 @@ export function GalleryEditor({ form, update, photoSrcs }: Props & { photoSrcs: 
         )}
       </div>
       {error && <p className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">{error}</p>}
+    </div>
+  );
+}
+
+/** The organisation's contact details and its setting for which to show. */
+export type OrganiserContactDefaults = {
+  details: OrganiserContact;
+  visibility: ContactVisibility;
+};
+
+/**
+ * Which organiser contact details this event shows, between the gallery and
+ * reviews where athletes will see them. Each starts on the organisation's
+ * setting; a tap sets it for this event only.
+ *
+ * `organisation` is absent in the admin portal, which edits on behalf of an
+ * organisation whose details it does not load here: the switches still work,
+ * there is just no preview.
+ */
+export function ContactEditor({ form, update, organisation }: Props & { organisation?: OrganiserContactDefaults }) {
+  const base = organisation?.visibility ?? { name: true, email: true, phone: false };
+  const shown = effectiveVisibility(base, form.contactShow);
+  const overridden = CONTACT_FIELDS.some(({ field }) => form.contactShow[field] !== null);
+  const toggle = (field: ContactField) => {
+    const next = !shown[field];
+    // Back on the organisation's value means following it again, so a later
+    // change in Settings still reaches this event.
+    update({ contactShow: { ...form.contactShow, [field]: next === base[field] ? null : next } });
+  };
+  const preview: OrganiserContact | null = organisation ? {
+    name:  shown.name  ? organisation.details.name  : null,
+    email: shown.email ? organisation.details.email : null,
+    phone: shown.phone ? organisation.details.phone : null,
+  } : null;
+  const hasPreview = !!preview && !!(preview.name || preview.email || preview.phone);
+
+  return (
+    <div id="region-contact" data-testid="contact-editor">
+      <SectionHeading info={
+        <InfoTip label="Contact the organiser">
+          Athletes see these on this page and on their ticket. They come from your organisation&apos;s
+          contact details in Settings, which also sets what shows by default.
+        </InfoTip>
+      }>
+        Contact the organiser
+      </SectionHeading>
+      <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Contact details to show">
+        {CONTACT_FIELDS.map(({ field, label }) => {
+          const value = organisation?.details[field];
+          return (
+            <button key={field} type="button" aria-pressed={shown[field]} onClick={() => toggle(field)}
+              className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest transition-colors ${
+                shown[field]
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-dark-lighter text-muted hover:border-primary/40 hover:text-light"
+              }`}>
+              {shown[field] ? <Check className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              {label}
+              {organisation && !value && <span className="text-muted-dark font-medium normal-case tracking-normal">not set</span>}
+            </button>
+          );
+        })}
+      </div>
+      {hasPreview ? (
+        <OrganiserContactDetails contact={preview!} inert />
+      ) : (
+        <p className="rounded-xl border border-dashed border-dark-lighter px-5 py-4 font-headline text-[11px] uppercase tracking-widest text-muted">
+          {organisation ? "No contact details are shown on this event." : "Uses the organisation's contact details."}
+        </p>
+      )}
+      <p className="mt-2 font-headline text-[10px] uppercase tracking-widest text-muted-dark">
+        {overridden ? (
+          <>
+            Set for this event ·{" "}
+            <button type="button" onClick={() => update({ contactShow: NO_CONTACT_OVERRIDE })}
+              className="text-muted hover:text-primary underline underline-offset-2">
+              Use organisation setting
+            </button>
+          </>
+        ) : "Following your organisation's setting"}
+      </p>
     </div>
   );
 }

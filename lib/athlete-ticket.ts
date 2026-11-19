@@ -1,6 +1,10 @@
 import prisma from "@/lib/prisma";
 import type { UserSession } from "@/lib/amplify-server";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { getOrganiserRatings, type OrganiserRating } from "@/lib/reviews";
+import {
+  eventContactSelect, organiserContactSelect, resolveOrganiserContact, type OrganiserContact,
+} from "@/lib/organiser-contact";
 
 /** How many of the organiser's announcements the ticket shows, newest first. */
 export const TICKET_ANNOUNCEMENT_LIMIT = 3;
@@ -45,7 +49,15 @@ export type AthleteTicket = {
     city: string;
     state: string;
     coverImageUrl: string | null;
-    organiser: { id: string; orgName: string | null; logoUrl: string | null };
+    organiser: {
+      id: string;
+      orgName: string | null;
+      logoUrl: string | null;
+      /** Published reviews only, as on the event page. Null before the first. */
+      rating: OrganiserRating | null;
+      /** Only the details the organiser chose to show; null when none. */
+      contact: OrganiserContact | null;
+    };
   };
   entries: TicketEntry[];
   announcements: TicketAnnouncement[];
@@ -111,7 +123,8 @@ export async function loadAthleteTicket(
       city: true,
       state: true,
       coverImageUrl: true,
-      organiser: { select: { id: true, orgName: true, logoUrl: true } },
+      ...eventContactSelect,
+      organiser: { select: { id: true, orgName: true, logoUrl: true, ...organiserContactSelect } },
       registrations: {
         where: {
           status: { in: ["CONFIRMED", "REFUND_REQUESTED", "REFUNDED"] },
@@ -142,9 +155,23 @@ export async function loadAthleteTicket(
 
   if (!event || event.registrations.length === 0) return null;
 
-  const { registrations, announcements, ...rest } = event;
+  // The raw contact columns stop here: the ticket carries only what resolves.
+  const {
+    registrations, announcements, organiser,
+    showContactName, showContactEmail, showContactPhone, ...rest
+  } = event;
+  const ratings = await getOrganiserRatings([organiser.id]);
   return {
-    event: rest,
+    event: {
+      ...rest,
+      organiser: {
+        id: organiser.id,
+        orgName: organiser.orgName,
+        logoUrl: organiser.logoUrl,
+        rating: ratings.get(organiser.id) ?? null,
+        contact: resolveOrganiserContact(organiser, { showContactName, showContactEmail, showContactPhone }),
+      },
+    },
     entries: registrations.map((row) => toTicketEntry(row, event.startTime)),
     // Bodies are sanitised on write; sanitising again on read means a row
     // written before that rule, or by hand, still cannot inject markup.

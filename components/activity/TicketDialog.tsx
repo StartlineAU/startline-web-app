@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Clock, MapPin, Megaphone } from "lucide-react";
+import { ArrowRight, CalendarDays, Clock, MapPin, Megaphone, MessageCircle } from "lucide-react";
 import type { AthleteTicket, TicketAnnouncement, TicketEntry } from "@/lib/athlete-ticket";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import { formatEventDateRange, formatTime } from "@/lib/utils";
@@ -11,6 +11,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import OrganiserIdentity from "@/components/OrganiserIdentity";
+import OrganiserContactDetails from "@/components/OrganiserContactDetails";
 import { useApiResource } from "@/hooks/useApiResource";
 import { CheckInAction, withdrawnCopy, type RegMeta } from "@/components/activity/registration-meta";
 
@@ -115,21 +117,30 @@ export default function TicketDialog({
                 ))}
               </ul>
               <Announcements ticket={ticket} />
+              <ContactSection ticket={ticket} />
             </>
           )}
         </div>
 
         {ticket && (
           <div className="flex items-center justify-between gap-3 border-t border-dark-lighter px-5 py-3">
-            <span className="truncate font-headline text-[10px] font-bold uppercase tracking-widest text-muted">
-              {ticket.event.organiser.orgName ?? "Organiser"}
-            </span>
+            {/* Same identity block as the event page's Organiser section. */}
+            <OrganiserIdentity
+              organiserId={ticket.event.organiser.id}
+              name={ticket.event.organiser.orgName ?? "Organiser"}
+              logoUrl={ticket.event.organiser.logoUrl}
+              rating={ticket.event.organiser.rating}
+              action="View profile"
+              className="min-w-0"
+            />
             <Link
               href={`/events/${ticket.event.id}`}
               data-testid="ticket-event-link"
-              className="inline-flex shrink-0 items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors"
+              // Same pill as "Back to Events" on the event page (#309), so every
+              // link that leaves the screen looks like the same control.
+              className="inline-flex shrink-0 items-center gap-2 font-headline text-xs font-bold uppercase tracking-widest border border-dark-lighter text-light hover:border-primary hover:text-primary px-4 py-2 rounded-full transition-colors"
             >
-              Event page <ArrowRight className="w-3 h-3" />
+              Event page <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         )}
@@ -256,6 +267,23 @@ function EntryRow({
         </div>
       )}
     </li>
+  );
+}
+
+/** Only what the organiser chose to show; nothing at all when they show none. */
+function ContactSection({ ticket }: { ticket: TicketJson }) {
+  const contact = ticket.event.organiser.contact;
+  if (!contact) return null;
+  return (
+    <section aria-labelledby="ticket-contact" data-testid="ticket-contact" className="border-t border-dark-lighter px-5 py-4">
+      <h3
+        id="ticket-contact"
+        className="inline-flex items-center gap-2 font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary"
+      >
+        <MessageCircle className="w-3.5 h-3.5" strokeWidth={2.4} /> Contact the organiser
+      </h3>
+      <OrganiserContactDetails contact={contact} compact className="mt-3" />
+    </section>
   );
 }
 

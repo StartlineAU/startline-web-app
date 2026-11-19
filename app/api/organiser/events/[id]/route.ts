@@ -208,6 +208,10 @@ export async function PATCH(
       coverImageUrl:     data.coverImageUrl     ?? undefined,
       informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
       photos:            Array.isArray(data.photos) ? data.photos : undefined,
+      // Undefined leaves the choice alone; null hands it back to the organisation.
+      showContactName:   data.showContactName,
+      showContactEmail:  data.showContactEmail,
+      showContactPhone:  data.showContactPhone,
     };
 
     // ── Change log and the material-change handshake ──────────────────────

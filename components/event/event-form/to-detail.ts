@@ -68,5 +68,7 @@ export function formToDetailData(form: FormState, media: FormMedia): EventDetail
     organiserName: "",
     organiserRating: null,
     organiserReviews: [],
+    // The editor fills the contact region through its own slot.
+    organiserContact: null,
   };
 }

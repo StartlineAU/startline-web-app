@@ -2,6 +2,10 @@ import { getEventByIdForAdmin, getPublicEventById } from "@/lib/events";
 import { parsePrizePool, type PrizePool } from "@/lib/prize-pool";
 import { averageOverallRating, getPublishedOrganiserReviews, type OrganiserRating, type PublicReview } from "@/lib/reviews";
 import { toUserEvent } from "@/lib/user-events";
+import prisma from "@/lib/prisma";
+import {
+  eventContactSelect, organiserContactSelect, resolveOrganiserContact, type OrganiserContact,
+} from "@/lib/organiser-contact";
 import type { UserEvent } from "@/types";
 
 /**
@@ -16,6 +20,8 @@ export type EventDetailData = {
   organiserName: string;
   organiserRating: OrganiserRating | null;
   organiserReviews: PublicReview[];
+  /** Only the details the organiser chose to show; null when they show none. */
+  organiserContact: OrganiserContact | null;
 };
 
 export async function getEventDetail(
@@ -38,9 +44,27 @@ export async function getEventDetail(
 
   return {
     event,
+    organiserContact: await loadOrganiserContact(event.id),
     prizePool: parsePrizePool(found.extras),
     organiserName: event.organizer ?? event.organiser?.orgName ?? "Organiser",
     organiserRating,
     organiserReviews,
   };
+}
+
+/**
+ * Read apart from the public event select on purpose: that shape is what the
+ * listing APIs send to the browser, and the raw contact columns, hidden ones
+ * included, must never travel with it.
+ */
+async function loadOrganiserContact(eventId: string): Promise<OrganiserContact | null> {
+  try {
+    const row = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { ...eventContactSelect, organiser: { select: organiserContactSelect } },
+    });
+    return row ? resolveOrganiserContact(row.organiser, row) : null;
+  } catch {
+    return null;
+  }
 }

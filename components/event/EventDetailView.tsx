@@ -6,6 +6,7 @@ import BackToEventsLink from "@/components/event/BackToEventsLink";
 import EventGallery from "@/components/EventGallery";
 import EventReviewsSection from "@/components/EventReviewsSection";
 import OrganiserIdentity from "@/components/OrganiserIdentity";
+import OrganiserContactDetails from "@/components/OrganiserContactDetails";
 import SaveEventButton from "@/components/SaveEventButton";
 import ShareEventButton from "@/components/ShareEventButton";
 import { Button } from "@/components/ui/button";
@@ -114,7 +115,7 @@ export function PrizePoolCard({ amount, details, children }: { amount: string; d
  */
 export type EventDetailSlots = Partial<Record<
   | "bannerMedia" | "bannerOverlay" | "discipline" | "title" | "meta" | "topLink"
-  | "overview" | "prizePool" | "pricing" | "gallery" | "reviews"
+  | "overview" | "prizePool" | "pricing" | "gallery" | "contact" | "reviews"
   | "actions" | "details" | "information" | "refund" | "footer"
   /** The editor's info bubbles beside headings that stay in this file. */
   | "overviewInfo" | "detailsInfo",
@@ -152,7 +153,7 @@ export default function EventDetailView({
   mode?: "public" | "edit";
   slots?: EventDetailSlots;
 }) {
-  const { event, prizePool, organiserName, organiserRating, organiserReviews } = data;
+  const { event, prizePool, organiserName, organiserRating, organiserReviews, organiserContact } = data;
   const isPanel = variant === "panel";
   const inert = mode !== "public";
 
@@ -322,6 +323,14 @@ export default function EventDetailView({
               <div>
                 <SectionHeading>Gallery</SectionHeading>
                 <EventGallery images={event.photos} title={event.title} />
+              </div>
+            ))}
+
+            {/* Only what the organiser chose to show, resolved on the server. */}
+            {slot(slots, "contact", () => organiserContact && (
+              <div>
+                <SectionHeading>Contact the organiser</SectionHeading>
+                <OrganiserContactDetails contact={organiserContact} inert={inert} />
               </div>
             ))}
 
