@@ -73,6 +73,9 @@ test.afterAll(async () => {
 
 test.describe("finished events for organisers", () => {
   test("open the dashboard on results instead of locking the organiser out", async ({ page }) => {
+    // Three cold dev-server compiles in one test (status page, dashboard,
+    // race-management panel): CI routinely spends most of 45s on them.
+    test.slow();
     await organiserLogin(page);
     const { id } = await createFinishedEvent(page, `E2E Finished ${Date.now()}`);
 
@@ -82,13 +85,13 @@ test.describe("finished events for organisers", () => {
 
     // The status page sends a finished event on to its dashboard.
     await page.goto(`/organiser/events/${id}`);
-    await expect(page).toHaveURL(new RegExp(`/organiser/events/${id}/dashboard`));
+    await expect(page).toHaveURL(new RegExp(`/organiser/events/${id}/dashboard`), { timeout: 45_000 });
     await expect(page.getByText("This event is complete")).toBeVisible();
     await expect(page.getByRole("button", { name: /Check-in QR/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New announcement" })).toHaveCount(0);
 
     await page.getByRole("button", { name: /Enter results/ }).click();
-    await expect(page.getByRole("button", { name: /Import results/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Import results/ })).toBeVisible({ timeout: 30_000 });
   });
 
   test("still accept results", async ({ page }) => {
@@ -143,7 +146,7 @@ test.describe("athlete race history", () => {
     ]);
     await page.goto("/profile");
 
-    await expect(page.getByRole("heading", { name: "Upcoming" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upcoming", exact: true })).toBeVisible();
     const card = page.getByRole("link", { name: new RegExp(title) });
     await expect(card).toContainText("Upcoming");
     await expect(card).not.toContainText("Completed");
