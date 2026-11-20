@@ -57,13 +57,14 @@ test.describe("race management", () => {
 
     // Opening rules and picking a gender updates the one-line summary.
     await rulesToggle.click();
-    await expect(dialog.getByLabel("Minimum finish minutes for Wave D")).toBeVisible();
-    await dialog.getByRole("button", { name: "Female", exact: true }).click();
+    // Seeded waves A-C have their rules open too, so scope to Wave D's panel.
+    const waveDRules = dialog.getByRole("group", { name: "Rules for Wave D" });
+    await expect(waveDRules.getByLabel("Minimum finish minutes for Wave D")).toBeVisible();
+    await waveDRules.getByRole("button", { name: "Female", exact: true }).click();
     await expect(dialog.getByText(/^For: Female/)).toBeVisible();
 
     // Clearing the rules puts the wave back to "Anyone".
-    // Seeded waves have rules too, so take the new (last) wave's button.
-    await dialog.getByRole("button", { name: /clear rules/i }).last().click();
+    await waveDRules.getByRole("button", { name: /clear rules/i }).click();
     await expect(dialog.getByText(/^For: Anyone/)).toBeVisible();
 
     // Close without saving so the seeded waves stay as other tests expect.

@@ -210,7 +210,11 @@ function WaveCard({
       </div>
 
       {rulesOpen && (
-        <div id={rulesId} className="mt-3 pt-3 border-t border-dark-lighter space-y-3">
+        <div
+          id={rulesId}
+          role="group"
+          aria-label={`Rules for ${name}`}
+          className="mt-3 pt-3 border-t border-dark-lighter space-y-3">
           <p className="text-[11.5px] text-muted-dark">
             Optional. Leave a rule blank and anyone can go in this wave.
           </p>
