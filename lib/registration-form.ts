@@ -55,6 +55,13 @@ export interface CompactParticipant {
   wav?: string;
   /** Estimated finish time in whole minutes. */
   eft?: number;
+  /** Index of this participant's team in the order, on a team ticket. */
+  tm?: number;
+  /**
+   * A team place bought without its member's details ("add later"). The other
+   * fields are blank apart from `em`, which is the buyer's.
+   */
+  pnd?: 1;
 }
 
 /**

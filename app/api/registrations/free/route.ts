@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
 import { rateLimit } from "@/lib/rate-limit";
 import {
   checkoutSchema,
+  compactOrderParticipant,
   isOrderFailure,
   resolveCheckoutOrder,
 } from "@/lib/checkout-order";
@@ -69,15 +69,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { event, participants, waveLabels, wavePricing } = order;
+    const { event, participants, waveLabels, wavePricing, teams } = order;
 
     const entries: PricedEntry[] = participants.map((participant, index) => {
       const label = waveLabels[index];
       return {
-        participant: { ...compactParticipant(participant), wav: label },
+        participant: { ...compactOrderParticipant(participant), wav: label },
         waveLabel: label,
         priceCents: wavePricing[label].p,
         platformFeeCents: wavePricing[label].f,
+        team: participant.team,
       };
     });
 
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       stripePaymentIntentId: null,
       termsAccepted: true,
       rejectExistingEntries: true,
+      teams,
     });
 
     // Both a full event and an entry that already exists are conflicts with the
@@ -101,7 +103,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: outcome.error }, { status: 409 });
     }
 
-    await announceRegistrations(event, event.organiser.id, entries);
+    await announceRegistrations(event, event.organiser.id, entries, teams, outcome.registrationIds);
 
     return NextResponse.json({
       registrationIds: outcome.registrationIds,

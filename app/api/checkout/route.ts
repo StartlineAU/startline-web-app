@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import { getStripe } from "@/lib/stripe";
-import { compactParticipant } from "@/lib/registration-form";
 import { assertTurnstile } from "@/lib/turnstile";
 import { rateLimit } from "@/lib/rate-limit";
-import { assertMetadataBudget } from "@/lib/stripe-webhook";
+import { assertMetadataBudget, STRIPE_METADATA_MAX_VALUE_CHARS } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
+  compactOrderParticipant,
   isOrderFailure,
   resolveCheckoutOrder,
 } from "@/lib/checkout-order";
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
 
     const {
-      event, participants, waveLabels, wavePricing,
+      event, participants, waveLabels, wavePricing, teams,
       totalCents, platformFeeCents, stripeFeeCents, applicationFeeCents,
       groupRegistration, userSession, athleteName, athleteEmail,
     } = order;
@@ -61,10 +61,26 @@ export async function POST(req: NextRequest) {
     };
     participants.forEach((participant, index) => {
       participantMetadata[`participant${index}`] = JSON.stringify({
-        ...compactParticipant(participant),
+        ...compactOrderParticipant(participant),
         wav: waveLabels[index],
+        ...(participant.team != null ? { tm: participant.team } : {}),
       });
     });
+    // Team names, indexed by each member's `tm`. The webhook re-checks the
+    // grouping against the event's tiers before writing anything.
+    if (teams.length > 0) {
+      participantMetadata.teams = JSON.stringify(teams.map((t) => t.name));
+      // All the names share one metadata value. Each is within the length
+      // limit, but several long ones (more so with quotes or backslashes,
+      // which JSON escapes) can outgrow Stripe's cap together. Say so plainly
+      // instead of failing the payment setup with a 500.
+      if (participantMetadata.teams.length > STRIPE_METADATA_MAX_VALUE_CHARS) {
+        return NextResponse.json(
+          { error: "Your team names are too long to fit on one order. Shorten one or more of them and try again." },
+          { status: 400 },
+        );
+      }
+    }
 
     const primaryWave = wavePricing[waveLabels[0]];
 

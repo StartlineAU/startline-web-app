@@ -62,10 +62,18 @@ describe("diffEventFields", () => {
 
   it("flags date, time, location and type changes as material and nothing else", () => {
     const changes = diffEventFields(stored, {
-      startTime: "08:00", state: "NSW", format: "Teams", cap: 600, waves: [], title: "Renamed",
+      startTime: "08:00", state: "NSW", discipline: "other", cap: 600, waves: [], title: "Renamed",
     });
-    expect(materialChanges(changes).map((c) => c.field)).toEqual(["format", "startTime", "state"]);
+    expect(materialChanges(changes).map((c) => c.field)).toEqual(["discipline", "startTime", "state"]);
     expect(materialGroupsChanged(changes)).toEqual(["date and time", "location", "event type"]);
+  });
+
+  // Format follows the tickets (#541): adding a team ticket to an individual
+  // event changes it, and must not tell every entrant they are owed a refund.
+  it("logs a format change without making it material", () => {
+    const changes = diffEventFields(stored, { format: "both" });
+    expect(changes.map((c) => c.field)).toContain("format");
+    expect(materialChanges(changes)).toEqual([]);
   });
 });
 

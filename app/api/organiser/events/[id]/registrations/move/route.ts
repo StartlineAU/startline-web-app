@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { teammatesOf } from "@/lib/team-entries";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { CAPACITY_COUNTING_STATUSES } from "@/lib/registration-status";
@@ -61,8 +62,11 @@ export async function POST(
     where: { id: { in: ids }, eventId: id },
     select: { id: true },
   });
-  const ownedIds = owned.map((r) => r.id);
-  const unmatched = ids.filter((rid) => !ownedIds.includes(rid));
+  const requestedIds = owned.map((r) => r.id);
+  const unmatched = ids.filter((rid) => !requestedIds.includes(rid));
+  // A team starts together: moving one member moves the whole team.
+  const teammates = await teammatesOf(id, requestedIds);
+  const ownedIds = [...new Set(requestedIds.flatMap((rid) => teammates.get(rid) ?? [rid]))];
 
   let moved = 0;
   if (ownedIds.length > 0) {

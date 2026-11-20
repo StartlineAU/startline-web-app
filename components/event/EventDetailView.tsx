@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Calendar, ExternalLink, Trophy, Clock, Ticket, FileText, ArrowUpRight } from "lucide-react";
+import { MapPin, Calendar, ExternalLink, Trophy, Clock, Ticket, FileText, ArrowUpRight, Users } from "lucide-react";
+import { teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
 import BackToEventsLink from "@/components/event/BackToEventsLink";
 import EventGallery from "@/components/EventGallery";
 import EventReviewsSection from "@/components/EventReviewsSection";
@@ -160,7 +161,13 @@ export default function EventDetailView({
   const today = todayIso();
   const drops = (event.ticketDrops ?? []).map((drop) => {
     const closes = drop.closes || drop.date;
-    return { ...drop, closes, isClosed: !!closes && closes < today };
+    // A team ticket's price is per person; the team total is shown beside it.
+    const teamSize = teamSizeOf(drop);
+    const price = parseFloat(drop.price ?? "");
+    const teamPrice = teamSize && Number.isFinite(price) && price > 0
+      ? `$${(price * teamSize).toFixed(2).replace(/\.00$/, "")}`
+      : null;
+    return { ...drop, closes, isClosed: !!closes && closes < today, teamSize, teamPrice };
   });
 
   const phase = inert ? "upcoming" : getEventPhase(event);
@@ -301,6 +308,12 @@ export default function EventDetailView({
                             </span>
                           )}
                         </p>
+                        {drop.teamSize != null && (
+                          <p className="font-headline text-xs text-muted uppercase tracking-widest mt-0.5 flex items-center gap-1" data-testid="pricing-team">
+                            <Users className="w-3 h-3" /> {teamSizeLabel(drop.teamSize)}
+                            {drop.teamPrice && ` · ${drop.teamPrice} per team`}
+                          </p>
+                        )}
                         {drop.startTime && (
                           <p className="font-headline text-xs text-muted uppercase tracking-widest mt-0.5 flex items-center gap-1">
                             <Clock className="w-3 h-3" /> Wave start {formatTime(drop.startTime)}
@@ -312,8 +325,11 @@ export default function EventDetailView({
                           </p>
                         )}
                       </div>
-                      <span className={`font-headline text-2xl font-black italic ${drop.isClosed ? "text-muted line-through" : "text-primary"}`}>
+                      <span className={`text-right font-headline text-2xl font-black italic ${drop.isClosed ? "text-muted line-through" : "text-primary"}`}>
                         {drop.price === "0" ? "Free" : `$${drop.price}`}
+                        {drop.teamSize != null && drop.price !== "0" && (
+                          <span className="block font-headline text-[10px] not-italic font-bold uppercase tracking-widest text-muted">per person</span>
+                        )}
                       </span>
                     </div>
                   ))}
@@ -424,7 +440,7 @@ export default function EventDetailView({
                   </div>
                   <div>
                     <DetailLabel>Format</DetailLabel>
-                    <DetailValue>{formatCompetitionFormat(event.format)}</DetailValue>
+                    <DetailValue>{formatCompetitionFormat(event.format, event.ticketDrops)}</DetailValue>
                   </div>
                   {event.categories && event.categories.length > 0 && (
                     <div>
