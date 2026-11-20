@@ -11,12 +11,22 @@ interface EventCardProps {
   event: UserEvent;
   className?: string;
   cardClassName?: string;
+  /**
+   * Open something in place instead of navigating (Activity's ticket overlay).
+   * The link keeps its href, so a modified click or "open in new tab" still
+   * reaches the event page.
+   */
+  onOpen?: () => void;
+  /** Drop the heart, e.g. on an event the visitor is already entered in. */
+  hideSave?: boolean;
+  /** Drop the price row, e.g. on an event the visitor has already paid for. */
+  hidePrice?: boolean;
   /** Map sidebar mode: render a div that calls onSelect on click instead of a Link. */
   onSelect?: () => void;
   selected?: boolean;
 }
 
-export default function EventCard({ event, className, cardClassName, onSelect, selected }: EventCardProps) {
+export default function EventCard({ event, className, cardClassName, onOpen, hideSave, hidePrice, onSelect, selected }: EventCardProps) {
   const [day, month] = formatShortDate(event.date).split(" ");
   const img = event.image;
   const typeLabel = EVENT_TYPE_LABELS[event.type];
@@ -41,9 +51,11 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
         <div className="absolute inset-0 bg-gradient-to-t from-dark/60 via-transparent to-transparent" />
 
         {/* Save button */}
-        <div className="absolute top-3 left-3">
-          <SaveEventButton eventId={event.id} className="bg-dark-light/80 backdrop-blur-sm hover:bg-dark-light" />
-        </div>
+        {!hideSave && (
+          <div className="absolute top-3 left-3">
+            <SaveEventButton eventId={event.id} className="bg-dark-light/80 backdrop-blur-sm hover:bg-dark-light" />
+          </div>
+        )}
 
         {/* Date badge */}
         <div className="absolute top-3 right-3 bg-dark-light/90 backdrop-blur-sm rounded-lg px-3 py-2 text-center leading-tight">
@@ -110,12 +122,12 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
             In map mode the link stays in the layout at all times and only its
             visibility changes, so selecting a card cannot shift the price by
             even a pixel. */}
-        {(event.fromPrice !== null || onSelect) && (
+        {((event.fromPrice !== null && !hidePrice) || onSelect) && (
           <div className="mt-auto pt-1 flex items-center gap-3">
             {/* A free event says so. "From $0" reads like a placeholder for a
                 price that has not been set yet. Matches the wording the event
                 page and the listing wizard's preview card already use. */}
-            {event.fromPrice !== null && (
+            {event.fromPrice !== null && !hidePrice && (
               <span className="font-headline text-sm font-bold">
                 {event.fromPrice === 0 ? (
                   <span className="text-primary">Free</span>
@@ -170,6 +182,11 @@ export default function EventCard({ event, className, cardClassName, onSelect, s
   return (
     <Link
       href={`/events/${event.id}`}
+      onClick={onOpen ? (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        onOpen();
+      } : undefined}
       data-testid="event-card"
       data-event-id={event.id}
       className={cn(

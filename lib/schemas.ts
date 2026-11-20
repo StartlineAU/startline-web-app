@@ -77,6 +77,11 @@ export const eventPayloadSchema = z
       .max(20)
       .optional(),
     photos: z.array(assetUrl(3000)).max(50).optional(),
+    // Which organiser contact details this event shows. Null follows the
+    // organisation's setting (lib/organiser-contact.ts).
+    showContactName: z.boolean().nullable().optional(),
+    showContactEmail: z.boolean().nullable().optional(),
+    showContactPhone: z.boolean().nullable().optional(),
   })
   .superRefine((data, ctx) => {
     // Cross-field ordering checks (only when both values are present, so

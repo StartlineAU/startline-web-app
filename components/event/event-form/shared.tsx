@@ -5,6 +5,7 @@ import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { NO_CONTACT_OVERRIDE, type ContactOverride } from "@/lib/organiser-contact";
 import { teamSizeOf } from "@/lib/team-tickets";
 import { firstLocationError } from "@/lib/event-location";
 
@@ -174,6 +175,8 @@ export interface FormState {
   informationPdfs: InfoPdf[];
   photos: File[];
   photoUrls: string[];
+  /** This event's choice of organiser contact details; null follows the organisation. */
+  contactShow: ContactOverride;
 }
 
 export const INITIAL: FormState = {
@@ -188,6 +191,7 @@ export const INITIAL: FormState = {
   coverImage: null, coverImageUrl: "",
   informationPdfs: [],
   photos: [], photoUrls: [],
+  contactShow: NO_CONTACT_OVERRIDE,
 };
 
 /* ── Shared field primitive ─────────────────────────────────── */

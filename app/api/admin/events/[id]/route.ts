@@ -30,6 +30,7 @@ const AUDIT_FIELDS = [
   "categories", "cap", "minAge", "waves", "inclusions", "extras", "activations",
   "refundTiers", "refundPolicy", "registrationType", "feeStructure", "registrationUrl",
   "accessibilityInfo", "coverImageUrl", "informationPdfs", "photos", "status",
+  "showContactName", "showContactEmail", "showContactPhone",
 ] as const;
 
 function auditChanges(before: Record<string, unknown>, after: Record<string, unknown>) {
@@ -169,6 +170,10 @@ export async function PATCH(
       coverImageUrl:     data.coverImageUrl     ?? undefined,
       informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
       photos:            Array.isArray(data.photos) ? data.photos : undefined,
+      // Undefined leaves the choice alone; null hands it back to the organisation.
+      showContactName:   data.showContactName,
+      showContactEmail:  data.showContactEmail,
+      showContactPhone:  data.showContactPhone,
     };
 
     // Same change log as an organiser edit (app/api/organiser/events/[id]/route.ts).

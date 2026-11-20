@@ -54,6 +54,12 @@ model Organiser {
   contactName   String?
   contactEmail  String?
   phone         String?
+  // Which contact details athletes see on the event page and on their ticket.
+  // Each event can override these (Event.showContact*). Phone is off by
+  // default: it is often a personal mobile (lib/organiser-contact.ts).
+  showContactName  Boolean @default(true)
+  showContactEmail Boolean @default(true)
+  showContactPhone Boolean @default(false)
   abn           String?
   bio           String?
   logoUrl       String?
@@ -230,6 +236,11 @@ model Event {
 
   // Step 5 — media & logistics
   coverImageUrl       String?
+  // This event's choice of which organiser contact details to show. Null
+  // follows the organisation's setting (Organiser.showContact*).
+  showContactName  Boolean?
+  showContactEmail Boolean?
+  showContactPhone Boolean?
   photos              String[]
   // Ordered list of { url, label, name } info PDFs — same JSON-array pattern as photos.
   informationPdfs     Json    @default("[]")

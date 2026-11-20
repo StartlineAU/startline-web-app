@@ -203,6 +203,9 @@ export async function POST(req: NextRequest) {
         coverImageUrl:    body.coverImageUrl      ?? null,
         informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
         photos:           Array.isArray(body.photos) ? body.photos : [],
+        showContactName:  body.showContactName  ?? null,
+        showContactEmail: body.showContactEmail ?? null,
+        showContactPhone: body.showContactPhone ?? null,
       },
       });
       if (created.status !== "DRAFT") {

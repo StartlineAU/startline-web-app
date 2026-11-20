@@ -75,6 +75,9 @@ export async function POST(
         coverImageUrl: source.coverImageUrl,
         informationPdfs: source.informationPdfs ?? [],
         photos: source.photos ?? [],
+        showContactName: source.showContactName,
+        showContactEmail: source.showContactEmail,
+        showContactPhone: source.showContactPhone,
       },
       }),
     );

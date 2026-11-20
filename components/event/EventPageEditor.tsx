@@ -22,10 +22,12 @@ import { popIn, revealWords, spotlight, staggerIn } from "./event-form/motion";
 import { formToDetailData } from "./event-form/to-detail";
 import { InfoTip } from "./event-form/info-tip";
 import {
-  BannerMeta, CoverControls, CoverMedia, DescriptionEditor, DetailsEditor, DisciplinePill,
+  BannerMeta, ContactEditor, CoverControls, CoverMedia, DescriptionEditor, DetailsEditor, DisciplinePill,
   GalleryEditor, InformationEditor, PrizePoolEditor, RefundCard, RegistrationEditor,
   ReviewsPlaceholder, TicketsEditor, TitleInput, useObjectUrls,
+  type OrganiserContactDefaults,
 } from "./event-form/regions";
+import { overrideFromColumns } from "@/lib/organiser-contact";
 import { formatFromTickets } from "@/lib/team-tickets";
 
 // Shown when an upload or the event save comes back 401. submitToApi refreshes
@@ -83,6 +85,7 @@ interface EventPageEditorProps {
   requireOrganiser?: boolean;  // admin create — block submit until an organiser is selected
   headingLabel?: string;       // breadcrumb label, default "Create new listing"
   organiserHasAbn?: boolean;   // false shows a non-blocking "profile incomplete" notice
+  organiserContact?: OrganiserContactDefaults; // the contact region's preview; absent in admin
 }
 
 /**
@@ -105,6 +108,7 @@ export default function EventPageEditor({
   requireOrganiser = false,
   headingLabel = "Create new listing",
   organiserHasAbn = true,
+  organiserContact,
 }: EventPageEditorProps) {
   const router = useRouter();
   const termsHref = customerHref("/terms#organisers", usePortalHost());
@@ -284,6 +288,7 @@ export default function EventPageEditor({
             : [],
           photos:            [],
           photoUrls:         Array.isArray(e.photos) ? e.photos.filter((p: unknown): p is string => typeof p === "string") : [],
+          contactShow:       overrideFromColumns(e),
         });
       })
       .catch(() => setLoadError("This event could not be loaded. Check your connection and try again."));
@@ -477,6 +482,9 @@ export default function EventPageEditor({
         coverImageUrl:     coverImageUrl ?? form.coverImageUrl ?? null,
         informationPdfs,
         photos:            photoUrls,
+        showContactName:   form.contactShow.name,
+        showContactEmail:  form.contactShow.email,
+        showContactPhone:  form.contactShow.phone,
         ...(!eventId && organiserId ? { organiserId } : {}),
       };
 
@@ -735,6 +743,7 @@ export default function EventPageEditor({
             prizePool:     <PrizePoolEditor form={form} update={update} />,
             pricing:       <TicketsEditor form={form} update={update} missing={missingFor("tickets")} />,
             gallery:       <GalleryEditor form={form} update={update} photoSrcs={photoSrcs} />,
+            contact:       <ContactEditor form={form} update={update} organisation={organiserContact} />,
             reviews:       <ReviewsPlaceholder />,
             actions:       <RegistrationEditor form={form} update={update} missing={missingFor("registration")} />,
             details: (

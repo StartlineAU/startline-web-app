@@ -164,7 +164,12 @@ jobs:
           # Output goes to a file: a background process's output is lost once
           # this step ends, which hid why the server stalled and dropped
           # connections mid-run. Printed below when the e2e run fails.
-          NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 > "$RUNNER_TEMP/next-dev.log" 2>&1 &
+          #
+          # next dev restarts its server once the heap passes 80% of the limit,
+          # which it sets to half the runner's memory. Late in the suite that
+          # dropped connections mid-test (ECONNRESET, then ECONNREFUSED until it
+          # came back). A larger heap keeps it up for the whole run.
+          NODE_OPTIONS=--max-old-space-size=10240 NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 > "$RUNNER_TEMP/next-dev.log" 2>&1 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
       - run: pnpm test:e2e
       - name: Dev server log

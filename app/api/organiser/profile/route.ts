@@ -12,6 +12,11 @@ const organiserProfileSchema = z.object({
   contactName: z.string().max(200),
   contactEmail: z.string().trim().max(255).email("Enter a valid contact email."),
   phone: z.string().max(50),
+  // Which of the three athletes see on event pages and tickets. Saved with the
+  // details themselves, so a manager who may edit them may also hide them.
+  showContactName: z.boolean().optional(),
+  showContactEmail: z.boolean().optional(),
+  showContactPhone: z.boolean().optional(),
   // Checked only when one is given: clearing it stays possible, and values
   // stored before the checksum existed are not re-validated until edited.
   abn: z
@@ -60,6 +65,7 @@ export async function GET() {
       select: {
         id: true, email: true, status: true,
         orgName: true, contactName: true, contactEmail: true, phone: true,
+        showContactName: true, showContactEmail: true, showContactPhone: true,
         abn: true,
         bio: true, logoUrl: true, logoPosition: true, coverImageUrl: true, coverPosition: true, photos: true,
         legalName: true, dob: true,
@@ -98,6 +104,7 @@ export async function PUT(req: NextRequest) {
   }
   const {
     orgName, contactName, contactEmail, phone,
+    showContactName, showContactEmail, showContactPhone,
     abn, bio,
     logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
     legalName, dob,
@@ -142,6 +149,7 @@ export async function PUT(req: NextRequest) {
       where: { id: session.sub },
       data: {
         orgName, contactName, contactEmail, phone,
+        showContactName, showContactEmail, showContactPhone,
         abn, bio,
         logoUrl, logoPosition, coverImageUrl, coverPosition, photos,
         ...(legalName !== undefined        ? { legalName }         : {}),
