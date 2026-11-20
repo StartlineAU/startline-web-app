@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import RejectPanel from "@/components/admin/RejectPanel";
 import { approvalBlocker } from "@/lib/event-approval";
 import { useApiResource } from "@/hooks/useApiResource";
+import { formatEventArea } from "@/lib/event-place";
 
 export const dynamic = "force-dynamic";
 
@@ -222,7 +223,7 @@ function EventRow({
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-headline text-[11px] uppercase tracking-widest text-muted mb-1">
             <span className="flex items-center gap-1">
               <MapPin className="w-3 h-3 text-primary" />
-              {event.city}, {event.state.toUpperCase()}
+              {formatEventArea(event.city, event.state.toUpperCase())}
             </span>
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3 text-muted-dark" />
@@ -420,6 +421,7 @@ function BulkActionBar({
   const [bulkReason,    setBulkReason]    = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [skipped,       setSkipped]       = useState<{ id: string; title: string; reason: string }[]>([]);
+  const [skippedAction, setSkippedAction] = useState("approve");
 
   const ids = Array.from(selectedIds);
 
@@ -442,6 +444,7 @@ function BulkActionBar({
         const blockedIds = new Set(blocked.map((e) => e.id));
         onBulkDone(ids.filter((id) => !blockedIds.has(id)), action);
         setSkipped(blocked);
+        setSkippedAction(action);
         if (blocked.length === 0) onClearSelection();
         setRejectOpen(false);
         setConfirmDelete(false);
@@ -463,7 +466,7 @@ function BulkActionBar({
           <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="text-[13px] text-amber-200">
             <span className="font-bold">
-              {skipped.length} event{skipped.length === 1 ? "" : "s"} not approved.
+              {skipped.length} event{skipped.length === 1 ? "" : "s"} not {skippedAction === "delete" ? "deleted" : "approved"}.
             </span>{" "}
             {skipped.map((e) => `${e.title} (${e.reason})`).join("; ")}
           </div>

@@ -122,6 +122,12 @@ describe("assertTurnstile", () => {
     expect(recordMock).not.toHaveBeenCalled();
   });
 
+  it("is enforced on the organiser host, which also serves /api/*", async () => {
+    process.env.TURNSTILE_SECRET_KEY = "secret";
+    const res = await assertTurnstile(makeRequest("organiser.startlineau.com"), { turnstileToken: undefined }, "waitlist");
+    expect(res?.status).toBe(400);
+  });
+
   it("fails open on non-production hostnames (Amplify preview URLs)", async () => {
     process.env.TURNSTILE_SECRET_KEY = "secret";
     const res = await assertTurnstile(

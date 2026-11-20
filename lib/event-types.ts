@@ -5,6 +5,8 @@ export interface PublicWave {
   qty?: number;
   closes?: string;
   startTime?: string;
+  /** Team ticket: members per team. `price` is per person, `qty` counts teams. */
+  teamSize?: number;
 }
 
 export interface InformationPdf {
@@ -68,7 +70,6 @@ export interface PublicEvent {
     id: string;
     orgName: string | null;
     logoUrl: string | null;
-    stripeAccountId: string | null;
     stripeOnboardingComplete: boolean;
     rating?: { average: number; count: number } | null;
   };

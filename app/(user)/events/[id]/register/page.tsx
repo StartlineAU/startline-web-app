@@ -13,15 +13,16 @@ import ReviewPayStep, { backBtnCls, type ReviewRow } from "./ReviewPayStep";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import TicketHolderToggle, { type TicketHolder } from "@/components/registration/TicketHolderToggle";
 import SaveDetailsPrompt, { type ProfileUpdate } from "@/components/registration/SaveDetailsPrompt";
+import { botCheckAppliesTo } from "@/lib/bot-check-hosts";
 import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
 import { getLifecyclePhase } from "@/lib/event-status";
 import { useApiResource } from "@/hooks/useApiResource";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
-const BOT_CHECK_HOSTS = ["startlineau.com", "www.startlineau.com"];
 import {
   Skeleton, PageHeaderSkeleton, PageShellSkeleton,
 } from "@/components/ui/skeleton";
@@ -29,6 +30,7 @@ import {
   splitFullName,
   validateParticipants,
   getRegistrationFormErrors,
+  getEmergencyContactErrors,
   formatPhoneForDisplay,
   createEmptyParticipant,
   MAX_REGISTRATION_PARTICIPANTS,
@@ -38,6 +40,7 @@ import {
   type EmergencyContact,
   type EmergencyContactErrors,
 } from "@/lib/registration-form";
+import { formatEventPlace } from "@/lib/event-place";
 
 interface Wave {
   label: string;
@@ -46,6 +49,8 @@ interface Wave {
   date?: string;
   closes?: string;
   startTime?: string;
+  /** Team ticket: members per team. `price` is per person, `qty` counts teams. */
+  teamSize?: number;
 }
 
 interface EventData {
@@ -84,10 +89,21 @@ const PROFILE_FIELDS = [
 ] as const;
 type ProfileField = (typeof PROFILE_FIELDS)[number];
 
+function savedContactIsSelf(p: ProfilePrefill): boolean {
+  if (!p.emergencyContactName.trim() || !p.emergencyContactPhone.trim()) return false;
+  const errors = getEmergencyContactErrors(
+    { name: p.emergencyContactName, phone: p.emergencyContactPhone },
+    [{ ...createEmptyParticipant(), ...p }]
+  );
+  return Object.keys(errors).length > 0;
+}
+
 interface WaveAvailability {
   label: string;
+  /** Tickets, or teams on a team ticket. */
   qty: number | null;
   confirmed: number;
+  teamSize?: number | null;
 }
 interface Availability {
   cap: number | null;
@@ -123,6 +139,21 @@ function formatEventDate(dateStr: string, timeStr?: string): string {
 const money = (n: number) => `$${n.toFixed(2)}`;
 /** "$0.00" reads like a mistake on a free ticket, so say what it means. */
 const priceLabel = (n: number) => (n > 0 ? money(n) : "Free");
+
+/** "2 × General", or "2 teams × Pairs" for a team ticket. */
+function tierLineLabel(t: { label: string; qty: number; teamSize: number | null }): string {
+  if (t.teamSize) return `${t.qty} team${t.qty === 1 ? "" : "s"} × ${t.label} (${t.qty * t.teamSize} people)`;
+  return t.qty > 1 ? `${t.qty} × ${t.label}` : t.label;
+}
+
+/**
+ * Whether ticket slot `index` is a team member other than its team's first:
+ * the only slots whose details can be added after checkout.
+ */
+function isTeammateSlot(teams: (number | undefined)[], index: number): boolean {
+  const team = teams[index];
+  return team != null && teams.indexOf(team) !== index;
+}
 
 /**
  * Keep already-entered details attached to the right ticket when the buyer
@@ -170,7 +201,7 @@ function RegisterContent() {
   const [showTurnstile, setShowTurnstile] = useState(false);
   useEffect(() => {
     startTransition(() => {
-      setShowTurnstile(Boolean(TURNSTILE_SITE_KEY) && BOT_CHECK_HOSTS.includes(window.location.hostname));
+      setShowTurnstile(Boolean(TURNSTILE_SITE_KEY) && botCheckAppliesTo(window.location.hostname));
     });
   }, []);
 
@@ -181,6 +212,14 @@ function RegisterContent() {
   );
   // Wave label per participant, aligned with `participants` (set on Continue).
   const [ticketWaves, setTicketWaves] = useState<string[]>([]);
+  // Team ticket members: the index of each participant's team in `teamNames`,
+  // aligned with `participants`. Undefined on an individual ticket.
+  const [ticketTeams, setTicketTeams] = useState<(number | undefined)[]>([]);
+  const [teamNames, setTeamNames] = useState<string[]>([]);
+  const [teamNameErrors, setTeamNameErrors] = useState<Record<number, string>>({});
+  // Team members whose details the buyer will add later from Activity,
+  // aligned with `participants`. Only a member other than a team's first can be.
+  const [detailsLater, setDetailsLater] = useState<boolean[]>([]);
   const [participants, setParticipants] = useState<RegistrationFormData[]>(() => [createEmptyParticipant()]);
   const [openTicket, setOpenTicket] = useState(0);
   const [useSharedContact, setUseSharedContact] = useState(true);
@@ -192,7 +231,7 @@ function RegisterContent() {
   // The authoritative total, returned by /api/checkout. Null until it answers.
   const [serverTotal, setServerTotal] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean } | null>(null);
+  const [confirmed, setConfirmed] = useState<{ ref: string; email: string; tierSummary: string; count: number; amount: string; free: boolean; later: number } | null>(null);
   // A duplicate can still lose the race against another tab. If the confirm
   // request says so, move to the same gate the precheck would have shown.
   const [rsvpBlockedAfterSubmit, setRsvpBlockedAfterSubmit] = useState(false);
@@ -246,12 +285,14 @@ function RegisterContent() {
         const next: Record<string, number> = {};
         for (const [label, qty] of Object.entries(prev)) {
           const wave = byLabel[label];
+          // A team ticket's quantity is teams; the event cap is people.
+          const size = teamSizeOf(wave) ?? 1;
           const tierLeft = wave && wave.qty != null ? Math.max(0, wave.qty - wave.confirmed) : Infinity;
           const capLeft = availability.cap != null ? Math.max(0, availability.cap - availability.confirmed - running) : Infinity;
-          const allowed = Math.max(0, Math.min(qty, tierLeft, capLeft));
+          const allowed = Math.max(0, Math.min(qty, tierLeft, Math.floor(capLeft / size)));
           if (allowed !== qty) changed = true;
           next[label] = allowed;
-          running += allowed;
+          running += allowed * size;
         }
         return changed ? next : prev;
       });
@@ -287,6 +328,13 @@ function RegisterContent() {
             ? formatPhoneForDisplay(profile.emergencyContactPhone)
             : "",
         };
+        // A saved emergency contact that is the account holder themselves
+        // (older profiles could store one) must not be prefilled: it would
+        // only fail validation as "someone other than a participant" (#532).
+        if (savedContactIsSelf(prefill)) {
+          prefill.emergencyContactName = "";
+          prefill.emergencyContactPhone = "";
+        }
         setProfile(prefill);
         setParticipants((prev) => {
           const first = prev[0];
@@ -302,14 +350,25 @@ function RegisterContent() {
 
   // ── Derived selection / pricing ──
   const openWaves = useMemo(() => (event?.waves ?? []).filter((w) => waveIsOpen(w)), [event]);
+  // `qty` is tickets, or teams on a team ticket; `people` is who those are for.
+  // The price is per person either way, so a team costs price x size.
   const tierLines = useMemo(
     () =>
       openWaves
-        .map((w) => ({ label: w.label, price: parseFloat(w.price || "0"), qty: quantities[w.label] ?? 0 }))
+        .map((w) => {
+          const qty = quantities[w.label] ?? 0;
+          const teamSize = teamSizeOf(w);
+          return { label: w.label, price: parseFloat(w.price || "0"), qty, teamSize, people: qty * (teamSize ?? 1) };
+        })
         .filter((t) => t.qty > 0),
     [openWaves, quantities]
   );
-  const totalTickets = tierLines.reduce((sum, t) => sum + t.qty, 0);
+  // People in the order: one participant form, and one entry, each.
+  const totalTickets = tierLines.reduce((sum, t) => sum + t.people, 0);
+  const sizeOfWave = useCallback(
+    (label: string) => teamSizeOf(event?.waves?.find((w) => w.label === label)) ?? 1,
+    [event]
+  );
 
   // ── Live availability (spots left) ──
   const availByWave = useMemo(() => {
@@ -322,14 +381,14 @@ function RegisterContent() {
     availability && availability.cap != null
       ? Math.max(0, availability.cap - availability.confirmed)
       : Infinity;
-  // Spots left in a single tier, bounded by the event cap.
+  // Tickets (or teams) left in a single tier, bounded by the event cap.
   const waveRemaining = useCallback(
     (label: string): number => {
       const w = availByWave[label];
       const tierLeft = w && w.qty != null ? Math.max(0, w.qty - w.confirmed) : Infinity;
-      return Math.min(tierLeft, eventRemaining);
+      return Math.min(tierLeft, Math.floor(eventRemaining / sizeOfWave(label)));
     },
-    [availByWave, eventRemaining]
+    [availByWave, eventRemaining, sizeOfWave]
   );
   const eventSoldOut = eventRemaining <= 0;
 
@@ -337,9 +396,9 @@ function RegisterContent() {
   // The service fee is a share of a sale, so a free tier carries none of it —
   // mirrors calculatePlatformFee on the server (issue #308).
   const feeTotal = athletePaysFee
-    ? tierLines.reduce((sum, t) => sum + (t.price > 0 ? (t.price * PLATFORM_FEE_PCT + PLATFORM_FEE_FIXED) * t.qty : 0), 0)
+    ? tierLines.reduce((sum, t) => sum + (t.price > 0 ? (t.price * PLATFORM_FEE_PCT + PLATFORM_FEE_FIXED) * t.people : 0), 0)
     : 0;
-  const subtotal = tierLines.reduce((sum, t) => sum + t.price * t.qty, 0);
+  const subtotal = tierLines.reduce((sum, t) => sum + t.price * t.people, 0);
 
   // What the entry alone costs. The refund policy applies to the entry, never
   // to anything else, and entryPaidCents reads only these figures.
@@ -350,7 +409,7 @@ function RegisterContent() {
   // is written by /api/registrations/free when the athlete confirms.
   const freeOrder = totalTickets > 0 && total === 0;
   const totalLabel = priceLabel(total);
-  const tierSummary = tierLines.map((t) => (t.qty > 1 ? `${t.qty} × ${t.label}` : t.label)).join(", ");
+  const tierSummary = tierLines.map(tierLineLabel).join(", ");
 
   // Refund position at the moment of paying, in dollars rather than in principle.
   // A free event has no policy to state — nothing is paid, so nothing comes back
@@ -359,7 +418,10 @@ function RegisterContent() {
   // A fully free event on Startline is an RSVP: one seat for the signed-in
   // account, no participant form and no card. A free tier on a mixed-price
   // event keeps the standard flow because there are still paid tiers.
-  const freeRsvp = freeEvent && event?.registrationType === "startline";
+  // A team ticket needs every member's details, so an event that sells one
+  // keeps the standard flow even when it is free.
+  const hasTeamTier = (event?.waves ?? []).some((w) => teamSizeOf(w) !== null);
+  const freeRsvp = freeEvent && event?.registrationType === "startline" && !hasTeamTier;
   const openFreeWaves = useMemo(() => (freeRsvp ? openWaves : []), [freeRsvp, openWaves]);
   const freeRsvpWaveLabel = useMemo(() => {
     if (freeRsvpWave && openFreeWaves.some((w) => w.label === freeRsvpWave)) return freeRsvpWave;
@@ -413,8 +475,8 @@ function RegisterContent() {
       ? [{ label: freeRsvpWaveLabel, value: "Free" }]
       : []
     : tierLines.map((t) => ({
-        label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
-        value: priceLabel(t.price * t.qty),
+        label: tierLineLabel(t),
+        value: priceLabel(t.price * t.people),
       }));
 
   const refundTiers = parseTiers(event?.refundTiers);
@@ -490,7 +552,7 @@ function RegisterContent() {
   // left. Steppers can add only up to what remains in the tier, the event, and
   // the per-order maximum.
   const waveSoldOut = (label: string): boolean => {
-    if (eventSoldOut) return true;
+    if (eventSoldOut || eventRemaining < sizeOfWave(label)) return true;
     const w = availByWave[label];
     return w?.qty != null && w.qty - w.confirmed <= 0;
   };
@@ -498,11 +560,27 @@ function RegisterContent() {
     !!freeRsvpWaveLabel && (eventSoldOut || waveSoldOut(freeRsvpWaveLabel));
   const freeRsvpReady = !!freeRsvpWaveLabel && !freeRsvpSoldOut;
   const canIncrement = (label: string): boolean => {
-    if (totalTickets >= MAX_REGISTRATION_PARTICIPANTS) return false;
-    if (totalTickets >= eventRemaining) return false;
+    // One more of a team ticket adds a whole team of people.
+    const size = sizeOfWave(label);
+    if (totalTickets + size > MAX_REGISTRATION_PARTICIPANTS) return false;
+    if (totalTickets + size > eventRemaining) return false;
     const w = availByWave[label];
     const tierLeft = w?.qty != null ? Math.max(0, w.qty - w.confirmed) : Infinity;
     return (quantities[label] ?? 0) < tierLeft;
+  };
+
+  const isLater = (index: number) => detailsLater[index] === true && isTeammateSlot(ticketTeams, index);
+  const laterCount = participants.filter((_, i) => isLater(i)).length;
+  const setLater = (index: number, later: boolean) => {
+    setDetailsLater((prev) => prev.map((v, i) => (i === index ? later : v)));
+    if (later) {
+      setFieldErrors((prev) => {
+        if (!prev[index]) return prev;
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    }
   };
 
   const ticketComplete = useCallback(
@@ -550,10 +628,20 @@ function RegisterContent() {
       eventId,
       waveLabel: ticketWaves[0],
       turnstileToken: turnstileToken ?? undefined,
-      participants: participants.map((p, i) => ({ ...p, waveLabel: ticketWaves[i] })),
+      participants: participants.map((p, i) =>
+        // A member left for later sends no details: whatever was half-typed
+        // into their form stays on this device.
+        detailsLater[i] === true && isTeammateSlot(ticketTeams, i)
+          ? { ...createEmptyParticipant(), waveLabel: ticketWaves[i], team: ticketTeams[i], detailsLater: true }
+          : {
+              ...p,
+              waveLabel: ticketWaves[i],
+              ...(ticketTeams[i] != null ? { team: ticketTeams[i] } : {}),
+            }),
+      ...(teamNames.length > 0 && { teams: teamNames.map((name) => ({ name: normaliseTeamName(name) })) }),
       ...(sharedContactActive && { groupRegistration: true, emergencyContact: sharedEmergencyContact }),
     }),
-    [eventId, ticketWaves, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
+    [eventId, ticketWaves, ticketTeams, teamNames, detailsLater, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
   );
 
   // ── Checkout (create PaymentIntent) ──
@@ -592,7 +680,9 @@ function RegisterContent() {
       const res = await fetch("/api/registrations/free", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderPayload()),
+        // Only reachable from the review step's confirm button, which needs the
+        // terms box ticked.
+        body: JSON.stringify({ ...orderPayload(), acceptedTerms: true }),
       });
       const data = (await res.json()) as { registrationIds?: string[]; error?: string };
       if (!res.ok || !data.registrationIds?.length) {
@@ -662,14 +752,35 @@ function RegisterContent() {
   };
   const goToDetails = () => {
     if (!event || totalTickets === 0) return;
-    // One ticket slot per selected quantity, in tier display order.
+    // One ticket slot per person, in tier display order. A team ticket adds a
+    // slot for every member, all pointing at the same team.
     const nextWaves: string[] = [];
+    const nextTeams: (number | undefined)[] = [];
+    let teamCount = 0;
     for (const wave of event.waves) {
       if (!waveIsOpen(wave)) continue;
-      for (let i = 0; i < (quantities[wave.label] ?? 0); i++) nextWaves.push(wave.label);
+      const size = teamSizeOf(wave);
+      for (let i = 0; i < (quantities[wave.label] ?? 0); i++) {
+        const team = size ? teamCount++ : undefined;
+        for (let m = 0; m < (size ?? 1); m++) {
+          nextWaves.push(wave.label);
+          nextTeams.push(team);
+        }
+      }
     }
+    // Names already typed stay with their team position.
+    setTeamNames((prev) => Array.from({ length: teamCount }, (_, i) => prev[i] ?? ""));
+    setTeamNameErrors({});
+    setTicketTeams(nextTeams);
     const kept = matchPreviousTickets(participants.length, ticketWaves, nextWaves);
     setParticipants((prev) => reconcileParticipants(prev, ticketWaves, nextWaves));
+    // A teammate starts as "add details later": the buyer only has to name
+    // themselves. A slot that keeps its earlier choice keeps it.
+    setDetailsLater(nextWaves.map((_, i) => {
+      if (!isTeammateSlot(nextTeams, i)) return false;
+      const from = kept[i];
+      return from != null ? detailsLater[from] ?? true : true;
+    }));
     // The buyer's own ticket follows its details; if it was dropped, none is theirs.
     if (selfIndex != null) {
       const moved = kept.indexOf(selfIndex);
@@ -686,14 +797,32 @@ function RegisterContent() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const goToReview = () => {
-    const { errors, emergencyContactErrors: ecErrors, firstMessage } = validateParticipants(participants, {
-      groupRegistration: sharedContactActive,
-      sharedEmergencyContact: sharedContactActive ? sharedEmergencyContact : undefined,
-      includeWaiver: false,
+    // Every team needs a name, and two teams in one order cannot share it.
+    const nameErrors: Record<number, string> = {};
+    const seenNames = new Set<string>();
+    teamNames.forEach((raw, i) => {
+      const name = normaliseTeamName(raw);
+      if (!name) nameErrors[i] = "Give this team a name";
+      else if (name.length > MAX_TEAM_NAME_LENGTH) nameErrors[i] = `Keep it to ${MAX_TEAM_NAME_LENGTH} characters`;
+      else if (seenNames.has(name.toLowerCase())) nameErrors[i] = "Another team in this order has this name";
+      seenNames.add(name.toLowerCase());
     });
+    setTeamNameErrors(nameErrors);
+    // Members left for later have nothing to check yet.
+    const namedIndexes = participants.map((_, i) => i).filter((i) => !isLater(i));
+    const { errors: namedErrors, emergencyContactErrors: ecErrors, firstMessage } = validateParticipants(
+      namedIndexes.map((i) => participants[i]),
+      {
+        groupRegistration: sharedContactActive,
+        sharedEmergencyContact: sharedContactActive ? sharedEmergencyContact : undefined,
+        includeWaiver: false,
+      },
+    );
+    const errors: typeof namedErrors = {};
+    for (const [k, v] of Object.entries(namedErrors)) errors[namedIndexes[Number(k)]] = v;
     setFieldErrors(errors);
     setEmergencyContactErrors(ecErrors);
-    if (firstMessage) {
+    if (firstMessage || Object.keys(nameErrors).length > 0) {
       setError("Please fix the highlighted fields.");
       const firstInvalid = participants.findIndex((_, i) => errors[i]);
       if (firstInvalid >= 0) setOpenTicket(firstInvalid);
@@ -710,6 +839,10 @@ function RegisterContent() {
     if (!freeOrder) startCheckout();
   };
   const goToNextTicket = (index: number) => {
+    if (isLater(index)) {
+      setOpenTicket(index + 1);
+      return;
+    }
     const errors = getRegistrationFormErrors(participants[index], {
       includeEmergencyContact: !sharedContactActive,
       includeWaiver: false,
@@ -737,6 +870,7 @@ function RegisterContent() {
       // disagree with what the card was charged.
       amount: freeRsvp ? "Free" : serverTotal != null ? priceLabel(serverTotal) : totalLabel,
       free: freeRsvp || freeOrder,
+      later: freeRsvp ? 0 : laterCount,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -757,8 +891,8 @@ function RegisterContent() {
   // ── Review rows ──
   const reviewRows: ReviewRow[] = useMemo(() => {
     const rows: ReviewRow[] = tierLines.map((t) => ({
-      label: t.qty > 1 ? `${t.qty} × ${t.label}` : t.label,
-      value: priceLabel(t.price * t.qty),
+      label: tierLineLabel(t),
+      value: priceLabel(t.price * t.people),
     }));
     if (participants.length === 1) {
       const p = participants[0];
@@ -772,8 +906,12 @@ function RegisterContent() {
     } else {
       participants.forEach((p, i) =>
         rows.push({
-          label: `Ticket ${i + 1} · ${ticketWaves[i]}`,
-          value: `${p.firstName} ${p.lastName}`.trim() + ` · ${p.email}`,
+          label: ticketTeams[i] != null
+            ? `Team ${normaliseTeamName(teamNames[ticketTeams[i] as number])} · ${ticketWaves[i]}`
+            : `Ticket ${i + 1} · ${ticketWaves[i]}`,
+          value: detailsLater[i] === true && isTeammateSlot(ticketTeams, i)
+            ? "Details to add later"
+            : `${p.firstName} ${p.lastName}`.trim() + ` · ${p.email}`,
         })
       );
       if (sharedContactActive) {
@@ -781,7 +919,7 @@ function RegisterContent() {
       }
     }
     return rows;
-  }, [participants, tierLines, ticketWaves, sharedContactActive, sharedEmergencyContact]);
+  }, [participants, tierLines, ticketWaves, ticketTeams, teamNames, detailsLater, sharedContactActive, sharedEmergencyContact]);
 
   // ── Loading / not-found ──
   if (loading || status === "loading" || rsvpCheckPending) {
@@ -880,7 +1018,7 @@ function RegisterContent() {
   }
 
   const dateLabel = formatEventDate(event.eventDate, event.startTime);
-  const locationLabel = [event.venue, event.city].filter(Boolean).join(", ") + ` ${event.state.toUpperCase()}`;
+  const locationLabel = formatEventPlace(event);
 
   // ── Confirmation screen ──
   if (confirmed) {
@@ -901,6 +1039,18 @@ function RegisterContent() {
               <>Your <strong className="text-light">{confirmed.count} tickets</strong> to <strong className="text-light">{event.title}</strong> are locked in.</>
             )}
           </p>
+          {confirmed.later > 0 && (
+            <div className="mb-[22px] rounded-[14px] border border-amber-400/30 bg-amber-400/10 px-[18px] py-[14px] text-left" data-testid="team-details-later-note">
+              <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.13em] text-amber-300">
+                {confirmed.later === 1 ? "1 team member to add" : `${confirmed.later} team members to add`}
+              </div>
+              <p className="text-[13px] text-muted leading-relaxed mt-1.5">
+                Their places are booked. Add their details from{" "}
+                <Link href="/activity" className="text-primary hover:underline">your Activity page</Link>{" "}
+                before race day. We&apos;ve emailed you a link too.
+              </p>
+            </div>
+          )}
           <div className="bg-dark-light border border-dark-lighter rounded-[14px] px-[22px] py-[18px] mb-[26px] text-left">
             {[
               ["Reference", confirmed.ref],
@@ -1161,6 +1311,11 @@ function RegisterContent() {
                         >
                           <div>
                             <div className="font-headline text-[14.5px] font-bold text-light">{wave.label}</div>
+                            {teamSizeOf(wave) && (
+                              <div className="font-headline text-[10px] uppercase tracking-[0.13em] text-muted mt-1" data-testid="register-team-size">
+                                {teamSizeLabel(teamSizeOf(wave) as number)} · you enter every member
+                              </div>
+                            )}
                             {closed ? (
                               <div className="font-headline text-[10px] font-bold uppercase tracking-[0.13em] text-red-400 mt-1">Closed</div>
                             ) : soldOut ? (
@@ -1186,7 +1341,7 @@ function RegisterContent() {
                             <div className="flex items-center gap-2 justify-self-center">
                               <button
                                 type="button"
-                                aria-label={`Remove one ${wave.label} ticket`}
+                                aria-label={`Remove one ${wave.label} ${teamSizeOf(wave) ? "team" : "ticket"}`}
                                 onClick={() => setQty(wave.label, -1)}
                                 disabled={qty === 0}
                                 className={stepperBtnCls}
@@ -1201,7 +1356,7 @@ function RegisterContent() {
                               </span>
                               <button
                                 type="button"
-                                aria-label={`Add one ${wave.label} ticket`}
+                                aria-label={`Add one ${wave.label} ${teamSizeOf(wave) ? "team" : "ticket"}`}
                                 onClick={() => setQty(wave.label, 1)}
                                 disabled={!canIncrement(wave.label)}
                                 className={stepperBtnCls}
@@ -1210,15 +1365,20 @@ function RegisterContent() {
                               </button>
                             </div>
                           )}
-                          <div className={cn("justify-self-end font-headline text-[24px] font-bold italic tracking-[-0.02em]", disabled ? "text-muted-dark" : "text-primary")}>
+                          <div className={cn("justify-self-end text-right font-headline text-[24px] font-bold italic tracking-[-0.02em]", disabled ? "text-muted-dark" : "text-primary")}>
                             {priceLabel(parseFloat(wave.price || "0"))}
+                            {teamSizeOf(wave) && parseFloat(wave.price || "0") > 0 && (
+                              <div className="font-headline text-[9.5px] not-italic font-bold uppercase tracking-[0.13em] text-muted">
+                                per person · {money(parseFloat(wave.price) * (teamSizeOf(wave) as number))} per team
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                   <p className="font-headline text-[10px] uppercase tracking-[0.13em] text-muted-dark mt-4">
-                    Mix tiers as needed · up to {MAX_REGISTRATION_PARTICIPANTS} tickets per order
+                    Mix tiers as needed · up to {MAX_REGISTRATION_PARTICIPANTS} {hasTeamTier ? "people" : "tickets"} per order
                   </p>
                 </div>
 
@@ -1277,6 +1437,50 @@ function RegisterContent() {
                 )}
 
                 <div className="space-y-4">
+                  {teamNames.length > 0 && (
+                    <div className="bg-dark border border-dark-lighter rounded-[14px] p-6 space-y-4" data-testid="team-names">
+                      <div className="font-headline text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted">
+                        {teamNames.length === 1 ? "Your team" : "Your teams"}
+                      </div>
+                      {teamNames.map((name, t) => {
+                        const label = ticketWaves[ticketTeams.indexOf(t)];
+                        const size = ticketTeams.filter((x) => x === t).length;
+                        return (
+                          <div key={t} data-invalid={teamNameErrors[t] ? true : undefined}>
+                            <label htmlFor={`team-name-${t}`} className="block font-headline text-[10px] font-bold uppercase tracking-[0.13em] text-light mb-1.5">
+                              Team name{teamNames.length > 1 ? ` ${t + 1}` : ""} <span className="text-muted-dark">· {label} · {size} people</span>
+                            </label>
+                            <input
+                              id={`team-name-${t}`}
+                              value={name}
+                              maxLength={MAX_TEAM_NAME_LENGTH}
+                              placeholder="e.g. Harbour Hustlers"
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setTeamNames((prev) => prev.map((n, j) => (j === t ? value : n)));
+                                setTeamNameErrors((prev) => {
+                                  if (!prev[t]) return prev;
+                                  const next = { ...prev };
+                                  delete next[t];
+                                  return next;
+                                });
+                              }}
+                              className={cn(
+                                "w-full bg-dark-light border rounded-lg px-4 py-3 text-[14px] text-light placeholder:text-muted-dark focus:outline-none focus:border-primary",
+                                teamNameErrors[t] ? "border-red-500/60" : "border-dark-lighter"
+                              )}
+                            />
+                            {teamNameErrors[t] && <p className="mt-1.5 text-[12px] text-red-400">{teamNameErrors[t]}</p>}
+                          </div>
+                        );
+                      })}
+                      <p className="text-[12.5px] text-muted leading-relaxed" data-testid="team-details-later-copy">
+                        Only the first member of each team has to be filled in now. Everyone else can be
+                        added later from your Activity page, or entered below if you have their details.
+                        Each member gets their own confirmation email once their details are in.
+                      </p>
+                    </div>
+                  )}
                   {!isMulti ? (
                     <>
                       <ParticipantFormSection
@@ -1291,7 +1495,9 @@ function RegisterContent() {
                   ) : (
                     participants.map((participant, index) => {
                       const isOpen = openTicket === index;
-                      const complete = ticketComplete(index);
+                      const later = isLater(index);
+                      const teammate = isTeammateSlot(ticketTeams, index);
+                      const complete = !later && ticketComplete(index);
                       const hasErrors = !!fieldErrors[index];
                       const name = `${participant.firstName} ${participant.lastName}`.trim();
                       return (
@@ -1325,11 +1531,19 @@ function RegisterContent() {
                               </span>
                               <div className="min-w-0">
                                 <div className="font-headline text-[12px] font-bold uppercase tracking-[0.13em] text-light">
-                                  Ticket {index + 1} of {participants.length} · <span className="text-primary">{ticketWaves[index]}</span>
+                                  {ticketTeams[index] != null ? (
+                                    <>
+                                      {normaliseTeamName(teamNames[ticketTeams[index] as number]) || `Team ${(ticketTeams[index] as number) + 1}`}
+                                      {" · "}Member {ticketTeams.slice(0, index).filter((x) => x === ticketTeams[index]).length + 1} of {ticketTeams.filter((x) => x === ticketTeams[index]).length}
+                                      {" · "}<span className="text-primary">{ticketWaves[index]}</span>
+                                    </>
+                                  ) : (
+                                    <>Ticket {index + 1} of {participants.length} · <span className="text-primary">{ticketWaves[index]}</span></>
+                                  )}
                                 </div>
                                 {!isOpen && (
-                                  <div className={cn("text-[12px] truncate mt-0.5", complete ? "text-muted" : "text-muted-dark")}>
-                                    {complete ? `${name} · ${participant.email}` : "Not completed yet"}
+                                  <div className={cn("text-[12px] truncate mt-0.5", complete ? "text-muted" : later ? "text-amber-300/80" : "text-muted-dark")}>
+                                    {later ? "Details to add later" : complete ? `${name} · ${participant.email}` : "Not completed yet"}
                                   </div>
                                 )}
                               </div>
@@ -1338,15 +1552,50 @@ function RegisterContent() {
                           </button>
                           {isOpen && (
                             <div className="px-6 pb-6">
-                              <ParticipantFormSection
-                                frameless
-                                index={index}
-                                intro={renderTicketHolder(index)}
-                                participant={participant}
-                                errors={fieldErrors[index]}
-                                hideEmergencyContact={sharedContactActive}
-                                onChange={(field, value) => updateParticipant(index, field, value)}
-                              />
+                              {teammate && (
+                                <div
+                                  role="radiogroup"
+                                  aria-label="When to add this member's details"
+                                  className="inline-flex rounded-md border border-dark-lighter p-0.5 mb-4"
+                                  data-testid="details-later-toggle"
+                                >
+                                  {([[true, "Add details later"], [false, "Enter details now"]] as const).map(([value, label]) => {
+                                    const on = later === value;
+                                    return (
+                                      <button
+                                        key={label}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={on}
+                                        onClick={() => setLater(index, value)}
+                                        className={cn(
+                                          "rounded px-3 py-1.5 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                          on ? "bg-primary text-dark" : "text-muted hover:text-primary"
+                                        )}
+                                      >
+                                        {label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {later ? (
+                                <p className="text-[13px] text-muted leading-relaxed" data-testid="details-later-note">
+                                  This place is booked and paid for with your order. Add who is taking it any
+                                  time before race day from your Activity page. We&apos;ll email you a link, and
+                                  they get their own confirmation once their details are in.
+                                </p>
+                              ) : (
+                                <ParticipantFormSection
+                                  frameless
+                                  index={index}
+                                  intro={renderTicketHolder(index)}
+                                  participant={participant}
+                                  errors={fieldErrors[index]}
+                                  hideEmergencyContact={sharedContactActive}
+                                  onChange={(field, value) => updateParticipant(index, field, value)}
+                                />
+                              )}
                               {index < participants.length - 1 && (
                                 <div className="flex justify-end mt-5">
                                   <button

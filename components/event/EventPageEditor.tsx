@@ -13,8 +13,9 @@ import { isFreeEvent } from "@/lib/event-types";
 import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
+import { safeReturnPath } from "@/lib/safe-return-path";
 import {
-  DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty,
+  DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty, waveTeamSize,
   type Discipline, type FormState, type RegionId, type Wave,
 } from "./event-form/shared";
 import { popIn, revealWords, spotlight, staggerIn } from "./event-form/motion";
@@ -27,6 +28,7 @@ import {
   type OrganiserContactDefaults,
 } from "./event-form/regions";
 import { overrideFromColumns } from "@/lib/organiser-contact";
+import { formatFromTickets } from "@/lib/team-tickets";
 
 // Shown when an upload or the event save comes back 401. submitToApi refreshes
 // the token first, so landing here means the refresh token itself is gone.
@@ -34,7 +36,8 @@ const SESSION_EXPIRED_MESSAGE =
   "Your session has expired and nothing was saved. Please sign in again, then retry. Keep this tab open so you don't lose your event details.";
 
 /** Rows of the Event Details card, in order. Each opens in place rather than all at once. */
-const DETAIL_ROWS: RegionId[] = ["date", "time", "location", "format", "divisions", "intensity"];
+// Format is not a row to fill in: it follows the tickets (#541).
+const DETAIL_ROWS: RegionId[] = ["date", "time", "location", "divisions", "intensity"];
 const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
   date: "Date", time: "Time", location: "Location", format: "Format",
   divisions: "Divisions", intensity: "Intensity",
@@ -45,7 +48,7 @@ const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
  * are complete before their optional fields (cut-off time, venue name) are
  * reached, so moving on would cut those off.
  */
-const AUTO_ADVANCE = new Set<RegionId>(["date", "format", "intensity"]);
+const AUTO_ADVANCE = new Set<RegionId>(["date", "intensity"]);
 /** A picker or suggestion list still open inside a row: the organiser is mid-choice. */
 const OPEN_PICKER = '[aria-haspopup][aria-expanded="true"], [role="combobox"][aria-expanded="true"]';
 
@@ -65,8 +68,13 @@ interface EditContext {
 function returnPath(): string | null {
   if (typeof window === "undefined") return null;
   const from = new URLSearchParams(window.location.search).get("from");
-  return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
+  if (!from) return null;
+  const safe = safeReturnPath(from, { fallback: "" });
+  return safe || null;
 }
+
+/** `leaveTo` when the leave prompt was opened by the browser's Back button. */
+const LEAVE_BACK = "__back__";
 
 interface EventPageEditorProps {
   apiBase: string;             // "/api/organiser" | "/api/admin"
@@ -140,7 +148,77 @@ export default function EventPageEditor({
   const saveLabel = awaitsReview ? "Submit for review" : "Save changes";
   const finalLabel = awaitsReview ? "Submit for review" : isLive ? "Save changes" : eventStatus === "REJECTED" ? "Resubmit" : eventStatus === "PENDING" ? "Save & keep in review" : "Publish listing";
 
-  const update = (patch: Partial<FormState>) => setForm(f => ({ ...f, ...patch }));
+  // Anything typed since the page opened or last saved. Every save that
+  // succeeds also leaves the editor, so nothing clears it but leaving.
+  const [dirty, setDirty] = useState(false);
+  const update = (patch: Partial<FormState>) => { setForm(f => ({ ...f, ...patch })); setDirty(true); };
+
+  // The browser's Back button skipped the leave prompt and dropped the event
+  // without a word (#529). While there are unsaved edits, an extra history
+  // entry for this same page sits on top, so Back lands on this page again
+  // and opens the prompt instead. That entry is put back immediately: the
+  // first Back does not change the URL, and a second press would otherwise
+  // leave. Closing or reloading the tab gets the browser's own "leave site?"
+  // check.
+  const backGuarded = useRef(false);
+  const leaving = useRef(false);
+  const armBackGuard = () => {
+    window.history.pushState(window.history.state, "", window.location.href);
+    backGuarded.current = true;
+  };
+  useEffect(() => {
+    if (!dirty) return;
+    if (!backGuarded.current) armBackGuard();
+    const onPopState = () => {
+      if (leaving.current || !backGuarded.current) return;
+      backGuarded.current = false;
+      armBackGuard();
+      setLeaveTo(LEAVE_BACK);
+      setShowCancelModal(true);
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (leaving.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("popstate", onPopState);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirty]);
+
+  /** Leave the editor. Replaces the Back guard entry, if there is one, so the
+   *  history does not keep a second copy of the editor behind the new page. */
+  const leave = (destination: string) => {
+    leaving.current = true;
+    if (destination === LEAVE_BACK) {
+      const fallback = returnPath() ?? cancelRedirect;
+      // The guard entry is current. One step back only returns to this same
+      // page. Two steps reaches whatever was open before the editor. With no
+      // such page (a new tab, a bookmark), go to the usual redirect.
+      if (!backGuarded.current || window.history.length <= 2) {
+        backGuarded.current = false;
+        router.push(fallback);
+        return;
+      }
+      backGuarded.current = false;
+      const here = window.location.href;
+      let giveUp = 0;
+      const onLeft = () => {
+        window.clearTimeout(giveUp);
+        window.removeEventListener("popstate", onLeft);
+        if (window.location.href === here) router.push(fallback);
+      };
+      giveUp = window.setTimeout(onLeft, 300);
+      window.addEventListener("popstate", onLeft);
+      window.history.go(-2);
+      return;
+    }
+    if (backGuarded.current) { backGuarded.current = false; router.replace(destination); return; }
+    router.push(destination);
+  };
   const { coverSrc, photoSrcs } = useObjectUrls(form.coverImage, form.coverImageUrl, form.photos);
 
   useEffect(() => {
@@ -163,9 +241,10 @@ export default function EventPageEditor({
         if (e.editContext?.pendingRevision?.payload) Object.assign(e, e.editContext.pendingRevision.payload);
         originalFields.current = { inclusions: e.inclusions, activations: e.activations, accessibilityInfo: e.accessibilityInfo };
         const waves: Wave[] = Array.isArray(e.waves) && e.waves.length
-          ? e.waves.map((w: { label?: string; price?: string; closes?: string; startTime?: string; qty?: number }) => ({
+          ? e.waves.map((w: { label?: string; price?: string; closes?: string; startTime?: string; qty?: number; teamSize?: number }) => ({
               label: w.label ?? "", price: w.price ?? "", closes: w.closes ?? "", startTime: w.startTime ?? "",
               qty: typeof w.qty === "number" && w.qty > 0 ? String(w.qty) : "",
+              teamSize: typeof w.teamSize === "number" && w.teamSize > 0 ? String(w.teamSize) : "",
             }))
           : [EMPTY_WAVE];
         // An overall cap from before ticket quantities. One ticket category
@@ -376,16 +455,19 @@ export default function EventPageEditor({
         state:             form.state,
         latitude:          form.latitude,
         longitude:         form.longitude,
-        format:            form.format,
+        format:            formatFromTickets(form.waves),
         level:             form.level,
         categories:        form.categories,
         // The total of the ticket quantities, which every capacity check reads.
         cap:               eventCap(form),
         // A quantity is only stored when the organiser set one: no `qty` is
         // what checkout already reads as "no limit".
-        waves:             form.waves.map(({ qty, ...w }) => {
+        // Team size is stored as a number on team tickets only; an
+        // individual ticket carries no `teamSize`.
+        waves:             form.waves.map(({ qty, teamSize, ...w }) => {
           const n = waveQty({ qty });
-          return n === null ? w : { ...w, qty: n };
+          const size = waveTeamSize({ teamSize });
+          return { ...w, ...(n === null ? {} : { qty: n }), ...(size === null ? {} : { teamSize: size }) };
         }),
         inclusions:        originalFields.current.inclusions ?? null,
         activations:       originalFields.current.activations ?? null,
@@ -435,14 +517,22 @@ export default function EventPageEditor({
       setAbnNotice(data.notice ?? "");
       return true;
     }
-    router.push(redirectTo ?? returnPath() ?? submitRedirect);
+    leave(redirectTo ?? returnPath() ?? submitRedirect);
     return true;
   };
 
   // A link out of the editor goes through the same prompt as Cancel, so
   // following it cannot silently throw away an unsaved event.
   const askToLeave = (destination: string) => { setLeaveTo(destination); setShowCancelModal(true); };
-  const closeLeavePrompt = () => { setShowCancelModal(false); setLeaveTo(null); };
+  const closeLeavePrompt = () => {
+    // Staying after Back used up the guard entry: put it back.
+    if (leaveTo === LEAVE_BACK && !leaving.current && !backGuarded.current) {
+      window.history.pushState(window.history.state, "", window.location.href);
+      backGuarded.current = true;
+    }
+    setShowCancelModal(false);
+    setLeaveTo(null);
+  };
 
   const saveDraft = () => submitToApi(true, form.title.trim() || "Untitled draft");
   // A live event saves its changes and stays live: the organiser agreed to
@@ -742,7 +832,7 @@ export default function EventPageEditor({
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                 {saving ? "Saving…" : <><Check className="w-4 h-4" /> {isEditingPublished ? <>{saveLabel} &amp; leave</> : <>Save draft &amp; leave</>}</>}
               </button>
-              <button onClick={() => router.push(leaveTo ?? returnPath() ?? cancelRedirect)}
+              <button onClick={() => leave(leaveTo ?? returnPath() ?? cancelRedirect)}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:border-primary/40 transition-colors">
                 Discard &amp; leave
               </button>
@@ -775,11 +865,11 @@ export default function EventPageEditor({
               Add your ABN and our team can approve the listing. Nothing you entered has been lost.
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={() => router.push("/organiser/payments")}
+              <button onClick={() => leave("/organiser/payments")}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center justify-center gap-2">
                 <ArrowRight className="w-4 h-4" /> Add my ABN
               </button>
-              <button onClick={() => { setAbnNotice(null); router.push(submitRedirect); }}
+              <button onClick={() => { setAbnNotice(null); leave(submitRedirect); }}
                 className="w-full font-headline text-[13px] font-bold uppercase tracking-widest px-6 py-3.5 rounded-md border border-dark-lighter text-light hover:border-primary/40 transition-colors">
                 I&apos;ll do it later
               </button>

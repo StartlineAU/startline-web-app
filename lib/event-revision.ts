@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { withUniqueSlug } from "@/lib/slugs";
+import { checkTeamTierChange } from "@/lib/team-entries";
 import {
   baselineChanges,
   describeChangeValue,
@@ -190,6 +191,15 @@ export async function applyPendingRevision(input: {
     ? (pending.payload as Record<string, unknown>)
     : {};
   const merged = { ...existing, ...payload } as typeof existing & Record<string, unknown>;
+
+  // Entries may have been taken on a team ticket while this edit waited for
+  // review; its team size is fixed once they have.
+  const teamTierError = await checkTeamTierChange(input.eventId, existing, {
+    waves: payload.waves,
+    format: typeof payload.format === "string" ? payload.format : undefined,
+  });
+  if (teamTierError) throw new RevisionError(teamTierError, 409, "TEAM_TICKET_CHANGED");
+
   const times = eventTimeData({
     eventDate: String(merged.eventDate ?? existing.eventDate),
     endDate: merged.endDate !== undefined ? (merged.endDate as string | null) : existing.endDate,

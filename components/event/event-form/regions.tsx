@@ -1,5 +1,6 @@
 "use client";
 
+import { MIN_TEAM_SIZE, MAX_TEAM_SIZE, ticketFormatLabel } from "@/lib/team-tickets";
 import { useEffect, useLayoutEffect, useRef, useState, startTransition, type ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/components/event/EventDetailView";
 import { formatDivisionLabel } from "@/lib/divisions";
 import { isFreeEvent } from "@/lib/event-types";
+import { locationFieldErrors } from "@/lib/event-location";
 import { ticketFeeBreakdown } from "@/lib/platform-fee";
 import { normalisePrizeAmount } from "@/lib/prize-pool";
 import { describeTiers } from "@/lib/refund-policy";
@@ -36,6 +38,7 @@ import {
 } from "@/lib/organiser-contact";
 import {
   DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, FORMATS, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
+  waveTeamSize, eventCap,
   type AusState, type Discipline, type FormState, type RegionId, type Wave,
 } from "./shared";
 
@@ -184,7 +187,7 @@ export function EditableDetail({ id, label, value, placeholder, open, onToggle, 
 }
 
 /** A labelled field in a details row. `hint` is a short tag on the right ("Optional"); `info` is guidance in a bubble. */
-function MiniField({ label, hint, info, children }: { label: string; hint?: string; info?: ReactNode; children: ReactNode }) {
+function MiniField({ label, hint, info, error, children }: { label: string; hint?: string; info?: ReactNode; error?: string; children: ReactNode }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -195,6 +198,7 @@ function MiniField({ label, hint, info, children }: { label: string; hint?: stri
         {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{hint}</span>}
       </div>
       {children}
+      {error && <p role="alert" className="font-headline text-[10px] uppercase tracking-widest text-red-400 mt-1.5">{error}</p>}
     </div>
   );
 }
@@ -446,13 +450,17 @@ export function PrizePoolEditor({ form, update }: Props) {
   );
 }
 
-function FeeBreakdown({ price, feeStructure }: { price: string; feeStructure: FormState["feeStructure"] }) {
+function FeeBreakdown({ price, feeStructure, teamSize }: {
+  price: string; feeStructure: FormState["feeStructure"]; teamSize?: number | null;
+}) {
   const p = parseFloat(price);
   if (!price || price === "0" || isNaN(p) || p <= 0) return null;
   // The same arithmetic checkout charges, so the preview matches the real
   // payout to the cent: the Stripe fee is estimated on the whole charge,
-  // booking fee included, and the organiser absorbs it (#470).
-  const fees = ticketFeeBreakdown(Math.round(p * 100), feeStructure);
+  // booking fee included, and the organiser absorbs it (#470). A team ticket
+  // is one payment, so it carries one Stripe fee, not one per member.
+  const fees = ticketFeeBreakdown(Math.round(p * 100), feeStructure, teamSize ?? 1);
+  const eachPays = teamSize ? ticketFeeBreakdown(Math.round(p * 100), feeStructure).athletePaysCents : null;
   const fmt = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
   const cell = (label: string, value: string, note?: string) => (
     <div className="min-w-0" data-fee-row={label}>
@@ -462,11 +470,18 @@ function FeeBreakdown({ price, feeStructure }: { price: string; feeStructure: Fo
     </div>
   );
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-lg bg-dark-darker/60 px-4 py-3" data-testid="fee-breakdown">
-      {cell("Athlete pays", fmt(fees.athletePaysCents))}
-      {cell("You receive", fmt(fees.organiserReceivesCents), "After Stripe fee")}
-      {cell("Startline fee", fmt(fees.platformFeeCents))}
-      {cell("Stripe fee", fmt(fees.stripeFeeCents), "Estimate, from your payout")}
+    <div className="rounded-lg bg-dark-darker/60 px-4 py-3 space-y-2" data-testid="fee-breakdown">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {cell(teamSize ? "Team pays" : "Athlete pays", fmt(fees.athletePaysCents), teamSize ? `Team of ${teamSize}` : undefined)}
+        {cell("You receive", fmt(fees.organiserReceivesCents), "After Stripe fee")}
+        {cell("Startline fee", fmt(fees.platformFeeCents))}
+        {cell("Stripe fee", fmt(fees.stripeFeeCents), "Estimate, from your payout")}
+      </div>
+      {teamSize && eachPays !== null && (
+        <p className="font-headline text-[10px] uppercase tracking-widest text-muted" data-testid="fee-breakdown-team">
+          A team of {teamSize} pays {fmt(fees.athletePaysCents)} in one payment · {fmt(eachPays)} per person
+        </p>
+      )}
     </div>
   );
 }
@@ -511,7 +526,9 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
   });
   const quantities = form.waves.map(waveQty);
   const allLimited = quantities.length > 0 && quantities.every(q => q !== null);
-  const totalTickets = quantities.reduce<number>((sum, q) => sum + (q ?? 0), 0);
+  const totalTickets = quantities.reduce<number>((sum, q, i) => sum + (waveTeamSize(form.waves[i]) ? 0 : q ?? 0), 0);
+  const totalTeams = quantities.reduce<number>((sum, q, i) => sum + (waveTeamSize(form.waves[i]) ? q ?? 0 : 0), 0);
+  const totalPeople = allLimited ? eventCap(form) ?? 0 : 0;
 
   return (
     <Region id="tickets" missing={missing}>
@@ -528,12 +545,34 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
           const labelMissing = !!missing && !w.label.trim();
           const priceMissing = !!missing && !free && !(parseFloat(w.price) >= 0);
           const id = `ticket-${i}`;
+          const teamSize = waveTeamSize(w);
+          // Each ticket says who it is for. The event's format follows from
+          // the tickets, so there is nothing to pick first.
+          const isTeam = w.teamSize !== "";
+          const teamSizeBad = isTeam && teamSize === null && (!!missing || w.teamSize.length > 0);
           return (
             <div key={i} data-testid="ticket-row" className="bg-dark rounded-xl border border-dark-lighter p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">
-                  Ticket {i + 1}
-                </span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3 min-w-0">
+                  <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary">
+                    Ticket {i + 1}
+                  </span>
+                  {/* Who the ticket is for. The event's format follows from these. */}
+                  <div role="radiogroup" aria-label="Who this ticket is for" className="inline-flex rounded-md border border-dark-lighter p-0.5">
+                    {([["individual", "Individual"], ["team", "Team"]] as const).map(([v, l]) => {
+                      const on = v === "team" ? isTeam : !isTeam;
+                      return (
+                        <button key={v} type="button" role="radio" aria-checked={on}
+                          onClick={() => updateWave(i, { teamSize: v === "team" ? (w.teamSize || "2") : "" })}
+                          className={`rounded px-3 py-1 font-headline text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                            on ? "bg-primary text-darker" : "text-muted hover:text-primary"
+                          }`}>
+                          {l}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 {form.waves.length > 1 && (
                   <button type="button" onClick={() => removeWave(i)} aria-label="Remove this ticket category"
                     className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest text-muted hover:text-primary transition-colors">
@@ -550,8 +589,10 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                     className={`${ticketInput} ${labelMissing ? "!border-orange-400/70" : ""}`} />
                 </TicketField>
 
-                <TicketField label="Price" htmlFor={`${id}-price`} required
-                  info="What athletes pay for this ticket, in Australian dollars. Tap Free if it costs nothing.">
+                <TicketField label={isTeam ? "Price per person" : "Price"} htmlFor={`${id}-price`} required
+                  info={isTeam
+                    ? "What each team member pays, in Australian dollars. A team pays this times the team size. Tap Free if it costs nothing."
+                    : "What athletes pay for this ticket, in Australian dollars. Tap Free if it costs nothing."}>
                   <div className="flex items-stretch gap-2">
                     {/* The price field stays put when the ticket is free, blanked out, so the row never changes shape. */}
                     <div className={`relative flex-1 transition-opacity ${free ? "opacity-40" : ""}`}>
@@ -571,10 +612,26 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                 </TicketField>
               </div>
 
-              <TicketField label="Tickets available" htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
-                info="How many of this ticket you will sell. Leave blank for no limit. Only you see this number, and sales stop when it runs out.">
+              {isTeam && (
+                <div data-testid="ticket-team">
+                  <TicketField label="People per team" htmlFor={`${id}-team-size`} required className="sm:max-w-[260px]"
+                    info={`How many athletes make up one team, from ${MIN_TEAM_SIZE} to ${MAX_TEAM_SIZE}. Two is shown to athletes as Pairs. The buyer names the first member at checkout and can add the rest later.`}>
+                    <input id={`${id}-team-size`} value={w.teamSize} inputMode="numeric" placeholder="e.g. 4" aria-label="People per team"
+                      onChange={e => updateWave(i, { teamSize: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+                      className={`${ticketInput} tabular-nums ${teamSizeBad ? "!border-orange-400/70" : ""}`} />
+                    {teamSizeBad && (
+                      <p className="mt-1.5 text-[12px] text-orange-300">Teams can have {MIN_TEAM_SIZE} to {MAX_TEAM_SIZE} people. For one person, choose Individual.</p>
+                    )}
+                  </TicketField>
+                </div>
+              )}
+
+              <TicketField label={isTeam ? "Teams available" : "Tickets available"} htmlFor={`${id}-qty`} className="sm:max-w-[260px]"
+                info={isTeam
+                  ? "How many teams you will take on this ticket. Leave blank for no limit. Only you see this number, and sales stop when it runs out."
+                  : "How many of this ticket you will sell. Leave blank for no limit. Only you see this number, and sales stop when it runs out."}>
                 <div className="relative">
-                  <input id={`${id}-qty`} value={w.qty} inputMode="numeric" placeholder="No limit" aria-label="Tickets available"
+                  <input id={`${id}-qty`} value={w.qty} inputMode="numeric" placeholder="No limit" aria-label={isTeam ? "Teams available" : "Tickets available"}
                     onChange={e => updateWave(i, { qty: e.target.value.replace(/\D/g, "").slice(0, 6) })}
                     className={`${ticketInput} !pr-10 tabular-nums`} />
                   <EyeOff className="w-4 h-4 text-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
@@ -604,14 +661,19 @@ export function TicketsEditor({ form, update, missing }: Props & { missing?: str
                 </button>
               )}
 
-              {form.registrationType === "startline" && <FeeBreakdown price={w.price} feeStructure={form.feeStructure} />}
+              {form.registrationType === "startline" && <FeeBreakdown price={w.price} feeStructure={form.feeStructure} teamSize={teamSize} />}
             </div>
           );
         })}
 
         {allLimited && (
           <p className="px-1 font-headline text-[10px] uppercase tracking-widest text-muted" data-testid="ticket-total">
-            {totalTickets.toLocaleString()} ticket{totalTickets === 1 ? "" : "s"} in total · registrations close when they sell out
+            {totalTeams > 0
+              ? <>{[
+                  `${totalTeams.toLocaleString()} team${totalTeams === 1 ? "" : "s"}`,
+                  ...(totalTickets > 0 ? [`${totalTickets.toLocaleString()} individual ticket${totalTickets === 1 ? "" : "s"}`] : []),
+                ].join(" + ")} · up to {totalPeople.toLocaleString()} athletes · registrations close when they sell out</>
+              : <>{totalTickets.toLocaleString()} ticket{totalTickets === 1 ? "" : "s"} in total · registrations close when they sell out</>}
           </p>
         )}
         {!allLimited && form.cap && (
@@ -862,6 +924,13 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
     onNext: () => onNext(id), nextLabel: nextLabel(id),
   });
   const timeInvalid = !!(form.startTime && form.endTime && form.endTime <= form.startTime);
+  // Inline, only once there is enough typed to judge: the first few letters
+  // of an address are not yet an error. The checklist still holds the rest.
+  const locationErrors = locationFieldErrors({
+    ...form,
+    address: form.address.trim().length >= 5 ? form.address : "",
+    city: form.city.trim().length >= 2 ? form.city : "",
+  });
   const disciplineCats = DISCIPLINE_CATS[form.discipline as Discipline];
   const showDivisions = !!disciplineCats || form.categories.length > 0;
 
@@ -897,6 +966,7 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
         </MiniField>
       </EditableDetail>
 
+      {/* Shown as they type: only what is filled in and does not look like a place. */}
       <EditableDetail {...row("location")} label="Location" placeholder="Add the venue"
         value={form.address || form.venue || form.city ? (
           <>
@@ -905,7 +975,7 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
             {(form.city || form.state) && <DetailSub>{[form.city, form.state ? STATE_LABELS[form.state] : ""].filter(Boolean).join(", ")}</DetailSub>}
           </>
         ) : null}>
-        <MiniField label="Street address">
+        <MiniField label="Street address" error={locationErrors.address}>
           <AddressAutocomplete
             value={form.address} onChange={raw => update({ address: raw })}
             onSelect={({ address, city, state, venue, latitude, longitude }) => {
@@ -926,12 +996,12 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
           longitude={form.longitude}
           label={[form.venue, form.city, form.state?.toUpperCase()].filter(Boolean).join(", ") || undefined}
         />
-        <MiniField label="Venue name" hint="Optional" info="The name athletes know the place by, such as a park or stadium. It replaces the city on the banner.">
+        <MiniField label="Venue name" hint="Optional" error={locationErrors.venue} info="The name athletes know the place by, such as a park or stadium. It replaces the city on the banner.">
           <input value={form.venue} onChange={e => update({ venue: e.target.value })}
             placeholder="Sydney Olympic Park" className={inputCls} />
         </MiniField>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
-          <MiniField label="City">
+          <MiniField label="City" error={locationErrors.city}>
             <SuburbAutocomplete
               value={form.city}
               onChange={city => update({ city })}
@@ -952,20 +1022,17 @@ export function DetailsEditor({ form, update, openRow, onToggle, onNext, nextLab
         </div>
       </EditableDetail>
 
-      <EditableDetail {...row("format")} label="Format" placeholder="Choose a format"
-        value={form.format ? <DetailValue>{formatCompetitionFormat(form.format)}</DetailValue> : null}>
-        <div className="grid grid-cols-1 gap-2">
-          {FORMATS.map(f => {
-            const on = form.format === f.v;
-            return (
-              <button key={f.v} type="button" aria-pressed={on} onClick={() => update({ format: f.v })} className={optionCard(on)}>
-                <span className={`font-headline text-[14px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{f.l}</span>
-                <span className="font-headline text-[10px] uppercase tracking-widest text-muted">{f.d}</span>
-              </button>
-            );
-          })}
+      {/* Not chosen: it follows the tickets, each set to Individual or Team
+          under Pricing (#541). */}
+      <Region id="format">
+        <div className="-mx-3 px-3 py-2" data-testid="event-format">
+          <DetailLabel>Format</DetailLabel>
+          <DetailValue>{ticketFormatLabel(form.waves) ?? "Individual"}</DetailValue>
+          <p className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">
+            Set by your tickets
+          </p>
         </div>
-      </EditableDetail>
+      </Region>
 
       {showDivisions && (
         <EditableDetail {...row("divisions")} label="Divisions" placeholder="Choose the divisions" required={!!disciplineCats}

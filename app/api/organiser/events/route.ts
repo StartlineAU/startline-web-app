@@ -10,11 +10,14 @@ import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted"
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { organiserEventPayloadSchema } from "@/lib/schemas";
 import { rateLimit } from "@/lib/rate-limit";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { takesPayments } from "@/lib/event-approval";
 import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
+import { withTicketFormat } from "@/lib/team-tickets";
 export async function GET() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -71,7 +74,8 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const body = parsed.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsed.data);
   const { submit, organiserId: requestedOrganiserId } = body;
 
   // Multi-org scoping: the organiser portal sends the active organiserId (the
@@ -112,6 +116,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A title is required to save a draft." }, { status: 400 });
     }
   }
+
+  // A real place, not spaces or symbols (#530).
+  const locationError = await checkEventLocation(body, { submit });
+  if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
 
   // A missing ABN no longer blocks the organiser from finishing their event.
   // It used to reject the whole submission at the last step, after five steps
@@ -171,9 +179,9 @@ export async function POST(req: NextRequest) {
         endDate:          body.endDate           ?? null,
         startTime:        body.startTime         ?? "",
         endTime:          body.endTime           || "",
-        venue:            body.venue             ?? "",
-        address:          body.address           ?? null,
-        city:             body.city              ?? "",
+        venue:            tidyLocationText(body.venue),
+        address:          tidyLocationText(body.address) || null,
+        city:             tidyLocationText(body.city),
         state:            body.state             ?? "",
         latitude:         body.latitude          ?? (body.city && body.state ? getEventCoords(body.city, body.state)[0] : null),
         longitude:        body.longitude         ?? (body.city && body.state ? getEventCoords(body.city, body.state)[1] : null),

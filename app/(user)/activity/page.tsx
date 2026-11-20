@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote } from "lucide-react";
+import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, Users, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserEvent } from "@/types";
 import type { PublicEvent } from "@/lib/event-types";
@@ -20,6 +20,7 @@ import {
   DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import TeamMemberDetailsDialog, { type PendingTeamPlace } from "@/components/activity/TeamMemberDetailsDialog";
 
 type FollowingOrganiser = {
   followId: string;
@@ -50,6 +51,7 @@ const USER_NOTIF_STYLE: Record<string, { Icon: LucideIcon; tone: string }> = {
   ORGANISER_EVENT_LIVE:     { Icon: Megaphone, tone: "bg-primary/10 text-primary"   },
   ORGANISER_REFUND_REQUEST: { Icon: Undo2,     tone: "bg-amber-400/10 text-amber-300" },
   REFUND_PROCESSED:         { Icon: Banknote,  tone: "bg-primary/10 text-primary"   },
+  TEAM_DETAILS_NEEDED:      { Icon: Users,     tone: "bg-amber-400/10 text-amber-300" },
 };
 
 const FALLBACK_NOTIF_STYLE = { Icon: Bell, tone: "bg-white/[0.06] text-muted" };
@@ -133,11 +135,14 @@ function RegisteredCard({
   event,
   metas,
   onOpenTicket,
+  onAddDetails,
 }: {
   event: UserEvent;
   metas: RegMeta[];
   onOpenTicket: () => void;
+  onAddDetails?: (meta: RegMeta) => void;
 }) {
+  const pending = metas.filter((m) => m.detailsPending && m.status === "CONFIRMED");
   const cardStatus = metas.length === 0
     ? "CONFIRMED"
     : metas.length === 1
@@ -159,6 +164,46 @@ function RegisteredCard({
         hideSave
         hidePrice
       />
+      {/* Unnamed team places stay on the card rather than inside the ticket:
+          the buyer has to act on them before race day (#541). */}
+      {onAddDetails && pending.length > 0 && (
+        <div
+          className="mt-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5"
+          role="status"
+          data-testid="team-details-warning"
+        >
+          <div className="flex items-start gap-3">
+            <Users className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" strokeWidth={2.5} />
+            <div className="min-w-0">
+              <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-amber-300">
+                {pending.length === 1
+                  ? "1 team member needs their details"
+                  : `${pending.length} team members need their details`}
+              </p>
+              <p className="text-[12px] text-muted leading-relaxed mt-1">
+                Their places are paid for and held. Add who is racing before race day so the
+                organiser has everyone.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-2 space-y-2">
+            {pending.map((meta) => (
+              <li key={meta.id} className="flex items-center justify-between gap-3" data-testid="team-place-pending">
+                <p className="min-w-0 truncate font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
+                  {meta.teamName ? `Team ${meta.teamName}` : "Team place"} · {meta.athleteName}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onAddDetails(meta)}
+                  className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/40 text-primary font-headline text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-colors"
+                >
+                  <UserPlus className="w-3.5 h-3.5" /> Add details
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -283,6 +328,7 @@ export default function ActivityPage() {
   const [refunding, setRefunding] = useState(false);
   const [refundError, setRefundError] = useState("");
   const [ticketTarget, setTicketTarget] = useState<{ eventId: string; title: string } | null>(null);
+  const [detailsTarget, setDetailsTarget] = useState<PendingTeamPlace | null>(null);
 
   const confirmRefund = async () => {
     if (!refundTarget) return;
@@ -403,6 +449,8 @@ export default function ActivityPage() {
               refundAmountCents: r.refundAmountCents ?? 0,
               refundPercent: r.refundPercent ?? 0,
               outsidePolicy: r.outsidePolicy ?? false,
+              teamName: r.teamName ?? null,
+              detailsPending: r.detailsPending === true,
             };
             (meta[r.eventId] ??= []).push(entry);
             regIds.push(r.eventId);
@@ -545,6 +593,14 @@ export default function ActivityPage() {
                     event={event}
                     metas={confirmedMetas(String(event.id))}
                     onOpenTicket={() => setTicketTarget({ eventId: String(event.id), title: event.title })}
+                    onAddDetails={(meta) =>
+                      setDetailsTarget({
+                        id: meta.id,
+                        athleteName: meta.athleteName,
+                        teamName: meta.teamName,
+                        eventTitle: event.title,
+                      })
+                    }
                   />
                 ))}
               </div>
@@ -605,6 +661,31 @@ export default function ActivityPage() {
           setTicketTarget(null);
           setRefundError("");
           setRefundTarget({ meta, title });
+        }}
+        onAddDetails={(meta) => {
+          const title = ticketTarget?.title ?? "";
+          setTicketTarget(null);
+          setDetailsTarget({
+            id: meta.id,
+            athleteName: meta.athleteName,
+            teamName: meta.teamName,
+            eventTitle: title,
+          });
+        }}
+      />
+
+      <TeamMemberDetailsDialog
+        place={detailsTarget}
+        onClose={() => setDetailsTarget(null)}
+        onSaved={(id, athleteName) => {
+          setRegMeta((prev) => {
+            const next: Record<string, RegMeta[]> = {};
+            for (const [eventId, list] of Object.entries(prev)) {
+              next[eventId] = list.map((m) => (m.id === id ? { ...m, athleteName, detailsPending: false } : m));
+            }
+            return next;
+          });
+          setDetailsTarget(null);
         }}
       />
 

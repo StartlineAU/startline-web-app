@@ -12,6 +12,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { useApiResource } from "@/hooks/useApiResource";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import type { CheckInState } from "@/lib/check-in-window";
+import { formatEventPlace } from "@/lib/event-place";
 
 interface CheckinEvent {
   title: string;
@@ -31,6 +32,8 @@ interface CheckinRegistration {
   waveLabel: string | null;
   bibNumber: string | null;
   checkedInAt: string | null;
+  /** Set for a team entry; checking in checks in the whole team. */
+  teamName?: string | null;
 }
 
 interface CheckInInfo {
@@ -207,6 +210,11 @@ export default function CheckInScreen({
 
             <div className="bg-dark rounded-xl border border-dark-lighter p-5">
               <div className="font-headline text-[14px] font-bold text-white">{data.registration!.athleteName}</div>
+              {data.registration!.teamName && (
+                <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary mt-1">
+                  Team {data.registration!.teamName} · checks in together
+                </div>
+              )}
               <div className="flex flex-col gap-1 mt-3 text-[13px] text-muted">
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-primary shrink-0" />
@@ -215,7 +223,7 @@ export default function CheckInScreen({
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-                  {data.event.venue}, {data.event.city} {data.event.state.toUpperCase()}
+                  {formatEventPlace(data.event)}
                 </span>
                 {data.registration!.bibNumber && (
                   <span className="flex items-center gap-1.5">

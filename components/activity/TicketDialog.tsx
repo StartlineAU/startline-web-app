@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Clock, MapPin, Megaphone, MessageCircle } from "lucide-react";
+import { ArrowRight, CalendarDays, Clock, MapPin, Megaphone, MessageCircle, UserPlus } from "lucide-react";
 import type { AthleteTicket, TicketAnnouncement, TicketEntry } from "@/lib/athlete-ticket";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import { formatEventDateRange, formatTime } from "@/lib/utils";
@@ -41,6 +41,7 @@ export default function TicketDialog({
   now,
   onClose,
   onWithdraw,
+  onAddDetails,
 }: {
   /** The event whose ticket is open, or null when closed. */
   eventId: string | null;
@@ -55,6 +56,8 @@ export default function TicketDialog({
   onClose: () => void;
   /** Free entries withdraw in place; Activity asks to confirm first. */
   onWithdraw: (meta: RegMeta) => void;
+  /** A team place left for later; Activity opens the details form. */
+  onAddDetails: (meta: RegMeta) => void;
 }) {
   const load = useCallback(async (signal: AbortSignal) => {
     const res = await fetch(`/api/user/tickets/${encodeURIComponent(eventId ?? "")}`, { signal });
@@ -113,6 +116,7 @@ export default function TicketDialog({
                     meta={metas.find((m) => m.id === entry.id) ?? null}
                     now={now}
                     onWithdraw={onWithdraw}
+                    onAddDetails={onAddDetails}
                   />
                 ))}
               </ul>
@@ -181,11 +185,13 @@ function EntryRow({
   meta,
   now,
   onWithdraw,
+  onAddDetails,
 }: {
   entry: Json<TicketEntry>;
   meta: RegMeta | null;
   now: Date;
   onWithdraw: (meta: RegMeta) => void;
+  onAddDetails: (meta: RegMeta) => void;
 }) {
   // Activity's copy wins: it changes as soon as the athlete withdraws.
   const withdrawn = (meta?.status ?? entry.status) !== "CONFIRMED";
@@ -204,6 +210,30 @@ function EntryRow({
           {copy.heading}
         </p>
         {copy.detail && <p className="mt-0.5 text-[12px] text-muted">{copy.detail}</p>}
+      </li>
+    );
+  }
+
+  // Nobody is named on this place yet, so there is no wave, bib or check-in
+  // to show: only the step that names them.
+  if (meta?.detailsPending) {
+    return (
+      <li data-testid="ticket-entry-pending" className="flex items-center justify-between gap-3 px-5 py-4">
+        <div className="min-w-0">
+          <p className="truncate font-headline text-[13px] font-bold text-light">
+            {meta.teamName ? `Team ${meta.teamName}` : "Team place"}
+          </p>
+          <p className="mt-1 font-headline text-[11px] font-bold uppercase tracking-widest text-amber-300">
+            Details needed
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onAddDetails(meta)}
+          className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/40 text-primary font-headline text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-colors"
+        >
+          <UserPlus className="w-3.5 h-3.5" /> Add details
+        </button>
       </li>
     );
   }

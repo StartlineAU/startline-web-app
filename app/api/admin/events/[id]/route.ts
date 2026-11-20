@@ -5,10 +5,14 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { checkTeamTierChange } from "@/lib/team-entries";
 import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { tidyLocationText } from "@/lib/event-location";
+import { checkEventLocation } from "@/lib/event-location-verify";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -18,6 +22,7 @@ import {
 import { notifyEventChange } from "@/lib/notify-event-change";
 import { supersedePendingRevision } from "@/lib/event-revision";
 import { notifyOrganiserRevisionSuperseded } from "@/lib/notify-event-revision";
+import { withTicketFormat } from "@/lib/team-tickets";
 
 const AUDIT_FIELDS = [
   "title", "discipline", "description", "eventDate", "endDate", "startTime", "endTime",
@@ -82,7 +87,8 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const body = parsedBody.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsedBody.data);
   const { submit, ...data } = body;
 
   try {
@@ -95,6 +101,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
 
+    // A ticket's team size is fixed once it has entries, for admins too.
+    const teamTierError = await checkTeamTierChange(id, existing, { waves: data.waves, format: data.format });
+    if (teamTierError) return NextResponse.json({ error: teamTierError }, { status: 409 });
+
     if (submit) {
       const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
       for (const field of required) {
@@ -104,6 +114,10 @@ export async function PATCH(
         return NextResponse.json({ error: "registrationUrl is required for external registrations." }, { status: 400 });
       }
     }
+
+    // A real place, not spaces or symbols (#530).
+    const locationError = await checkEventLocation(data, { submit, saved: existing });
+    if (locationError) return NextResponse.json({ error: locationError }, { status: 400 });
 
     // Live events stay live after an admin edit; everything else re-enters the
     // review queue. Archived events stay archived rather than reopening.
@@ -132,9 +146,9 @@ export async function PATCH(
       endDate:           data.endDate !== undefined ? data.endDate : undefined,
       startTime:         data.startTime         ?? undefined,
       endTime:           data.endTime           ?? undefined,
-      venue:             data.venue             ?? undefined,
-      address:           data.address           ?? undefined,
-      city:              data.city              ?? undefined,
+      venue:             data.venue   != null ? tidyLocationText(data.venue) : undefined,
+      address:           data.address != null ? tidyLocationText(data.address) || null : undefined,
+      city:              data.city    != null ? tidyLocationText(data.city) : undefined,
       state:             data.state             ?? undefined,
       latitude:          data.latitude          ?? (data.city && data.state ? getEventCoords(data.city, data.state)[0] : null),
       longitude:         data.longitude         ?? (data.city && data.state ? getEventCoords(data.city, data.state)[1] : null),
@@ -267,6 +281,9 @@ export async function DELETE(
     if (!event) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
+    if ((await eventIdsWithEntries([id])).has(id)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
 
     await prisma.event.delete({ where: { id } });
     await cancelEventSchedules(id).catch((err) =>
@@ -283,6 +300,9 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
     console.error("Admin delete event error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }

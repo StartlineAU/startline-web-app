@@ -4,8 +4,11 @@ import { test, expect } from "@playwright/test";
 // auth and validation paths without making real Stripe API calls, so they run
 // in CI and against any local DB state. Live end-to-end validation (real
 // PaymentIntents, webhooks, payouts) lives in scripts/validate-stripe-connect.mjs.
-const BYPASS_COOKIE = { name: "__e2e_bypass", value: "1", domain: "localhost", path: "/", sameSite: "Lax" as const };
-const BYPASS_HEADER = { extraHTTPHeaders: { Cookie: "__e2e_bypass=1" } };
+// The seeded admin. A bypass identity is only an admin when it maps to an
+// existing Admin row (lib/amplify-server.ts resolveAdminRow), and "1" is Sarah,
+// who has none.
+const BYPASS_COOKIE = { name: "__e2e_bypass", value: "admin", domain: "localhost", path: "/", sameSite: "Lax" as const };
+const BYPASS_HEADER = { extraHTTPHeaders: { Cookie: "__e2e_bypass=admin" } };
 
 test.describe("admin payouts API", () => {
   test("GET /api/admin/payouts returns 401 without auth", async ({ request }) => {

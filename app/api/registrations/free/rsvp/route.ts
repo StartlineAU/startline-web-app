@@ -5,6 +5,8 @@ import { getUserSession } from "@/lib/amplify-server";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
 import { isFreeEvent, waveIsOpen, type PublicWave } from "@/lib/event-types";
+import { teamSizeOf } from "@/lib/team-tickets";
+import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 import {
   compactParticipant,
   athleteNameFromParticipant,
@@ -99,7 +101,8 @@ export async function POST(req: NextRequest) {
     if (blocked) return blocked;
 
     const event = await prisma.event.findUnique({
-      where: { id: body.eventId },
+      // A suspended organisation takes no new entries.
+      where: { id: body.eventId, ...ACTIVE_ORGANISER_WHERE },
       select: {
         id: true,
         title: true,
@@ -120,7 +123,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
-    if (event.status !== "APPROVED") {
+    // Same rule as checkout: closed once the event starts, whether or not the
+    // background worker has moved the row to IN_PROGRESS yet.
+    if (!registrationOpenAt(event)) {
       return NextResponse.json(
         { error: "This event is not currently accepting registrations." },
         { status: 409 },
@@ -141,6 +146,14 @@ export async function POST(req: NextRequest) {
     const wave = waves.find((candidate) => candidate.label === body.waveLabel);
     if (!wave) {
       return NextResponse.json({ error: "Selected ticket tier not found." }, { status: 400 });
+    }
+    // A team entry needs every member's details, which a one-tap RSVP has not
+    // got; it goes through the standard registration flow instead.
+    if (teamSizeOf(wave)) {
+      return NextResponse.json(
+        { error: "Team tickets need the standard registration flow." },
+        { status: 400 },
+      );
     }
     if (!waveIsOpen(wave)) {
       return NextResponse.json(
@@ -167,6 +180,8 @@ export async function POST(req: NextRequest) {
       buyerUserId: session.sub,
       userIdByEmail: {},
       stripePaymentIntentId: null,
+      // The request schema requires acceptedTerms to be true.
+      termsAccepted: true,
       rejectExistingEntries: true,
       rejectExistingUserEntries: true,
       duplicateStatuses: RSVP_DUPLICATE_STATUSES,

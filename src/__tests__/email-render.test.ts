@@ -12,13 +12,15 @@ import {
   buildEventSubmittedForReviewEmail,
   buildReviewReportedEmail,
   buildWaveUpdateEmail,
+  buildTeamDetailsNeededEmail,
   buildFollowedOrganiserEventEmail,
   buildEventChangedEmail,
   buildEventEditPendingReviewEmail,
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
 } from "@/lib/email";
-import { formatEmailDate, formatEmailPlace, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
+import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
+import { formatEventPlace } from "@/lib/event-place";
 
 // Every transactional email in the app goes through `render` from
 // @react-email/render, which converts the HTML body to text with html-to-text.
@@ -64,7 +66,7 @@ describe("registration confirmation email", () => {
       ...data,
       eventDate: "2026-11-21",
       startTime: "07:00",
-      location: formatEmailPlace({ venue: "", city: "Melbourne", state: "vic" }),
+      location: formatEventPlace({ venue: "", city: "Melbourne", state: "vic" }),
       category: "General admission",
     });
 
@@ -104,12 +106,6 @@ describe("email formatting", () => {
     expect(formatEmailTime("TBC")).toBe("TBC");
   });
 
-  it("drops blank parts of a place and upper-cases the state", () => {
-    expect(formatEmailPlace({ venue: "Olympic Park", city: "Melbourne", state: "vic" })).toBe("Olympic Park, Melbourne VIC");
-    expect(formatEmailPlace({ venue: "  ", city: "Melbourne", state: "VIC" })).toBe("Melbourne VIC");
-    expect(formatEmailPlace({ venue: "Olympic Park", city: "", state: "" })).toBe("Olympic Park");
-  });
-
   it("builds a calendar link from the UTC instants, or none without a start", () => {
     const url = googleCalendarUrl({
       title: "Harbour 10K",
@@ -139,6 +135,7 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
     { reviewTitle: "Great", reviewBody: "Loved it", reviewerName: "Harper", organiserName: "Apex", reason: "Spam", reportCount: 1 },
     opts,
   )],
+  ["team details", () => buildTeamDetailsNeededEmail("harper@example.com", { buyerName: "Harper Jones", eventTitle: "Harbour Relay", eventDate: "2027-03-21", teams: [{ name: "Fast Feet", size: 4, missing: 3 }] }, opts)],
   ["wave", () => buildWaveUpdateEmail("harper@example.com", { athleteName: "Harper Jones", eventTitle: "Harbour 10K", eventId: "evt-1", waveLabel: "Elite", waveTime: "06:30", eventDate: "2027-03-21" }, opts)],
   ["followed", () => buildFollowedOrganiserEventEmail("harper@example.com", { followerName: "Harper", organiserName: "Apex", eventTitle: "Harbour 10K", eventId: "evt-1", eventDate: "2027-03-21", city: "Sydney" }, opts)],
   ["changed", () => buildEventChangedEmail(
@@ -192,5 +189,30 @@ describe("escaping", () => {
     );
     expect(submitted.html).toContain("Sun, 21 Mar 2027");
     expect(submitted.html).toContain("Sydney NSW");
+  });
+});
+
+describe("account security notice", () => {
+  it("names the change and how to get help, escaping what it is given", async () => {
+    const { buildAccountSecurityNoticeEmail } = await import("@/lib/email");
+    const email = await buildAccountSecurityNoticeEmail("Your sign-in email was changed to <b>x@example.com</b>.");
+    expect(email.subject).toMatch(/security change/i);
+    expect(email.text).toContain("Your sign-in email was changed to");
+    expect(email.text).toContain("admin@startlineau.com");
+    expect(email.html).not.toContain("<b>x@example.com</b>");
+  });
+});
+
+describe("organiser invitation", () => {
+  it("names the organisation and links to the invitation", async () => {
+    const { buildOrganiserInviteEmail } = await import("@/lib/email");
+    const email = await buildOrganiserInviteEmail({
+      organisationName: "Apex Endurance Events",
+      inviteUrl: "https://organiser.startlineau.com/organiser/invite?token=abc",
+      expiresInDays: 7,
+    });
+    expect(email.subject).toContain("Apex Endurance Events");
+    expect(email.html).toContain("https://organiser.startlineau.com/organiser/invite?token=abc");
+    expect(email.text).toMatch(/Nothing changes unless you accept/);
   });
 });

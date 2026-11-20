@@ -7,13 +7,13 @@ describe("uploadSizeError", () => {
   it("accepts a file exactly at the cap", () => {
     expect(uploadSizeError("document", 15 * MB)).toBeNull();
     expect(uploadSizeError("cover", 10 * MB)).toBeNull();
-    expect(uploadSizeError("video", 200 * MB)).toBeNull();
+    expect(uploadSizeError("video", 200 * MB)).toBeNull(); // not a type: no cap applies, the type check refuses it
   });
 
   it("rejects a file one byte over the cap with the type's message", () => {
     expect(uploadSizeError("document", 15 * MB + 1)).toBe("PDF must be 15 MB or smaller.");
     expect(uploadSizeError("cover", 10 * MB + 1)).toBe("Image must be 10 MB or smaller.");
-    expect(uploadSizeError("video", 200 * MB + 1)).toBe("Video must be 200 MB or smaller.");
+    expect(uploadSizeError("document", 15 * MB + 1)).toBe("PDF must be 15 MB or smaller.");
   });
 
   it("caps every allowlisted upload type", () => {
@@ -45,5 +45,15 @@ describe("image uploads", () => {
 
   it("allows no GIF under any upload type", () => {
     for (const mimes of Object.values(TYPE_MIMES)) expect(mimes).not.toContain("image/gif");
+  });
+});
+
+describe("isUploadType", () => {
+  it("accepts only the defined upload types, not inherited object keys", async () => {
+    const { isUploadType } = await import("@/lib/upload-limits");
+    expect(isUploadType("photo")).toBe(true);
+    for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(isUploadType(name)).toBe(false);
+    }
   });
 });

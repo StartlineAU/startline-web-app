@@ -22,6 +22,9 @@ export type RegMeta = {
   refundAmountCents: number;
   refundPercent: number;
   outsidePolicy: boolean;
+  teamName: string | null;
+  /** A team place bought "details later": its member still needs naming. */
+  detailsPending: boolean;
 };
 
 export function currentCheckInState(meta: RegMeta, now: Date): CheckInState {

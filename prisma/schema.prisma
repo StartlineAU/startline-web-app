@@ -104,6 +104,7 @@ model Organiser {
   registrations Registration[]
   follows       OrganiserFollow[]
   members       OrganiserMember[]
+  invites       OrganiserInvite[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -130,6 +131,27 @@ model OrganiserMember {
   @@unique([organiserId, userId])
   @@index([userId])
   @@map("organiser_members")
+}
+
+// An Owner's invitation for someone to join as a MANAGER. Nobody becomes a
+// member without accepting: only the signed-in account whose verified email is
+// the invited address can accept it (app/api/organiser/invites/accept). The
+// token is stored hashed; the link in the email carries the token itself.
+model OrganiserInvite {
+  id          String    @id @default(uuid())
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String    @unique
+  // The User who sent it. Not a relation: it stays readable if they leave.
+  invitedById String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+
+  @@index([organiserId])
+  @@index([email])
+  @@map("organiser_invites")
 }
 
 enum OrganiserStatus {
@@ -241,6 +263,7 @@ model Event {
   registrations Registration[]
   savedEvents   SavedEvent[]
   startWaveRows StartWave[]
+  teams         Team[]
   changes       EventChange[]
   revisions     EventRevision[]
 
@@ -275,7 +298,7 @@ enum PayoutAttemptStatus {
 model PayoutOperation {
   id              String       @id @default(uuid())
   eventId         String       @unique
-  event           Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event           Event        @relation(fields: [eventId], references: [id], onDelete: Restrict)
   stripeAccountId String
   amountCents     Int
   currency        String       @default("aud")
@@ -306,6 +329,60 @@ model PayoutAttempt {
 
   @@unique([operationId, attemptNumber])
   @@map("payout_attempts")
+}
+
+// ─── Teams ───────────────────────────────────────────────────────────────────
+// A team entry bought on a team ticket (a tier in Event.waves with a teamSize).
+// Each member is still their own Registration, linked here by teamId, so money,
+// refunds and athlete history stay per person. The team is the race-day unit:
+// one bib (stored here, so Registration's per-row bib uniqueness still holds),
+// and its members' start wave, check-in and results are written together.
+model Team {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  name        String
+  // Ticket tier the team was bought on, and that tier's team size at the time.
+  ticketLabel String
+  size        Int
+  // The member who booked. Null once that entry is removed from the team.
+  captainRegistrationId String?
+  bibNumber             String?
+
+  members Registration[]
+  changes TeamMemberChange[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, bibNumber])
+  @@index([eventId])
+  @@map("teams")
+}
+
+// Who changed a team after it was entered: a rename, or a member swapped for
+// someone else. A swap hands a paid place to another person, so the record
+// keeps both sets of details and who made the change. Adding the details of a
+// member bought "details later" is recorded here too.
+model TeamMemberChange {
+  id     String @id @default(uuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // The entry whose holder changed. Null for a rename.
+  registrationId String?
+  // RENAME, SWAP or DETAILS_ADDED.
+  kind           String
+  // { name } for a rename; the holder's details for a swap.
+  before         Json
+  after          Json
+  // The signed-in person who made it, and the organisation running the event.
+  changedByEmail String?
+  organiserId    String
+
+  createdAt DateTime @default(now())
+
+  @@index([teamId, createdAt])
+  @@map("team_member_changes")
 }
 
 // ─── Start waves (heats) ──────────────────────────────────────────────────────
@@ -426,9 +503,9 @@ model Announcement {
 model Registration {
   id          String    @id @default(uuid())
   eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
   organiserId String
-  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Restrict)
   userId      String?
   user        User?     @relation(fields: [userId], references: [id])
 
@@ -460,6 +537,14 @@ model Registration {
   // athletes into start waves by pace. Null when not provided.
   estimatedFinishMinutes Int?
   bibNumber    String?
+  // Set for a member of a team entry. The team's bib lives on Team; this row's
+  // bibNumber stays null.
+  teamId       String?
+  team         Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  // A team place bought without the member's details, to be added later from
+  // Activity (or by the organiser). Until then the row holds the buyer's email
+  // and account, a "Team member N" name and no personal details.
+  detailsPending Boolean @default(false)
 
   // Money is stored in integer cents (AUD) to avoid float rounding.
   amountCents      Int    @default(0) // ticket price paid by the athlete
@@ -503,6 +588,7 @@ model Registration {
   @@index([eventId])
   @@index([organiserId])
   @@index([startWaveId])
+  @@index([teamId])
   @@index([stripePaymentIntentId])
   @@map("registrations")
 }
@@ -628,6 +714,8 @@ enum UserNotificationType {
   // The organiser changed the date, time, location or type of an event the
   // athlete had already entered, which entitles them to a full refund.
   EVENT_CHANGED
+  // A team entry was bought with some members' details left to add later.
+  TEAM_DETAILS_NEEDED
 }
 
 // ─── Event change log ─────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { organiserLogin, resetRegistration } from "./helpers";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { ensureDatabaseUrl, organiserLogin, resetRegistration } from "./helpers";
 
 const EVENT_ID = "seed-event-001";
 const DASHBOARD = `/organiser/events/${EVENT_ID}/dashboard`;
@@ -413,30 +415,38 @@ test.describe("race management", () => {
 
   test("a refund-requested athlete moves to the Refunds tab and leaves the board", async ({ page }) => {
     await organiserLogin(page);
-    // Restore the seeded state: Cameron is CONFIRMED until this test flags him.
-    await resetRegistration(page, "Cameron Nguyen", { status: "CONFIRMED" });
-    await page.goto(MANAGE);
-    await page.waitForLoadState("networkidle");
 
-    // Flag a confirmed athlete as refund-requested via the board edit dialog.
-    await page.getByPlaceholder(/search any wave/i).fill("Cameron Nguyen");
-    await page.getByRole("button", { name: /edit cameron nguyen/i }).click();
-    const editDialog = page.getByRole("dialog");
-    await editDialog.getByLabel(/^status$/i).click();
-    await editDialog.getByRole("option", { name: /refund requested/i }).click();
-    await editDialog.getByRole("button", { name: /^save$/i }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // Cameron's entry is paid, and an organiser can no longer change a paid
+    // entry's status (lib/registration-status-policy.ts): only the athlete's
+    // refund request does. That flow belongs to Cameron, not a bypass identity,
+    // so the request is written to the database directly.
+    ensureDatabaseUrl();
+    const prisma = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    });
+    const where = { eventId: EVENT_ID, athleteName: "Cameron Nguyen" };
+    try {
+      const flagged = await prisma.registration.updateMany({ where, data: { status: "REFUND_REQUESTED" } });
+      expect(flagged.count, "expected Cameron Nguyen's seeded entry").toBeGreaterThan(0);
 
-    // Shows up under Refunds with the right status...
-    await page.getByRole("button", { name: /refunds/i }).click();
-    const refundRow = page.locator("tr", { hasText: "Cameron Nguyen" });
-    await expect(refundRow).toBeVisible();
-    await expect(refundRow.getByText(/refund requested/i)).toBeVisible();
+      await page.goto(MANAGE);
+      await page.waitForLoadState("networkidle");
 
-    // ...and is no longer in the allocation board, which only holds confirmed athletes.
-    await page.getByRole("button", { name: /before race/i }).click();
-    await page.getByPlaceholder(/search any wave/i).fill("Cameron Nguyen");
-    await expect(page.getByText("Cameron Nguyen")).toHaveCount(0);
+      // Shows up under Refunds with the right status...
+      await page.getByRole("button", { name: /refunds/i }).click();
+      const refundRow = page.locator("tr", { hasText: "Cameron Nguyen" });
+      await expect(refundRow).toBeVisible();
+      await expect(refundRow.getByText(/refund requested/i)).toBeVisible();
+
+      // ...and is no longer in the allocation board, which only holds confirmed athletes.
+      await page.getByRole("button", { name: /before race/i }).click();
+      await page.getByPlaceholder(/search any wave/i).fill("Cameron Nguyen");
+      await expect(page.getByText("Cameron Nguyen")).toHaveCount(0);
+    } finally {
+      // Back to the seeded state, so the board tests and a rerun find him confirmed.
+      await prisma.registration.updateMany({ where, data: { status: "CONFIRMED" } });
+      await prisma.$disconnect();
+    }
   });
 });
 

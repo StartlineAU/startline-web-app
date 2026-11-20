@@ -1,3 +1,4 @@
+import { safeReturnPath } from "./safe-return-path";
 import { signInWithRedirect } from "aws-amplify/auth";
 import { isNative } from "./capacitor";
 import type { SocialProvider } from "./social-providers";
@@ -35,8 +36,7 @@ export async function startSocialSignIn(provider: SocialProvider, returnTo?: str
 
 // Same-site paths only, so a crafted value cannot send someone off-site.
 function sanitiseReturnTo(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/auth/callback")) return "/";
-  return value;
+  return safeReturnPath(value, { blockedPrefixes: ["/auth/callback"] });
 }
 
 // Reads the return path without consuming it, so a retry can keep it.

@@ -27,6 +27,8 @@ const SIGNED_OUT =
   "Your session has expired. Please sign in again.";
 const NOT_AN_ORGANISER =
   "This account isn't linked to an organiser profile. Set one up before managing events.";
+const SUSPENDED =
+  "This organisation has been suspended. Contact Startline support to restore access.";
 const UNAVAILABLE =
   "We couldn't reach the database. Nothing was changed. Please try again in a moment.";
 
@@ -53,6 +55,16 @@ export async function requireOrganiser(): Promise<OrganiserGuard> {
   if (!session) {
     return {
       error: NextResponse.json({ error: NOT_AN_ORGANISER, code: "NO_ORGANISER" }, { status: 403 }),
+      session: null,
+    };
+  }
+
+  // A suspension is only real if the organiser API stops working: otherwise a
+  // suspended organisation keeps publishing (verified ones skip review), taking
+  // payments and exporting registrant data.
+  if (session.status === "SUSPENDED") {
+    return {
+      error: NextResponse.json({ error: SUSPENDED, code: "SUSPENDED" }, { status: 403 }),
       session: null,
     };
   }
