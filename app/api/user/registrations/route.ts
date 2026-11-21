@@ -101,7 +101,7 @@ export async function GET() {
         detailsPending: r.detailsPending,
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
-        checkInLeadMinutes: window.opensAt?.toISOString() ?? null,
+        checkInOpensAt: window.opensAt?.toISOString() ?? null,
         checkInClosesAt: window.closesAt?.toISOString() ?? null,
         timeZone: r.event.timeZone,
         paidCents,
