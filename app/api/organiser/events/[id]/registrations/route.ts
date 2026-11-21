@@ -5,6 +5,7 @@ import { wavesWithCounts } from "@/lib/start-waves";
 import type { RegistrationStatus, Prisma } from "@prisma/client";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
+import { RACE_FEATURES_SELECT, organiserSeesBibs, organiserSeesWaves } from "@/lib/race-features";
 
 const STATUSES = new Set(["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "CANCELLED"]);
 
@@ -24,7 +25,7 @@ const registrationPatchSchema = z.object({
 async function assertOwnedEvent(eventId: string, organiserId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organiserId: true, waves: true, title: true },
+    select: { id: true, organiserId: true, waves: true, title: true, ...RACE_FEATURES_SELECT },
   });
   if (!event) return { error: NextResponse.json({ error: "Not found." }, { status: 404 }) };
   if (event.organiserId !== organiserId) {
@@ -89,6 +90,8 @@ export async function GET(
       title: owned.event!.title,
       waves,
       startWaves,
+      waveMode: owned.event!.waveMode,
+      bibMode: owned.event!.bibMode,
     },
     registrations: registrations.map((r) => ({
       id: r.id,
@@ -141,6 +144,16 @@ export async function PATCH(
     return NextResponse.json({ error: "registrations array is required." }, { status: 400 });
   }
   const rows = parsedBody.data.registrations;
+
+  // Waves and bibs are opt-in (#566). A write to one that is turned off would
+  // land data nobody can see, so refuse it rather than store it silently.
+  const event = owned.event!;
+  if (!organiserSeesWaves(event) && rows.some((r) => "startWaveId" in r || "startWaveLabel" in r)) {
+    return NextResponse.json({ error: "Start waves are turned off for this event." }, { status: 409 });
+  }
+  if (!organiserSeesBibs(event) && rows.some((r) => "bibNumber" in r)) {
+    return NextResponse.json({ error: "Bib numbers are turned off for this event." }, { status: 409 });
+  }
 
   // Resolve wave references against the StartWave table. We accept either an id
   // (preferred) or a label (from older callers) and write both columns in step.

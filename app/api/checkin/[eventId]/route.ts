@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { z } from "zod";
 import { checkInWindow, type CheckInState } from "@/lib/check-in-window";
+import { athleteSeesBibs } from "@/lib/race-features";
 
 const eventIdParams = z.object({ eventId: z.string().min(1).max(255) });
 const checkInBody = z.object({
@@ -118,11 +119,12 @@ export async function GET(
   const registrationId =
     new URL(req.url).searchParams.get("registrationId")?.trim() || undefined;
 
-  const event = await prisma.event.findFirst({
+  const found = await prisma.event.findFirst({
     where: { id: eventId, status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] } },
-    select: EVENT_SELECT,
+    select: { ...EVENT_SELECT, bibMode: true },
   });
-  if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  if (!found) return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  const { bibMode, ...event } = found;
 
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
@@ -134,7 +136,10 @@ export async function GET(
 
   return NextResponse.json({
     event,
-    registration,
+    // A bib stays private until the organiser shares bibs (#566).
+    registration: registration
+      ? { ...registration, bibNumber: athleteSeesBibs({ bibMode }) ? registration.bibNumber : null }
+      : null,
     checkIn: checkInPayload(event),
   });
 }

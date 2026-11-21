@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { CAPACITY_COUNTING_STATUSES } from "@/lib/registration-status";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
+import { RACE_FEATURES_SELECT, organiserSeesWaves } from "@/lib/race-features";
 
 const moveBodySchema = z.object({
   registrationIds: z.array(z.string().min(1).max(255)).min(1),
@@ -27,11 +28,14 @@ export async function POST(
   const { id } = parsedParams.data;
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, organiserId: true },
+    select: { id: true, organiserId: true, ...RACE_FEATURES_SELECT },
   });
   if (!event) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (event.organiserId !== session.sub) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+  if (!organiserSeesWaves(event)) {
+    return NextResponse.json({ error: "Start waves are turned off for this event." }, { status: 409 });
   }
 
   const parsedBody = moveBodySchema.safeParse(await req.json().catch(() => null));

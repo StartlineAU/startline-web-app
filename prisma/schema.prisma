@@ -185,6 +185,12 @@ model Event {
   // working; drop once every consumer reads the relation. Was: JSON array of
   // heat definitions (start time, capacity, match conditions).
   startWaves        Json?
+  // Start waves and bib numbers are opt-in per event (#566). OFF hides them
+  // everywhere, PRIVATE lets the organiser set them up without athletes seeing
+  // anything, SHARED shows them to athletes. Turning one off keeps the data.
+  // Read through lib/race-features.ts, never directly.
+  waveMode          RaceFeatureMode @default(OFF)
+  bibMode           RaceFeatureMode @default(OFF)
   inclusions        String?
   extras            String?
   activations       String?
@@ -242,6 +248,12 @@ model Event {
 }
 
 // ─── Payout operations ────────────────────────────────────────────────────────
+enum RaceFeatureMode {
+  OFF
+  PRIVATE
+  SHARED
+}
+
 // One durable operation per event. Stripe and the database cannot commit
 // atomically, so the operation is claimed before the Stripe call and every
 // request carries an idempotency key recorded here. An ambiguous outcome stays

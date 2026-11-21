@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { athleteRaceFields } from "@/lib/race-features";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import {
@@ -58,6 +59,8 @@ export async function GET() {
           state: true,
           coverImageUrl: true,
           refundTiers: true,
+          waveMode: true,
+          bibMode: true,
         },
       },
     },
@@ -83,13 +86,15 @@ export async function GET() {
         startsAtUtc: r.event.startsAtUtc,
         endsAtUtc: r.event.endsAtUtc,
       });
+      const race = athleteRaceFields(r.event, r);
       return {
         id: r.id,
         eventId: r.eventId,
         status: r.status,
         athleteName: r.athleteName,
-        wave: r.startWaveLabel,
-        bibNumber: r.bibNumber,
+        // Private until the organiser shares them (#566).
+        wave: race.wave,
+        bibNumber: race.bib,
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
         checkInOpensAt: window.opensAt?.toISOString() ?? null,

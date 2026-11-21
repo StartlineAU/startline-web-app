@@ -489,7 +489,7 @@ function EventDashboardInner({
                     <table className="w-full min-w-[520px] border-collapse">
                       <thead>
                         <tr className="border-b border-white/5">
-                          {["Athlete", "Wave", "Registered", "Paid", "Check-in"].map((h) => (
+                          {["Athlete", "Ticket", "Registered", "Paid", "Check-in"].map((h) => (
                             <th key={h} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark text-left px-2 py-2 last:text-right">
                               {h}
                             </th>

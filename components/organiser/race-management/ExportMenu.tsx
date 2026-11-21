@@ -13,14 +13,23 @@ import {
   type ExportColumnKey,
 } from "@/lib/registration-export";
 
-export default function ExportMenu({ eventId }: { eventId: string }) {
+export default function ExportMenu({
+  eventId,
+  hiddenColumns = [],
+}: {
+  eventId: string;
+  /** Columns for a race feature that is turned off (#566). The server drops them too. */
+  hiddenColumns?: ExportColumnKey[];
+}) {
   const [open, setOpen] = useState(false);
+  const columns = EXPORT_COLUMNS.filter((c) => !hiddenColumns.includes(c.key));
+  const allKeys = columns.map((c) => c.key);
   const [selected, setSelected] = useState<Set<ExportColumnKey>>(
     () => new Set(DEFAULT_EXPORT_COLUMN_KEYS),
   );
 
   const base = `/api/organiser/events/${eventId}/registrations/export`;
-  const orderedKeys = EXPORT_COLUMNS.map((c) => c.key).filter((k) => selected.has(k));
+  const orderedKeys = allKeys.filter((k) => selected.has(k));
   const columnsQuery = encodeURIComponent(orderedKeys.join(","));
 
   const toggleColumn = (key: ExportColumnKey, required?: boolean) => {
@@ -34,7 +43,7 @@ export default function ExportMenu({ eventId }: { eventId: string }) {
     });
   };
 
-  const selectAll = () => setSelected(new Set(DEFAULT_EXPORT_COLUMN_KEYS));
+  const selectAll = () => setSelected(new Set(allKeys));
   const selectMinimal = () => setSelected(new Set<ExportColumnKey>(["name"]));
 
   return (
@@ -85,7 +94,7 @@ export default function ExportMenu({ eventId }: { eventId: string }) {
           </div>
 
           <div className="max-h-64 overflow-y-auto rounded-xl border border-dark-lighter bg-dark-light/40 px-2 py-2 grid grid-cols-1 sm:grid-cols-2 gap-0.5">
-            {EXPORT_COLUMNS.map((col) => {
+            {columns.map((col) => {
               const checked = selected.has(col.key);
               return (
                 <label

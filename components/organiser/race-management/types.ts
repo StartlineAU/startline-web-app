@@ -1,4 +1,5 @@
 import type { WaveDef } from "@/lib/wave-assignment";
+import type { RaceFeatures } from "@/lib/race-features";
 
 export interface Registration {
   id: string;
@@ -7,6 +8,8 @@ export interface Registration {
   category: string | null;
   waveId: string | null;
   wave: string | null;
+  /** The ticket tier they bought (Registration.waveLabel), not a start wave. */
+  tier: string | null;
   bibNumber: string | null;
   gender: string | null;
   dateOfBirth: string | null;
@@ -33,7 +36,7 @@ export interface StartWave extends WaveDef {
 }
 
 export interface PageData {
-  event: { id: string; title: string; startWaves: StartWave[] };
+  event: { id: string; title: string; startWaves: StartWave[] } & RaceFeatures;
   registrations: Registration[];
 }
 

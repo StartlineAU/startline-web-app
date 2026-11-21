@@ -2,9 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
-  Download,
-  RefreshCw, CheckCircle2, Circle,
-  SlidersHorizontal, FileSpreadsheet, FileText,
+  RefreshCw, Circle, Hash,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,11 +24,11 @@ import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
 import WaveBuilderDialog from "@/components/organiser/WaveBuilderDialog";
-import {
-  DEFAULT_EXPORT_COLUMN_KEYS,
-  EXPORT_COLUMNS,
-  type ExportColumnKey,
-} from "@/lib/registration-export";
+import type { ExportColumnKey } from "@/lib/registration-export";
+import { organiserSeesBibs, organiserSeesWaves, raceDayReady, type RaceFeatures } from "@/lib/race-features";
+import RaceFeatureControls from "@/components/organiser/race-management/RaceFeatureControls";
+import SimpleRoster from "@/components/organiser/race-management/SimpleRoster";
+import AssignBibsDialog from "@/components/organiser/race-management/AssignBibsDialog";
 
 import { useApiResource } from "@/hooks/useApiResource";
 import ExportMenu from "@/components/organiser/race-management/ExportMenu";
@@ -65,6 +64,9 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const [builderWaves, setBuilderWaves] = useState<WaveDef[]>([]);
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignMsg, setAssignMsg] = useState("");
+  const [assignBibsOpen, setAssignBibsOpen] = useState(false);
+  // Bumped on each open so the dialog remounts with fresh inputs.
+  const [assignBibsKey, setAssignBibsKey] = useState(0);
 
   const [editingResult, setEditingResult] = useState<Registration | null>(null);
   const [resultTime, setResultTime] = useState("");
@@ -157,7 +159,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
 
   // Lowest unused bib on the event; one obvious action, no guessing.
   const editNextBib = useMemo(() => {
-    if (!data || !editReg) return null;
+    if (!data || !editReg || !organiserSeesBibs(data.event)) return null;
     return nextAvailableBib({
       taken: data.registrations.map((r) => r.bibNumber).filter(Boolean) as string[],
       start: 1,
@@ -165,7 +167,9 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   }, [data, editReg]);
 
   const saveEdit = async () => {
-    if (!editReg) return;
+    if (!editReg || !data) return;
+    const wavesOn = organiserSeesWaves(data.event);
+    const bibsOn = organiserSeesBibs(data.event);
     // A finish time we can't read would silently save as "unknown" and quietly
     // drop the athlete out of pace-based wave sorting. Say so instead.
     if (editFinish.trim() && parseFinishToMinutes(editFinish) === null) {
@@ -179,10 +183,11 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // A feature that is turned off is left out: the server refuses writes to it.
           registrations: [{
             registrationId: editReg.id,
-            startWaveLabel: editWave || null,
-            bibNumber: editBib.trim() || null,
+            ...(wavesOn ? { startWaveLabel: editWave || null } : {}),
+            ...(bibsOn ? { bibNumber: editBib.trim() || null } : {}),
             status: editStatus,
             estimatedFinishMinutes: parseFinishToMinutes(editFinish),
           }],
@@ -214,9 +219,8 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           r.id === editReg.id
             ? {
                 ...r,
-                waveId: nextWaveId,
-                wave: editWave || null,
-                bibNumber: editBib.trim() || null,
+                ...(wavesOn ? { waveId: nextWaveId, wave: editWave || null } : {}),
+                ...(bibsOn ? { bibNumber: editBib.trim() || null } : {}),
                 status: editStatus,
                 estimatedFinishMinutes: parseFinishToMinutes(editFinish),
               }
@@ -347,6 +351,24 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     }
   };
 
+  // Turn waves or bibs on, share them, or turn them off (#566).
+  const updateModes = async (next: Partial<RaceFeatures>): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/organiser/events/${id}/race-features`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) return json?.error ?? "Could not save that change.";
+      setData((d) => d ? { ...d, event: { ...d.event, waveMode: json.waveMode, bibMode: json.bibMode } } : d);
+      setAssignMsg("");
+      return null;
+    } catch {
+      return "Could not save that change. Check your connection.";
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -381,15 +403,39 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   }
 
   const { event, registrations } = data;
-  const confirmed = registrations.filter((r) => r.status === "CONFIRMED");
+  const wavesOn = organiserSeesWaves(event);
+  const bibsOn = organiserSeesBibs(event);
+  // Waves and bibs that are turned off are hidden, not deleted, so blank them
+  // here and every board below behaves as if they were never set.
+  const startWaves = wavesOn ? event.startWaves : [];
+  const confirmed = registrations
+    .filter((r) => r.status === "CONFIRMED")
+    .map((r) => ({
+      ...r,
+      waveId: wavesOn ? r.waveId : null,
+      wave: wavesOn ? r.wave : null,
+      bibNumber: bibsOn ? r.bibNumber : null,
+    }));
   const confirmedCount = confirmed.length;
-  const wavesConfigured = event.startWaves.length > 0;
+  const wavesConfigured = startWaves.length > 0;
   const withWave = confirmed.filter((r) => r.wave).length;
   const withBib = confirmed.filter((r) => r.bibNumber).length;
   const withResults = confirmed.filter((r) => r.resultTime || r.resultPlacement).length;
-  const wavesDone = !wavesConfigured || withWave === confirmedCount;
-  const bibsDone = confirmedCount > 0 && withBib === confirmedCount;
-  const allSet = confirmedCount > 0 && wavesDone && bibsDone;
+  const wavesDone = wavesConfigured && withWave === confirmedCount;
+  const bibsDone = withBib === confirmedCount;
+  const allSet = raceDayReady(event, {
+    total: confirmedCount,
+    withWave,
+    withBib,
+    wavesConfigured: startWaves.length,
+  });
+  const nextFreeBib = Number(nextAvailableBib({
+    taken: registrations.map((r) => r.bibNumber).filter(Boolean) as string[],
+  }));
+  const hiddenExportColumns: ExportColumnKey[] = [
+    ...(bibsOn ? [] : (["bib"] as const)),
+    ...(wavesOn ? [] : (["startWave", "waveStart"] as const)),
+  ];
 
   // Athletes who asked for a refund (pending) or have been refunded (done). These
   // sit outside wave assignment; the organiser only views them, admins action them.
@@ -431,29 +477,38 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         {/* Tab-scoped progress + actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div className="min-h-[20px]">
-            {activeTab === "setup" && confirmedCount > 0 && (
+            {activeTab === "setup" && confirmedCount > 0 && !wavesOn && !bibsOn && (
+              <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                Confirmed <span className="text-light">{confirmedCount}</span>
+              </p>
+            )}
+            {activeTab === "setup" && confirmedCount > 0 && (wavesOn || bibsOn) && (
               allSet ? (
                 <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
                   Ready for race day
                 </p>
               ) : (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                  <span className="inline-flex items-center gap-1.5">
-                    {!wavesConfigured || !wavesDone ? (
-                      <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
-                    ) : null}
-                    Waves{" "}
-                    <span className="text-light">
-                      {!wavesConfigured ? "none" : `${withWave}/${confirmedCount}`}
+                  {wavesOn && (
+                    <span className="inline-flex items-center gap-1.5">
+                      {!wavesDone ? (
+                        <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
+                      ) : null}
+                      Waves{" "}
+                      <span className="text-light">
+                        {!wavesConfigured ? "none" : `${withWave}/${confirmedCount}`}
+                      </span>
                     </span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    {!bibsDone ? (
-                      <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
-                    ) : null}
-                    Bibs{" "}
-                    <span className="text-light">{`${withBib}/${confirmedCount}`}</span>
-                  </span>
+                  )}
+                  {bibsOn && (
+                    <span className="inline-flex items-center gap-1.5">
+                      {!bibsDone ? (
+                        <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
+                      ) : null}
+                      Bibs{" "}
+                      <span className="text-light">{`${withBib}/${confirmedCount}`}</span>
+                    </span>
+                  )}
                 </div>
               )
             )}
@@ -465,15 +520,18 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {activeTab === "setup" && (
-              <>
-                <Button variant="outline" onClick={openManageWaves}>
-                  <SlidersHorizontal className="w-4 h-4" /> Manage waves
-                </Button>
-              </>
+            {activeTab === "setup" && wavesOn && (
+              <Button variant="outline" onClick={openManageWaves}>
+                <SlidersHorizontal className="w-4 h-4" /> Manage waves
+              </Button>
+            )}
+            {activeTab === "setup" && bibsOn && (
+              <Button variant="outline" onClick={() => { setAssignMsg(""); setAssignBibsKey((k) => k + 1); setAssignBibsOpen(true); }} disabled={confirmedCount === 0}>
+                <Hash className="w-4 h-4" /> Assign bibs
+              </Button>
             )}
             {/* Import results and Export are off the After race tab until #565. */}
-            {activeTab === "setup" && <ExportMenu eventId={id} />}
+            {activeTab === "setup" && <ExportMenu eventId={id} hiddenColumns={hiddenExportColumns} />}
           </div>
         </div>
 
@@ -482,10 +540,35 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         )}
 
         {activeTab === "setup" && (
+          <RaceFeatureControls modes={{ waveMode: event.waveMode, bibMode: event.bibMode }} onChange={updateModes} />
+        )}
+
+        {activeTab === "setup" && !wavesOn && (
+          <Card className="mb-6">
+            <CardContent className="p-4 sm:p-5">
+              <SimpleRoster
+                athletes={confirmed.map((r) => ({
+                  id: r.id,
+                  name: r.name,
+                  email: r.email,
+                  tier: r.tier,
+                  bibNumber: r.bibNumber,
+                  medicalNotes: r.medicalNotes,
+                  checkedInAt: r.checkedInAt,
+                }))}
+                showBibs={bibsOn}
+                onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "setup" && wavesOn && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveAllocationBoard
-                waves={event.startWaves.map((w) => ({
+                showBibs={bibsOn}
+                waves={startWaves.map((w) => ({
                   id: w.id,
                   label: w.label,
                   startTime: w.startTime,
@@ -519,7 +602,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     age,
                     unassignedReason: r.waveId
                       ? null
-                      : unassignedReason(candidate, event.startWaves),
+                      : unassignedReason(candidate, startWaves),
                   };
                 })}
                 onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
@@ -533,7 +616,8 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveResultsBoard
-                waves={event.startWaves.map((w) => ({
+                showBibs={bibsOn}
+                waves={startWaves.map((w) => ({
                   id: w.id,
                   label: w.label,
                   startTime: w.startTime,
@@ -570,8 +654,8 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                   <RefreshCw className="w-3.5 h-3.5" strokeWidth={2.5} /> Refund requests
                 </div>
                 <p className="text-[13px] text-muted leading-relaxed max-w-[600px]">
-                  Athletes who asked for a refund. They come out of wave assignment automatically and free up
-                  their spot. Refund due is worked out from your event&apos;s policy at the moment they asked,
+                  Athletes who asked for a refund.{" "}
+                  {wavesOn ? "They come out of wave assignment automatically and free up their spot." : "Their spot is freed automatically."} Refund due is worked out from your event&apos;s policy at the moment they asked,
                   and is fixed from then on. {REFUND_PROCESS_COPY} This list is for your visibility.
                 </p>
               </CardContent>
@@ -591,7 +675,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                     <table className="w-full min-w-[640px] border-collapse">
                       <thead>
                         <tr className="border-b border-white/5">
-                          {["Athlete", "Was in wave", "Paid", "Refund due", "Requested", "Status"].map((h) => (
+                          {["Athlete", wavesOn ? "Was in wave" : "Ticket", "Paid", "Refund due", "Requested", "Status"].map((h) => (
                             <th key={h} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark text-left px-3 py-3">
                               {h}
                             </th>
@@ -605,7 +689,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                               <div className="font-headline text-[14px] font-bold text-white/90 truncate max-w-[220px]">{r.name}</div>
                               <div className="text-[12px] text-muted-dark truncate max-w-[240px]">{r.email}</div>
                             </td>
-                            <td className="px-3 py-3 font-headline text-[12px] text-muted-light">{r.wave ?? "-"}</td>
+                            <td className="px-3 py-3 font-headline text-[12px] text-muted-light">{(wavesOn ? r.wave : r.tier) ?? "-"}</td>
                             <td className="px-3 py-3 font-headline text-[13px] font-black italic text-white whitespace-nowrap">
                               ${r.amount.toFixed(2)}
                             </td>
@@ -647,10 +731,17 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           <DialogHeader>
             <DialogTitle>Edit: {editReg?.name}</DialogTitle>
             <DialogDescription>
-              Update wave, bib number, or registration status.
+              {wavesOn && bibsOn
+                ? "Update wave, bib number, or registration status."
+                : wavesOn
+                  ? "Update wave or registration status."
+                  : bibsOn
+                    ? "Update bib number or registration status."
+                    : "Update registration status."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {wavesOn && (
             <div>
               <label htmlFor="edit-wave" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Start wave
@@ -668,6 +759,8 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 ]}
               />
             </div>
+            )}
+            {bibsOn && (
             <div>
               <label htmlFor="edit-bib" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Bib number
@@ -689,6 +782,8 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 </button>
               )}
             </div>
+            )}
+            {wavesOn && (
             <div>
               <label htmlFor="edit-finish" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Estimated finish time
@@ -702,6 +797,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
               />
               <p className="text-[12px] text-muted-dark mt-1.5">Used to seed start waves by pace. Leave blank if unknown.</p>
             </div>
+            )}
             <div>
               <label htmlFor="edit-status" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Status
@@ -777,6 +873,19 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AssignBibsDialog
+        key={assignBibsKey}
+        eventId={id}
+        open={assignBibsOpen}
+        onOpenChange={setAssignBibsOpen}
+        defaultStart={nextFreeBib}
+        wavesOn={wavesOn}
+        onAssigned={(count) => {
+          setAssignMsg(`Bibs assigned to ${count} athlete${count === 1 ? "" : "s"}.`);
+          load();
+        }}
+      />
 
       <WaveBuilderDialog
         open={manageOpen}
