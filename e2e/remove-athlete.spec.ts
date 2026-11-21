@@ -100,7 +100,7 @@ test.afterAll(async () => {
 
 async function removeFromBoard(page: Page, opts: { reason: RegExp; block?: boolean }) {
   await page.goto(MANAGE);
-  await page.getByPlaceholder(/search any wave/i).fill("Harper Jones");
+  await page.getByLabel("Search athletes").fill("Harper Jones");
   await page.getByRole("button", { name: /remove harper jones from event/i }).click();
 
   const dialog = page.getByTestId("remove-athlete-dialog");
@@ -139,7 +139,7 @@ test("an organiser removes an athlete, who is told and loses their bib", async (
 
   // Off the board for good: a removed entry holds no place.
   await page.reload();
-  await page.getByPlaceholder(/search any wave/i).fill("Harper Jones");
+  await page.getByLabel("Search athletes").fill("Harper Jones");
   await expect(page.getByRole("button", { name: /remove harper jones from event/i })).toHaveCount(0);
 });
 
@@ -251,7 +251,7 @@ test("a removed team member's place can be handed to someone else", async ({ pag
 
   await organiserLogin(page);
   await page.goto(MANAGE);
-  await page.getByPlaceholder(/search any wave/i).fill("Harper Pair");
+  await page.getByLabel("Search athletes").fill("Harper Pair");
   await page.getByRole("button", { name: /remove harper pair from event/i }).click();
 
   const dialog = page.getByTestId("remove-athlete-dialog");
@@ -316,7 +316,7 @@ test.describe("paid removal (real test-mode Stripe)", () => {
 
     await organiserLogin(page);
     await page.goto(MANAGE);
-    await page.getByPlaceholder(/search any wave/i).fill("Harper Jones");
+    await page.getByLabel("Search athletes").fill("Harper Jones");
     await page.getByRole("button", { name: /remove harper jones from event/i }).click();
     const dialog = page.getByTestId("remove-athlete-dialog");
     await dialog.getByLabel(/^reason$/i).click();

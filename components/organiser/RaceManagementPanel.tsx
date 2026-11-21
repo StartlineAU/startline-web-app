@@ -726,6 +726,7 @@ export default function RaceManagementPanel({
                 }))}
                 showBibs={bibsOn}
                 onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
+                onRemove={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) setRemoveReg(reg); }}
               />
             </CardContent>
           </Card>
