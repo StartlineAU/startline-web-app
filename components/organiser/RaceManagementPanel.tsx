@@ -53,7 +53,14 @@ const STATUS_LABEL: Record<Registration["status"], string> = {
 };
 
 /** Race-day console: waves, results, refunds. Embedded on the event dashboard. */
-export default function RaceManagementPanel({ eventId }: { eventId: string }) {
+export default function RaceManagementPanel({
+  eventId,
+  finished = false,
+}: {
+  eventId: string;
+  /** The event has ended: open on results and drop the pre-race nudges. */
+  finished?: boolean;
+}) {
   const id = eventId;
 
   const [editReg, setEditReg] = useState<Registration | null>(null);
@@ -90,7 +97,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const [notifyMsg, setNotifyMsg] = useState("");
 
   // Splits the page into before-race setup (waves, bibs) and after-race results.
-  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">(finished ? "results" : "setup");
 
   const fetchRegistrations = useCallback(async (signal: AbortSignal) => {
     const response = await fetch(`/api/organiser/events/${id}/registrations`, { signal });
@@ -622,7 +629,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           <div className="flex flex-wrap gap-2">
             {activeTab === "setup" && (
               <>
-                {pendingNotify > 0 && (
+                {pendingNotify > 0 && !finished && (
                   <Button variant="outline" onClick={openNotify}>
                     <Bell className="w-4 h-4" /> Notify athletes
                     <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black">

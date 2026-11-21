@@ -9,6 +9,8 @@ import { formatDiscipline, formatShortDate, cn } from "@/lib/utils";
 import OrganiserIdentity from "@/components/OrganiserIdentity";
 import type { OrganiserRating } from "@/lib/reviews";
 import { formatEventArea } from "@/lib/event-place";
+import type { EventPhase } from "@/lib/event-status";
+import { raceStatusLabel } from "@/lib/profile-history";
 
 export type ProfileRaceHistory = {
   completed: number;
@@ -16,6 +18,8 @@ export type ProfileRaceHistory = {
     id: string;
     resultTime: string | null;
     resultPlacement: string | null;
+    /** Where the event is in its lifecycle, decided on the server. */
+    phase: EventPhase;
     event: {
       id: string;
       title: string;
@@ -130,6 +134,12 @@ function RaceHistoryCard({ reg }: { reg: HistoryRegistration }) {
           )}
         </div>
 
+        {!hasResult && (
+          <p className="xl:hidden pt-1 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+            {raceStatusLabel(reg.phase)}
+          </p>
+        )}
+
         {hasResult && (
           <div className="xl:hidden flex items-center gap-8 pt-1 border-t border-dark-lighter">
             {reg.resultTime && (
@@ -194,7 +204,7 @@ function RaceHistoryCard({ reg }: { reg: HistoryRegistration }) {
               Status
             </p>
             <p className="font-headline text-sm font-bold uppercase tracking-widest text-muted mt-1">
-              Completed
+              {raceStatusLabel(reg.phase)}
             </p>
           </div>
         )}
@@ -213,6 +223,14 @@ export default function UserProfileView({
   loading = false,
 }: UserProfileViewProps) {
   const initial = displayName[0]?.toUpperCase() ?? "A";
+  // Race history is races that have happened. Entries still to come (or
+  // underway today) sit above it, soonest first, so they are never shown as
+  // finished (#561).
+  const registrations = history?.registrations ?? [];
+  const raced = registrations.filter((r) => r.phase === "ended");
+  const upcoming = registrations
+    .filter((r) => r.phase !== "ended")
+    .sort((a, b) => parseISO(a.event.eventDate).getTime() - parseISO(b.event.eventDate).getTime());
 
   return (
     <main className="min-h-screen bg-dark-darker pt-14">
@@ -272,6 +290,21 @@ export default function UserProfileView({
           </div>
         )}
 
+        {!loading && upcoming.length > 0 && (
+          <div className="mt-12">
+            <div className="mb-6">
+              <h2 className="font-headline text-3xl sm:text-4xl font-black tracking-tighter text-light leading-none">
+                Up<span className="text-primary">coming</span>
+              </h2>
+            </div>
+            <div className="space-y-4">
+              {upcoming.map((reg) => (
+                <RaceHistoryCard key={reg.id} reg={reg} />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-12">
           <div className="mb-6">
             <h2 className="font-headline text-3xl sm:text-4xl font-black tracking-tighter text-light leading-none">
@@ -288,9 +321,9 @@ export default function UserProfileView({
                 />
               ))}
             </div>
-          ) : history && history.registrations.length > 0 ? (
+          ) : raced.length > 0 ? (
             <div className="space-y-8">
-              {groupHistoryByYear(history.registrations).map(({ year, registrations }) => (
+              {groupHistoryByYear(raced).map(({ year, registrations }) => (
                 <div key={year}>
                   <p className="font-headline text-2xl font-black tracking-tighter text-light mb-3">
                     {year}

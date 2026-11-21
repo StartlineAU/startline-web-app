@@ -85,7 +85,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: strin
   APPROVED: { bg: "bg-primary/10",   text: "text-primary",   label: "Published" },
   IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
-  ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Archived"  },
+  ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Completed" },
 };
 
 function MetricCell({
