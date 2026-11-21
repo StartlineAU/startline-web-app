@@ -103,13 +103,13 @@ const STATUS_META: Record<EventStatus, {
     description: "Review the feedback below, make the necessary changes, and resubmit.",
   },
   ARCHIVED: {
-    label:       "Archived",
+    label:       "Completed",
     color:       "text-muted",
     bg:          "bg-white/5",
     border:      "border-dark-lighter",
     icon:        FileText,
-    headline:    "This event is archived.",
-    description: "It's no longer visible to athletes.",
+    headline:    "This event is complete.",
+    description: "Registration has closed. Results are entered from the event dashboard.",
   },
 };
 
@@ -140,7 +140,7 @@ export default function EventStatusPage({
   } = useApiResource<EventDetail>(fetchEvent, { key: id });
 
   useEffect(() => {
-    if (event?.status === "APPROVED" || event?.status === "IN_PROGRESS") {
+    if (event?.status === "APPROVED" || event?.status === "IN_PROGRESS" || event?.status === "ARCHIVED") {
       router.replace(`/organiser/events/${id}/dashboard`);
     }
   }, [event, id, router]);

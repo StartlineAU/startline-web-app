@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
-  MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
+  MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2, Trophy,
   Download, ImageDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,7 +31,8 @@ interface Wave { label: string; price: string; qty?: number; sold?: number }
 interface DashboardData {
   event: {
     id: string; title: string; organiserName?: string | null; discipline: string;
-    status: "APPROVED" | "IN_PROGRESS";
+    /** ARCHIVED is a finished event; organisers see it as "Completed". */
+    status: "APPROVED" | "IN_PROGRESS" | "ARCHIVED";
     eventDate: string; endDate?: string | null;
     startTime: string; endTime: string;
     venue: string; city: string; state: string;
@@ -300,6 +301,9 @@ function EventDashboardInner({
 
   const { event, announcements, recentRegistrations } = data;
   const canEdit = organiserCanEditEvent(event.status);
+  // Once the event is over, check-in and announcements are closed (their
+  // APIs refuse a finished event), but results and registrations stay open.
+  const finished = event.status === "ARCHIVED";
   const location = [event.venue, event.city].map((s) => s?.trim()).filter(Boolean).join(", ");
 
   const stats = [
@@ -345,8 +349,8 @@ function EventDashboardInner({
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-light">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" aria-hidden />
-                  Live
+                  <span className={`w-1.5 h-1.5 rounded-full ${finished ? "bg-muted" : "bg-primary"}`} aria-hidden />
+                  {finished ? "Completed" : "Live"}
                 </span>
                 <span className="text-muted-dark" aria-hidden>·</span>
                 <span className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">
@@ -375,11 +379,15 @@ function EventDashboardInner({
               ) : (
                 <>
                   <Button type="button" className="col-span-2" onClick={() => setManagePanel(true)}>
-                    <Users className="w-4 h-4" /> Manage registrations
+                    {finished
+                      ? <><Trophy className="w-4 h-4" /> Enter results</>
+                      : <><Users className="w-4 h-4" /> Manage registrations</>}
                   </Button>
-                  <Button variant="outline" type="button" className={canEdit ? "" : "col-span-2"} onClick={openCheckInQr}>
-                    <QrCode className="w-4 h-4" /> Check-in QR
-                  </Button>
+                  {!finished && (
+                    <Button variant="outline" type="button" className={canEdit ? "" : "col-span-2"} onClick={openCheckInQr}>
+                      <QrCode className="w-4 h-4" /> Check-in QR
+                    </Button>
+                  )}
                   {canEdit && (
                     <Button variant="outline" asChild>
                       <Link href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`}>
@@ -407,7 +415,26 @@ function EventDashboardInner({
             ))}
           </div>
 
-          {!managePanel && !canEdit && (
+          {!managePanel && finished && (
+            <div className="mb-8 rounded-xl border border-dark-lighter bg-dark p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+              <div className="flex items-start gap-3 min-w-0">
+                <Trophy className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h2 className="font-headline text-[15px] font-black italic tracking-tight text-light">
+                    This event is complete
+                  </h2>
+                  <p className="text-[13px] text-muted-light leading-relaxed mt-1">
+                    Enter or import results so athletes can see their time and placing.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" type="button" className="shrink-0" onClick={() => setManagePanel(true)}>
+                Go to results
+              </Button>
+            </div>
+          )}
+
+          {!managePanel && !canEdit && !finished && (
             <div className="mb-8">
               <EventEditLockedNotice eventId={id} status={event.status} compact />
             </div>
@@ -415,7 +442,7 @@ function EventDashboardInner({
 
           {managePanel ? (
             <div className="mb-8">
-              <RaceManagementPanel eventId={id} />
+              <RaceManagementPanel eventId={id} finished={finished} />
             </div>
           ) : (
           <>
@@ -607,20 +634,24 @@ function EventDashboardInner({
                       <span className="font-headline text-[13px] tabular-nums text-muted-dark">{announcements.length}</span>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    aria-label="New announcement"
-                    onClick={() => setPanel("announce")}
-                  >
-                    <Plus className="w-3.5 h-3.5" /> New
-                  </Button>
+                  {!finished && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      aria-label="New announcement"
+                      onClick={() => setPanel("announce")}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> New
+                    </Button>
+                  )}
                 </div>
 
                 {announcements.length === 0 ? (
                   <p className="mt-4 text-[13px] text-muted-dark">
-                    No announcements yet. Post one to notify registered athletes.
+                    {finished
+                      ? "No announcements were posted for this event."
+                      : "No announcements yet. Post one to notify registered athletes."}
                   </p>
                 ) : (
                   <div className="mt-4 space-y-3">
@@ -665,7 +696,7 @@ function EventDashboardInner({
       </main>
 
       {/* New announcement: driven by ?panel=announce so the link stays shareable */}
-      <Dialog open={announcePanel} onOpenChange={open => { if (!open) setPanel(null); }}>
+      <Dialog open={announcePanel && !finished} onOpenChange={open => { if (!open) setPanel(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-1">

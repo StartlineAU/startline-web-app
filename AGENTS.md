@@ -616,7 +616,7 @@ Non-negotiables:
 - **No emoji. Lucide line icons only.**
 - **Text on `#B3E153` is always `#141414` (dark ink).**
 - **"Machined" shadow** `box-shadow: 2px 2px 0 #B3E153` on single primary CTA per view.
-- **Status labels:** `APPROVED` renders as "Published" to organisers.
+- **Status labels:** `APPROVED` renders as "Published" and `ARCHIVED` (a finished event) as "Completed" to organisers. A finished event keeps its dashboard so results can still be entered.
 
 shadcn/ui components via `npx shadcn@latest add <component>`. Use `cn()` from `lib/utils.ts`.
 

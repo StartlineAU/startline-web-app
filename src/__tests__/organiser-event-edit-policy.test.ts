@@ -162,7 +162,7 @@ describe("PATCH /api/organiser/events/[id] — edit policy", () => {
     const res = await patch({ title: "Changed" });
 
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: expect.stringContaining("Archived events") });
+    expect(await res.json()).toEqual({ error: expect.stringContaining("Completed events") });
     expect(mocks.eventUpdate).not.toHaveBeenCalled();
   });
 

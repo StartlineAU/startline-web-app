@@ -25,9 +25,12 @@ export async function GET(
 
     if (!event)                            return NextResponse.json({ error: "Not found." },  { status: 404 });
     if (event.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    // Finished (ARCHIVED) events keep their dashboard: results are entered
+    // after the race, so closing it at the finish line locked organisers out
+    // of the one job left to do (#561).
     const status = effectiveEventStatus(event);
-    if (status !== "APPROVED" && status !== "IN_PROGRESS") {
-      return NextResponse.json({ error: "Dashboard only available for live events." }, { status: 409 });
+    if (status !== "APPROVED" && status !== "IN_PROGRESS" && status !== "ARCHIVED") {
+      return NextResponse.json({ error: "Dashboard only available for published events." }, { status: 409 });
     }
 
     const waves = (event.waves as { label: string; price: string; qty?: number }[]) ?? [];

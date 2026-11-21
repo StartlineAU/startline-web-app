@@ -26,7 +26,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string;
   PENDING:  { bg: "bg-blue-900/30", text: "text-blue-400", dot: "bg-blue-400",  label: "PENDING"  },
   DRAFT:    { bg: "bg-dark-lighter",text: "text-muted",    dot: "bg-muted",     label: "DRAFT"    },
   REJECTED: { bg: "bg-red-900/30",  text: "text-red-400",  dot: "bg-red-400",   label: "REJECTED" },
-  ARCHIVED: { bg: "bg-dark-lighter",text: "text-muted-dark",dot: "bg-muted-dark",label: "ARCHIVED"},
+  ARCHIVED: { bg: "bg-dark-lighter",text: "text-muted-dark",dot: "bg-muted-dark",label: "COMPLETED"},
 };
 
 function formatDate(dateStr: string) {

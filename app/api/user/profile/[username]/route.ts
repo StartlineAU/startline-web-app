@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserRatings } from "@/lib/reviews";
+import { PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, withRacePhase } from "@/lib/profile-history";
 import { usernameParams } from "@/lib/schemas";
 
 export async function GET(
@@ -45,25 +46,15 @@ export async function GET(
       id: true,
       resultTime: true,
       resultPlacement: true,
-      event: {
-        select: {
-          id: true,
-          title: true,
-          discipline: true,
-          eventDate: true,
-          city: true,
-          state: true,
-          coverImageUrl: true,
-          organiser: { select: { id: true, orgName: true, logoUrl: true } },
-        },
-      },
+      event: { select: PROFILE_HISTORY_EVENT_SELECT },
     },
   });
+  const history = withRacePhase(registrations);
 
   const ratings = await getOrganiserRatings(
     registrations.map((r) => r.event.organiser.id),
   );
-  const historyRegistrations = registrations.map((r) => ({
+  const historyRegistrations = history.map((r) => ({
     ...r,
     event: {
       ...r.event,
@@ -77,7 +68,7 @@ export async function GET(
   return NextResponse.json({
     ...user,
     history: {
-      completed: registrations.length,
+      completed: countCompletedRaces(history),
       registrations: historyRegistrations,
     },
   });
