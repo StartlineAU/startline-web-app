@@ -32,6 +32,7 @@ const prismaMock = vi.hoisted(() => {
     // Nobody is on a block list unless a test says so.
     organiserBlock: { findFirst: mocks.organiserBlockFindFirst },
     notification: { create: mocks.notificationCreate },
+    pendingOrder: { create: async () => ({ id: "order-1" }) },
     // The capacity check and the insert share one transaction; the mock hands
     // the callback the same client so both are observed by the spies above.
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
