@@ -18,6 +18,7 @@ import {
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
   buildRefundOverrideEmail,
+  buildEventCancelledEmail,
 } from "@/lib/email";
 import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -209,5 +210,19 @@ describe("organiser invitation", () => {
     expect(email.subject).toContain("Apex Endurance Events");
     expect(email.html).toContain("https://organiser.startlineau.com/organiser/invite?token=abc");
     expect(email.text).toMatch(/Nothing changes unless you accept/);
+  });
+});
+
+describe("event cancelled", () => {
+  it("tells a paid entrant what is coming back", async () => {
+    const email = await buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: null, refundCents: 5495, reason: null });
+    expect(email.text).toContain("$54.95");
+    expect(email.text).toMatch(/refund/i);
+  });
+
+  it("does not mention a refund to a free entrant", async () => {
+    const email = await buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: null, refundCents: 0, reason: null });
+    expect(email.text).toContain("your entry has been cancelled");
+    expect(email.text).not.toMatch(/refund/i);
   });
 });

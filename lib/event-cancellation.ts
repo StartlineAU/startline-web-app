@@ -380,6 +380,15 @@ async function notifyCancellation(input: {
     });
   }
 
+  // A free event's entries are released, not refunded. A mixed event says both.
+  const anyPaid = input.owed.some((o) => o.cents > 0);
+  const anyFree = input.owed.some((o) => o.cents === 0);
+  const effect = anyPaid
+    ? anyFree
+      ? "Every paid entry is being refunded in full and free entries are released."
+      : "Every entrant is being refunded in full."
+    : "Every entry is released. They were free, so there is nothing to refund.";
+
   await prisma.notification.create({
     data: {
       organiserId: input.organiserId,
@@ -388,8 +397,8 @@ async function notifyCancellation(input: {
       title: "Event cancelled",
       body:
         input.cancelledBy === "admin"
-          ? `Startline cancelled "${input.eventTitle}". Every entrant is being refunded in full.`
-          : `"${input.eventTitle}" is cancelled. Every entrant is being refunded in full.`,
+          ? `Startline cancelled "${input.eventTitle}". ${effect}`
+          : `"${input.eventTitle}" is cancelled. ${effect}`,
     },
   });
 

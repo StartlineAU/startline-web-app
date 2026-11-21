@@ -102,6 +102,10 @@ function CancelEventForm({
     }
   };
 
+  // Until the preview loads, assume money is involved. Once it shows no paid
+  // entries, nothing is refunded and the copy must not promise a refund.
+  const refunds = preview === null || preview.paidEntries > 0;
+
   return (
       <DialogContent>
         <DialogHeader>
@@ -113,8 +117,11 @@ function CancelEventForm({
           </div>
           <DialogDescription>
             <span className="text-white font-semibold">{event.title}</span> will be taken off sale and marked
-            cancelled. Every athlete is refunded everything they paid, booking fee included, and emailed. This
-            cannot be undone.
+            cancelled.{" "}
+            {refunds
+              ? "Every athlete is refunded everything they paid, booking fee included, and emailed."
+              : "Every entry is released and every athlete is emailed."}{" "}
+            This cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
@@ -155,7 +162,9 @@ function CancelEventForm({
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={busy}>Keep event</Button>
           <Button variant="destructive" onClick={submit} disabled={!confirmed || busy}>
-            {busy ? "Cancelling and refunding…" : "Cancel event and refund everyone"}
+            {refunds
+              ? busy ? "Cancelling and refunding…" : "Cancel event and refund everyone"
+              : busy ? "Cancelling…" : "Cancel event"}
           </Button>
         </DialogFooter>
       </DialogContent>

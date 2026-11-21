@@ -285,6 +285,17 @@ describe("cancelEvent", () => {
     expect(result.released).toBe(1);
   });
 
+  it("tells the organisation a free event's entries are released, not refunded", async () => {
+    registrations({ free: [{ id: "f1", athleteEmail: "f1@x.test", userId: "user-f1" }] });
+
+    await cancelEvent({ eventId: "evt-1", actor: { role: "organiser", id: "org-1" }, reason: null });
+
+    const body = mocks.notification.create.mock.calls[0][0].data.body as string;
+    expect(body).toContain("released");
+    expect(body).not.toContain("refunded in full");
+    expect(mocks.userNotification.createMany.mock.calls[0][0].data[0].body).not.toMatch(/refund/i);
+  });
+
   it("emails each address once with the total coming back to it", async () => {
     const shared = { athleteEmail: "Buyer@x.test", userId: "user-buyer", cancelRefundStatus: null };
     registrations({

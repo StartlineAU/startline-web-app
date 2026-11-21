@@ -12,7 +12,7 @@ export interface EventCancelledEmailProps {
   activityUrl: string
 }
 
-/** To an athlete: the event is off and everything they paid is coming back. */
+/** To an athlete: the event is off, and anything they paid is coming back. A free entry is told only that it is released. */
 export function EventCancelledEmail({
   eventTitle,
   eventDate,
@@ -22,7 +22,7 @@ export function EventCancelledEmail({
 }: EventCancelledEmailProps) {
   const items: DetailItem[] = []
   if (eventDate) items.push({ label: 'Event date', value: eventDate })
-  items.push({ label: 'Refund', value: refundAmount ? `${refundAmount}, in full` : 'Free entry, nothing to refund' })
+  if (refundAmount) items.push({ label: 'Refund', value: `${refundAmount}, in full` })
   if (reason) items.push({ label: 'From the organiser', value: reason, wide: true })
 
   const sub = refundAmount

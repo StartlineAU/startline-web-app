@@ -196,8 +196,9 @@ export default function EventDetailView({
           className="border-b border-red-400/30 bg-red-400/10 px-4 sm:px-6 py-3">
           <p className="max-w-[1200px] mx-auto text-[13px] text-red-200 leading-relaxed">
             <span className="font-headline font-bold uppercase tracking-widest text-[11px] text-red-300 mr-2">Event cancelled</span>
-            This event will not go ahead. Everyone who entered is refunded everything they paid, booking fee
-            included, to their original payment method.
+            {freeEvent
+              ? "This event will not go ahead, and every entry has been released."
+              : "This event will not go ahead. Everyone who entered is refunded everything they paid, booking fee included, to their original payment method."}
           </p>
         </div>
       )}
