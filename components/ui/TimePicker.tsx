@@ -48,6 +48,7 @@ const PERIODS = ["AM", "PM"] as const;
 const TRIGGER_SIZE = {
   md: "rounded-md px-4 py-3 text-[15px]",
   sm: "rounded-[10px] px-[13px] py-[11px] text-[13.5px]",
+  xs: "rounded-lg px-2.5 py-2 text-[13px]",
 } as const;
 
 export interface TimePickerProps {

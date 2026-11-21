@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, ChevronDown, Clock, Plus, Trash2, Users } from "lucide-react";
+import { AlertCircle, ChevronDown, Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import TimePicker from "@/components/ui/TimePicker";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -156,14 +157,13 @@ function WaveCard({
           aria-label={`Wave name for ${w.label || "new wave"}`}
           className={cn(INPUT, "flex-1 min-w-[8rem] px-2.5 py-2 text-[14px] font-headline font-bold")}
         />
-        <div className="flex items-center gap-1.5" title="Start time">
-          <Clock className="w-3.5 h-3.5 text-muted-dark shrink-0" />
-          <input
-            type="time"
+        <div className="w-[10.5rem] shrink-0" title="Start time">
+          <TimePicker
             value={w.startTime ?? ""}
-            onChange={(e) => onChange({ startTime: e.target.value })}
-            aria-label={`Start time for ${w.label || "new wave"}`}
-            className={cn(INPUT, "px-2 py-2 text-[13px]")}
+            onChange={(v) => onChange({ startTime: v })}
+            placeholder="Start time"
+            size="xs"
+            ariaLabel={`Start time for ${w.label || "new wave"}`}
           />
         </div>
         <div className="flex items-center gap-1.5" title="Max athletes">
