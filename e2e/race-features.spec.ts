@@ -41,6 +41,16 @@ async function tomsBibAsAthlete(request: APIRequestContext): Promise<string | nu
   return mine.bibNumber;
 }
 
+/**
+ * Registrations hold their event with onDelete: Restrict, so the event can
+ * only go once its entrants have. Deleting it alone failed silently, left the
+ * row behind, and the retry's create then hit a duplicate key.
+ */
+async function removeEvent() {
+  await prisma.registration.deleteMany({ where: { eventId: EVENT_ID } });
+  await prisma.event.deleteMany({ where: { id: EVENT_ID } });
+}
+
 test.beforeAll(async () => {
   const organiser = await prisma.organiser.findFirst({
     where: { orgName: "Apex Endurance Events" },
@@ -50,7 +60,7 @@ test.beforeAll(async () => {
   const tom = await prisma.user.findUnique({ where: { email: TOM_EMAIL }, select: { id: true } });
   expect(tom, "seeded user Tom should exist").toBeTruthy();
 
-  await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
+  await removeEvent();
   await prisma.event.create({
     data: {
       id: EVENT_ID,
@@ -94,7 +104,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
+  await removeEvent();
   await prisma.$disconnect();
 });
 
@@ -112,7 +122,8 @@ test("an event without waves or bibs opens on the simple registrations list", as
   await organiserLogin(page);
   await page.goto(MANAGE);
 
-  await expect(page.getByTestId("simple-roster")).toBeVisible();
+  // The first spec to open this dashboard pays for its cold compile.
+  await expect(page.getByTestId("simple-roster")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Alice Archer")).toBeVisible();
   await expect(page.getByTestId("race-feature-card-waves")).toBeVisible();
   await expect(page.getByTestId("race-feature-card-bibs")).toBeVisible();
