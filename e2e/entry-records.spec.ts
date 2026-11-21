@@ -131,16 +131,32 @@ test.describe("organiser registration status", () => {
     expect(res.status).toBe(200);
   });
 
-  test("can cancel a free entry, and reinstating it respects the cap", async () => {
+  // #571: a status edit is no longer a quiet way to take someone out.
+  test("cannot cancel or remove a free entry by status", async () => {
+    for (const status of ["CANCELLED", "REMOVED"]) {
+      const res = await patch(FREE_REG, status);
+      expect(res.status, status).toBe(403);
+    }
+    expect((await prisma.registration.findUnique({ where: { id: FREE_REG } }))?.status).toBe("CONFIRMED");
+  });
+
+  test("a removed entry frees its place, and reinstating a cancelled one respects the cap", async () => {
     // Cap 2: the paid and the free entry hold both places.
     const full = await patch(FREE_REG_2, "CONFIRMED");
     expect(full.status).toBe(409);
 
-    expect((await patch(FREE_REG, "CANCELLED")).status).toBe(200);
-    expect((await prisma.registration.findUnique({ where: { id: FREE_REG } }))?.status).toBe("CANCELLED");
+    const removed = await fetch(`${BASE_URL}/api/organiser/events/${EVENT_ID}/registrations/${FREE_REG}/remove`, {
+      method: "POST",
+      headers: { ...cookie("organiser"), "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "DUPLICATE" }),
+    });
+    expect(removed.status).toBe(200);
+    expect((await prisma.registration.findUnique({ where: { id: FREE_REG } }))?.status).toBe("REMOVED");
 
     expect((await patch(FREE_REG_2, "CONFIRMED")).status).toBe(200);
     expect((await prisma.registration.findUnique({ where: { id: FREE_REG_2 } }))?.status).toBe("CONFIRMED");
+    // A removal is final.
+    expect((await patch(FREE_REG, "CONFIRMED")).status).toBe(403);
   });
 });
 

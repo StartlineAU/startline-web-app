@@ -36,6 +36,7 @@ import AssignBibsDialog from "@/components/organiser/race-management/AssignBibsD
 
 import { useApiResource } from "@/hooks/useApiResource";
 import ExportMenu from "@/components/organiser/race-management/ExportMenu";
+import RemoveAthleteDialog, { type RemovalOutcome } from "@/components/organiser/race-management/RemoveAthleteDialog";
 import { InfoTip } from "@/components/event/event-form/info-tip";
 import type { PageData, Registration, StartWave } from "@/components/organiser/race-management/types";
 
@@ -44,6 +45,7 @@ const STATUS_STYLE: Record<Registration["status"], string> = {
   REFUND_REQUESTED: "bg-amber-400/10 text-amber-300 border-amber-400/20",
   REFUNDED:         "bg-red-400/10 text-red-300 border-red-400/20",
   CANCELLED:        "bg-white/5 text-muted border-dark-lighter",
+  REMOVED:          "bg-red-400/10 text-red-300 border-red-400/20",
 };
 
 /** Sentinel option in the division picker that reveals a "new division" field. */
@@ -54,6 +56,7 @@ const STATUS_LABEL: Record<Registration["status"], string> = {
   REFUND_REQUESTED: "Refund requested",
   REFUNDED:         "Refunded",
   CANCELLED:        "Cancelled",
+  REMOVED:          "Removed",
 };
 
 /** Race-day console: waves, results, refunds. Embedded on the event dashboard. */
@@ -84,6 +87,9 @@ export default function RaceManagementPanel({
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
+  // Remove from event (#571).
+  const [removeReg, setRemoveReg] = useState<Registration | null>(null);
+  const [removeMsg, setRemoveMsg] = useState("");
 
   const [manageOpen, setManageOpen] = useState(false);
   const [builderWaves, setBuilderWaves] = useState<WaveDef[]>([]);
@@ -312,6 +318,31 @@ export default function RaceManagementPanel({
     } finally {
       setSavingEdit(false);
     }
+  };
+
+  const onRemoved = (registrationId: string, outcome: RemovalOutcome) => {
+    const removed = data?.registrations.find((r) => r.id === registrationId);
+    setRemoveReg(null);
+    setEditReg(null);
+    if (outcome.replacedBy) {
+      // The entry now belongs to the replacement: reload rather than guess.
+      setRemoveMsg(`${removed?.name ?? "The athlete"} was removed and emailed. ${outcome.replacedBy} now holds their place.`);
+      load();
+      return;
+    }
+    setData((d) => d ? {
+      ...d,
+      registrations: d.registrations.map((r) =>
+        r.id === registrationId
+          ? { ...r, status: "REMOVED" as const, bibNumber: r.team ? r.bibNumber : null, waveId: null, wave: null }
+          : r,
+      ),
+    } : d);
+    const parts = [`${removed?.name ?? "The athlete"} was removed and emailed.`];
+    if (outcome.refundCents > 0) parts.push(`A refund of $${(outcome.refundCents / 100).toFixed(2)} is on its way to them.`);
+    if (outcome.blocked) parts.push("They are blocked from your future events.");
+    if (outcome.warning) parts.push(outcome.warning);
+    setRemoveMsg(parts.join(" "));
   };
 
   const openResultEditor = (reg: Registration) => {
@@ -663,6 +694,10 @@ export default function RaceManagementPanel({
           </div>
         )}
 
+        {removeMsg && (
+          <p className="text-[13px] text-muted-light mb-4" role="status" data-testid="remove-message">{removeMsg}</p>
+        )}
+
         {tab === "results" && confirmedCount > 0 && (
           <p className="mb-4 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
             Results{" "}
@@ -741,6 +776,7 @@ export default function RaceManagementPanel({
                   };
                 })}
                 onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
+                onRemove={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) setRemoveReg(reg); }}
                 onMove={moveAthletes}
               />
             </CardContent>
@@ -868,10 +904,10 @@ export default function RaceManagementPanel({
             <DialogTitle>Edit: {editReg?.name}</DialogTitle>
             <DialogDescription>
               {[
-                wavesOn && bibsOn ? "Update wave, bib number, or registration status."
-                  : wavesOn ? "Update wave or registration status."
-                  : bibsOn ? "Update bib number or registration status."
-                  : "Update registration status.",
+                wavesOn && bibsOn ? "Update wave, bib number or estimated finish."
+                  : wavesOn ? "Update wave or estimated finish."
+                  : bibsOn ? "Update bib number."
+                  : "Check this entry's status.",
                 editReg?.team && (wavesOn || bibsOn)
                   ? `${wavesOn && bibsOn ? "Wave and bib apply" : wavesOn ? "The wave applies" : "The bib applies"} to the whole team.`
                   : "",
@@ -1006,21 +1042,25 @@ export default function RaceManagementPanel({
               <label htmlFor="edit-status" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Status
               </label>
-              {editReg?.statusEditable && (editStatus === "CONFIRMED" || editStatus === "CANCELLED") ? (
+              {editReg?.statusEditable && editReg.status === "CANCELLED" ? (
+                // A cancelled free entry can be put back, capacity permitting.
+                // Taking someone out is Remove from event, never a status (#571).
                 <FormSelect
                   id="edit-status"
                   value={editStatus}
                   onChange={(v) => setEditStatus(v as Registration["status"])}
                   options={[
-                    { value: "CONFIRMED", label: "Confirmed" },
                     { value: "CANCELLED", label: "Cancelled" },
+                    { value: "CONFIRMED", label: "Confirmed (reinstate)" },
                   ]}
                 />
               ) : (
                 <>
                   <p id="edit-status" className="text-[14px] text-light">{STATUS_LABEL[editStatus]}</p>
                   <p className="text-[12px] text-muted-dark mt-1.5">
-                    Paid entries change status only through a refund, which the athlete requests from their activity.
+                    {editReg && holdsTeamPlace(editReg.status)
+                      ? "To take this athlete out of the event, use Remove from event below."
+                      : "This entry no longer holds a place."}
                   </p>
                 </>
               )}
@@ -1029,14 +1069,28 @@ export default function RaceManagementPanel({
               <p className="text-[13px] text-red-300">{editError}</p>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditReg(null)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={savingEdit}>
-              {savingEdit ? "Saving…" : "Save"}
-            </Button>
+          <DialogFooter className="sm:justify-between">
+            {editReg && holdsTeamPlace(editReg.status) ? (
+              <Button variant="destructive" onClick={() => setRemoveReg(editReg)}>
+                Remove from event
+              </Button>
+            ) : <span />}
+            <div className="flex flex-col-reverse sm:flex-row gap-2">
+              <Button variant="ghost" onClick={() => setEditReg(null)}>Cancel</Button>
+              <Button onClick={saveEdit} disabled={savingEdit}>
+                {savingEdit ? "Saving…" : "Save"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <RemoveAthleteDialog
+        eventId={id}
+        registration={removeReg}
+        onClose={() => setRemoveReg(null)}
+        onRemoved={onRemoved}
+      />
 
       {/* Result editor */}
       <Dialog open={!!editingResult} onOpenChange={(open) => { if (!open) setEditingResult(null); }}>
