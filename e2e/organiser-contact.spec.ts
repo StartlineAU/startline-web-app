@@ -197,7 +197,17 @@ test("the listing editor sets this event's contact details, then hands them back
 
     await phone.click();
     await expect(editor).toContainText("Set for this event");
+    // Wait on the save itself, so a refused save fails with the server's
+    // reason instead of a poll that only says the column stayed null.
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "PATCH",
+      { timeout: 30000 },
+    );
     await save.click();
+    const res = await saved;
+    const body = await res.text();
+    expect(res.status(), `PATCH ${apex.id} answered ${res.status()}: ${body}`).toBe(200);
+    expect(JSON.parse(body).pendingReview, `the save was queued for review: ${body}`).toBeFalsy();
     await expect
       .poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).showContactPhone, { timeout: 20000 })
       .not.toBeNull();

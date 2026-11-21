@@ -62,7 +62,6 @@ export async function GET(
       waveLabel: true,
       startWaveId: true,
       startWaveLabel: true,
-      waveNotifiedLabel: true,
       bibNumber: true,
       gender: true,
       dateOfBirth: true,
@@ -107,7 +106,6 @@ export async function GET(
       waveId: r.startWaveId,
       wave: r.startWaveLabel,
       tier: r.waveLabel,
-      waveNotified: r.waveNotifiedLabel,
       // A team member carries the team's bib.
       bibNumber: entryBib(r),
       // A team place bought "details later": the buyer has not named its member yet.

@@ -90,8 +90,10 @@ test.describe("finished events for organisers", () => {
     await expect(page.getByRole("button", { name: /Check-in QR/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "New announcement" })).toHaveCount(0);
 
+    // Import results is off the After race tab until #565, so the athlete's
+    // own result action is what proves the results board opened.
     await page.getByRole("button", { name: /Enter results/ }).click();
-    await expect(page.getByRole("button", { name: /Import results/ })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("button", { name: "Add result for Finished Athlete" })).toBeVisible({ timeout: 30_000 });
   });
 
   test("still accept results", async ({ page }) => {
