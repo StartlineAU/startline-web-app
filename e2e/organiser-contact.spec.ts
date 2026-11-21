@@ -153,42 +153,46 @@ test("an owner chooses in Settings which contact details athletes see", async ({
 
 test("the listing editor sets this event's contact details, then hands them back to the organisation", async ({ page }) => {
   test.slow();
-  // Apex is verified, so saving its live listing applies at once rather than
-  // waiting for review.
-  //
-  // Only a seeded event that has not started yet. Other specs add APPROVED Apex
-  // events of their own (event-lifecycle's already ended, event-edit's is
-  // deleted and recreated mid-run), and the seed keeps past ones. Saving an
-  // event that has finished is refused, and without an order Postgres returns
-  // whichever row it scans first, so the test failed whenever it drew one.
-  const apex = await prisma.event.findFirstOrThrow({
-    where: {
-      id: { startsWith: "seed-event-" },
-      organiser: { orgName: "Apex Endurance Events" },
-      status: "APPROVED",
-      startsAtUtc: { gt: new Date(Date.now() + 7 * 86_400_000) },
-      registrations: { none: {} },
+  await signInAs(page, "organiser");
+
+  // A live event of its own. Borrowing a seeded Apex event raced the other
+  // specs that edit Apex's events in parallel: the one picked could be moved
+  // to draft or past its date mid-test, so Save changes never appeared or the
+  // save was refused. Apex is verified and the event is free, so the save
+  // applies at once rather than waiting for review.
+  const created = await page.request.post("/api/organiser/events", {
+    data: {
+      title: `E2E Contact Override ${Date.now()}`,
+      discipline: "Running",
+      eventDate: "2027-06-14",
+      startTime: "07:00",
+      endTime: "10:00",
+      venue: "Albert Park",
+      address: "Aughtie Dr, Albert Park VIC 3206",
+      city: "Melbourne",
+      state: "VIC",
+      format: "Individual",
+      level: "All levels",
+      registrationType: "startline",
+      waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
+      submit: true,
     },
-    orderBy: { id: "asc" },
-    select: { id: true, showContactPhone: true },
   });
-  await prisma.event.update({ where: { id: apex.id }, data: { showContactPhone: null } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const apex = { id: (await created.json()).id as string };
+  expect((await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).status).toBe("APPROVED");
 
   try {
-    await signInAs(page, "organiser");
-    // The editor shows an empty form until the event loads, then replaces it
-    // with what was fetched. On a cold dev server that fetch takes seconds, and
-    // a toggle made before it lands is overwritten, so the save sent null.
-    const loaded = page.waitForResponse(
-      (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "GET",
-      { timeout: 30000 },
-    );
     await page.goto(`/organiser/new-listing?id=${apex.id}`);
-    expect((await loaded).ok()).toBe(true);
 
     const editor = page.getByTestId("contact-editor");
     const phone = editor.getByRole("button", { name: /^Phone/ });
-    await expect(phone).toBeVisible({ timeout: 30000 });
+    const save = page.getByRole("button", { name: "Save changes" }).filter({ visible: true }).first();
+    // The editor renders an empty form first and fills it when the event's
+    // fetch lands. A click before then is overwritten by that fill, and a save
+    // before then has no event id. "Save changes" only appears once the event
+    // has loaded, so it is the gate.
+    await expect(save).toBeVisible({ timeout: 30000 });
     await expect(editor).toContainText("Following your organisation's setting");
 
     await phone.click();
@@ -199,7 +203,7 @@ test("the listing editor sets this event's contact details, then hands them back
       (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "PATCH",
       { timeout: 30000 },
     );
-    await page.getByRole("button", { name: "Save changes" }).filter({ visible: true }).first().click();
+    await save.click();
     const res = await saved;
     const body = await res.text();
     expect(res.status(), `PATCH ${apex.id} answered ${res.status()}: ${body}`).toBe(200);
@@ -208,6 +212,6 @@ test("the listing editor sets this event's contact details, then hands them back
       .poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).showContactPhone, { timeout: 20000 })
       .not.toBeNull();
   } finally {
-    await prisma.event.update({ where: { id: apex.id }, data: { showContactPhone: apex.showContactPhone } });
+    await prisma.event.deleteMany({ where: { id: apex.id } });
   }
 });

@@ -9,6 +9,7 @@ import { resetPassword, confirmResetPassword } from "aws-amplify/auth";
 import { mapResetPasswordError } from "@/lib/auth-errors";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
 import { resolveSignInUsername } from "@/lib/sign-in-username";
+import { signInAfterResetHref } from "@/lib/password-reset-return";
 import PasswordRequirements from "@/components/PasswordRequirements";
 
 type Step = "request" | "confirm";
@@ -56,7 +57,7 @@ function ForgotPasswordForm() {
     setLoading(true);
     try {
       await confirmResetPassword({ username: signInUsername || email, confirmationCode: code.trim(), newPassword });
-      router.push("/?reset=1");
+      router.push(signInAfterResetHref("/", email));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
       setError(mapResetPasswordError(msg));
