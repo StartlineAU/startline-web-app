@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { ensureDatabaseUrl, organiserLogin, resetRegistration } from "./helpers";
@@ -6,6 +6,15 @@ import { ensureDatabaseUrl, organiserLogin, resetRegistration } from "./helpers"
 const EVENT_ID = "seed-event-001";
 const DASHBOARD = `/organiser/events/${EVENT_ID}/dashboard`;
 const MANAGE = `${DASHBOARD}?panel=manage`;
+
+/** Pick a finish time in the result dialog's hour / minute / second dropdowns. */
+async function pickResultTime(dialog: Locator, hours: number, minutes: number, seconds: number) {
+  for (const [label, value] of [["Hours", hours], ["Minutes", minutes], ["Seconds", seconds]] as const) {
+    await dialog.getByRole("button", { name: label, exact: true }).click();
+    const text = label === "Hours" ? String(value) : String(value).padStart(2, "0");
+    await dialog.getByRole("option").filter({ hasText: new RegExp(`^${text}$`) }).click();
+  }
+}
 
 test.describe("race management", () => {
   test("opens race management on the event dashboard", async ({ page }) => {
@@ -35,6 +44,43 @@ test.describe("race management", () => {
     await page.getByPlaceholder(/search any wave/i).fill("Alex Turner");
     await expect(page.getByText("Alex Turner")).toBeVisible();
     await expect(page.getByText("Bree Collins")).toHaveCount(0);
+  });
+
+  test("wave builder keeps rules tucked away until asked for (#554)", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto(MANAGE);
+    await page.getByRole("button", { name: /manage waves/i }).click();
+
+    const dialog = page.getByRole("dialog", { name: /build start waves/i });
+    await expect(dialog).toBeVisible();
+
+    // Seeded waves are banded by finish time, so their rules open and summarise.
+    await expect(dialog.getByText("finish up to 50 min")).toBeVisible();
+    await expect(dialog.getByLabel("Minimum finish minutes for Wave A")).toBeVisible();
+
+    // A new wave shows only the essentials: name, time, size. Rules stay closed.
+    await dialog.getByRole("button", { name: /add another wave/i }).click();
+    await expect(dialog.getByLabel("Wave name for Wave D")).toBeVisible();
+    await expect(dialog.getByLabel("Maximum athletes in Wave D")).toBeVisible();
+    await expect(dialog.getByLabel("Minimum finish minutes for Wave D")).toHaveCount(0);
+    const rulesToggle = dialog.getByRole("button", { name: /add rules/i });
+    await expect(rulesToggle).toHaveAttribute("aria-expanded", "false");
+
+    // Opening rules and picking a gender updates the one-line summary.
+    await rulesToggle.click();
+    // Seeded waves A-C have their rules open too, so scope to Wave D's panel.
+    const waveDRules = dialog.getByRole("group", { name: "Rules for Wave D" });
+    await expect(waveDRules.getByLabel("Minimum finish minutes for Wave D")).toBeVisible();
+    await waveDRules.getByRole("button", { name: "Female", exact: true }).click();
+    await expect(dialog.getByText(/^For: Female/)).toBeVisible();
+
+    // Clearing the rules puts the wave back to "Anyone".
+    await waveDRules.getByRole("button", { name: /clear rules/i }).click();
+    await expect(dialog.getByText(/^For: Anyone/)).toBeVisible();
+
+    // Close without saving so the seeded waves stay as other tests expect.
+    await dialog.getByRole("button", { name: /^close$/i }).first().click();
+    await expect(dialog).toHaveCount(0);
   });
 
   test("moves an athlete into a wave in bulk", async ({ page }) => {
@@ -202,7 +248,7 @@ test.describe("race management", () => {
     await expect(row.getByText("Wave A", { exact: true })).toBeVisible();
   });
 
-  test("rejects an unreadable finish time instead of publishing it", async ({ page }) => {
+  test("finish time is picked from dropdowns, so junk can never be saved", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
@@ -215,17 +261,12 @@ test.describe("race management", () => {
     await block.getByRole("button", { name: /add result|edit result/i }).click();
 
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel(/^time$/i).fill("banana");
-    await dialog.getByRole("button", { name: /save result/i }).click();
-
-    // Dialog stays open with a message rather than saving junk to the profile.
-    await expect(dialog).toHaveCount(1);
-    await expect(dialog.getByText(/must look like/i)).toBeVisible();
-
-    // A real time still saves.
-    await dialog.getByLabel(/^time$/i).fill("1:08:22");
+    // There is no free-text time field to type into.
+    await expect(dialog.getByRole("textbox", { name: /^time$/i })).toHaveCount(0);
+    await pickResultTime(dialog, 1, 8, 22);
     await dialog.getByRole("button", { name: /save result/i }).click();
     await expect(dialog).toHaveCount(0);
+    await expect(block.getByText("1:08:22").locator("visible=true")).toBeVisible();
   });
 
   test("rejects an unreadable estimated finish instead of wiping it", async ({ page }) => {
@@ -243,7 +284,8 @@ test.describe("race management", () => {
     await expect(dialog.getByText(/must look like/i)).toBeVisible();
   });
 
-  test("results import preview reports unmatched athletes and unreadable times", async ({ page }) => {
+  // Import results is off the After race tab until #565 brings it back.
+  test.fixme("results import preview reports unmatched athletes and unreadable times", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
@@ -371,8 +413,10 @@ test.describe("race management", () => {
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText(/division/i).first()).toBeVisible();
-    await dialog.getByLabel(/^time$/i).fill("55:01");
-    await dialog.getByLabel(/placement/i).fill("1st / 12");
+    await pickResultTime(dialog, 0, 55, 1);
+    // A bare number; the ordinal is added for the athlete.
+    await dialog.getByLabel(/placement/i).fill("1");
+    await expect(dialog.getByText("Shows as 1st")).toBeVisible();
     await dialog.getByRole("button", { name: /save result/i }).click();
 
     await expect(dialog).toHaveCount(0);
@@ -380,11 +424,13 @@ test.describe("race management", () => {
       .locator("div.flex.items-center.gap-2", { hasText: "Alex Turner" })
       .filter({ hasText: /@/ })
       .first();
-    await expect(updated.getByText(/55:01/)).toBeVisible();
-    await expect(updated.getByText(/1st \/ 12/)).toBeVisible();
+    // Phones stack these under the name, so match the copy that is showing.
+    await expect(updated.getByText(/55:01/).locator("visible=true")).toBeVisible();
+    await expect(updated.getByText(/^1st$/).locator("visible=true")).toBeVisible();
   });
 
-  test("imports results pasted from a spreadsheet", async ({ page }) => {
+  // Import results is off the After race tab until #565 brings it back.
+  test.fixme("imports results pasted from a spreadsheet", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
@@ -522,16 +568,16 @@ test.describe("athlete public profile race history", () => {
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /after race/i }).click();
-    // The results tab's own CTA proves the tab actually switched.
-    await expect(page.getByRole("button", { name: /import results/i })).toBeVisible();
+    // The results tab's own row actions prove the tab actually switched.
+    await expect(page.getByRole("button", { name: /add result|edit result/i }).first()).toBeVisible();
 
     // Jade is seeded onto this event's results board (profile-linked athlete).
-    await page.getByPlaceholder(/search any wave by name, email, or bib/i).fill("jade.nguyen");
+    await page.getByPlaceholder(/^search by name/i).fill("jade.nguyen");
     await page.getByRole("button", { name: /add result|edit result/i }).first().click();
 
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel(/^time$/i).fill("57:30");
-    await dialog.getByLabel(/placement/i).fill("22nd / 100");
+    await pickResultTime(dialog, 0, 57, 30);
+    await dialog.getByLabel(/placement/i).fill("22");
     await dialog.getByRole("button", { name: /save result/i }).click();
     await expect(dialog).toHaveCount(0);
 
@@ -540,6 +586,6 @@ test.describe("athlete public profile race history", () => {
     // The card renders the time in both the mobile and desktop result blocks;
     // filter to the visible one rather than assuming a breakpoint.
     await expect(page.getByText("57:30").locator("visible=true")).toBeVisible();
-    await expect(page.getByText("22nd / 100").locator("visible=true")).toBeVisible();
+    await expect(page.getByText("22nd").locator("visible=true")).toBeVisible();
   });
 });

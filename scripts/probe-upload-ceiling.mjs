@@ -61,13 +61,19 @@ async function main() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "photo", contentType: "image/jpeg", size: 8 * 1024 * KB }),
     });
-    presignLive = res.status !== 404;
-    console.log(
-      `  ${presignLive ? "PASS" : "FAIL"} /api/upload/presign -> ${res.status}` +
-        (presignLive
-          ? " (401 unauthenticated is correct; the route is deployed)"
-          : " (not deployed: this environment still proxies uploads)")
-    );
+    // Only our handler's own 401 proves the route is deployed and reachable. A
+    // 405 is the waitlist rewrite answering for a page route, and it used to
+    // pass this check (#335, B7).
+    const body = await res.text();
+    presignLive = res.status === 401 && body.includes("Unauthorised");
+    const reason = presignLive
+      ? " (401 unauthenticated is correct; the route is deployed)"
+      : res.status === 404
+        ? " (not deployed: this environment still proxies uploads)"
+        : res.status === 405
+          ? " (the waitlist gate answered, not the route: uploads cannot work here)"
+          : ` (expected 401 from the route: ${body.replace(/\s+/g, " ").trim().slice(0, 80) || "no body"})`;
+    console.log(`  ${presignLive ? "PASS" : "FAIL"} /api/upload/presign -> ${res.status}${reason}`);
   } catch (err) {
     console.log(`  FAIL /api/upload/presign -> unreachable: ${err.message}`);
   }
@@ -108,8 +114,9 @@ async function main() {
     console.log("  PASS Uploads bypass the ceiling: the browser posts straight to S3.");
     console.log("       Now upload a >5 MB photo through the event wizard to confirm end to end.");
   } else {
-    console.log("  FAIL The presign route is missing, so uploads still route through compute");
-    console.log("       and anything over ~4.5 MB will fail. Deploy the fix to this environment.");
+    console.log("  FAIL The presign route did not answer with its own 401. Either it is missing,");
+    console.log("       so uploads route through compute and anything over ~4.5 MB fails, or");
+    console.log("       something in front of it (the waitlist gate) is answering instead.");
   }
   console.log("");
 }

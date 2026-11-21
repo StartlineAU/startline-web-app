@@ -5,7 +5,6 @@ import { EventApprovedEmail } from "@/emails/event-approved";
 import { EventRejectedEmail } from "@/emails/event-rejected";
 import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
 import { ReviewReportedEmail } from "@/emails/review-reported";
-import { WaveUpdateEmail } from "@/emails/wave-update";
 import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
 import { FollowedOrganiserEventEmail } from "@/emails/followed-organiser-event";
 import { EventChangedEmail } from "@/emails/event-changed";
@@ -267,43 +266,6 @@ export async function sendReviewReportedEmails(recipients: string[], data: Revie
   await sendToEachAdmin(recipients, await buildReviewReportedEmail(data), "review report notification");
 }
 
-// ── Wave update (athlete) ─────────────────────────────────────────────────────
-export interface WaveUpdateEmailData {
-  athleteName?: string | null;
-  eventTitle: string;
-  eventId: string;
-  waveLabel: string;
-  waveTime?: string | null; // start time for the wave, if known
-  eventDate?: string | null;
-}
-
-export async function buildWaveUpdateEmail(
-  to: string,
-  data: WaveUpdateEmailData,
-  { siteUrl = SITE } = {},
-): Promise<BuiltEmail> {
-  const rendered = await renderEmail(
-    WaveUpdateEmail({
-      greeting: firstNameGreeting(data.athleteName),
-      eventTitle: data.eventTitle,
-      waveLabel: data.waveLabel,
-      waveTime: formatEmailTime(data.waveTime),
-      eventDate: formatEmailDate(data.eventDate),
-      activityUrl: `${siteUrl}/activity`,
-      sentTo: to,
-    }),
-  );
-  return { subject: `Your start wave for ${data.eventTitle}`, ...rendered };
-}
-
-export async function sendWaveUpdateEmails(items: { to: string; data: WaveUpdateEmailData }[]) {
-  if (items.length === 0 || !getResend()) return 0;
-  const messages = await Promise.all(
-    items.map(async ({ to, data }) => ({ to, email: await buildWaveUpdateEmail(to, data) })),
-  );
-  return sendEmailBatch(messages, "wave update emails");
-}
-
 // ── Team details needed (buyer) ───────────────────────────────────────────────
 export interface TeamDetailsNeededEmailData {
   buyerName?: string | null;
@@ -377,8 +339,8 @@ export async function sendFollowedOrganiserEventEmails(
 // ── Event changed (athlete) ───────────────────────────────────────────────────
 // The organiser moved the date, time or venue, or changed the type of an event
 // this athlete had already entered. There is no automatic refund: anyone
-// affected is told to raise it through Support, where the organiser and
-// Startline review it.
+// affected is told to raise it through Support, where the organiser
+// decides it and Startline issues it (#570).
 export interface EventChangeLine {
   label: string;
   from: string;

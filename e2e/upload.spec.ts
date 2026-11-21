@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { organiserLogin } from "./helpers";
 
 // Uploads used to POST the file through /api/upload, which runs on Amplify's
@@ -26,7 +26,25 @@ const SIX_MB_JPEG = Buffer.concat([
   Buffer.alloc(6 * 1024 * 1024, 0x7f),
 ]);
 
+// The profile page is server-rendered: a click before hydration does nothing,
+// so keep clicking until the settings menu is actually up. Retry on the dialog,
+// not its contents: once it is open the button sits under its overlay, and the
+// organisation section can take seconds to load on a cold dev server.
+async function openProfileSettings(page: Page) {
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(async () => {
+    if (!(await settings.isVisible())) {
+      await page.getByRole("button", { name: "Edit Profile" }).click({ timeout: 2000 });
+    }
+    await expect(settings).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 30000 });
+  await expect(settings.getByText("Cover photo")).toBeVisible({ timeout: 30000 });
+}
+
 test.describe("image upload", () => {
+  // Cold compiles of the profile page and the settings section on CI.
+  test.slow();
+
   test("posts the file straight to S3 and has the server verify it", async ({ page }) => {
     let presignBody: Record<string, unknown> | null = null;
     let completeBody: Record<string, unknown> | null = null;
@@ -77,8 +95,7 @@ test.describe("image upload", () => {
 
     await organiserLogin(page);
     await page.goto("/organiser/profile");
-    await page.getByRole("button", { name: "Edit Profile" }).click();
-    await expect(page.getByText("Cover photo")).toBeVisible();
+    await openProfileSettings(page);
 
     await page.locator('input[type="file"]').first().setInputFiles({
       name: "pexels-runffwpu-5840726.jpg",
@@ -106,8 +123,7 @@ test.describe("image upload", () => {
 
     await organiserLogin(page);
     await page.goto("/organiser/profile");
-    await page.getByRole("button", { name: "Edit Profile" }).click();
-    await expect(page.getByText("Cover photo")).toBeVisible();
+    await openProfileSettings(page);
 
     await page.locator('input[type="file"]').first().setInputFiles({
       name: "too-big.jpg",

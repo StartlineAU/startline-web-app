@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { checkinParams } from "@/lib/schemas";
 import { checkInWindow } from "@/lib/check-in-window";
+import { athleteSeesBibs } from "@/lib/race-features";
 
 export async function GET(
   _req: Request,
@@ -15,7 +16,7 @@ export async function GET(
 
   // The shortCode is the event's unguessable check-in code. Resolving by it
   // (not eventId alone) means a mistyped or fabricated link gets a 404.
-  const event = await prisma.event.findFirst({
+  const found = await prisma.event.findFirst({
     where: {
       id: eventId,
       checkInCode: shortCode,
@@ -26,9 +27,11 @@ export async function GET(
       startTime: true, endTime: true, timeZone: true,
       startsAtUtc: true, endsAtUtc: true, checkInLeadMinutes: true, status: true,
       venue: true, city: true, state: true,
+      bibMode: true,
     },
   });
-  if (!event) return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  if (!found) return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  const { bibMode, ...event } = found;
 
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
@@ -74,8 +77,13 @@ export async function GET(
 
   return NextResponse.json({
     event,
+    // The team's bib for a team entry, hidden until the organiser shares bibs (#566).
     registration: registration
-      ? (({ team, ...rest }) => ({ ...rest, bibNumber: entryBib(registration), teamName: team?.name ?? null }))(registration)
+      ? (({ team, ...rest }) => ({
+          ...rest,
+          bibNumber: athleteSeesBibs({ bibMode }) ? entryBib(registration) : null,
+          teamName: team?.name ?? null,
+        }))(registration)
       : null,
     checkIn: {
       state: window.state,

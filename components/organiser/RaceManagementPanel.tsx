@@ -2,9 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
-  Upload, Download,
-  AlertCircle, RefreshCw, CheckCircle2, Circle, Plus, Bell,
-  Clock, SlidersHorizontal, Trash2, FileSpreadsheet, FileText,
+  RefreshCw, Circle, Hash,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,22 +20,24 @@ import { nextAvailableBib } from "@/lib/bib-assignment";
 import { holdsTeamPlace } from "@/lib/team-tickets";
 import { assignAthletesToWaves, unassignedReason, type WaveDef } from "@/lib/wave-assignment";
 import { parseFinishToMinutes, formatFinishMinutes, calcAgeFromIsoDate } from "@/lib/registration-form";
-import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
+import {
+  normalisePlacement, ordinal, placementNumber, raceTimeFromParts, raceTimeParts, type RaceTimeParts,
+} from "@/lib/race-results";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
+import { isFreeEvent } from "@/lib/event-types";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
-import ResultsImportDialog from "@/components/organiser/ResultsImportDialog";
-import {
-  DEFAULT_EXPORT_COLUMN_KEYS,
-  EXPORT_COLUMNS,
-  type ExportColumnKey,
-} from "@/lib/registration-export";
+import WaveBuilderDialog from "@/components/organiser/WaveBuilderDialog";
+import type { ExportColumnKey } from "@/lib/registration-export";
+import { organiserSeesBibs, organiserSeesWaves, raceDayReady, type RaceFeatures } from "@/lib/race-features";
+import RaceFeatureControls from "@/components/organiser/race-management/RaceFeatureControls";
+import SimpleRoster from "@/components/organiser/race-management/SimpleRoster";
+import AssignBibsDialog from "@/components/organiser/race-management/AssignBibsDialog";
 
 import { useApiResource } from "@/hooks/useApiResource";
 import ExportMenu from "@/components/organiser/race-management/ExportMenu";
+import { InfoTip } from "@/components/event/event-form/info-tip";
 import type { PageData, Registration, StartWave } from "@/components/organiser/race-management/types";
-
-const GENDER_CHOICES = ["Male", "Female", "Non-binary", "Other"];
 
 const STATUS_STYLE: Record<Registration["status"], string> = {
   CONFIRMED:        "bg-primary/10 text-primary border-primary/30",
@@ -44,6 +45,9 @@ const STATUS_STYLE: Record<Registration["status"], string> = {
   REFUNDED:         "bg-red-400/10 text-red-300 border-red-400/20",
   CANCELLED:        "bg-white/5 text-muted border-dark-lighter",
 };
+
+/** Sentinel option in the division picker that reveals a "new division" field. */
+const ADD_DIVISION = "__add_division__";
 
 const STATUS_LABEL: Record<Registration["status"], string> = {
   CONFIRMED:        "Confirmed",
@@ -56,10 +60,13 @@ const STATUS_LABEL: Record<Registration["status"], string> = {
 export default function RaceManagementPanel({
   eventId,
   finished = false,
+  initialTab,
 }: {
   eventId: string;
   /** The event has ended: open on results and drop the pre-race nudges. */
   finished?: boolean;
+  /** Which tab opens first. Defaults to After race once the event has finished. */
+  initialTab?: "setup" | "results" | "refunds";
 }) {
   const id = eventId;
 
@@ -82,22 +89,23 @@ export default function RaceManagementPanel({
   const [builderWaves, setBuilderWaves] = useState<WaveDef[]>([]);
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignMsg, setAssignMsg] = useState("");
+  const [assignBibsOpen, setAssignBibsOpen] = useState(false);
+  // Bumped on each open so the dialog remounts with fresh inputs.
+  const [assignBibsKey, setAssignBibsKey] = useState(0);
 
   const [editingResult, setEditingResult] = useState<Registration | null>(null);
-  const [resultTime, setResultTime] = useState("");
+  const [resultTime, setResultTime] = useState<RaceTimeParts>({ hours: 0, minutes: 0, seconds: 0 });
+  // Digits only: the ordinal ("st", "nd", "rd", "th") is added for the athlete.
   const [resultPlacement, setResultPlacement] = useState("");
+  // The athlete's division, or ADD_DIVISION while typing a new one in.
+  const [resultDivision, setResultDivision] = useState("");
+  const [newDivision, setNewDivision] = useState("");
   const [savingResult, setSavingResult] = useState(false);
   const [resultError, setResultError] = useState("");
 
-  const [importOpen, setImportOpen] = useState(false);
-  const [importMessage, setImportMessage] = useState("");
-
-  const [notifyOpen, setNotifyOpen] = useState(false);
-  const [notifySaving, setNotifySaving] = useState(false);
-  const [notifyMsg, setNotifyMsg] = useState("");
 
   // Splits the page into before-race setup (waves, bibs) and after-race results.
-  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">(finished ? "results" : "setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">(initialTab ?? (finished ? "results" : "setup"));
 
   const fetchRegistrations = useCallback(async (signal: AbortSignal) => {
     const response = await fetch(`/api/organiser/events/${id}/registrations`, { signal });
@@ -194,7 +202,7 @@ export default function RaceManagementPanel({
 
   // Lowest unused bib on the event; one obvious action, no guessing.
   const editNextBib = useMemo(() => {
-    if (!data || !editReg) return null;
+    if (!data || !editReg || !organiserSeesBibs(data.event)) return null;
     return nextAvailableBib({
       taken: data.registrations.map((r) => r.bibNumber).filter(Boolean) as string[],
       start: 1,
@@ -202,7 +210,9 @@ export default function RaceManagementPanel({
   }, [data, editReg]);
 
   const saveEdit = async () => {
-    if (!editReg) return;
+    if (!editReg || !data) return;
+    const wavesOn = organiserSeesWaves(data.event);
+    const bibsOn = organiserSeesBibs(data.event);
     // A finish time we can't read would silently save as "unknown" and quietly
     // drop the athlete out of pace-based wave sorting. Say so instead.
     if (editFinish.trim() && parseFinishToMinutes(editFinish) === null) {
@@ -234,10 +244,11 @@ export default function RaceManagementPanel({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // A feature that is turned off is left out: the server refuses writes to it.
           registrations: [{
             registrationId: editReg.id,
-            startWaveLabel: editWave || null,
-            bibNumber: editBib.trim() || null,
+            ...(wavesOn ? { startWaveLabel: editWave || null } : {}),
+            ...(bibsOn ? { bibNumber: editBib.trim() || null } : {}),
             status: editStatus,
             estimatedFinishMinutes: parseFinishToMinutes(editFinish),
           }],
@@ -277,9 +288,8 @@ export default function RaceManagementPanel({
           if (r.id === editReg.id) {
             return {
               ...r,
-              waveId: nextWaveId,
-              wave: editWave || null,
-              bibNumber: editBib.trim() || null,
+              ...(wavesOn ? { waveId: nextWaveId, wave: editWave || null } : {}),
+              ...(bibsOn ? { bibNumber: editBib.trim() || null } : {}),
               status: editStatus,
               estimatedFinishMinutes: parseFinishToMinutes(editFinish),
               team: r.team ? { ...r.team, name: teamName } : r.team,
@@ -290,8 +300,8 @@ export default function RaceManagementPanel({
           if (teamId && r.team?.id === teamId) {
             return {
               ...r,
-              ...(holdsTeamPlace(r.status) ? { waveId: nextWaveId, wave: editWave || null } : {}),
-              bibNumber: editBib.trim() || null,
+              ...(wavesOn && holdsTeamPlace(r.status) ? { waveId: nextWaveId, wave: editWave || null } : {}),
+              ...(bibsOn ? { bibNumber: editBib.trim() || null } : {}),
               team: { ...r.team, name: teamName },
             };
           }
@@ -306,20 +316,25 @@ export default function RaceManagementPanel({
 
   const openResultEditor = (reg: Registration) => {
     setEditingResult(reg);
-    setResultTime(reg.resultTime ?? "");
-    setResultPlacement(reg.resultPlacement ?? "");
+    setResultTime(raceTimeParts(reg.resultTime));
+    const place = placementNumber(reg.resultPlacement);
+    setResultPlacement(place ? String(place) : "");
+    setResultDivision(reg.category?.trim() ?? "");
+    setNewDivision("");
     setResultError("");
   };
 
   const saveResult = async () => {
     if (!editingResult) return;
-    // Results publish straight to the athlete's public profile, so an unreadable
-    // time must never get that far.
-    const trimmedTime = resultTime.trim();
-    if (trimmedTime && !isValidRaceTime(trimmedTime)) {
-      setResultError("Finish time must look like 41:05 or 1:08:22.");
+    // Built from the dropdowns, so it is always a readable time (or none at 0:00:00).
+    const timeValue = raceTimeFromParts(resultTime);
+    const placementValue = normalisePlacement(resultPlacement);
+    const addingDivision = resultDivision === ADD_DIVISION;
+    if (addingDivision && !newDivision.trim()) {
+      setResultError("Name the new division, or pick one from the list.");
       return;
     }
+    const divisionValue = addingDivision ? newDivision.trim() : resultDivision || null;
     setSavingResult(true);
     setResultError("");
     try {
@@ -329,8 +344,9 @@ export default function RaceManagementPanel({
         body: JSON.stringify({
           results: [{
             registrationId: editingResult.id,
-            resultTime: trimmedTime || null,
-            resultPlacement: resultPlacement.trim() || null,
+            resultTime: timeValue,
+            resultPlacement: placementValue,
+            division: divisionValue,
           }],
         }),
       });
@@ -339,25 +355,23 @@ export default function RaceManagementPanel({
         setResultError(json?.error ?? "Could not save this result.");
         return;
       }
-      if (json?.invalidTimes?.length) {
-        setResultError("Finish time must look like 41:05 or 1:08:22.");
-        return;
-      }
-      const savedTime = trimmedTime ? normaliseRaceTime(trimmedTime) : null;
       // A team shares one result; the server wrote it to every member still
-      // holding a place.
+      // holding a place. The division stays with the row it was set on.
       const resultTeamId = editingResult.team?.id ?? null;
       const sharesResult = (r: Registration) =>
         r.id === editingResult.id ||
         (!!resultTeamId && r.team?.id === resultTeamId && holdsTeamPlace(r.status));
       setData((d) => d ? {
         ...d,
+        // The server answers with the event's divisions, including one just added.
+        event: Array.isArray(json?.divisions) ? { ...d.event, divisions: json.divisions } : d.event,
         registrations: d.registrations.map((r) =>
           sharesResult(r)
             ? {
                 ...r,
-                resultTime: savedTime,
-                resultPlacement: resultPlacement.trim() || null,
+                category: divisionValue,
+                resultTime: timeValue,
+                resultPlacement: placementValue,
               }
             : r
         ),
@@ -375,36 +389,6 @@ export default function RaceManagementPanel({
     // Deep copy so edits in the builder don't mutate the loaded data.
     setBuilderWaves((data?.event.startWaves ?? []).map((w) => ({ ...w, genders: [...(w.genders ?? [])] })));
     setManageOpen(true);
-  };
-
-  const addWave = () => {
-    setBuilderWaves((waves) => {
-      const n = waves.length + 1;
-      return [...waves, {
-        id: `wave-${Date.now()}-${n}`,
-        label: `Wave ${String.fromCharCode(64 + n)}`, // Wave A, B, C…
-        startTime: "",
-        capacity: null,
-        finishMin: null, finishMax: null, genders: [], ageMin: null, ageMax: null,
-      }];
-    });
-  };
-
-  const updateWave = (waveId: string, patch: Partial<WaveDef>) => {
-    setBuilderWaves((waves) => waves.map((w) => (w.id === waveId ? { ...w, ...patch } : w)));
-  };
-
-  const removeWave = (waveId: string) => {
-    setBuilderWaves((waves) => waves.filter((w) => w.id !== waveId));
-  };
-
-  const toggleWaveGender = (waveId: string, gender: string) => {
-    setBuilderWaves((waves) => waves.map((w) => {
-      if (w.id !== waveId) return w;
-      const set = new Set(w.genders ?? []);
-      set.has(gender) ? set.delete(gender) : set.add(gender);
-      return { ...w, genders: [...set] };
-    }));
   };
 
   // Persist the wave definitions, then sort confirmed athletes into them.
@@ -461,7 +445,7 @@ export default function RaceManagementPanel({
       });
       const json = await res.json();
       if (!res.ok) { setAssignMsg(json.error ?? "Could not assign waves."); return; }
-      setAssignMsg(`Waves saved and ${json.updated} athlete${json.updated === 1 ? "" : "s"} sorted. Notify them from the header when ready.`);
+      setAssignMsg(`Waves saved and ${json.updated} athlete${json.updated === 1 ? "" : "s"} sorted.`);
       load();
       setManageOpen(false);
     } finally {
@@ -469,24 +453,21 @@ export default function RaceManagementPanel({
     }
   };
 
-  const runNotifyWaves = async () => {
-    setNotifySaving(true);
-    setNotifyMsg("");
+  // Turn waves or bibs on, share them, or turn them off (#566).
+  const updateModes = async (next: Partial<RaceFeatures>): Promise<string | null> => {
     try {
-      const res = await fetch(`/api/organiser/events/${id}/waves/notify`, { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) {
-        setNotifyMsg(json.error ?? "Could not send notifications.");
-        return;
-      }
-      if (json.notified === 0) {
-        setNotifyMsg("Everyone is already up to date. Nothing to send.");
-      } else {
-        setNotifyMsg(`Notified ${json.notified} athlete${json.notified === 1 ? "" : "s"}.`);
-      }
-      load();
-    } finally {
-      setNotifySaving(false);
+      const res = await fetch(`/api/organiser/events/${id}/race-features`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) return json?.error ?? "Could not save that change.";
+      setData((d) => d ? { ...d, event: { ...d.event, waveMode: json.waveMode, bibMode: json.bibMode } } : d);
+      setAssignMsg("");
+      return null;
+    } catch {
+      return "Could not save that change. Check your connection.";
     }
   };
 
@@ -524,6 +505,11 @@ export default function RaceManagementPanel({
   }
 
   const { event, registrations } = data;
+  const wavesOn = organiserSeesWaves(event);
+  const bibsOn = organiserSeesBibs(event);
+  // Waves and bibs that are turned off are hidden, not deleted, so blank them
+  // here and every board below behaves as if they were never set.
+  const startWaves = wavesOn ? event.startWaves : [];
   // Members still holding a place, per team. A team with fewer than its size
   // (someone cancelled or was refunded) is flagged on its badge, so the
   // organiser can swap someone in or settle the rest of the team.
@@ -539,17 +525,45 @@ export default function RaceManagementPanel({
     const held = heldByTeam.get(r.team.id) ?? 0;
     return held < r.team.size ? `${r.team.name} · ${held}/${r.team.size}` : r.team.name;
   };
-  const confirmed = registrations.filter((r) => r.status === "CONFIRMED");
+  const confirmed = registrations
+    .filter((r) => r.status === "CONFIRMED")
+    .map((r) => ({
+      ...r,
+      waveId: wavesOn ? r.waveId : null,
+      wave: wavesOn ? r.wave : null,
+      bibNumber: bibsOn ? r.bibNumber : null,
+    }));
   const confirmedCount = confirmed.length;
-  const wavesConfigured = event.startWaves.length > 0;
+  const wavesConfigured = startWaves.length > 0;
   const withWave = confirmed.filter((r) => r.wave).length;
   const withBib = confirmed.filter((r) => r.bibNumber).length;
   const withResults = confirmed.filter((r) => r.resultTime || r.resultPlacement).length;
-  const wavesDone = !wavesConfigured || withWave === confirmedCount;
-  const bibsDone = confirmedCount > 0 && withBib === confirmedCount;
-  // Athletes with a wave that differs from what they were last told about.
-  const pendingNotify = confirmed.filter((r) => r.wave && r.wave !== r.waveNotified).length;
-  const allSet = confirmedCount > 0 && wavesDone && bibsDone && pendingNotify === 0;
+  const wavesDone = wavesConfigured && withWave === confirmedCount;
+  const bibsDone = withBib === confirmedCount;
+  const allSet = raceDayReady(event, {
+    total: confirmedCount,
+    withWave,
+    withBib,
+    wavesConfigured: startWaves.length,
+  });
+  const nextFreeBib = Number(nextAvailableBib({
+    taken: registrations.map((r) => r.bibNumber).filter(Boolean) as string[],
+  }));
+  // The event's divisions, plus the athlete's current one if the event doesn't
+  // list it (entries start with their ticket name), plus "add a division".
+  const currentDivision = editingResult?.category?.trim() || "";
+  const divisionOptions = [
+    { value: "", label: "No division" },
+    ...event.divisions.map((d) => ({ value: d, label: d })),
+    ...(currentDivision && !event.divisions.some((d) => d.toLowerCase() === currentDivision.toLowerCase())
+      ? [{ value: currentDivision, label: `${currentDivision} (not an event division)` }]
+      : []),
+    { value: ADD_DIVISION, label: "+ Add a division" },
+  ];
+  const hiddenExportColumns: ExportColumnKey[] = [
+    ...(bibsOn ? [] : (["bib"] as const)),
+    ...(wavesOn ? [] : (["startWave", "waveStart"] as const)),
+  ];
 
   // Athletes who asked for a refund (pending) or have been refunded (done). These
   // sit outside wave assignment; the organiser only views them, admins action them.
@@ -557,8 +571,29 @@ export default function RaceManagementPanel({
     .filter((r) => r.status === "REFUND_REQUESTED" || r.status === "REFUNDED")
     .sort((a, b) => Number(a.status !== "REFUND_REQUESTED") - Number(b.status !== "REFUND_REQUESTED"));
   const refundPending = registrations.filter((r) => r.status === "REFUND_REQUESTED").length;
+  // A free event takes no money, so there is nothing to refund. The tab still
+  // shows if refund records exist (the event was paid before it went free), so
+  // they never become unreachable.
+  const showRefunds = !isFreeEvent(event.waves) || refundsList.length > 0;
+  const tab = activeTab === "refunds" && !showRefunds ? "setup" : activeTab;
 
-  const openNotify = () => { setNotifyMsg(""); setNotifyOpen(true); };
+  // The list's actions sit beside its search field. Import results and Export
+  // are off the After race tab until #565.
+  const setupActions = (
+    <>
+      {wavesOn && (
+        <Button variant="outline" onClick={openManageWaves}>
+          <SlidersHorizontal className="w-4 h-4" /> Manage waves
+        </Button>
+      )}
+      {bibsOn && (
+        <Button variant="outline" onClick={() => { setAssignMsg(""); setAssignBibsKey((k) => k + 1); setAssignBibsOpen(true); }} disabled={confirmedCount === 0}>
+          <Hash className="w-4 h-4" /> Assign bibs
+        </Button>
+      )}
+      <ExportMenu eventId={id} hiddenColumns={hiddenExportColumns} />
+    </>
+  );
 
   return (
     <div>
@@ -566,9 +601,9 @@ export default function RaceManagementPanel({
           {([
             { id: "setup", label: "Before race" },
             { id: "results", label: "After race" },
-            { id: "refunds", label: "Refunds" },
+            ...(showRefunds ? [{ id: "refunds" as const, label: "Refunds" }] : []),
           ] as const).map((t) => {
-            const on = activeTab === t.id;
+            const on = tab === t.id;
             const badge = t.id === "refunds" ? refundPending : 0;
             return (
               <button
@@ -590,18 +625,22 @@ export default function RaceManagementPanel({
           })}
         </div>
 
-        {/* Tab-scoped progress + actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <div className="min-h-[20px]">
-            {activeTab === "setup" && confirmedCount > 0 && (
-              allSet ? (
-                <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                  Ready for race day
-                </p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+        {tab === "setup" && (
+          <RaceFeatureControls modes={{ waveMode: event.waveMode, bibMode: event.bibMode }} onChange={updateModes} />
+        )}
+
+        {/* Progress only exists for features that are on; a plain list has none. */}
+        {tab === "setup" && confirmedCount > 0 && (wavesOn || bibsOn) && (
+          <div className="mb-3 min-h-[20px]">
+            {allSet ? (
+              <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                Ready for race day
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                {wavesOn && (
                   <span className="inline-flex items-center gap-1.5">
-                    {!wavesConfigured || !wavesDone ? (
+                    {!wavesDone ? (
                       <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
                     ) : null}
                     Waves{" "}
@@ -609,6 +648,8 @@ export default function RaceManagementPanel({
                       {!wavesConfigured ? "none" : `${withWave}/${confirmedCount}`}
                     </span>
                   </span>
+                )}
+                {bibsOn && (
                   <span className="inline-flex items-center gap-1.5">
                     {!bibsDone ? (
                       <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
@@ -616,59 +657,52 @@ export default function RaceManagementPanel({
                     Bibs{" "}
                     <span className="text-light">{`${withBib}/${confirmedCount}`}</span>
                   </span>
-                </div>
-              )
-            )}
-            {activeTab === "results" && confirmedCount > 0 && (
-              <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                Results{" "}
-                <span className="text-light">{withResults}/{confirmedCount}</span>
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {activeTab === "setup" && (
-              <>
-                {pendingNotify > 0 && !finished && (
-                  <Button variant="outline" onClick={openNotify}>
-                    <Bell className="w-4 h-4" /> Notify athletes
-                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black">
-                      {pendingNotify}
-                    </span>
-                  </Button>
                 )}
-                <Button variant="outline" onClick={openManageWaves}>
-                  <SlidersHorizontal className="w-4 h-4" /> Manage waves
-                </Button>
-              </>
+              </div>
             )}
-            {activeTab === "results" && (
-              <Button
-                onClick={() => { setImportMessage(""); setImportOpen(true); }}
-                className="shadow-machined"
-              >
-                <Upload className="w-4 h-4" /> Import results
-              </Button>
-            )}
-            <ExportMenu eventId={id} />
           </div>
-        </div>
+        )}
 
-        {activeTab === "results" && importMessage && (
-          <p className="flex items-center gap-2 text-[13px] text-primary mb-4">
-            <CheckCircle2 className="w-4 h-4" /> {importMessage}
+        {tab === "results" && confirmedCount > 0 && (
+          <p className="mb-4 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+            Results{" "}
+            <span className="text-light">{withResults}/{confirmedCount}</span>
           </p>
         )}
 
-        {activeTab === "setup" && assignMsg && !manageOpen && (
+        {tab === "setup" && assignMsg && !manageOpen && (
           <p className="text-[13px] text-muted-light mb-4">{assignMsg}</p>
         )}
 
-        {activeTab === "setup" && (
+        {tab === "setup" && !wavesOn && (
+          <Card className="mb-6">
+            <CardContent className="p-4 sm:p-5">
+              <SimpleRoster
+                actions={setupActions}
+                athletes={confirmed.map((r) => ({
+                  id: r.id,
+                  name: r.name,
+                  email: r.email,
+                  tier: r.tier,
+                  bibNumber: r.bibNumber,
+                  medicalNotes: r.medicalNotes,
+                  checkedInAt: r.checkedInAt,
+                  teamName: teamLabel(r),
+                }))}
+                showBibs={bibsOn}
+                onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {tab === "setup" && wavesOn && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveAllocationBoard
-                waves={event.startWaves.map((w) => ({
+                actions={setupActions}
+                showBibs={bibsOn}
+                waves={startWaves.map((w) => ({
                   id: w.id,
                   label: w.label,
                   startTime: w.startTime,
@@ -702,7 +736,7 @@ export default function RaceManagementPanel({
                     age,
                     unassignedReason: r.waveId
                       ? null
-                      : unassignedReason(candidate, event.startWaves),
+                      : unassignedReason(candidate, startWaves),
                     teamName: teamLabel(r),
                   };
                 })}
@@ -713,11 +747,12 @@ export default function RaceManagementPanel({
           </Card>
         )}
 
-        {activeTab === "results" && (
+        {tab === "results" && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveResultsBoard
-                waves={event.startWaves.map((w) => ({
+                showBibs={bibsOn}
+                waves={startWaves.map((w) => ({
                   id: w.id,
                   label: w.label,
                   startTime: w.startTime,
@@ -747,7 +782,7 @@ export default function RaceManagementPanel({
           </Card>
         )}
 
-        {activeTab === "refunds" && (
+        {tab === "refunds" && (
           <>
             <Card className="mb-6">
               <CardContent className="p-5 sm:p-6">
@@ -755,8 +790,8 @@ export default function RaceManagementPanel({
                   <RefreshCw className="w-3.5 h-3.5" strokeWidth={2.5} /> Refund requests
                 </div>
                 <p className="text-[13px] text-muted leading-relaxed max-w-[600px]">
-                  Athletes who asked for a refund. They come out of wave assignment automatically and free up
-                  their spot. Refund due is worked out from your event&apos;s policy at the moment they asked,
+                  Athletes who asked for a refund.{" "}
+                  {wavesOn ? "They come out of wave assignment automatically and free up their spot." : "Their spot is freed automatically."} Refund due is worked out from your event&apos;s policy at the moment they asked,
                   and is fixed from then on. {REFUND_PROCESS_COPY} This list is for your visibility.
                 </p>
               </CardContent>
@@ -776,7 +811,7 @@ export default function RaceManagementPanel({
                     <table className="w-full min-w-[640px] border-collapse">
                       <thead>
                         <tr className="border-b border-white/5">
-                          {["Athlete", "Was in wave", "Paid", "Refund due", "Requested", "Status"].map((h) => (
+                          {["Athlete", wavesOn ? "Was in wave" : "Ticket", "Paid", "Refund due", "Requested", "Status"].map((h) => (
                             <th key={h} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark text-left px-3 py-3">
                               {h}
                             </th>
@@ -790,7 +825,7 @@ export default function RaceManagementPanel({
                               <div className="font-headline text-[14px] font-bold text-white/90 truncate max-w-[220px]">{r.name}</div>
                               <div className="text-[12px] text-muted-dark truncate max-w-[240px]">{r.email}</div>
                             </td>
-                            <td className="px-3 py-3 font-headline text-[12px] text-muted-light">{r.wave ?? "-"}</td>
+                            <td className="px-3 py-3 font-headline text-[12px] text-muted-light">{(wavesOn ? r.wave : r.tier) ?? "-"}</td>
                             <td className="px-3 py-3 font-headline text-[13px] font-black italic text-white whitespace-nowrap">
                               ${r.amount.toFixed(2)}
                             </td>
@@ -832,9 +867,15 @@ export default function RaceManagementPanel({
           <DialogHeader>
             <DialogTitle>Edit: {editReg?.name}</DialogTitle>
             <DialogDescription>
-              {editReg?.team
-                ? "Update wave, bib number, or registration status. Wave and bib apply to the whole team."
-                : "Update wave, bib number, or registration status."}
+              {[
+                wavesOn && bibsOn ? "Update wave, bib number, or registration status."
+                  : wavesOn ? "Update wave or registration status."
+                  : bibsOn ? "Update bib number or registration status."
+                  : "Update registration status.",
+                editReg?.team && (wavesOn || bibsOn)
+                  ? `${wavesOn && bibsOn ? "Wave and bib apply" : wavesOn ? "The wave applies" : "The bib applies"} to the whole team.`
+                  : "",
+              ].filter(Boolean).join(" ")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -904,6 +945,7 @@ export default function RaceManagementPanel({
                 )}
               </div>
             )}
+            {wavesOn && (
             <div>
               <label htmlFor="edit-wave" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Start wave
@@ -921,6 +963,8 @@ export default function RaceManagementPanel({
                 ]}
               />
             </div>
+            )}
+            {bibsOn && (
             <div>
               <label htmlFor="edit-bib" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Bib number
@@ -942,6 +986,8 @@ export default function RaceManagementPanel({
                 </button>
               )}
             </div>
+            )}
+            {wavesOn && (
             <div>
               <label htmlFor="edit-finish" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Estimated finish time
@@ -955,6 +1001,7 @@ export default function RaceManagementPanel({
               />
               <p className="text-[12px] text-muted-dark mt-1.5">Used to seed start waves by pace. Leave blank if unknown.</p>
             </div>
+            )}
             <div>
               <label htmlFor="edit-status" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">
                 Status
@@ -1002,30 +1049,85 @@ export default function RaceManagementPanel({
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Division</div>
-              <div className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-muted-light">
-                {editingResult?.category?.trim() || "No division on registration"}
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span id="result-division-label" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted">Division</span>
+                <InfoTip label="Division">
+                  <p>
+                    The race or group an athlete is placed in, such as 10K or Women 40-49. Placements are
+                    usually counted within a division.
+                  </p>
+                  <p className="mt-2">
+                    Athletes don&apos;t choose one when they register yet, so an entry starts with its ticket
+                    name (like General). Pick the right one here, or add a division this event is missing.
+                  </p>
+                </InfoTip>
               </div>
-            </div>
-            <div>
-              <label htmlFor="result-time" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Time</label>
-              <input
-                id="result-time"
-                value={resultTime}
-                onChange={(e) => setResultTime(e.target.value)}
-                placeholder="e.g. 41:05"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+              <FormSelect
+                id="result-division"
+                aria-label="Division"
+                value={resultDivision}
+                onChange={setResultDivision}
+                options={divisionOptions}
               />
+              {resultDivision === ADD_DIVISION && (
+                <input
+                  aria-label="New division name"
+                  autoFocus
+                  value={newDivision}
+                  onChange={(e) => setNewDivision(e.target.value)}
+                  maxLength={60}
+                  placeholder="e.g. Half Marathon or Women 40-49"
+                  className="mt-2 w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                />
+              )}
+              {resultDivision === ADD_DIVISION && (
+                <p className="text-[12px] text-muted-dark mt-1.5">Added to this event&apos;s divisions and kept in its change history.</p>
+              )}
             </div>
+            <fieldset>
+              <legend className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Time</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: "hours", label: "Hours", max: 99 },
+                  { key: "minutes", label: "Minutes", max: 59 },
+                  { key: "seconds", label: "Seconds", max: 59 },
+                ] as const).map((unit) => (
+                  <div key={unit.key}>
+                    <FormSelect
+                      aria-label={unit.label}
+                      value={String(resultTime[unit.key])}
+                      onChange={(v) => setResultTime((t) => ({ ...t, [unit.key]: Number(v) }))}
+                      options={Array.from({ length: unit.max + 1 }, (_, n) => ({
+                        value: String(n),
+                        label: unit.key === "hours" ? String(n) : String(n).padStart(2, "0"),
+                      }))}
+                    />
+                    <span className="block mt-1 font-headline text-[10px] uppercase tracking-widest text-muted-dark">{unit.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[12px] text-muted-dark mt-1.5">Leave all three at 0 for no time.</p>
+            </fieldset>
             <div>
               <label htmlFor="result-placement" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Placement</label>
-              <input
-                id="result-placement"
-                value={resultPlacement}
-                onChange={(e) => setResultPlacement(e.target.value)}
-                placeholder="e.g. 8th / 512"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  id="result-placement"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={resultPlacement}
+                  onChange={(e) => setResultPlacement(e.target.value.replace(/\D/g, ""))}
+                  placeholder="e.g. 8"
+                  className="w-32 bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                />
+                {Number(resultPlacement) >= 1 && (
+                  <span className="font-headline text-[13px] font-bold text-muted-light" aria-live="polite">
+                    Shows as {ordinal(Number(resultPlacement))}
+                  </span>
+                )}
+              </div>
             </div>
             {resultError && <p className="text-[13px] text-red-300">{resultError}</p>}
           </div>
@@ -1038,206 +1140,29 @@ export default function RaceManagementPanel({
         </DialogContent>
       </Dialog>
 
-      {importOpen && (
-        <ResultsImportDialog
-          eventId={id}
-          registrations={registrations}
-          onClose={() => setImportOpen(false)}
-          onImported={(count) => {
-            setImportOpen(false);
-            setImportMessage(`Updated ${count} result${count === 1 ? "" : "s"}.`);
-            load({ silent: true });
-          }}
-        />
-      )}
+      <AssignBibsDialog
+        key={assignBibsKey}
+        eventId={id}
+        open={assignBibsOpen}
+        onOpenChange={setAssignBibsOpen}
+        defaultStart={nextFreeBib}
+        wavesOn={wavesOn}
+        onAssigned={(count) => {
+          setAssignMsg(`Bibs assigned to ${count} athlete${count === 1 ? "" : "s"}.`);
+          load();
+        }}
+      />
 
-      {/* Notify athletes of wave */}
-      <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Let athletes know their wave</DialogTitle>
-            <DialogDescription>
-              Sends each athlete their wave and start time, by app notification and email. Only people whose
-              wave changed since you last told them are messaged, so no one gets spammed by small edits.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {pendingNotify > 0 ? (
-              <p className="flex items-center gap-2 text-[13px] text-light bg-primary/10 border border-primary/20 rounded-lg px-3 py-2.5">
-                <Bell className="w-4 h-4 text-primary shrink-0" />
-                <span>
-                  <strong className="font-semibold text-primary">{pendingNotify} athlete{pendingNotify === 1 ? "" : "s"}</strong>{" "}
-                  {pendingNotify === 1 ? "has" : "have"} a new or changed wave and will be notified.
-                </span>
-              </p>
-            ) : (
-              <p className="flex items-center gap-2 text-[13px] text-muted-light bg-dark border border-dark-lighter rounded-lg px-3 py-2.5">
-                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                Everyone is up to date. There&apos;s nothing new to send right now.
-              </p>
-            )}
-            {notifyMsg && <p className="text-[13px] text-muted-light">{notifyMsg}</p>}
-          </div>
-          <DialogFooter>
-            {pendingNotify === 0 ? (
-              <Button onClick={() => setNotifyOpen(false)}>Done</Button>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => setNotifyOpen(false)}>Cancel</Button>
-                <Button onClick={runNotifyWaves} disabled={notifySaving} className="shadow-machined">
-                  {notifySaving
-                    ? "Sending…"
-                    : `Notify ${pendingNotify} athlete${pendingNotify === 1 ? "" : "s"}`}
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Wave builder: create waves with conditions + capacity, then sort athletes in */}
-      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Build start waves</DialogTitle>
-            <DialogDescription>
-              Create your start waves and set each one&apos;s time, size, and who it&apos;s for. Save to sort
-              athletes in automatically. This is separate from the ticket tiers people bought.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1 space-y-3">
-            {builderWaves.length === 0 ? (
-              <div className="text-center py-10 px-4 rounded-xl border border-dashed border-dark-lighter">
-                <p className="font-headline text-[13px] font-bold text-light mb-1">No start waves yet</p>
-                <p className="text-[12.5px] text-muted-dark mb-4">Add a wave, set who it&apos;s for, then save to seed athletes in.</p>
-                <Button variant="outline" size="sm" onClick={addWave}>
-                  <Plus className="w-4 h-4" /> Add your first wave
-                </Button>
-              </div>
-            ) : builderWaves.map((w) => {
-              const count = assignPreview?.perWave[w.label] ?? 0;
-              return (
-                <div key={w.id} className="rounded-xl border border-dark-lighter bg-dark p-3.5">
-                  {/* Name / time / capacity / remove */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <input
-                      value={w.label}
-                      onChange={(e) => updateWave(w.id, { label: e.target.value })}
-                      placeholder="Wave name"
-                      aria-label={`Wave name for ${w.label || "new wave"}`}
-                      className="flex-1 min-w-0 bg-dark-light border border-dark-lighter rounded-lg px-2.5 py-2 text-[14px] font-headline font-bold text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
-                    />
-                    <div className="flex items-center gap-1.5" title="Start time">
-                      <Clock className="w-3.5 h-3.5 text-muted-dark shrink-0" />
-                      <input
-                        type="time"
-                        value={w.startTime ?? ""}
-                        onChange={(e) => updateWave(w.id, { startTime: e.target.value })}
-                        aria-label={`Start time for ${w.label || "new wave"}`}
-                        className="bg-dark-light border border-dark-lighter rounded-lg px-2 py-2 text-[13px] text-light focus:border-primary focus:outline-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeWave(w.id)}
-                      className="shrink-0 p-2 text-muted-dark hover:text-red-400 transition-colors"
-                      aria-label={`Remove ${w.label || "wave"}`}
-                      title="Remove wave"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Conditions */}
-                  <p className="font-headline text-[9.5px] font-bold uppercase tracking-widest text-muted-dark mb-2">Who goes in this wave</p>
-                  <div className="grid sm:grid-cols-3 gap-2.5">
-                    <div>
-                      <label htmlFor={`${w.id}-finish-min`} className="text-[11px] text-muted-dark block mb-1">Finish time (mins)</label>
-                      <div className="flex items-center gap-1.5">
-                        <input type="number" min={0} value={w.finishMin ?? ""} placeholder="min"
-                          id={`${w.id}-finish-min`} aria-label={`Minimum finish minutes for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { finishMin: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                        <span className="text-muted-dark text-[12px]">-</span>
-                        <input type="number" min={0} value={w.finishMax ?? ""} placeholder="max"
-                          aria-label={`Maximum finish minutes for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { finishMax: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor={`${w.id}-age-min`} className="text-[11px] text-muted-dark block mb-1">Age</label>
-                      <div className="flex items-center gap-1.5">
-                        <input type="number" min={0} value={w.ageMin ?? ""} placeholder="min"
-                          id={`${w.id}-age-min`} aria-label={`Minimum age for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { ageMin: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                        <span className="text-muted-dark text-[12px]">-</span>
-                        <input type="number" min={0} value={w.ageMax ?? ""} placeholder="max"
-                          aria-label={`Maximum age for ${w.label || "this wave"}`}
-                          onChange={(e) => updateWave(w.id, { ageMax: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor={`${w.id}-capacity`} className="text-[11px] text-muted-dark block mb-1">Max athletes</label>
-                      <input type="number" min={0} value={w.capacity ?? ""} placeholder="Any"
-                        id={`${w.id}-capacity`} aria-label={`Maximum athletes in ${w.label || "this wave"}`}
-                        onChange={(e) => updateWave(w.id, { capacity: e.target.value === "" ? null : Number(e.target.value) })}
-                        className="w-full bg-dark-light border border-dark-lighter rounded-lg px-2 py-1.5 text-[13px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none" />
-                    </div>
-                  </div>
-
-                  {/* Gender + live count */}
-                  <div className="flex items-center justify-between gap-3 mt-2.5 flex-wrap">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[11px] text-muted-dark mr-0.5">Gender:</span>
-                      {GENDER_CHOICES.map((g) => {
-                        const on = (w.genders ?? []).includes(g);
-                        return (
-                          <button key={g} type="button" onClick={() => toggleWaveGender(w.id, g)}
-                            className={`px-2 py-1 rounded-md text-[11px] font-headline font-bold uppercase tracking-wide border transition-colors ${
-                              on ? "bg-primary/15 border-primary/40 text-primary" : "bg-dark-light border-dark-lighter text-muted-dark hover:text-light"
-                            }`}>
-                            {g}
-                          </button>
-                        );
-                      })}
-                      {(w.genders ?? []).length === 0 && <span className="text-[11px] text-muted-dark">any</span>}
-                    </div>
-                    <span className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                      <span className="text-primary font-black italic">{count}</span> athlete{count === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {builderWaves.length > 0 && (
-              <button type="button" onClick={addWave}
-                className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-dark-lighter py-2.5 font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-primary hover:border-primary/40 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Add another wave
-              </button>
-            )}
-          </div>
-
-          {assignPreview && builderWaves.length > 0 && assignPreview.unassigned > 0 && (
-            <p className="flex items-center gap-2 text-[12.5px] text-muted-light bg-dark border border-dark-lighter rounded-lg px-3 py-2 mt-1">
-              <AlertCircle className="w-4 h-4 text-amber-300 shrink-0" />
-              {assignPreview.unassigned} athlete{assignPreview.unassigned === 1 ? "" : "s"} match no wave and will stay unassigned.
-            </p>
-          )}
-          {assignMsg && <p className="text-[13px] text-muted-light mt-1">{assignMsg}</p>}
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setManageOpen(false)}>Close</Button>
-            <Button onClick={saveAndAssign} disabled={assignSaving || builderWaves.length === 0} className="shadow-machined">
-              {assignSaving ? "Saving…" : "Save & sort athletes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <WaveBuilderDialog
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        waves={builderWaves}
+        onWavesChange={setBuilderWaves}
+        preview={assignPreview}
+        message={assignMsg}
+        saving={assignSaving}
+        onSave={saveAndAssign}
+      />
     </div>
   );
 }
