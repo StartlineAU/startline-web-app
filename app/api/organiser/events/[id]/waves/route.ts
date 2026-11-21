@@ -5,13 +5,14 @@ import prisma from "@/lib/prisma";
 import { sanitizeWaveInput, wavesWithCounts } from "@/lib/start-waves";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
+import { RACE_FEATURES_SELECT, organiserSeesWaves } from "@/lib/race-features";
 
 const wavePatchSchema = z.object({ startWaves: z.unknown().optional() });
 
 async function assertOwnedEvent(eventId: string, organiserId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organiserId: true },
+    select: { id: true, organiserId: true, ...RACE_FEATURES_SELECT },
   });
   if (!event) return { error: NextResponse.json({ error: "Not found." }, { status: 404 }) };
   if (event.organiserId !== organiserId) {
@@ -56,6 +57,10 @@ export async function PATCH(
   const { id } = parsedParams.data;
   const owned = await assertOwnedEvent(id, session.sub);
   if (owned.error) return owned.error;
+
+  if (!organiserSeesWaves(owned.event!)) {
+    return NextResponse.json({ error: "Start waves are turned off for this event." }, { status: 409 });
+  }
 
   const parsedBody = wavePatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsedBody.success) {

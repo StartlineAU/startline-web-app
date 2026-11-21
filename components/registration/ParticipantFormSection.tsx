@@ -165,7 +165,7 @@ export default function ParticipantFormSection({
                 className={registerInputCls()}
               />
               <p className="mt-1.5 text-[11.5px] text-muted-dark leading-relaxed">
-                Optional. Roughly how long you expect to take (hours:minutes). Organisers use this to seed start waves by pace.
+                Optional. Roughly how long you expect to take (hours:minutes). Organisers may use this to group starts by pace.
               </p>
             </RegisterField>
           </div>

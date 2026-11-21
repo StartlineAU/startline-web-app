@@ -135,8 +135,9 @@ Measured on staging:
 
 The probe also checks that `/api/upload/presign` exists, which is the real
 regression test. **A 404 there means the environment is proxying uploads again
-and anything over ~4.5 MB will fail.** It exits non-zero on either failure, so
-it can gate a deploy.
+and anything over ~4.5 MB will fail.** Only the route's own `401` passes: a
+`405` is the waitlist gate answering in its place, which used to pass. It exits
+non-zero on either failure, so it can gate a deploy.
 
 The browser uploads straight to S3 instead:
 

@@ -12,6 +12,7 @@ import { buildRegistrationsXlsx } from "@/lib/registration-export-xlsx";
 import { buildStartListPdf } from "@/lib/registration-export-pdf";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
+import { RACE_FEATURES_SELECT, organiserSeesBibs, organiserSeesWaves } from "@/lib/race-features";
 
 const exportQuery = z.object({
   format: z.enum(["xlsx", "pdf", "csv"]).catch("xlsx"),
@@ -32,7 +33,7 @@ export async function GET(
   const { format, columns: columnsParam } = exportQuery.parse(
     Object.fromEntries(req.nextUrl.searchParams),
   );
-  const columns = parseExportColumns(columnsParam ?? null);
+  const requestedColumns = parseExportColumns(columnsParam ?? null);
 
   const event = await prisma.event.findUnique({
     where: { id },
@@ -45,12 +46,21 @@ export async function GET(
       venue: true,
       city: true,
       state: true,
+      ...RACE_FEATURES_SELECT,
     },
   });
   if (!event) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (event.organiserId !== session.sub) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
+
+  // A feature that is turned off leaves the export too (#566), including the
+  // fixed-layout PDF, which is why the values are blanked as well as the columns.
+  const wavesOn = organiserSeesWaves(event);
+  const bibsOn = organiserSeesBibs(event);
+  const columns = requestedColumns.filter((key) =>
+    (bibsOn || key !== "bib") && (wavesOn || (key !== "startWave" && key !== "waveStart")),
+  );
 
   const registrations = await prisma.registration.findMany({
     where: { eventId: id },
@@ -85,12 +95,12 @@ export async function GET(
     athleteName: r.athleteName,
     athleteEmail: r.athleteEmail,
     mobile: r.mobile,
-    // A team member carries the team's bib.
-    bibNumber: r.team ? r.team.bibNumber : r.bibNumber,
+    // A team member carries the team's bib. Features that are off are blanked (#566).
+    bibNumber: bibsOn ? (r.team ? r.team.bibNumber : r.bibNumber) : null,
     teamName: r.team?.name ?? null,
-    startWaveLabel: r.startWave?.label ?? r.startWaveLabel,
+    startWaveLabel: wavesOn ? r.startWave?.label ?? r.startWaveLabel : null,
     startWaveStartTime:
-      r.startWave || r.startWaveLabel
+      wavesOn && (r.startWave || r.startWaveLabel)
         ? (r.startWave?.startTime ?? event.startTime)
         : null,
     waveLabel: r.waveLabel,

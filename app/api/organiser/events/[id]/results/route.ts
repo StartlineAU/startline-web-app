@@ -3,10 +3,12 @@ import { teammatesOf } from "@/lib/team-entries";
 import { findTeamResultConflict, pickTeamResult } from "@/lib/team-results";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
+import { isValidRaceTime, normalisePlacement, normaliseRaceTime } from "@/lib/race-results";
 import type { Prisma } from "@prisma/client";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
+import { EVENT_FIELD_LABELS, recordEventChange } from "@/lib/event-change-log";
+import { effectiveEventStatus } from "@/lib/event-lifecycle";
 
 const resultRowSchema = z.object({
   registrationId: z.string().max(255).optional(),
@@ -16,6 +18,12 @@ const resultRowSchema = z.object({
   resultPlacement: z.string().max(100).nullable().optional(),
   isPersonalBest: z.boolean().optional(),
   isTopResult: z.boolean().optional(),
+  /**
+   * The athlete's division (Registration.category). A name the event doesn't
+   * list yet is added to the event's divisions, for organisers who forgot to
+   * set them up before entries opened.
+   */
+  division: z.string().trim().max(60).nullable().optional(),
 });
 
 const resultsPatchSchema = z.object({
@@ -37,7 +45,10 @@ export async function PATCH(
 
   const event = await prisma.event.findUnique({
     where: { id },
-    select: { id: true, organiserId: true },
+    select: {
+      id: true, organiserId: true, title: true, categories: true,
+      status: true, startsAtUtc: true, endsAtUtc: true,
+    },
   });
   if (!event) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (event.organiserId !== session.sub) {
@@ -60,6 +71,23 @@ export async function PATCH(
   const byEmail = new Map(
     registrations.filter((r) => !r.detailsPending).map((r) => [r.athleteEmail.toLowerCase(), r])
   );
+
+  // Divisions match the event's list case-insensitively and take its spelling;
+  // anything new is appended once, in the order it first appears.
+  const existingDivisions = Array.isArray(event.categories)
+    ? (event.categories as unknown[]).filter((c): c is string => typeof c === "string")
+    : [];
+  const divisionByKey = new Map(existingDivisions.map((d) => [d.toLowerCase(), d]));
+  const addedDivisions: string[] = [];
+  const resolveDivision = (raw: string | null | undefined): string | null => {
+    const name = raw?.trim();
+    if (!name) return null;
+    const known = divisionByKey.get(name.toLowerCase());
+    if (known) return known;
+    divisionByKey.set(name.toLowerCase(), name);
+    addedDivisions.push(name);
+    return name;
+  };
 
   const updates: { id: string; data: Prisma.RegistrationUpdateInput }[] = [];
   const unmatched: typeof results = [];
@@ -88,9 +116,11 @@ export async function PATCH(
     const data: Prisma.RegistrationUpdateInput = {};
     if ("resultDistance" in row)  data.resultDistance  = row.resultDistance?.trim() || null;
     if ("resultTime" in row)      data.resultTime      = rawTime ? normaliseRaceTime(rawTime) : null;
-    if ("resultPlacement" in row) data.resultPlacement = row.resultPlacement?.trim() || null;
+    // A bare number ("43") is stored as the ordinal athletes read ("43rd").
+    if ("resultPlacement" in row) data.resultPlacement = normalisePlacement(row.resultPlacement);
     if ("isPersonalBest" in row)  data.isPersonalBest  = !!row.isPersonalBest;
     if ("isTopResult" in row)     data.isTopResult     = !!row.isTopResult;
+    if ("division" in row)        data.category        = resolveDivision(row.division);
 
     if (Object.keys(data).length === 0) continue;
     updates.push({ id: match.id, data });
@@ -122,12 +152,38 @@ export async function PATCH(
   }
 
   if (writes.size > 0) {
-    await prisma.$transaction(
-      [...writes].map(([rid, data]) => prisma.registration.update({ where: { id: rid }, data }))
-    );
+    await prisma.$transaction(async (tx) => {
+      if (addedDivisions.length > 0) {
+        const next = [...existingDivisions, ...addedDivisions];
+        await tx.event.update({ where: { id }, data: { categories: next } });
+        // Logged like any other edit, so the event's history shows when a
+        // division appeared and who added it.
+        await recordEventChange(tx, {
+          eventId: id,
+          eventTitle: event.title,
+          source: "ORGANISER",
+          kind: "EDIT",
+          changedById: session.sub,
+          changedByEmail: auth.actorEmail ?? session.email,
+          organiserVerified: session.verified,
+          statusAtChange: effectiveEventStatus(event),
+          changes: [{
+            field: "categories",
+            label: EVENT_FIELD_LABELS.categories,
+            from: existingDivisions,
+            to: next,
+            material: false,
+          }],
+        });
+      }
+      for (const [rid, data] of writes) {
+        await tx.registration.update({ where: { id: rid }, data });
+      }
+    });
   }
 
   return NextResponse.json({
+    divisions: [...existingDivisions, ...addedDivisions],
     updated: updates.length,
     unmatched: unmatched.map((r) => r.athleteEmail ?? r.registrationId ?? "unknown"),
     invalidTimes,

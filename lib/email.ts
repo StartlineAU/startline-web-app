@@ -340,8 +340,8 @@ export async function sendFollowedOrganiserEventEmails(
 // ── Event changed (athlete) ───────────────────────────────────────────────────
 // The organiser moved the date, time or venue, or changed the type of an event
 // this athlete had already entered. There is no automatic refund: anyone
-// affected is told to raise it through Support, where the organiser and
-// Startline review it.
+// affected is told to raise it through Support, where the organiser
+// decides it and Startline issues it (#570).
 export interface EventChangeLine {
   label: string;
   from: string;

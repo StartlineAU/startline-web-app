@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { ensureDatabaseUrl, organiserLogin, resetRegistration } from "./helpers";
@@ -6,6 +6,15 @@ import { ensureDatabaseUrl, organiserLogin, resetRegistration } from "./helpers"
 const EVENT_ID = "seed-event-001";
 const DASHBOARD = `/organiser/events/${EVENT_ID}/dashboard`;
 const MANAGE = `${DASHBOARD}?panel=manage`;
+
+/** Pick a finish time in the result dialog's hour / minute / second dropdowns. */
+async function pickResultTime(dialog: Locator, hours: number, minutes: number, seconds: number) {
+  for (const [label, value] of [["Hours", hours], ["Minutes", minutes], ["Seconds", seconds]] as const) {
+    await dialog.getByRole("button", { name: label, exact: true }).click();
+    const text = label === "Hours" ? String(value) : String(value).padStart(2, "0");
+    await dialog.getByRole("option").filter({ hasText: new RegExp(`^${text}$`) }).click();
+  }
+}
 
 test.describe("race management", () => {
   test("opens race management on the event dashboard", async ({ page }) => {
@@ -239,7 +248,7 @@ test.describe("race management", () => {
     await expect(row.getByText("Wave A", { exact: true })).toBeVisible();
   });
 
-  test("rejects an unreadable finish time instead of publishing it", async ({ page }) => {
+  test("finish time is picked from dropdowns, so junk can never be saved", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
@@ -252,17 +261,12 @@ test.describe("race management", () => {
     await block.getByRole("button", { name: /add result|edit result/i }).click();
 
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel(/^time$/i).fill("banana");
-    await dialog.getByRole("button", { name: /save result/i }).click();
-
-    // Dialog stays open with a message rather than saving junk to the profile.
-    await expect(dialog).toHaveCount(1);
-    await expect(dialog.getByText(/must look like/i)).toBeVisible();
-
-    // A real time still saves.
-    await dialog.getByLabel(/^time$/i).fill("1:08:22");
+    // There is no free-text time field to type into.
+    await expect(dialog.getByRole("textbox", { name: /^time$/i })).toHaveCount(0);
+    await pickResultTime(dialog, 1, 8, 22);
     await dialog.getByRole("button", { name: /save result/i }).click();
     await expect(dialog).toHaveCount(0);
+    await expect(block.getByText("1:08:22").locator("visible=true")).toBeVisible();
   });
 
   test("rejects an unreadable estimated finish instead of wiping it", async ({ page }) => {
@@ -409,8 +413,10 @@ test.describe("race management", () => {
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText(/division/i).first()).toBeVisible();
-    await dialog.getByLabel(/^time$/i).fill("55:01");
-    await dialog.getByLabel(/placement/i).fill("1st / 12");
+    await pickResultTime(dialog, 0, 55, 1);
+    // A bare number; the ordinal is added for the athlete.
+    await dialog.getByLabel(/placement/i).fill("1");
+    await expect(dialog.getByText("Shows as 1st")).toBeVisible();
     await dialog.getByRole("button", { name: /save result/i }).click();
 
     await expect(dialog).toHaveCount(0);
@@ -418,8 +424,9 @@ test.describe("race management", () => {
       .locator("div.flex.items-center.gap-2", { hasText: "Alex Turner" })
       .filter({ hasText: /@/ })
       .first();
-    await expect(updated.getByText(/55:01/)).toBeVisible();
-    await expect(updated.getByText(/1st \/ 12/)).toBeVisible();
+    // Phones stack these under the name, so match the copy that is showing.
+    await expect(updated.getByText(/55:01/).locator("visible=true")).toBeVisible();
+    await expect(updated.getByText(/^1st$/).locator("visible=true")).toBeVisible();
   });
 
   // Import results is off the After race tab until #565 brings it back.
@@ -565,12 +572,12 @@ test.describe("athlete public profile race history", () => {
     await expect(page.getByRole("button", { name: /add result|edit result/i }).first()).toBeVisible();
 
     // Jade is seeded onto this event's results board (profile-linked athlete).
-    await page.getByPlaceholder(/search any wave by name, email, or bib/i).fill("jade.nguyen");
+    await page.getByPlaceholder(/^search by name/i).fill("jade.nguyen");
     await page.getByRole("button", { name: /add result|edit result/i }).first().click();
 
     const dialog = page.getByRole("dialog");
-    await dialog.getByLabel(/^time$/i).fill("57:30");
-    await dialog.getByLabel(/placement/i).fill("22nd / 100");
+    await pickResultTime(dialog, 0, 57, 30);
+    await dialog.getByLabel(/placement/i).fill("22");
     await dialog.getByRole("button", { name: /save result/i }).click();
     await expect(dialog).toHaveCount(0);
 
@@ -579,6 +586,6 @@ test.describe("athlete public profile race history", () => {
     // The card renders the time in both the mobile and desktop result blocks;
     // filter to the visible one rather than assuming a breakpoint.
     await expect(page.getByText("57:30").locator("visible=true")).toBeVisible();
-    await expect(page.getByText("22nd / 100").locator("visible=true")).toBeVisible();
+    await expect(page.getByText("22nd").locator("visible=true")).toBeVisible();
   });
 });
