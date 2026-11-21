@@ -12,9 +12,15 @@ interface Ticket {
   eventDate: string | null;
   reason: string;
   status: "OPEN" | "APPROVED" | "DECLINED" | "REFUNDED";
-  decisionNote: string | null;
+  organiserDecision: "APPROVED" | "DECLINED" | null;
+  organiserNote: string | null;
+  adminDecisionKind: "NO_RESPONSE" | "OVERRIDE" | null;
+  adminNote: string | null;
+  organiserResponseDue: string;
   createdAt: string;
 }
+
+const DUE = new Intl.DateTimeFormat("en-AU", { weekday: "short", day: "numeric", month: "short" });
 
 const STATUS_STYLE: Record<Ticket["status"], string> = {
   OPEN: "text-amber-300 bg-amber-300/10",
@@ -27,6 +33,8 @@ export default function OrganiserRefundsPage() {
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // Optional note per ticket, sent with the decision and shown to Startline.
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     return fetch("/api/organiser/refund-requests")
@@ -46,7 +54,7 @@ export default function OrganiserRefundsPage() {
       const res = await fetch(`/api/organiser/refund-requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, note: notes[id]?.trim() || undefined }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -67,7 +75,8 @@ export default function OrganiserRefundsPage() {
         </Link>
         <h1 className="font-headline text-[34px] font-black italic tracking-tighter text-light mt-3">Refund requests</h1>
         <p className="text-[14px] text-muted mt-2 mb-8 leading-relaxed">
-          Athletes ask for a refund through Support. Your decision is recorded here; Startline issues the refund.
+          Athletes ask for a refund through Support. You decide on each request, and Startline issues the refund.
+          Please decide within 3 business days. After that, Startline may decide in your place.
         </p>
 
         {error && <p className="text-[13px] text-red-300 mb-4">{error}</p>}
@@ -88,18 +97,38 @@ export default function OrganiserRefundsPage() {
               <p className="text-[13px] text-muted-light mt-2 whitespace-pre-wrap">{t.reason}</p>
               <p className="text-[12px] text-muted-dark mt-2">{t.name} · {t.email}</p>
               {t.status === "OPEN" && (
-                <div className="mt-3 flex gap-2">
-                  <button type="button" disabled={busy === t.id} onClick={() => decide(t.id, "approve")}
-                    className="font-headline text-[11px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-2 rounded disabled:opacity-50">
-                    Approve
-                  </button>
-                  <button type="button" disabled={busy === t.id} onClick={() => decide(t.id, "decline")}
-                    className="font-headline text-[11px] font-bold uppercase tracking-widest border border-red-500/30 text-red-400 px-3 py-2 rounded disabled:opacity-50">
-                    Decline
-                  </button>
+                <div className="mt-3 grid gap-2">
+                  <p className="text-[12px] text-muted">Please decide by {DUE.format(new Date(t.organiserResponseDue))}.</p>
+                  <textarea
+                    value={notes[t.id] ?? ""}
+                    onChange={(e) => setNotes((n) => ({ ...n, [t.id]: e.target.value }))}
+                    rows={2}
+                    maxLength={2000}
+                    placeholder="Note for Startline (optional)"
+                    aria-label="Note for Startline"
+                    className="rounded border border-dark-lighter bg-dark p-2 text-[13px] text-light"
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" disabled={busy === t.id} onClick={() => decide(t.id, "approve")}
+                      className="font-headline text-[11px] font-bold uppercase tracking-widest bg-primary text-dark px-3 py-2 rounded disabled:opacity-50">
+                      Approve
+                    </button>
+                    <button type="button" disabled={busy === t.id} onClick={() => decide(t.id, "decline")}
+                      className="font-headline text-[11px] font-bold uppercase tracking-widest border border-red-500/30 text-red-400 px-3 py-2 rounded disabled:opacity-50">
+                      Decline
+                    </button>
+                  </div>
                 </div>
               )}
-              {t.decisionNote && <p className="text-[12px] text-muted mt-2">Note: {t.decisionNote}</p>}
+              {t.organiserNote && <p className="text-[12px] text-muted mt-2">Your note: {t.organiserNote}</p>}
+              {t.adminDecisionKind && (
+                <p className="text-[12px] text-amber-300 mt-2">
+                  {t.adminDecisionKind === "OVERRIDE"
+                    ? `Startline overrode ${t.organiserDecision ? `your decision (${t.organiserDecision.toLowerCase()})` : "this request"}`
+                    : "Startline decided after no response"}
+                  {t.adminNote ? `: ${t.adminNote}` : "."}
+                </p>
+              )}
             </div>
           ))}
         </div>

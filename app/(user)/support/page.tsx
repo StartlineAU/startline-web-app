@@ -13,7 +13,7 @@ export default function SupportPage() {
         <p className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary">Support</p>
         <h1 className="font-headline text-[36px] font-black italic tracking-tighter text-light mt-2">Open a ticket</h1>
         <p className="text-[14px] text-muted mt-3 mb-8 leading-relaxed">
-          Tell us the event and what you need. A refund request is reviewed by Startline. It is not issued when you submit this form.
+          Tell us the event and what you need. On a refund request, the organiser decides, usually within 3 business days, and Startline issues the refund. Nothing is refunded when you submit this form.
         </p>
         <SupportForm />
       </div>

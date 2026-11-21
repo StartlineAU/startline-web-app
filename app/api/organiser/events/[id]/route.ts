@@ -81,7 +81,7 @@ const REQUIRED_ON_SUBMIT = ["title", "discipline", "eventDate", "startTime", "ci
 //
 // A material change (date, time, location or event type) is recorded and the
 // athletes already entered are emailed. There is no automatic refund: anyone
-// affected raises it through Support, which the organiser and Startline review.
+// affected raises it through Support: the organiser decides, Startline issues.
 //
 // An unverified organiser's edit of a live event is stored as a revision and an
 // admin approves it before the listing changes.

@@ -503,14 +503,57 @@ anyone affected asks through Support. That happens when the change becomes the
 public offer: immediately for a verified organiser, and only after an admin
 approves a revision for an unverified one.
 
-**Refunds are reviewed, never automatic.** `lib/issue-entry-refund.ts` has one
-path: the organisation's policy amount, frozen onto the entry when the request
-was raised, with the booking fee retained and the transfer reversed
-proportionally. Nothing refunds an entry on its own. The request starts as a
-`SupportTicket`, the organiser records approve or decline at
-`/organiser/refunds`, and Startline issues the Stripe refund from the admin
-registrations page. Change-of-mind refunds stop 24 hours before the start
-(`refundWithinCutoff`).
+**The organiser decides; Startline issues (#570).** A refund request is a
+`SupportTicket`. The organiser approves or declines it at `/organiser/refunds`,
+and that is the decision. Startline issues the Stripe refund for an approved
+request from the admin registrations page (`lib/issue-entry-refund.ts`: the
+policy amount frozen onto the entry, booking fee retained, transfer reversed
+proportionally) and marks the ticket refunded at `/admin/refunds`. The rules are
+in `lib/refund-ticket-rules.ts`:
+
+- The organiser has 3 business days (Mon–Fri, no public holidays) to respond.
+  After that an admin may decide it, recorded as `NO_RESPONSE`.
+- Any other admin decision is an **override**: it needs a note, is written to
+  the audit log as `REFUND_TICKET_OVERRIDE`, and the organisation gets an
+  in-app notice and an email (always sent, no preference switch). The admin
+  route answers 409 to a plain decision on a ticket the organiser decided.
+- The organiser's decision (`organiserDecision`, `organiserNote`, …) and
+  Startline's (`adminDecisionKind`, `adminNote`, …) are separate columns, so an
+  override never erases what the organiser said. `status` is the effective one.
+- Change-of-mind refunds stop 24 hours before the start (`refundWithinCutoff`).
+
+**Cancelling an event refunds everyone, in full.** Once an event has entries it
+can't be deleted (Registration→Event is RESTRICT); it is cancelled instead, by
+an organisation OWNER (`POST /api/organiser/events/[id]/cancel`) or an admin
+(`POST /api/admin/events/[id]/cancel`, audited as `CANCEL_EVENT`). There is no
+policy, cut-off or review step: `lib/event-cancellation.ts` refunds every paid
+entry everything it paid at checkout (`entryCancellationOwedCents`: ticket
+price, plus the booking fee under the athlete fee structure, less anything
+already refunded under the policy), and releases free entries.
+
+- Startline returns its booking fee on a cancellation
+  (`refund_application_fee: true` with `reverse_transfer`), so the organiser's
+  transfer comes back in full and it pays no fee on sales it had to give back.
+  Ordinary refunds keep the fee (`REFUND_APPLICATION_FEE = false`).
+- The event flips to `CANCELLED` under the per-event entry lock checkout uses.
+  A payment that lands afterwards is refused and refunded in full, fee
+  included, by the Stripe webhook.
+- Each paid entry gets `cancelRefundStatus`: `PENDING`, then `DONE` or `FAILED`
+  with the reason. The cancel request refunds the first 10; the lifecycle
+  worker's one-minute sweep (`event_lifecycle_reconcile` in `startline-infra`)
+  does the rest and retries a `FAILED` entry every 15 minutes until it goes
+  through. The admin event page lists the refunds and "Retry now" retries
+  failures immediately. Refunds carry an idempotency key and
+  `metadata.registrationId`, so a retry after Stripe forgets the key finds the
+  earlier refund rather than making a second one.
+- A cancelled event is never paid out (`lib/payout.ts`) and can't be edited,
+  by the organiser or an admin.
+- A cancelled event's open refund tickets are closed as refunded, the
+  organiser's registrations PATCH and new refund tickets are refused, and the
+  event page stays reachable with a notice.
+- If the organiser has already been paid out, the reversal can leave the
+  connected account negative and Stripe debits the platform. That is accepted:
+  the athlete is refunded regardless.
 
 ## Mobile app
 

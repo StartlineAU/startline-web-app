@@ -25,6 +25,8 @@ import {
   buildEventEditPendingReviewEmail,
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
+  buildRefundOverrideEmail,
+  buildEventCancelledEmail,
 } from "../lib/email";
 import { googleCalendarUrl } from "../lib/email-format";
 import { formatEventPlace } from "../lib/event-place";
@@ -98,7 +100,11 @@ const emails: Record<string, () => Promise<{ html: string }>> = {
   "event-edit-approved": () => buildEventEditDecisionEmail({ eventTitle: "Harbour 10K", approved: true, eventUrl: "https://startlineau.com/organiser/events/evt-1" }),
   "event-edit-rejected": () => buildEventEditDecisionEmail({ eventTitle: "Harbour 10K", approved: false, reason: "The new date clashes with the council permit.", eventUrl: "https://startlineau.com/organiser/events/evt-1" }),
   "refund-request": () =>
-    buildRefundRequestEmail({ ticketId: "tkt-1", athleteName: "Harper Jones", athleteEmail: "harper.jones@startline.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "The new date clashes with another race I've entered.", eventUrl: "https://organiser.startlineau.com/organiser/refunds" }),
+    buildRefundRequestEmail({ ticketId: "tkt-1", athleteName: "Harper Jones", athleteEmail: "harper.jones@startline.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "The new date clashes with another race I've entered.", eventUrl: "https://organiser.startlineau.com/organiser/refunds", audience: "organiser", respondBy: new Date("2027-03-04T00:00:00Z") }),
+  "refund-override": () =>
+    buildRefundOverrideEmail({ athleteName: "Harper Jones", eventTitle: "Harbour 10K", organiserDecision: "declined", decision: "approved", note: "The date moved by a week, so the athlete is owed a remedy under the Australian Consumer Law." }),
+  "event-cancelled": () =>
+    buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: "2027-03-21", refundCents: 5495, reason: "The council withdrew the road closure permit." }),
   waitlist: () => renderEmail(WaitlistConfirmationEmail()),
   "contact-message": () =>
     renderEmail(ContactMessageEmail({ name: "Harper Jones", email: "harper.jones@startline.test", subject: "Group discount?", message: "Hi team,\n\nDo you offer group entries for clubs?\n\nThanks" })),

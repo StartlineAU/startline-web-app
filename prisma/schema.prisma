@@ -257,6 +257,13 @@ model Event {
   reviewedBy      Admin?    @relation("EventReviewedBy", fields: [reviewedById], references: [id])
   reviewedAt      DateTime?
 
+  // Cancellation. Cancelling replaces deleting once an event has entries, and
+  // refunds every athlete everything they paid, booking fee included.
+  cancelledAt        DateTime?
+  cancelledById      String? // Organiser or Admin id, see cancelledByRole
+  cancelledByRole    String? // "organiser" | "admin"
+  cancellationReason String?
+
   isPinned      Boolean        @default(false)
   reviews       Review[]
   announcements Announcement[]
@@ -425,6 +432,7 @@ enum EventStatus {
   IN_PROGRESS // the event has started and has not finished
   REJECTED // admin denied
   ARCHIVED // finished, or retired by the organiser
+  CANCELLED // called off; every entry is refunded in full (lib/event-cancellation.ts)
 }
 
 // ─── Athlete reviews ──────────────────────────────────────────────────────────
@@ -481,6 +489,10 @@ enum NotificationType {
   EVENT_APPROVED
   EVENT_REJECTED
   NEW_REGISTRATION
+  // Startline overrode the organisation's refund decision. No switch: always sent.
+  REFUND_TICKET_OVERRIDE
+  // The event was cancelled and every entry refunded. No switch: always sent.
+  EVENT_CANCELLED
 }
 
 // ─── Organiser announcements (per-event) ─────────────────────────────────────
@@ -567,8 +579,17 @@ model Registration {
   refundAmountCents Int?
   refundRequestedAt DateTime?
   refundOutsidePolicy Boolean @default(false)
-  // Refunds are reviewed from a support ticket, by the organiser and Startline.
+  // Refunds are decided by the organiser from a support ticket and issued by Startline.
   stripeRefundId String?
+  // Full refund owed because the event was cancelled. PENDING until Stripe
+  // confirms, FAILED (with the reason) until a retry succeeds, DONE once the
+  // athlete has everything back. The lifecycle worker retries anything not DONE.
+  cancelRefundStatus   String?
+  cancelRefundError    String?
+  cancelRefundId       String?
+  // When the last refund attempt ran, so a failing one is retried every few
+  // minutes rather than on every one-minute sweep.
+  cancelRefundAttemptAt DateTime?
 
   // Set when the athlete confirms attendance via the check-in QR.
   checkedInAt DateTime?
@@ -590,6 +611,7 @@ model Registration {
   @@index([startWaveId])
   @@index([teamId])
   @@index([stripePaymentIntentId])
+  @@index([cancelRefundStatus])
   @@map("registrations")
 }
 
@@ -716,6 +738,8 @@ enum UserNotificationType {
   EVENT_CHANGED
   // A team entry was bought with some members' details left to add later.
   TEAM_DETAILS_NEEDED
+  // The event was cancelled; everything the athlete paid is being refunded.
+  EVENT_CANCELLED
 }
 
 // ─── Event change log ─────────────────────────────────────────────────────────
@@ -791,8 +815,11 @@ model EventRevision {
   @@map("event_revisions")
 }
 
-// An athlete's request to Startline. A refund is reviewed by the organiser and
-// Startline; nothing is issued from this form.
+// An athlete's request to Startline. On a refund the organiser decides and
+// Startline issues the money; nothing is issued from this form. An admin decides
+// only when the organiser has not responded in time, or as a recorded override
+// (lib/refund-ticket-rules.ts). The two decisions are stored apart so an
+// override never erases what the organiser said.
 model SupportTicket {
   id          String   @id @default(uuid())
   name        String
@@ -804,14 +831,25 @@ model SupportTicket {
   eventId     String?
   organiserId String?
   reason      String
+  // The effective state: the organiser's decision unless an admin decided.
   status      SupportTicketStatus @default(OPEN)
-  decidedById String?
-  decidedAt   DateTime?
-  decisionNote String?
+
+  organiserDecision    SupportTicketStatus?
+  organiserDecidedById String?
+  organiserDecidedAt   DateTime?
+  organiserNote        String?
+
+  // "NO_RESPONSE" (the organiser let the window pass) or "OVERRIDE".
+  adminDecisionKind String?
+  adminDecidedById  String?
+  adminDecidedAt    DateTime?
+  adminNote         String?
+
   createdAt   DateTime @default(now())
 
   @@index([createdAt])
   @@index([organiserId, status])
+  @@index([eventId, status])
   @@map("support_tickets")
 }
 

@@ -8,6 +8,7 @@ import { refundWithinCutoff } from "@/lib/refund-policy";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
 import { listAdminReviewRecipients } from "@/lib/admin-notification-recipients";
 import { organiserNotificationRecipients } from "@/lib/organiser-notification-recipients";
+import { organiserResponseDue } from "@/lib/refund-ticket-rules";
 import { sendRefundRequestEmail } from "@/lib/email";
 
 const schema = z.object({
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     ? await prisma.event.findUnique({
         where: { id: eventId },
         select: {
-          id: true, title: true, eventDate: true, startsAtUtc: true, organiserId: true,
+          id: true, title: true, eventDate: true, startsAtUtc: true, organiserId: true, status: true,
           organiser: {
             select: {
               email: true, contactEmail: true, notifyManagers: true,
@@ -52,6 +53,14 @@ export async function POST(request: NextRequest) {
         },
       })
     : null;
+
+  if (requestType === "refund" && event?.status === "CANCELLED") {
+    // Nothing to decide: a cancelled event refunds everyone in full on its own.
+    return NextResponse.json(
+      { error: "This event was cancelled. Everything you paid, booking fee included, is being refunded to your original payment method automatically." },
+      { status: 409 },
+    );
+  }
 
   if (requestType === "refund") {
     let startsAt: Date | null = event?.startsAtUtc ?? null;
@@ -79,9 +88,10 @@ export async function POST(request: NextRequest) {
       organiserId: event?.organiserId ?? null,
       reason,
     },
-    select: { id: true },
+    select: { id: true, createdAt: true },
   });
 
+  const respondBy = organiserResponseDue(ticket);
   const data = {
     ticketId: ticket.id,
     athleteName: name,
@@ -96,13 +106,13 @@ export async function POST(request: NextRequest) {
     const recipients = organiserNotificationRecipients(event.organiser);
     const eventUrl = organiserUrl(`/organiser/refunds`, SITE);
     for (const to of recipients) {
-      sends.push(sendRefundRequestEmail(to, { ...data, eventUrl }));
+      sends.push(sendRefundRequestEmail(to, { ...data, eventUrl, audience: "organiser", respondBy }));
     }
   }
   const admins = await listAdminReviewRecipients().catch(() => []);
   const adminUrlForTicket = adminUrl("/admin/refunds", SITE);
   for (const to of admins) {
-    sends.push(sendRefundRequestEmail(to, { ...data, eventUrl: adminUrlForTicket }));
+    sends.push(sendRefundRequestEmail(to, { ...data, eventUrl: adminUrlForTicket, audience: "admin", respondBy }));
   }
   await Promise.all(sends.map((p) => p.catch((err) => console.error("Refund request email failed:", err))));
 

@@ -20,7 +20,7 @@ export function changeLines(changes: EventFieldChange[]): ChangeLine[] {
 /**
  * Tell the athletes already entered that an event's date, time, location or
  * type changed. There is no automatic refund: anyone affected is told to raise
- * it through Support, and the organiser and Startline review that.
+ * it through Support, where the organiser decides and Startline issues the refund.
  *
  * Called after the edit has committed. Sends are best-effort and go out in
  * Resend batches, so a large field of entrants does not hold the request open

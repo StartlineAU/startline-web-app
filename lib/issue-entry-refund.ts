@@ -10,9 +10,9 @@ import {
  * Issue the Stripe refund for one registration and mark it REFUNDED.
  *
  * The amount follows the organisation's refund policy, frozen onto the entry
- * when the request was raised, and keeps Startline's booking fee. Every refund
- * is reviewed first — by the organiser and by Startline — from a support ticket.
- * Nothing here is automatic.
+ * when the request was raised, and keeps Startline's booking fee. The organiser
+ * decides on the support ticket first and Startline issues the refund (#570).
+ * A cancelled event is different: lib/event-cancellation.ts refunds everything.
  */
 
 const REFUNDABLE_STATUSES: ("CONFIRMED" | "REFUND_REQUESTED")[] = ["CONFIRMED", "REFUND_REQUESTED"];
@@ -37,6 +37,7 @@ export const refundEntrySelect = {
   refundAmountCents: true,
   refundPercent: true,
   stripePaymentIntentId: true,
+  cancelRefundStatus: true,
   athleteName: true,
   userId: true,
   eventId: true,
@@ -51,6 +52,8 @@ export interface RefundEntry {
   feeStructure: string;
   refundAmountCents: number | null;
   stripePaymentIntentId: string | null;
+  /** Set once the event is cancelled: the full refund is handled there. */
+  cancelRefundStatus?: string | null;
   athleteName: string;
   userId: string | null;
   eventId: string;
@@ -63,7 +66,57 @@ export interface RefundResult {
   refundCents: number;
 }
 
+/**
+ * Refund part of a registration payment's charge on Stripe. Shared by a single
+ * reviewed refund (below) and a cancelled event (lib/event-cancellation.ts).
+ *
+ * The charge (and its transfer) are expanded because the refund needs facts
+ * only they carry: whether there is a transfer to reverse and an application
+ * fee to keep or return. Checkout omits both for a direct charge, and Stripe
+ * rejects a refund that claims either one is there when it is not.
+ */
+export async function refundEntryCharge(opts: {
+  paymentIntentId: string;
+  amountCents: number;
+  idempotencyKey: string;
+  refundApplicationFee?: boolean;
+  metadata?: Record<string, string>;
+}): Promise<{ id: string }> {
+  const stripe = getStripe();
+  const paymentIntent = await stripe.paymentIntents.retrieve(opts.paymentIntentId, {
+    expand: ["latest_charge", "latest_charge.transfer"],
+  });
+  const charge = paymentIntent.latest_charge;
+  if (!charge) throw new RefundError("No charge found on this payment intent.", 422, "NO_CHARGE");
+  // A bare id means the expansion did not come back and we cannot prove what
+  // the charge carries. Guessing moves real money the wrong way either way.
+  if (typeof charge === "string") {
+    throw new RefundError("Could not read the charge for this payment. Try again in a moment.", 502, "CHARGE_UNREADABLE");
+  }
+
+  return stripe.refunds.create(
+    ...buildRefundParams({
+      chargeId: charge.id,
+      amountCents: opts.amountCents,
+      idempotencyKey: opts.idempotencyKey,
+      hasTransfer: Boolean(charge.transfer),
+      hasApplicationFee: Boolean(charge.application_fee),
+      refundApplicationFee: opts.refundApplicationFee,
+      metadata: opts.metadata,
+    }),
+  );
+}
+
 export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult> {
+  // A cancelled event refunds this entry in full by itself. A reviewed partial
+  // refund issued alongside would race it and leave the totals wrong.
+  if (entry.cancelRefundStatus) {
+    throw new RefundError(
+      "This event was cancelled, so this entry is being refunded in full automatically. Retry it from the event page if it failed.",
+      409,
+      "EVENT_CANCELLED",
+    );
+  }
   if (entry.status !== "CONFIRMED" && entry.status !== "REFUND_REQUESTED") {
     throw new RefundError(
       "Only confirmed or refund-requested registrations can be refunded.",
@@ -96,34 +149,14 @@ export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult
   // on a group booking is every participant's entry.
   const refundCents = entryRefundAmountCents(entry);
 
-  const stripe = getStripe();
-  // The charge (and its transfer) are expanded because the refund needs facts
-  // only they carry: whether there is a transfer to reverse and an application
-  // fee to keep. Checkout omits both for a direct charge, and Stripe rejects a
-  // refund that claims either one is there when it is not.
-  const paymentIntent = await stripe.paymentIntents.retrieve(entry.stripePaymentIntentId, {
-    expand: ["latest_charge", "latest_charge.transfer"],
+  const refund = await refundEntryCharge({
+    paymentIntentId: entry.stripePaymentIntentId,
+    amountCents: refundCents,
+    // Retrying a failed request must not refund the athlete twice. Stripe
+    // expires an idempotency key after 24 hours, so a refund that failed
+    // for a transient reason can still be retried tomorrow.
+    idempotencyKey: `entry-refund-${entry.id}`,
   });
-  const charge = paymentIntent.latest_charge;
-  if (!charge) throw new RefundError("No charge found on this payment intent.", 422, "NO_CHARGE");
-  // A bare id means the expansion did not come back and we cannot prove what
-  // the charge carries. Guessing moves real money the wrong way either way.
-  if (typeof charge === "string") {
-    throw new RefundError("Could not read the charge for this payment. Try again in a moment.", 502, "CHARGE_UNREADABLE");
-  }
-
-  const refund = await stripe.refunds.create(
-    ...buildRefundParams({
-      chargeId: charge.id,
-      amountCents: refundCents,
-      // Retrying a failed request must not refund the athlete twice. Stripe
-      // expires an idempotency key after 24 hours, so a refund that failed
-      // for a transient reason can still be retried tomorrow.
-      idempotencyKey: `entry-refund-${entry.id}`,
-      hasTransfer: Boolean(charge.transfer),
-      hasApplicationFee: Boolean(charge.application_fee),
-    }),
-  );
 
   // The refund is idempotent per entry, so a concurrent second attempt gets the
   // same refund back. Only one of them moves the row; the other finds it

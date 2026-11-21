@@ -18,6 +18,7 @@ import {
   buildEventEditPendingReviewEmail,
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
+  buildRefundOverrideEmail,
 } from "@/lib/email";
 import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -147,7 +148,8 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
     opts,
   )],
   ["edit decision", () => buildEventEditDecisionEmail({ eventTitle: "Harbour 10K", approved: false, reason: "Too vague", eventUrl: "https://x.test/e" })],
-  ["refund", () => buildRefundRequestEmail({ ticketId: "t1", athleteName: "Harper", athleteEmail: "h@x.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "Clash", eventUrl: "https://x.test/r" })],
+  ["refund", () => buildRefundRequestEmail({ ticketId: "t1", athleteName: "Harper", athleteEmail: "h@x.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "Clash", eventUrl: "https://x.test/r", audience: "organiser", respondBy: new Date("2027-03-04T00:00:00Z") })],
+  ["refund override", () => buildRefundOverrideEmail({ athleteName: "Harper", eventTitle: "Harbour 10K", organiserDecision: "declined", decision: "approved", note: "Date <moved>" })],
   ["waitlist", () => renderEmail(WaitlistConfirmationEmail())],
   ["contact", () => renderEmail(ContactMessageEmail({ name: "Harper", email: "h@x.test", subject: "Hi", message: "Line one\nLine <two>" }))],
   ["feedback", () => renderEmail(FeedbackSubmittedEmail({ reference: "SL-1234", type: "Bug", title: "Broken", details: "It broke", filenames: ["a.png"] }))],

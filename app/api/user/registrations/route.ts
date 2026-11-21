@@ -105,7 +105,11 @@ export async function GET() {
         paidCents,
         // Once a refund is in flight the frozen snapshot wins, so the athlete is
         // never shown a different number than the one they agreed to.
-        refundAmountCents: r.refundAmountCents ?? refundAmountCents(tiers, paidCents, days),
+        // A cancelled event owes everything back, whatever the policy said.
+        refundAmountCents: r.event.status === "CANCELLED"
+          ? paidCents
+          : r.refundAmountCents ?? refundAmountCents(tiers, paidCents, days),
+        eventCancelled: r.event.status === "CANCELLED",
         refundPercent: r.refundPercent ?? refundPercentFor(tiers, days),
         outsidePolicy: r.refundOutsidePolicy,
         ticketCents: r.amountCents,

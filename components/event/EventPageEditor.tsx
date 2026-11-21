@@ -711,7 +711,7 @@ export default function EventPageEditor({
                 </span>{" "}
                 Changing the category, format, date, times or location emails each of them, and the change is
                 kept in this event&apos;s history. Anyone who no longer wants to take part asks for a refund
-                through Support, which you and Startline review.
+                through Support. You decide on each request, and Startline issues the refund.
                 {awaitsReview && " The listing stays as it is until Startline approves the edit."}
               </p>
             </div>

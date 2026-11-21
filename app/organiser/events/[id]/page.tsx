@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/skeleton";
 import { formatEventPlace } from "@/lib/event-place";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED" | "CANCELLED";
 
 interface EventDetail {
   id: string;
@@ -110,6 +110,15 @@ const STATUS_META: Record<EventStatus, {
     icon:        FileText,
     headline:    "This event is complete.",
     description: "Registration has closed. Results are entered from the event dashboard.",
+  },
+  CANCELLED: {
+    label:       "Cancelled",
+    color:       "text-red-300",
+    bg:          "bg-red-400/10",
+    border:      "border-red-400/20",
+    icon:        XCircle,
+    headline:    "This event is cancelled.",
+    description: "Registration is closed. Every athlete is refunded everything they paid, booking fee included.",
   },
 };
 

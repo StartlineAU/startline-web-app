@@ -16,7 +16,8 @@ export type PersistedEventStatus =
   | "APPROVED"
   | "IN_PROGRESS"
   | "REJECTED"
-  | "ARCHIVED";
+  | "ARCHIVED"
+  | "CANCELLED";
 
 export interface LifecycleEvent {
   status: string;
