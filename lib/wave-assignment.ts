@@ -152,3 +152,31 @@ export function assignAthletesToWaves(input: {
 
   return { assignments, unassignedIds: [...pool.keys()], perWave };
 }
+
+/** True when the wave limits who can go in it (finish time, gender or age). */
+export function hasRules(w: WaveDef): boolean {
+  return w.finishMin != null || w.finishMax != null
+    || (w.genders?.length ?? 0) > 0
+    || w.ageMin != null || w.ageMax != null;
+}
+
+function describeBand(min: number | null | undefined, max: number | null | undefined): string | null {
+  if (min != null && max != null) return min === max ? `${min}` : `${min}–${max}`;
+  if (min != null) return `${min}+`;
+  if (max != null) return `up to ${max}`;
+  return null;
+}
+
+/**
+ * One plain-language line saying who goes in a wave, for the builder's collapsed
+ * card: "Anyone", or e.g. "Female · age 18–39 · finish 45–60 min".
+ */
+export function describeWaveRules(w: WaveDef): string {
+  const parts: string[] = [];
+  if ((w.genders?.length ?? 0) > 0) parts.push(w.genders!.join(" or "));
+  const age = describeBand(w.ageMin, w.ageMax);
+  if (age) parts.push(`age ${age}`);
+  const finish = describeBand(w.finishMin, w.finishMax);
+  if (finish) parts.push(`finish ${finish} min`);
+  return parts.length > 0 ? parts.join(" · ") : "Anyone";
+}

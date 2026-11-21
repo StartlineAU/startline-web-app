@@ -227,3 +227,34 @@ test.describe("forgot-password route", () => {
     await expect(page.getByText(/check your spam or junk folder/i)).toBeVisible();
   });
 });
+
+// #508: a finished password reset returns to sign-in, not a bare home page.
+// The redirect itself needs a real Cognito code, so these drive the URL the
+// forgot-password pages push once confirmResetPassword succeeds.
+test.describe("after a password reset", () => {
+  test("athlete portal opens sign-in with the email filled in", async ({ page }) => {
+    await page.goto("/?signin=true&reset=1&email=" + encodeURIComponent("reset.user@example.com"));
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("status")).toHaveText(/password updated/i);
+    await expect(page.locator("#signin-email")).toHaveValue("reset.user@example.com");
+    // The flag is stripped so a refresh after closing does not reopen it.
+    await expect(page).not.toHaveURL(/signin=true/);
+  });
+
+  test("organiser portal opens sign-in with the email filled in", async ({ page }) => {
+    await page.goto("/organiser?signin=true&reset=1&email=" + encodeURIComponent("reset.organiser@example.com"));
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("status")).toHaveText(/password updated/i);
+    await expect(page.locator("#signin-email")).toHaveValue("reset.organiser@example.com");
+    await expect(page).not.toHaveURL(/signin=true/);
+  });
+
+  test("a plain ?signin=true shows no reset notice", async ({ page }) => {
+    await page.goto("/?signin=true");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/password updated/i)).toHaveCount(0);
+  });
+});
