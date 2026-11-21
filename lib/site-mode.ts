@@ -76,6 +76,9 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   // answered it with HTML, which is not a valid robots.txt, and the file is
   // public by definition. The route itself tells a branch deployment to stay out.
   "/robots.txt",
+  // robots.txt names this file. The route lists only what the current mode
+  // serves, so while waitlisted it names the waitlist and the legal pages.
+  "/sitemap.xml",
 ]);
 
 // Prefixes, matched on a path segment so `/checkin` does not also open

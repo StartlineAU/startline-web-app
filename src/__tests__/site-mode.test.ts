@@ -61,6 +61,11 @@ describe("servesWhileWaitlisted", () => {
     expect(servesWhileWaitlisted("/mobile/challenge")).toBe(true);
   });
 
+  it("keeps robots.txt and the sitemap it names reachable (#547)", () => {
+    expect(servesWhileWaitlisted("/robots.txt")).toBe(true);
+    expect(servesWhileWaitlisted("/sitemap.xml")).toBe(true);
+  });
+
   it("keeps build output and images reachable", () => {
     expect(servesWhileWaitlisted("/_next/static/chunk.js")).toBe(true);
     expect(servesWhileWaitlisted("/images/logo-title.png")).toBe(true);
