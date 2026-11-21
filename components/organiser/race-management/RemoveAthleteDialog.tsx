@@ -138,7 +138,10 @@ export default function RemoveAthleteDialog({
 
   return (
     <Dialog open={!!registration} onOpenChange={(open) => { if (!open) close(); }}>
-      <DialogContent data-testid="remove-athlete-dialog">
+      {/* The replacement's details make this taller than a laptop screen, and a
+          centred dialog that overflows puts its buttons out of reach. */}
+      <DialogContent data-testid="remove-athlete-dialog" className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+
         <DialogHeader>
           <DialogTitle>Remove {registration?.name} from event</DialogTitle>
           <DialogDescription>
