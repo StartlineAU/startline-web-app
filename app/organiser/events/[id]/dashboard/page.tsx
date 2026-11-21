@@ -20,6 +20,8 @@ import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice"
 import EventChangeHistory from "@/components/event/EventChangeHistory";
 import PendingRevisionNotice from "@/components/event/PendingRevisionNotice";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
+import { isFreeEvent } from "@/lib/event-types";
+import { REFUND_CUTOFF_HOURS } from "@/lib/refund-policy";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { buildCheckInQrImage, checkInQrImageFilename } from "@/lib/check-in-qr-image";
@@ -36,6 +38,7 @@ interface DashboardData {
     startTime: string; endTime: string;
     venue: string; city: string; state: string;
     cap?: number | null; registrationCount: number;
+    editNeedsReview?: boolean;
     checkedInCount: number;
     coverImageUrl?: string | null; waves: Wave[];
     feeStructure: string; categories: string[];
@@ -734,10 +737,26 @@ function EventDashboardInner({
                 {entered} athlete{entered === 1 ? " has" : "s have"} entered
               </DialogTitle>
             </div>
-            <DialogDescription>
-              Changing the category, format, date, times or location emails each of them, and the change is
-              kept in this event&apos;s history. Anyone who no longer wants to take part asks for a refund
-              through Support, which you and Startline review.
+            {/* Field list mirrors MATERIAL_FIELD_GROUPS in lib/event-change-log.ts. */}
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Changing the date, start or finish time, location, event type or format emails each of them,
+                  and the change is kept in this event&apos;s history.
+                </p>
+                {event.editNeedsReview && (
+                  <p>
+                    Your edit goes to Startline for review first. The listing stays as it is, and athletes are
+                    only emailed once the edit is approved.
+                  </p>
+                )}
+                {!isFreeEvent(event.waves) && (
+                  <p>
+                    Anyone who no longer wants to take part can ask for a refund through Support, up to{" "}
+                    {REFUND_CUTOFF_HOURS} hours before the start. You and Startline review each request.
+                  </p>
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
