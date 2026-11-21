@@ -193,7 +193,11 @@ test("an event with no entries can still be deleted", async () => {
 test("the listings menu offers Cancel, not Delete, for an event with entries", async ({ page }) => {
   await organiserLogin(page);
   await page.goto("/organiser/listings");
-  const row = page.getByTestId("listing-row").filter({ hasText: `E2E Cancel ${EVENT_ID}` }).first();
+  // Match the title exactly: "E2E Cancel e2e-event-cancel" is also a prefix of
+  // the empty event's title, which sorts first and offers Delete instead.
+  const row = page
+    .getByTestId("listing-row")
+    .filter({ has: page.getByText(`E2E Cancel ${EVENT_ID}`, { exact: true }) });
   await row.getByRole("button").last().click();
   await expect(page.getByRole("button", { name: "Cancel event", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete event", exact: true })).toHaveCount(0);
