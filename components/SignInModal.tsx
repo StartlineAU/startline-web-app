@@ -26,6 +26,10 @@ interface SignInModalProps {
   // Which tab the modal opens on. "signup" lets a SIGN UP button in the navbar
   // land straight on the create-account form instead of the sign-in one.
   initialView?: "signin" | "signup";
+  // Email to fill in when the modal opens, e.g. after a password reset.
+  initialEmail?: string;
+  // A confirmation shown above the sign-in form, e.g. "Password updated".
+  notice?: string;
 }
 
 function totpUri(details: unknown): string | null {
@@ -36,7 +40,7 @@ function totpUri(details: unknown): string | null {
   return uri && typeof uri.toString === "function" ? uri.toString() : null;
 }
 
-export default function SignInModal({ isOpen, onClose, onSuccess, initialView = "signin" }: SignInModalProps) {
+export default function SignInModal({ isOpen, onClose, onSuccess, initialView = "signin", initialEmail = "", notice }: SignInModalProps) {
   // The modal also opens on the organiser portal, where /contact does not exist.
   const portalHost  = usePortalHost();
   const contactHref = customerHref("/contact", portalHost);
@@ -101,6 +105,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
       // Opening always starts on the requested tab, so closing on the signup
       // form and reopening with SIGN IN does not show the signup form again.
       setView(initialView);
+      if (initialEmail) setEmail(initialEmail);
     } else {
       document.body.style.overflow = "";
       setView("signin");
@@ -117,7 +122,7 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
     }
     /* eslint-enable react-hooks/set-state-in-effect */
     return () => { document.body.style.overflow = ""; };
-  }, [isOpen, initialView]);
+  }, [isOpen, initialView, initialEmail]);
 
   // Username validation — format + profanity checked client-side.
   const usernameStatus_ = useMemo(() => {
@@ -580,6 +585,11 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
               <p className="text-muted text-[14px] leading-relaxed">Enter your email to get started.</p>
             </div>
 
+            {notice && (
+              <div role="status" className="mb-4 px-4 py-3 rounded-md bg-primary/10 border border-primary/30 text-primary font-headline text-[13px]">
+                {notice}
+              </div>
+            )}
             {error && <div className={errCls}>{error}</div>}
 
             <div className="mb-4">
@@ -651,6 +661,11 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
               </p>
             </div>
 
+            {notice && (
+              <div role="status" className="mb-4 px-4 py-3 rounded-md bg-primary/10 border border-primary/30 text-primary font-headline text-[13px]">
+                {notice}
+              </div>
+            )}
             {error && <div className={errCls}>{error}</div>}
 
             <form onSubmit={handleSignIn} className="space-y-4">
