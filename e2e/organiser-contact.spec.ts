@@ -155,8 +155,21 @@ test("the listing editor sets this event's contact details, then hands them back
   test.slow();
   // Apex is verified, so saving its live listing applies at once rather than
   // waiting for review.
+  //
+  // Only a seeded event that has not started yet. Other specs add APPROVED Apex
+  // events of their own (event-lifecycle's already ended, event-edit's is
+  // deleted and recreated mid-run), and the seed keeps past ones. Saving an
+  // event that has finished is refused, and without an order Postgres returns
+  // whichever row it scans first, so the test failed whenever it drew one.
   const apex = await prisma.event.findFirstOrThrow({
-    where: { organiser: { orgName: "Apex Endurance Events" }, status: "APPROVED", registrations: { none: {} } },
+    where: {
+      id: { startsWith: "seed-event-" },
+      organiser: { orgName: "Apex Endurance Events" },
+      status: "APPROVED",
+      startsAtUtc: { gt: new Date(Date.now() + 7 * 86_400_000) },
+      registrations: { none: {} },
+    },
+    orderBy: { id: "asc" },
     select: { id: true, showContactPhone: true },
   });
   await prisma.event.update({ where: { id: apex.id }, data: { showContactPhone: null } });
