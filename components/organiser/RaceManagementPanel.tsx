@@ -687,6 +687,7 @@ export default function RaceManagementPanel({
                   bibNumber: r.bibNumber,
                   medicalNotes: r.medicalNotes,
                   checkedInAt: r.checkedInAt,
+                  teamName: teamLabel(r),
                 }))}
                 showBibs={bibsOn}
                 onEdit={(aid) => { const reg = registrations.find((r) => r.id === aid); if (reg) openEdit(reg); }}

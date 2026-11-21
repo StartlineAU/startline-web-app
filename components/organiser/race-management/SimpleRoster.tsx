@@ -12,6 +12,8 @@ export interface RosterAthlete {
   bibNumber: string | null;
   medicalNotes: string | null;
   checkedInAt: string | null;
+  /** Team entry: the team's name. */
+  teamName?: string | null;
 }
 
 const PAGE = 50;
@@ -94,6 +96,11 @@ export default function SimpleRoster({
               <span role="cell" className="min-w-0 flex-1">
                 <span className="font-headline text-[13.5px] font-bold text-white/90 truncate block">
                   {a.name}
+                  {a.teamName && (
+                    <span className="ml-2 inline-flex items-center align-middle font-headline text-[9px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5" data-testid="team-badge">
+                      {a.teamName}
+                    </span>
+                  )}
                   {a.medicalNotes && (
                     <span
                       title={`Medical: ${a.medicalNotes}`}

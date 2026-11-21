@@ -572,7 +572,7 @@ test.describe("athlete public profile race history", () => {
     await expect(page.getByRole("button", { name: /add result|edit result/i }).first()).toBeVisible();
 
     // Jade is seeded onto this event's results board (profile-linked athlete).
-    await page.getByPlaceholder(/search any wave by name, email, or bib/i).fill("jade.nguyen");
+    await page.getByPlaceholder(/^search by name/i).fill("jade.nguyen");
     await page.getByRole("button", { name: /add result|edit result/i }).first().click();
 
     const dialog = page.getByRole("dialog");

@@ -255,8 +255,8 @@ test("an organiser can add a division the event was missing while entering a res
 
   const dialog = page.getByRole("dialog");
   // The entry starts on its ticket name, which isn't one of the event's divisions.
-  await expect(dialog.getByRole("button", { name: "Division" })).toHaveText(/General \(not an event division\)/);
-  await dialog.getByRole("button", { name: "Division" }).click();
+  await expect(dialog.getByRole("button", { name: "Division", exact: true })).toHaveText(/General \(not an event division\)/);
+  await dialog.getByRole("button", { name: "Division", exact: true }).click();
   await dialog.getByRole("option", { name: "+ Add a division" }).click();
   await dialog.getByLabel("New division name").fill("Masters 40+");
   await dialog.getByLabel(/placement/i).fill("3");
