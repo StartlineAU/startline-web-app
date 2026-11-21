@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
   MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
-  Download, ImageDown, AlertTriangle,
+  Download, ImageDown, AlertTriangle, Trophy,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -120,17 +120,19 @@ function EventDashboardInner({
   const panel = searchParams.get("panel");
   const managePanel = panel === "manage";
   const announcePanel = panel === "announce";
+  // ?tab= picks the race-management tab, so "Enter results" is a shareable link.
+  const tabParam = searchParams.get("tab");
 
-  const setPanel = (next: "manage" | "announce" | null) => {
+  const setPanel = (next: "manage" | "announce" | null, tab?: "setup" | "results") => {
     router.replace(
       next
-        ? `/organiser/events/${id}/dashboard?panel=${next}`
+        ? `/organiser/events/${id}/dashboard?panel=${next}${tab ? `&tab=${tab}` : ""}`
         : `/organiser/events/${id}/dashboard`,
       { scroll: false },
     );
   };
 
-  const setManagePanel = (on: boolean) => setPanel(on ? "manage" : null);
+  const setManagePanel = (on: boolean, tab?: "setup" | "results") => setPanel(on ? "manage" : null, tab);
 
   const fetchDashboard = useCallback(async (signal: AbortSignal) => {
     const response = await fetch(`/api/organiser/events/${id}/dashboard`, { signal });
@@ -305,6 +307,10 @@ function EventDashboardInner({
 
   const { event, announcements, recentRegistrations } = data;
   const canEdit = organiserCanEditEvent(event.status);
+  // Once the event is under way, results are the job: "Enter results" becomes
+  // the primary action and race management opens on After race.
+  const started = event.status === "IN_PROGRESS";
+  const initialTab = tabParam === "results" || tabParam === "setup" ? tabParam : started ? "results" : "setup";
   const editHref = `/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`;
   // Entrants are told about material changes, so say so before the editor
   // opens rather than inside it.
@@ -383,18 +389,35 @@ function EventDashboardInner({
                 </Button>
               ) : (
                 <>
-                  <Button type="button" className="col-span-2" onClick={() => setManagePanel(true)}>
-                    <Users className="w-4 h-4" /> Manage registrations
-                  </Button>
-                  <Button variant="outline" type="button" className={canEdit ? "" : "col-span-2"} onClick={openCheckInQr}>
+                  {started ? (
+                    <>
+                      <Button type="button" className="col-span-2" onClick={() => setManagePanel(true, "results")}>
+                        <Trophy className="w-4 h-4" /> Enter results
+                      </Button>
+                      <Button variant="outline" type="button" onClick={() => setManagePanel(true, "setup")}>
+                        <Users className="w-4 h-4" /> Manage registrations
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button type="button" className="col-span-2" onClick={() => setManagePanel(true, "setup")}>
+                        <Users className="w-4 h-4" /> Manage registrations
+                      </Button>
+                      <Button variant="outline" type="button" onClick={() => setManagePanel(true, "results")}>
+                        <Trophy className="w-4 h-4" /> Enter results
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="outline" type="button" onClick={openCheckInQr}>
                     <QrCode className="w-4 h-4" /> Check-in QR
                   </Button>
+                  {/* Two-column grid on phones: the last of three secondary buttons spans both. */}
                   {canEdit && (entered > 0 ? (
-                    <Button variant="outline" type="button" onClick={() => setEditWarnOpen(true)}>
+                    <Button variant="outline" type="button" className="col-span-2 sm:col-span-1" onClick={() => setEditWarnOpen(true)}>
                       <Pencil className="w-4 h-4" /> Edit event
                     </Button>
                   ) : (
-                    <Button variant="outline" asChild>
+                    <Button variant="outline" className="col-span-2 sm:col-span-1" asChild>
                       <Link href={editHref}>
                         <Pencil className="w-4 h-4" /> Edit event
                       </Link>
@@ -428,7 +451,7 @@ function EventDashboardInner({
 
           {managePanel ? (
             <div className="mb-8">
-              <RaceManagementPanel eventId={id} />
+              <RaceManagementPanel eventId={id} initialTab={initialTab} />
             </div>
           ) : (
           <>

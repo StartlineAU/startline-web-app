@@ -100,6 +100,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async () => {
   await setModes("OFF", "OFF");
+  await prisma.event.update({ where: { id: EVENT_ID }, data: { startsAtUtc: null, endsAtUtc: null } });
   for (const a of ATHLETES) {
     await prisma.registration.update({ where: { id: a.id }, data: { bibNumber: a.bib } });
   }
@@ -211,4 +212,31 @@ test("turning bibs off hides them and keeps every number", async ({ page }) => {
   // Turning it back on brings the number straight back.
   await page.getByRole("button", { name: /set up bib numbers/i }).click();
   await expect(page.getByTestId("simple-roster").getByText("#9")).toBeVisible();
+});
+
+test("before the event, Manage registrations leads and Enter results sits beside it", async ({ page }) => {
+  await organiserLogin(page);
+  await page.goto(`/organiser/events/${EVENT_ID}/dashboard`);
+
+  await page.getByRole("button", { name: /^enter results$/i }).click();
+  await page.waitForURL(/panel=manage&tab=results/);
+  await expect(page.getByText(/^results/i).first()).toBeVisible();
+});
+
+test("once the event has started, Enter results is the main action and opens After race", async ({ page }) => {
+  await prisma.event.update({
+    where: { id: EVENT_ID },
+    data: { startsAtUtc: new Date(Date.now() - 60 * 60 * 1000), endsAtUtc: new Date(Date.now() + 3 * 60 * 60 * 1000) },
+  });
+  await organiserLogin(page);
+  await page.goto(`/organiser/events/${EVENT_ID}/dashboard`);
+
+  // The primary action comes first in the header.
+  const header = page.getByRole("button", { name: /^(enter results|manage registrations)$/i });
+  await expect(header.first()).toHaveText(/enter results/i);
+
+  // Manage registrations also opens on After race while the event is running.
+  await page.goto(`/organiser/events/${EVENT_ID}/dashboard?panel=manage`);
+  await expect(page.getByText(/^results/i).first()).toBeVisible();
+  await expect(page.getByTestId("simple-roster")).toHaveCount(0);
 });

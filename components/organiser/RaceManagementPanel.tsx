@@ -50,7 +50,14 @@ const STATUS_LABEL: Record<Registration["status"], string> = {
 };
 
 /** Race-day console: waves, results, refunds. Embedded on the event dashboard. */
-export default function RaceManagementPanel({ eventId }: { eventId: string }) {
+export default function RaceManagementPanel({
+  eventId,
+  initialTab = "setup",
+}: {
+  eventId: string;
+  /** Which tab opens first. The dashboard picks After race once the event has started. */
+  initialTab?: "setup" | "results" | "refunds";
+}) {
   const id = eventId;
 
   const [editReg, setEditReg] = useState<Registration | null>(null);
@@ -77,7 +84,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
 
 
   // Splits the page into before-race setup (waves, bibs) and after-race results.
-  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">(initialTab);
 
   const fetchRegistrations = useCallback(async (signal: AbortSignal) => {
     const response = await fetch(`/api/organiser/events/${id}/registrations`, { signal });
