@@ -57,6 +57,7 @@ export async function GET() {
           timeZone: true,
           startsAtUtc: true,
           endsAtUtc: true,
+          checkInLeadMinutes: true,
           status: true,
           city: true,
           state: true,
@@ -88,6 +89,7 @@ export async function GET() {
         status: r.event.status,
         startsAtUtc: r.event.startsAtUtc,
         endsAtUtc: r.event.endsAtUtc,
+        checkInLeadMinutes: r.event.checkInLeadMinutes,
       });
       const race = athleteRaceFields(r.event, { startWaveLabel: r.startWaveLabel, bibNumber: entryBib(r) });
       return {
