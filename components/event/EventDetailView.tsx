@@ -191,6 +191,18 @@ export default function EventDetailView({
   return (
     <div className={isPanel ? "@container" : undefined}>
 
+      {event.status === "CANCELLED" && (
+        <div role="status" data-testid="event-cancelled-notice"
+          className="border-b border-red-400/30 bg-red-400/10 px-4 sm:px-6 py-3">
+          <p className="max-w-[1200px] mx-auto text-[13px] text-red-200 leading-relaxed">
+            <span className="font-headline font-bold uppercase tracking-widest text-[11px] text-red-300 mr-2">Event cancelled</span>
+            {freeEvent
+              ? "This event will not go ahead, and every entry has been released."
+              : "This event will not go ahead. Everyone who entered is refunded everything they paid, booking fee included, to their original payment method."}
+          </p>
+        </div>
+      )}
+
       {/* ── Banner ── */}
       <div
         // The editor stacks an upload prompt above the title fields, which a
@@ -377,7 +389,7 @@ export default function EventDetailView({
                   {registrationClosed && (
                     <div className="rounded-lg border border-dark-lighter bg-white/5 px-4 py-3 text-center">
                       <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                        {isRunning ? "Event in progress" : "Registration closed"}
+                        {event.status === "CANCELLED" ? "Event cancelled" : isRunning ? "Event in progress" : "Registration closed"}
                       </div>
                     </div>
                   )}

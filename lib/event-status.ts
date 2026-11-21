@@ -20,6 +20,8 @@ export function getLifecyclePhase(event: LifecycleFields, now = Date.now()): Eve
   const startsAt = event.startsAtUtc ? new Date(event.startsAtUtc).getTime() : null;
   const endsAt = event.endsAtUtc ? new Date(event.endsAtUtc).getTime() : null;
 
+  // A cancelled event is over as far as registration is concerned.
+  if (event.status === "CANCELLED") return "ended";
   if (event.status === "ARCHIVED" || (endsAt != null && now >= endsAt)) return "ended";
   if (event.status === "IN_PROGRESS" || (startsAt != null && now >= startsAt)) return "in_progress";
   return "upcoming";
@@ -30,6 +32,9 @@ export function getEventPhase(event: UserEvent, now = Date.now()): EventPhase {
 }
 
 export function getEventStatus(event: UserEvent): EventStatus {
+  if (event.status === "CANCELLED") {
+    return { label: "Cancelled", style: "border border-red-400/40 text-red-300" };
+  }
   const phase = getEventPhase(event);
   if (phase === "in_progress") {
     return { label: "In progress", style: "bg-amber-300 text-dark" };

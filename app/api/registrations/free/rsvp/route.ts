@@ -185,6 +185,17 @@ export async function POST(req: NextRequest) {
       rejectExistingEntries: true,
       rejectExistingUserEntries: true,
       duplicateStatuses: RSVP_DUPLICATE_STATUSES,
+      // Re-read under the entry lock: an event cancelled since the check above
+      // has already released its entries, and must not take a new one.
+      beforeInsert: async (tx) => {
+        const fresh = await tx.event.findUnique({
+          where: { id: event.id },
+          select: { status: true, startsAtUtc: true, endsAtUtc: true },
+        });
+        return fresh && registrationOpenAt(fresh)
+          ? null
+          : "This event is not currently accepting registrations.";
+      },
     });
 
     if (!outcome.ok) {

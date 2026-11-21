@@ -32,6 +32,8 @@ export function organiserEditBlockedMessage(status: string): string {
       return "Events that are underway can't be edited. Post an announcement for updates, or contact Startline if something must change.";
     case "ARCHIVED":
       return "Completed events can't be edited.";
+    case "CANCELLED":
+      return "Cancelled events can't be edited.";
     default:
       return "This event can't be edited here.";
   }

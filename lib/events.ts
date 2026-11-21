@@ -125,7 +125,8 @@ export async function getPublicEventsByIds(ids: string[]): Promise<PublicEvent[]
     const events = await prisma.event.findMany({
       where: {
         id: { in: ids },
-        status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] as EventStatus[] },
+        // A cancelled event stays reachable for the athletes who entered it.
+        status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED", "CANCELLED"] as EventStatus[] },
         ...ACTIVE_ORGANISER_WHERE,
       },
       orderBy: { eventDate: "asc" },
@@ -171,7 +172,8 @@ async function findEventById(
         OR: [{ id }, { slug: id }],
         ...(publicOnly
           ? {
-              status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED"] as EventStatus[] },
+              // A cancelled event stays reachable for the athletes who entered it.
+        status: { in: ["APPROVED", "IN_PROGRESS", "ARCHIVED", "CANCELLED"] as EventStatus[] },
               ...ACTIVE_ORGANISER_WHERE,
             }
           : {}),

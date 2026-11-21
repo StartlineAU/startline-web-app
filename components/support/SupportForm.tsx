@@ -58,7 +58,7 @@ export default function SupportForm() {
         <h2 className="font-headline text-[20px] font-black uppercase tracking-wide text-light">Ticket opened</h2>
         <p className="text-[14px] text-muted-light mt-2 leading-relaxed">
           Your reference is <span className="text-light">{ticketId.slice(0, 8)}</span>. Startline will reply to {email}.
-          A refund is not issued from this form.
+          For a refund, the organiser decides, usually within 3 business days, and Startline issues it.
         </p>
       </div>
     );
@@ -98,7 +98,7 @@ export default function SupportForm() {
       )}
       {error && <p className="text-[13px] text-red-300">{error}</p>}
       <p className="text-[12px] text-muted-dark leading-relaxed">
-        Refunds are not available within 24 hours of the event start. Australian Consumer Law rights still apply if the event is cancelled or significantly changed. Opening a ticket does not refund you.
+        Refunds are not available within 24 hours of the event start. Australian Consumer Law rights still apply if the event is cancelled or significantly changed. The organiser decides on a refund request, and Startline issues the refund. Opening a ticket does not refund you.
       </p>
       <button type="submit" disabled={submitting} className="inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-machined text-dark font-headline text-[13px] font-black uppercase tracking-[0.12em] shadow-machined disabled:opacity-50">
         <Send className="w-4 h-4" />

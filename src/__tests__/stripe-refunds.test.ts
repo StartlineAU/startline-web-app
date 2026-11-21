@@ -5,6 +5,7 @@ import {
   isOutsidePolicyRefund,
   buildRefundParams,
   REFUND_APPLICATION_FEE,
+  entryCancellationOwedCents,
 } from "@/lib/stripe-refunds";
 
 // Two pre-existing bugs on what are normally Connect destination charges: every
@@ -142,5 +143,59 @@ describe("buildRefundParams", () => {
         /positive whole number/,
       );
     }
+  });
+});
+
+describe("refund parameters for a cancelled event", () => {
+  const base = {
+    chargeId: "ch_1",
+    amountCents: 10540,
+    idempotencyKey: "event-cancel-refund-reg-1",
+    hasTransfer: true,
+    hasApplicationFee: true,
+  };
+
+  it("keeps the signed-off rule by default", () => {
+    const [params] = buildRefundParams(base);
+    expect(params.refund_application_fee).toBe(REFUND_APPLICATION_FEE);
+  });
+
+  it("returns Startline's fee when asked, and carries metadata", () => {
+    const [params] = buildRefundParams({
+      ...base,
+      refundApplicationFee: true,
+      metadata: { registrationId: "reg-1", reason: "event_cancelled" },
+    });
+    expect(params).toMatchObject({
+      refund_application_fee: true,
+      reverse_transfer: true,
+      metadata: { registrationId: "reg-1", reason: "event_cancelled" },
+    });
+  });
+
+  it("still leaves the fee flag off a charge with no fee", () => {
+    const [params] = buildRefundParams({ ...base, hasApplicationFee: false, refundApplicationFee: true });
+    expect(params).not.toHaveProperty("refund_application_fee");
+  });
+});
+
+describe("entryCancellationOwedCents", () => {
+  const entry = { amountCents: 10000, platformFeeCents: 540, feeStructure: "athlete", refundAmountCents: null };
+
+  it("owes everything paid on a live entry, whatever the policy quote", () => {
+    expect(entryCancellationOwedCents({ ...entry, status: "CONFIRMED" })).toBe(10540);
+    expect(entryCancellationOwedCents({ ...entry, status: "REFUND_REQUESTED", refundAmountCents: 5270 })).toBe(10540);
+  });
+
+  it("owes the remainder after a partial policy refund", () => {
+    expect(entryCancellationOwedCents({ ...entry, status: "REFUNDED", refundAmountCents: 5270 })).toBe(5270);
+  });
+
+  it("owes nothing after a full refund", () => {
+    expect(entryCancellationOwedCents({ ...entry, status: "REFUNDED", refundAmountCents: 10540 })).toBe(0);
+  });
+
+  it("owes the ticket price alone when the organiser absorbed the fee", () => {
+    expect(entryCancellationOwedCents({ ...entry, feeStructure: "organiser", status: "CONFIRMED" })).toBe(10000);
   });
 });

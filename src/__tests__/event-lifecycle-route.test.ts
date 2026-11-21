@@ -7,6 +7,13 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   transaction: vi.fn(),
   syncEventSchedules: vi.fn(),
+  eventsOwingCancellationRefunds: vi.fn(),
+  processCancellationRefunds: vi.fn(),
+}));
+
+vi.mock("@/lib/event-cancellation", () => ({
+  eventsOwingCancellationRefunds: mocks.eventsOwingCancellationRefunds,
+  processCancellationRefunds: mocks.processCancellationRefunds,
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -48,6 +55,8 @@ beforeEach(() => {
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.transaction.mockImplementation(async (ops: Promise<unknown>[]) => Promise.all(ops));
   mocks.syncEventSchedules.mockResolvedValue(undefined);
+  mocks.eventsOwingCancellationRefunds.mockResolvedValue([]);
+  mocks.processCancellationRefunds.mockResolvedValue({ refunded: 0, failed: 0, released: 0, refundedCents: 0 });
 });
 
 afterEach(() => {
@@ -64,6 +73,23 @@ describe("POST /api/internal/events/lifecycle", () => {
   it("rejects a request with the wrong secret", async () => {
     const res = await request("sweep=1", "wrong");
     expect(res.status).toBe(401);
+  });
+
+  it("retries outstanding cancellation refunds on a sweep", async () => {
+    mocks.eventsOwingCancellationRefunds.mockResolvedValue(["evt-cancelled"]);
+    mocks.processCancellationRefunds.mockResolvedValue({ refunded: 2, failed: 1, released: 0, refundedCents: 9000 });
+
+    const res = await request();
+    const body = await res.json();
+
+    expect(mocks.processCancellationRefunds).toHaveBeenCalledWith("evt-cancelled");
+    expect(body.cancellationRefunds).toEqual({ events: 1, refunded: 2, failed: 1 });
+  });
+
+  it("does not retry cancellation refunds on a targeted call", async () => {
+    mocks.findUnique.mockResolvedValue(null);
+    await request("eventId=evt-1");
+    expect(mocks.eventsOwingCancellationRefunds).not.toHaveBeenCalled();
   });
 
   it("advances due transitions and reconciles live schedules", async () => {

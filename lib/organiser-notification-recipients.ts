@@ -9,6 +9,14 @@ export interface OrganiserNotificationSource {
   members: { role: OrganiserRole; user: { email: string } }[];
 }
 
+/** Prisma select for everything organiserNotificationRecipients reads. */
+export const ORGANISER_RECIPIENTS_SELECT = {
+  email: true,
+  contactEmail: true,
+  notifyManagers: true,
+  members: { select: { role: true, user: { select: { email: true } } } },
+} as const;
+
 /**
  * Who hears about an organisation's events being reviewed.
  *

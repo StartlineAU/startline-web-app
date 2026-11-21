@@ -85,6 +85,18 @@ beforeEach(() => {
   });
 });
 
+describe("PATCH /api/admin/events/[id] — cancelled events", () => {
+  it("refuses any edit, so a cancelled event can't be reopened", async () => {
+    mocks.eventFindUnique.mockResolvedValue({ ...baseEvent, status: "CANCELLED", organiser: { verified: true } });
+
+    const res = await patch({ title: "Back on", submit: true });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("CANCELLED");
+    expect(mocks.eventUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe("PATCH /api/admin/events/[id] — edit history", () => {
   it("records the fields that changed with before and after values", async () => {
     const res = await patch({ title: "New title" });

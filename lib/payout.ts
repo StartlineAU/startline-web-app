@@ -61,6 +61,7 @@ type PayoutAttemptRecord = {
 
 type PayoutEventRecord = {
   id: string;
+  status: string;
   payoutTriggered: boolean;
   payoutAmountCents: number | null;
   organiser: { id: string; stripeAccountId: string | null };
@@ -169,6 +170,9 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
   const events = await prisma.event.findMany({
     where: {
       registrationType: "startline",
+      // A cancelled event's takings go back to the athletes, never to the
+      // organiser (lib/event-cancellation.ts).
+      status: { not: "CANCELLED" },
       payoutTriggered: false,
       organiser: { stripeOnboardingComplete: true, stripeAccountId: { not: null } },
       OR: [
@@ -275,6 +279,17 @@ export async function runPayoutForEvent(eventId: string): Promise<PayoutResult> 
   if (existing?.status === PayoutStatus.SUBMITTING) {
     return resumeSubmitting(event, existing);
   }
+  // Checked before anything new is started (an attempt already in flight is
+  // finished above, since Stripe may have moved the money): an entry whose
+  // cancellation refund is still being retried looks CONFIRMED, and paying it
+  // out would hand the organiser money owed to the athlete.
+  if (event.status === "CANCELLED") {
+    throw new PayoutError(
+      "This event was cancelled. Its takings are refunded to the athletes, so there is nothing to pay out.",
+      409,
+      "EVENT_CANCELLED",
+    );
+  }
 
   const stripeAccountId = existing?.stripeAccountId ?? event.organiser.stripeAccountId;
   if (!stripeAccountId) {
@@ -299,6 +314,7 @@ async function loadEvent(eventId: string): Promise<PayoutEventRecord> {
     where: { id: eventId },
     select: {
       id: true,
+      status: true,
       payoutTriggered: true,
       payoutAmountCents: true,
       organiser: { select: { id: true, stripeAccountId: true } },

@@ -37,6 +37,12 @@ const ACTION_COLORS: Record<string, string> = {
   UNBAN_USER:          "bg-primary/10 text-primary",
   EDIT_USER:           "bg-blue-400/10 text-blue-300",
   REFUND_REGISTRATION: "bg-amber-400/10 text-amber-300",
+  REFUND_TICKET_REFUNDED:             "bg-primary/10 text-primary",
+  REFUND_TICKET_NO_RESPONSE_APPROVED: "bg-blue-400/10 text-blue-300",
+  REFUND_TICKET_NO_RESPONSE_DECLINED: "bg-blue-400/10 text-blue-300",
+  REFUND_TICKET_OVERRIDE:             "bg-amber-400/10 text-amber-300",
+  CANCEL_EVENT:                       "bg-red-400/10 text-red-400",
+  RETRY_CANCELLATION_REFUNDS:         "bg-amber-400/10 text-amber-300",
 };
 
 function formatDateTime(iso: string) {
@@ -54,11 +60,20 @@ function metaSummary(meta: Record<string, unknown> | null): string {
   if (!meta) return "";
   const parts: string[] = [];
   if (typeof meta.title       === "string") parts.push(meta.title);
+  if (typeof meta.eventName   === "string") parts.push(meta.eventName);
   if (typeof meta.reason      === "string" && meta.reason) parts.push(`Reason: ${meta.reason}`);
   if (typeof meta.count       === "number") parts.push(`${meta.count} event${meta.count !== 1 ? "s" : ""}`);
   if (typeof meta.athleteName === "string") parts.push(meta.athleteName);
   if (typeof meta.amountCents === "number") parts.push(`$${((meta.amountCents as number) / 100).toFixed(2)}`);
   if (typeof meta.newStatus   === "string") parts.push(`→ ${meta.newStatus}`);
+  if (typeof meta.previousStatus === "string" && typeof meta.status === "string") {
+    parts.push(`${meta.previousStatus} → ${meta.status}`);
+  }
+  if (typeof meta.organiserDecision === "string") parts.push(`Organiser: ${meta.organiserDecision}`);
+  if (typeof meta.note        === "string") parts.push(`Note: ${meta.note}`);
+  if (typeof meta.refundedCents === "number") {
+    parts.push(`$${((meta.refundedCents as number) / 100).toFixed(2)} refunded`);
+  }
   if (Array.isArray(meta.fields) && meta.fields.length) parts.push(`${meta.fields.join(", ")} changed`);
   return parts.join(" · ");
 }
@@ -69,6 +84,9 @@ const ALL_ACTIONS = [
   "VERIFY_ORGANISER", "UNVERIFY_ORGANISER", "SUSPEND_ORGANISER", "ACTIVATE_ORGANISER",
   "BAN_USER", "UNBAN_USER", "EDIT_USER",
   "REFUND_REGISTRATION",
+  "REFUND_TICKET_REFUNDED", "REFUND_TICKET_NO_RESPONSE_APPROVED", "REFUND_TICKET_NO_RESPONSE_DECLINED",
+  "REFUND_TICKET_OVERRIDE",
+  "CANCEL_EVENT", "RETRY_CANCELLATION_REFUNDS",
 ];
 
 export default function AdminAuditPage() {
