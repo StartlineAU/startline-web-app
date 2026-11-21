@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronRight, Search, Users, AlertTriangle, AlertCircle,
@@ -78,6 +78,8 @@ interface Props {
   athletes: BoardAthlete[];
   /** False while bib numbers are turned off for the event (#566). */
   showBibs?: boolean;
+  /** Buttons that sit beside the search field (manage waves, assign bibs, export). */
+  actions?: ReactNode;
   onEdit: (athleteId: string) => void;
   onMove: (
     ids: string[],
@@ -98,7 +100,7 @@ const CAP_STYLE = {
   over: "text-red-300 border-red-400/40 bg-red-400/10",
 } as const;
 
-export default function WaveAllocationBoard({ waves, athletes, showBibs = true, onEdit, onMove }: Props) {
+export default function WaveAllocationBoard({ waves, athletes, showBibs = true, actions, onEdit, onMove }: Props) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set([...waves.map((w) => w.id), UNASSIGNED]),
@@ -647,7 +649,8 @@ export default function WaveAllocationBoard({ waves, athletes, showBibs = true, 
 
   return (
     <div className="space-y-3">
-      <div className="relative">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="relative flex-1 sm:max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
         <input
           value={query}
@@ -656,6 +659,8 @@ export default function WaveAllocationBoard({ waves, athletes, showBibs = true, 
           aria-label="Search athletes"
           className="w-full bg-dark border border-dark-lighter rounded-lg pl-10 pr-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
         />
+      </div>
+      {actions && <div className="flex flex-wrap gap-2 sm:ml-auto">{actions}</div>}
       </div>
 
       {(msg || error) && (

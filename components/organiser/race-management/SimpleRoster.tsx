@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { AlertCircle, CheckCheck, Pencil, Search } from "lucide-react";
 
 export interface RosterAthlete {
@@ -25,10 +25,13 @@ export default function SimpleRoster({
   athletes,
   showBibs,
   onEdit,
+  actions,
 }: {
   athletes: RosterAthlete[];
   showBibs: boolean;
   onEdit: (athleteId: string) => void;
+  /** Buttons that sit beside the search field (export, assign bibs). */
+  actions?: ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
@@ -51,7 +54,8 @@ export default function SimpleRoster({
 
   return (
     <div className="space-y-3" data-testid="simple-roster">
-      <div className="relative">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="relative flex-1 sm:max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
         <input
           value={query}
@@ -60,6 +64,8 @@ export default function SimpleRoster({
           aria-label="Search athletes"
           className="w-full bg-dark border border-dark-lighter rounded-lg pl-10 pr-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
         />
+      </div>
+      {actions && <div className="flex flex-wrap gap-2 sm:ml-auto">{actions}</div>}
       </div>
 
       {athletes.length === 0 ? (

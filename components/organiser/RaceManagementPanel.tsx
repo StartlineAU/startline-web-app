@@ -450,6 +450,24 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const showRefunds = !isFreeEvent(event.waves) || refundsList.length > 0;
   const tab = activeTab === "refunds" && !showRefunds ? "setup" : activeTab;
 
+  // The list's actions sit beside its search field. Import results and Export
+  // are off the After race tab until #565.
+  const setupActions = (
+    <>
+      {wavesOn && (
+        <Button variant="outline" onClick={openManageWaves}>
+          <SlidersHorizontal className="w-4 h-4" /> Manage waves
+        </Button>
+      )}
+      {bibsOn && (
+        <Button variant="outline" onClick={() => { setAssignMsg(""); setAssignBibsKey((k) => k + 1); setAssignBibsOpen(true); }} disabled={confirmedCount === 0}>
+          <Hash className="w-4 h-4" /> Assign bibs
+        </Button>
+      )}
+      <ExportMenu eventId={id} hiddenColumns={hiddenExportColumns} />
+    </>
+  );
+
   return (
     <div>
         <div className="flex items-center gap-1 border-b border-white/5 mb-4">
@@ -480,79 +498,60 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           })}
         </div>
 
-        {/* Tab-scoped progress + actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <div className="min-h-[20px]">
-            {tab === "setup" && confirmedCount > 0 && !wavesOn && !bibsOn && (
+        {tab === "setup" && (
+          <RaceFeatureControls modes={{ waveMode: event.waveMode, bibMode: event.bibMode }} onChange={updateModes} />
+        )}
+
+        {/* Progress only exists for features that are on; a plain list has none. */}
+        {tab === "setup" && confirmedCount > 0 && (wavesOn || bibsOn) && (
+          <div className="mb-3 min-h-[20px]">
+            {allSet ? (
               <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                Confirmed <span className="text-light">{confirmedCount}</span>
+                Ready for race day
               </p>
-            )}
-            {tab === "setup" && confirmedCount > 0 && (wavesOn || bibsOn) && (
-              allSet ? (
-                <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                  Ready for race day
-                </p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                  {wavesOn && (
-                    <span className="inline-flex items-center gap-1.5">
-                      {!wavesDone ? (
-                        <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
-                      ) : null}
-                      Waves{" "}
-                      <span className="text-light">
-                        {!wavesConfigured ? "none" : `${withWave}/${confirmedCount}`}
-                      </span>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                {wavesOn && (
+                  <span className="inline-flex items-center gap-1.5">
+                    {!wavesDone ? (
+                      <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
+                    ) : null}
+                    Waves{" "}
+                    <span className="text-light">
+                      {!wavesConfigured ? "none" : `${withWave}/${confirmedCount}`}
                     </span>
-                  )}
-                  {bibsOn && (
-                    <span className="inline-flex items-center gap-1.5">
-                      {!bibsDone ? (
-                        <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
-                      ) : null}
-                      Bibs{" "}
-                      <span className="text-light">{`${withBib}/${confirmedCount}`}</span>
-                    </span>
-                  )}
-                </div>
-              )
-            )}
-            {tab === "results" && confirmedCount > 0 && (
-              <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-                Results{" "}
-                <span className="text-light">{withResults}/{confirmedCount}</span>
-              </p>
+                  </span>
+                )}
+                {bibsOn && (
+                  <span className="inline-flex items-center gap-1.5">
+                    {!bibsDone ? (
+                      <Circle className="w-3.5 h-3.5 text-muted-dark shrink-0" strokeWidth={2.2} />
+                    ) : null}
+                    Bibs{" "}
+                    <span className="text-light">{`${withBib}/${confirmedCount}`}</span>
+                  </span>
+                )}
+              </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {tab === "setup" && wavesOn && (
-              <Button variant="outline" onClick={openManageWaves}>
-                <SlidersHorizontal className="w-4 h-4" /> Manage waves
-              </Button>
-            )}
-            {tab === "setup" && bibsOn && (
-              <Button variant="outline" onClick={() => { setAssignMsg(""); setAssignBibsKey((k) => k + 1); setAssignBibsOpen(true); }} disabled={confirmedCount === 0}>
-                <Hash className="w-4 h-4" /> Assign bibs
-              </Button>
-            )}
-            {/* Import results and Export are off the After race tab until #565. */}
-            {tab === "setup" && <ExportMenu eventId={id} hiddenColumns={hiddenExportColumns} />}
-          </div>
-        </div>
+        )}
+
+        {tab === "results" && confirmedCount > 0 && (
+          <p className="mb-4 font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+            Results{" "}
+            <span className="text-light">{withResults}/{confirmedCount}</span>
+          </p>
+        )}
 
         {tab === "setup" && assignMsg && !manageOpen && (
           <p className="text-[13px] text-muted-light mb-4">{assignMsg}</p>
-        )}
-
-        {tab === "setup" && (
-          <RaceFeatureControls modes={{ waveMode: event.waveMode, bibMode: event.bibMode }} onChange={updateModes} />
         )}
 
         {tab === "setup" && !wavesOn && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <SimpleRoster
+                actions={setupActions}
                 athletes={confirmed.map((r) => ({
                   id: r.id,
                   name: r.name,
@@ -573,6 +572,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveAllocationBoard
+                actions={setupActions}
                 showBibs={bibsOn}
                 waves={startWaves.map((w) => ({
                   id: w.id,

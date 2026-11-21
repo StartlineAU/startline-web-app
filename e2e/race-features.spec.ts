@@ -115,6 +115,8 @@ test("an event without waves or bibs opens on the simple registrations list", as
   await expect(page.getByText("Alice Archer")).toBeVisible();
   await expect(page.getByTestId("race-feature-card-waves")).toBeVisible();
   await expect(page.getByTestId("race-feature-card-bibs")).toBeVisible();
+  // "Confirmed N" was noise above a list that already shows everyone.
+  await expect(page.getByText(/^confirmed \d+$/i)).toHaveCount(0);
 
   // None of the race-day machinery shows until it is asked for.
   await expect(page.getByRole("button", { name: /manage waves/i })).toHaveCount(0);
@@ -132,8 +134,8 @@ test("set up bibs, then number the whole field in one go", async ({ page }) => {
   await page.goto(MANAGE);
 
   await page.getByRole("button", { name: /set up bib numbers/i }).click();
-  await expect(page.getByTestId("race-feature-bibs")).toHaveAttribute("data-mode", "PRIVATE");
-  await expect(page.getByText(/only you can see this/i)).toBeVisible();
+  await expect(page.getByTestId("race-feature-card-bibs")).toHaveAttribute("data-mode", "PRIVATE");
+  await expect(page.getByTestId("race-feature-card-bibs")).toContainText(/only you can see this/i);
 
   await page.getByRole("button", { name: /assign bibs/i }).click();
   const dialog = page.getByRole("dialog");
@@ -154,6 +156,20 @@ test("set up bibs, then number the whole field in one go", async ({ page }) => {
   expect(bibs.map((b) => b.bibNumber)).toEqual(["1", "2", "3", "4"]);
 });
 
+test("waves and bibs can both be set up on the same event", async ({ page }) => {
+  await organiserLogin(page);
+  await page.goto(MANAGE);
+
+  await page.getByRole("button", { name: /set up bib numbers/i }).click();
+  await expect(page.getByTestId("race-feature-card-bibs")).toHaveAttribute("data-mode", "PRIVATE");
+  await page.getByRole("button", { name: /set up start waves/i }).click();
+  await expect(page.getByTestId("race-feature-card-waves")).toHaveAttribute("data-mode", "PRIVATE");
+  await expect(page.getByTestId("race-feature-card-bibs")).toHaveAttribute("data-mode", "PRIVATE");
+
+  await expect(page.getByRole("button", { name: /manage waves/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /assign bibs/i })).toBeVisible();
+});
+
 test("a bib stays private until the organiser shares bibs", async ({ page, request }) => {
   await setModes("OFF", "PRIVATE");
   await prisma.registration.update({ where: { id: TOM_REG }, data: { bibNumber: "77" } });
@@ -162,10 +178,10 @@ test("a bib stays private until the organiser shares bibs", async ({ page, reque
 
   await organiserLogin(page);
   await page.goto(MANAGE);
-  await page.getByRole("button", { name: /share with athletes/i }).click();
+  await page.getByRole("button", { name: /share bib numbers with athletes/i }).click();
   await page.getByRole("dialog").getByRole("button", { name: /^share$/i }).click();
-  await expect(page.getByTestId("race-feature-bibs")).toHaveAttribute("data-mode", "SHARED");
-  await expect(page.getByText(/athletes can see this/i)).toBeVisible();
+  await expect(page.getByTestId("race-feature-card-bibs")).toHaveAttribute("data-mode", "SHARED");
+  await expect(page.getByTestId("race-feature-card-bibs")).toContainText(/athletes can see this/i);
 
   expect(await tomsBibAsAthlete(request)).toBe("77");
 });
@@ -180,7 +196,7 @@ test("turning bibs off hides them and keeps every number", async ({ page }) => {
 
   await page.getByRole("button", { name: /turn off bib numbers/i }).click();
   await page.getByRole("dialog").getByRole("button", { name: /^turn off$/i }).click();
-  await expect(page.getByTestId("race-feature-card-bibs")).toBeVisible();
+  await expect(page.getByTestId("race-feature-card-bibs")).toHaveAttribute("data-mode", "OFF");
   await expect(page.getByTestId("simple-roster").getByText("#9")).toHaveCount(0);
 
   const tom = await prisma.registration.findUnique({ where: { id: TOM_REG }, select: { bibNumber: true } });
