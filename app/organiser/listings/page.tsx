@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
-  Plus, Trash2, MapPin, RefreshCw, Search,
+  Plus, Trash2, MapPin, RefreshCw, Search, Ban,
   MoreHorizontal, Pencil, LayoutDashboard, Copy, Megaphone,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from "lucide-react";
@@ -18,8 +18,9 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 import { formatEventArea } from "@/lib/event-place";
+import { CancelEventDialog } from "@/components/event/CancelEventDialog";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED" | "CANCELLED";
 
 const STATUS_ORDER: Record<EventStatus, number> = {
   IN_PROGRESS: 0,
@@ -28,6 +29,7 @@ const STATUS_ORDER: Record<EventStatus, number> = {
   REJECTED: 3,
   DRAFT:    4,
   ARCHIVED: 5,
+  CANCELLED: 6,
 };
 
 interface EventRow {
@@ -56,6 +58,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: strin
   IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
   ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Completed" },
+  CANCELLED: { bg: "bg-red-400/10",  text: "text-red-300",   label: "Cancelled" },
 };
 
 type SortField = "status" | "date" | "name";
@@ -70,12 +73,25 @@ const FILTERS: { k: Filter; l: string }[] = [
   { k: "DRAFT",    l: "Drafts"    },
   { k: "REJECTED", l: "Rejected"  },
   { k: "ARCHIVED", l: "Completed" },
+  { k: "CANCELLED", l: "Cancelled" },
 ];
 
 const SORT_LABELS: Record<SortField, string> = { status: "Status", date: "Date", name: "Name" };
 
 // ── Actions dropdown ────────────────────────────────────────────────────────
-function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => void }) {
+/**
+ * Once an event has entries it can't be deleted: it is cancelled instead, and
+ * everyone is refunded. A finished or cancelled event offers neither.
+ */
+function destructiveAction(event: EventRow): "delete" | "cancel" | null {
+  if (event.status === "CANCELLED") return null;
+  if (event.registrationCount > 0) {
+    return event.status === "ARCHIVED" || event.status === "REJECTED" ? null : "cancel";
+  }
+  return "delete";
+}
+
+function ActionsMenu({ event, onDelete, onCancel }: { event: EventRow; onDelete: () => void; onCancel: () => void }) {
   const [open, setOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const ref             = useRef<HTMLDivElement>(null);
@@ -149,13 +165,23 @@ function ActionsMenu({ event, onDelete }: { event: EventRow; onDelete: () => voi
           >
             <Copy className="w-4 h-4" /> {duplicating ? "Duplicating…" : "Duplicate listing"}
           </button>
-          <div className="my-1 border-t border-dark-lighter" />
-          <button
-            onClick={e => { e.stopPropagation(); setOpen(false); onDelete(); }}
-            className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-300 hover:bg-red-400/10 transition-colors font-headline font-bold uppercase tracking-widest"
-          >
-            <Trash2 className="w-4 h-4" /> Delete event
-          </button>
+          {destructiveAction(event) && <div className="my-1 border-t border-dark-lighter" />}
+          {destructiveAction(event) === "cancel" && (
+            <button
+              onClick={e => { e.stopPropagation(); setOpen(false); onCancel(); }}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-300 hover:bg-red-400/10 transition-colors font-headline font-bold uppercase tracking-widest"
+            >
+              <Ban className="w-4 h-4" /> Cancel event
+            </button>
+          )}
+          {destructiveAction(event) === "delete" && (
+            <button
+              onClick={e => { e.stopPropagation(); setOpen(false); onDelete(); }}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-300 hover:bg-red-400/10 transition-colors font-headline font-bold uppercase tracking-widest"
+            >
+              <Trash2 className="w-4 h-4" /> Delete event
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -185,6 +211,7 @@ export default function ListingsPage() {
   const [filter,     setFilter]     = useState<Filter>("all");
   const [confirmDel, setConfirmDel] = useState<EventRow | null>(null);
   const [deleting,   setDeleting]   = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState<EventRow | null>(null);
   const [sortField,  setSortField]  = useState<SortField>("status");
   const [sortDir,    setSortDir]    = useState<SortDir>("asc");
 
@@ -243,6 +270,10 @@ export default function ListingsPage() {
       const res = await fetch(`/api/organiser/events/${confirmDel.id}`, { method: "DELETE" });
       if (res.ok) {
         setEvents(es => (es ?? []).filter(e => e.id !== confirmDel.id));
+        setConfirmDel(null);
+      } else if (res.status === 409) {
+        // An entry landed (or a refunded one exists): it has to be cancelled.
+        setConfirmCancel(confirmDel);
         setConfirmDel(null);
       }
     } finally {
@@ -375,12 +406,13 @@ export default function ListingsPage() {
                       </div>
                     </div>
                     <div onClick={ev => ev.stopPropagation()}>
-                      <ActionsMenu event={e} onDelete={() => setConfirmDel(e)} />
+                      <ActionsMenu event={e} onDelete={() => setConfirmDel(e)} onCancel={() => setConfirmCancel(e)} />
                     </div>
                   </div>
 
                   {/* ── Desktop table row (≥ sm) — inset rail (no layout shift vs hover:border-l) ── */}
                   <div
+                    data-testid="listing-row"
                     className={`hidden sm:grid grid-cols-12 gap-4 px-5 py-4 items-center cursor-pointer transition-colors
                       ${e.status === "APPROVED" || e.status === "IN_PROGRESS"
                         ? "hover:bg-primary/5 hover:shadow-[inset_2px_0_0_0_#B3E153]"
@@ -416,7 +448,7 @@ export default function ListingsPage() {
                       {price && <div className="font-headline text-[10px] uppercase tracking-widest text-muted-dark mt-0.5">from A${price}</div>}
                     </div>
                     <div className="col-span-1 flex items-center justify-end" onClick={ev => ev.stopPropagation()}>
-                      <ActionsMenu event={e} onDelete={() => setConfirmDel(e)} />
+                      <ActionsMenu event={e} onDelete={() => setConfirmDel(e)} onCancel={() => setConfirmCancel(e)} />
                     </div>
                   </div>
                 </div>
@@ -445,6 +477,17 @@ export default function ListingsPage() {
           )}
         </div>
       </main>
+
+      <CancelEventDialog
+        event={confirmCancel}
+        apiBase="/api/organiser/events"
+        onClose={() => setConfirmCancel(null)}
+        onCancelled={() => {
+          const id = confirmCancel?.id;
+          setEvents(es => (es ?? []).map(e => (e.id === id ? { ...e, status: "CANCELLED" } : e)));
+          setConfirmCancel(null);
+        }}
+      />
 
       {/* Delete confirmation */}
       <Dialog open={!!confirmDel} onOpenChange={open => { if (!open) setConfirmDel(null); }}>

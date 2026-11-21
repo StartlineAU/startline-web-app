@@ -89,6 +89,7 @@ function attempt(overrides: Record<string, unknown> = {}) {
 function event(overrides: Record<string, unknown> = {}) {
   return {
     id: "event-1",
+    status: "ARCHIVED",
     payoutTriggered: false,
     payoutAmountCents: null,
     organiser: { id: "org-1", stripeAccountId: "acct_1" },
@@ -208,6 +209,33 @@ describe("getPayoutEligibleEvents", () => {
         },
       }),
     }));
+  });
+});
+
+describe("cancelled events", () => {
+  it("are never offered for payout", async () => {
+    mocks.event.findMany.mockResolvedValue([]);
+    await getPayoutEligibleEvents();
+    expect(mocks.event.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: { not: "CANCELLED" } }),
+    }));
+  });
+
+  it("refuse a new payout even with entries still showing as confirmed", async () => {
+    // An entry whose cancellation refund is being retried still reads CONFIRMED.
+    mocks.event.findUnique.mockResolvedValue(event({ status: "CANCELLED" }));
+    await expect(runPayoutForEvent("event-1")).rejects.toMatchObject({ status: 409, code: "EVENT_CANCELLED" });
+    expect(mocks.createPayout).not.toHaveBeenCalled();
+    expect(mocks.payoutOperation.create).not.toHaveBeenCalled();
+  });
+
+  it("still finish a payout Stripe already started", async () => {
+    const submitting = operation({ status: PayoutStatus.SUBMITTING });
+    mocks.event.findUnique.mockResolvedValue(event({ status: "CANCELLED", payoutOperation: submitting }));
+    mocks.payoutOperation.findUnique.mockResolvedValue(submitting);
+    await runPayoutForEvent("event-1").catch(() => undefined);
+    // Not refused up front: the in-flight attempt is resumed, not abandoned.
+    expect(mocks.payoutAttempt.findFirst).toHaveBeenCalled();
   });
 });
 

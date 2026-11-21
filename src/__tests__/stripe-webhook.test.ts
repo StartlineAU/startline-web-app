@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     createMany: vi.fn(),
     groupBy: vi.fn(),
     findMany: vi.fn(),
+    findFirst: vi.fn(),
     updateMany: vi.fn(),
   },
   user: { upsert: vi.fn(), findMany: vi.fn(async () => []) },
@@ -126,6 +127,7 @@ beforeEach(() => {
   mocks.sendEmail.mockResolvedValue(undefined);
   mocks.registration.count.mockResolvedValue(0);
   mocks.registration.findMany.mockResolvedValue([]);
+  mocks.registration.findFirst.mockResolvedValue(null);
   mocks.registration.updateMany.mockResolvedValue({ count: 1 });
   mocks.registration.groupBy.mockResolvedValue([]);
   mocks.registration.createMany.mockResolvedValue({ count: 1 });
@@ -451,6 +453,41 @@ describe("POST /api/stripe/webhook", () => {
     expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
     expect(mocks.registration.createMany.mock.calls[0][0].data[0].status).toBe("CANCELLED");
     expect(mocks.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("refunds a payment for a cancelled event in full, booking fee included", async () => {
+    mocks.event.findUnique.mockResolvedValue({ ...approvedEvent, status: "CANCELLED" });
+    mocks.registration.findFirst.mockResolvedValue({ event: { status: "CANCELLED" } });
+    signedEvent({
+      id: "pi_123",
+      amount_received: 10540,
+      application_fee_amount: 540,
+      transfer_data: { destination: "acct_org" },
+      metadata: metadata(ONE_PARTICIPANT),
+    });
+
+    await post({ id: "pi_123" });
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
+    const [params] = mocks.refundCreate.mock.calls[0];
+    // No amount: the whole charge goes back. Startline returns its fee too.
+    expect(params).not.toHaveProperty("amount");
+    expect(params).toMatchObject({ reverse_transfer: true, refund_application_fee: true });
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].status).toBe("CANCELLED");
+  });
+
+  it("keeps the fee rule unchanged when a refusal is not a cancellation", async () => {
+    mocks.event.findUnique.mockResolvedValue({ ...approvedEvent, organiser: { status: "SUSPENDED" } });
+    mocks.registration.findFirst.mockResolvedValue({ event: { status: "APPROVED" } });
+    signedEvent({
+      id: "pi_123",
+      amount_received: 10540,
+      application_fee_amount: 540,
+      metadata: metadata(ONE_PARTICIPANT),
+    });
+
+    await post({ id: "pi_123" });
+    const [params] = mocks.refundCreate.mock.calls[0];
+    expect(params).not.toHaveProperty("refund_application_fee");
   });
 
   it("refunds a payment in an unexpected currency", async () => {

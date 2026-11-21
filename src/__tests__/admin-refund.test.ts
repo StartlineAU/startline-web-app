@@ -263,6 +263,14 @@ describe("admin refund route: team entries (#541)", () => {
     expect(mocks.createRefund).not.toHaveBeenCalled();
   });
 
+  it("leaves an entry of a cancelled event to the full cancellation refund", async () => {
+    mocks.registration.findUnique.mockResolvedValue({ ...confirmedRegistration, cancelRefundStatus: "FAILED" });
+    const res = await refund();
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("EVENT_CANCELLED");
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+  });
+
   it("gives a teammate with no quote the same percentage as the team", async () => {
     mocks.registration.findUnique.mockResolvedValue({ ...teamEntry, refundPercent: 50, refundAmountCents: 5270 });
     const unquoted = { ...mate("reg-2", "Sam Lee"), refundAmountCents: null, refundPercent: null };

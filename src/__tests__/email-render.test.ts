@@ -18,6 +18,8 @@ import {
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
   buildRemovedFromEventEmail,
+  buildRefundOverrideEmail,
+  buildEventCancelledEmail,
 } from "@/lib/email";
 import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -146,11 +148,12 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
     opts,
   )],
   ["edit decision", () => buildEventEditDecisionEmail({ eventTitle: "Harbour 10K", approved: false, reason: "Too vague", eventUrl: "https://x.test/e" })],
-  ["refund", () => buildRefundRequestEmail({ ticketId: "t1", athleteName: "Harper", athleteEmail: "h@x.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "Clash", eventUrl: "https://x.test/r" })],
+  ["refund", () => buildRefundRequestEmail({ ticketId: "t1", athleteName: "Harper", athleteEmail: "h@x.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "Clash", eventUrl: "https://x.test/r", audience: "organiser", respondBy: new Date("2027-03-04T00:00:00Z") })],
   ["removed", () => buildRemovedFromEventEmail(
     { athleteName: "Harper", eventTitle: "Harbour 10K", organiserName: "Apex", reasonLabel: "Code of conduct", note: null, refundCents: 10540, noRefund: false, blocked: true },
     opts,
   )],
+  ["refund override", () => buildRefundOverrideEmail({ athleteName: "Harper", eventTitle: "Harbour 10K", organiserDecision: "declined", decision: "approved", note: "Date <moved>" })],
   ["waitlist", () => renderEmail(WaitlistConfirmationEmail())],
   ["contact", () => renderEmail(ContactMessageEmail({ name: "Harper", email: "h@x.test", subject: "Hi", message: "Line one\nLine <two>" }))],
   ["feedback", () => renderEmail(FeedbackSubmittedEmail({ reference: "SL-1234", type: "Bug", title: "Broken", details: "It broke", filenames: ["a.png"] }))],
@@ -263,5 +266,19 @@ describe("organiser invitation", () => {
     expect(email.subject).toContain("Apex Endurance Events");
     expect(email.html).toContain("https://organiser.startlineau.com/organiser/invite?token=abc");
     expect(email.text).toMatch(/Nothing changes unless you accept/);
+  });
+});
+
+describe("event cancelled", () => {
+  it("tells a paid entrant what is coming back", async () => {
+    const email = await buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: null, refundCents: 5495, reason: null });
+    expect(email.text).toContain("$54.95");
+    expect(email.text).toMatch(/refund/i);
+  });
+
+  it("does not mention a refund to a free entrant", async () => {
+    const email = await buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: null, refundCents: 0, reason: null });
+    expect(email.text).toContain("your entry has been cancelled");
+    expect(email.text).not.toMatch(/refund/i);
   });
 });

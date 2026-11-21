@@ -207,9 +207,11 @@ function RegistrationRow({
 function RegistrationsContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId") ?? undefined;
+  // Linked from an approved refund request, pre-filtered to the athlete.
+  const initialSearch = searchParams.get("search") ?? "";
 
-  const [search,     setSearch]     = useState("");
-  const [query,      setQuery]      = useState("");
+  const [search,     setSearch]     = useState(initialSearch);
+  const [query,      setQuery]      = useState(initialSearch);
   const [activeTab,  setActiveTab]  = useState<RegStatus | "ALL">("ALL");
   const [page,       setPage]       = useState(1);
 

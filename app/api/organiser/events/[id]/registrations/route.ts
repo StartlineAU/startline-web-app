@@ -33,7 +33,7 @@ const registrationPatchSchema = z.object({
 async function assertOwnedEvent(eventId: string, organiserId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organiserId: true, waves: true, title: true, cap: true, categories: true, ...RACE_FEATURES_SELECT },
+    select: { id: true, organiserId: true, waves: true, title: true, cap: true, status: true, categories: true, ...RACE_FEATURES_SELECT },
   });
   if (!event) return { error: NextResponse.json({ error: "Not found." }, { status: 404 }) };
   if (event.organiserId !== organiserId) {
@@ -171,6 +171,14 @@ export async function PATCH(
   const { id } = parsedParams.data;
   const owned = await assertOwnedEvent(id, session.sub);
   if (owned.error) return owned.error;
+  // Every entry of a cancelled event is being refunded in full. Reinstating
+  // or re-marking one by hand would take it out of that.
+  if (owned.event.status === "CANCELLED") {
+    return NextResponse.json(
+      { error: "This event is cancelled, so its entries can't be changed." },
+      { status: 409 },
+    );
+  }
 
   const parsedBody = registrationPatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsedBody.success) {

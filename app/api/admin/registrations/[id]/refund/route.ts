@@ -110,7 +110,7 @@ export async function POST(
     return NextResponse.json(body);
   } catch (err) {
     if (err instanceof RefundError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     console.error("Admin refund error:", err);
     return NextResponse.json({ error: "Refund failed." }, { status: 503 });

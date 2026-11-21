@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   MapPin, Calendar, Check, X, RefreshCw, ChevronDown, ChevronUp,
-  Pin, PinOff, Trash2, CheckSquare, Square, Plus, Pencil, AlertTriangle, Eye,
+  Pin, PinOff, Trash2, Ban, CheckSquare, Square, Plus, Pencil, AlertTriangle, Eye,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +15,11 @@ import RejectPanel from "@/components/admin/RejectPanel";
 import { approvalBlocker } from "@/lib/event-approval";
 import { useApiResource } from "@/hooks/useApiResource";
 import { formatEventArea } from "@/lib/event-place";
+import { CancelEventDialog } from "@/components/event/CancelEventDialog";
 
 export const dynamic = "force-dynamic";
 
-type EventStatus = "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+type EventStatus = "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED" | "CANCELLED";
 
 interface AdminEventRow {
   id: string;
@@ -52,6 +53,7 @@ const TABS: { status: EventStatus; label: string }[] = [
   { status: "IN_PROGRESS", label: "In progress" },
   { status: "REJECTED", label: "Rejected" },
   { status: "ARCHIVED", label: "Archived" },
+  { status: "CANCELLED", label: "Cancelled" },
 ];
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
@@ -60,6 +62,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string;
   IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", dot: "bg-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-400",   dot: "bg-red-400",    label: "Rejected" },
   ARCHIVED: { bg: "bg-white/[0.05]", text: "text-muted",     dot: "bg-muted-dark", label: "Archived" },
+  CANCELLED: { bg: "bg-red-400/10",  text: "text-red-300",   dot: "bg-red-400",    label: "Cancelled" },
 };
 
 function formatDate(dateStr: string) {
@@ -105,6 +108,8 @@ function EventRow({
   const [pinning,      setPinning]      = useState(false);
   const [deleting,     setDeleting]     = useState(false);
   const [confirmDel,   setConfirmDel]   = useState(false);
+  // Set when the event has entries: it is cancelled and refunded, not deleted.
+  const [cancelling,   setCancelling]   = useState(false);
   const [expanded,     setExpanded]     = useState(false);
 
   const organiserName =
@@ -168,6 +173,7 @@ function EventRow({
     try {
       const res = await fetch(`/api/admin/events/${event.id}`, { method: "DELETE" });
       if (res.ok) onDeleted(event.id);
+      else if (res.status === 409 && event.status !== "ARCHIVED" && event.status !== "CANCELLED") setCancelling(true);
     } finally {
       setDeleting(false);
     }
@@ -302,6 +308,22 @@ function EventRow({
           >
             <Pencil className="w-3.5 h-3.5" /> Edit
           </Link>
+
+          {/* Cancel: refunds everyone. The way to withdraw an event with entries. */}
+          {(event.status === "APPROVED" || event.status === "IN_PROGRESS" || event.status === "PENDING") && (
+            <button
+              onClick={() => setCancelling(true)}
+              className="flex items-center gap-1.5 font-headline text-[12px] font-bold uppercase tracking-widest border border-dark-lighter text-muted-dark px-3 py-2 rounded-md hover:border-red-500/40 hover:text-red-400 transition-colors"
+            >
+              <Ban className="w-3.5 h-3.5" /> Cancel event
+            </button>
+          )}
+          <CancelEventDialog
+            event={cancelling ? { id: event.id, title: event.title } : null}
+            apiBase="/api/admin/events"
+            onClose={() => setCancelling(false)}
+            onCancelled={() => { setCancelling(false); onReviewed(event.id); }}
+          />
 
           {/* Delete */}
           <button

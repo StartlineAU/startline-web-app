@@ -39,9 +39,14 @@ describe("refund request email", () => {
       eventDate: "2027-03-21",
       reason: "Clash <with> another race",
       eventUrl: "https://organiser.startlineau.com/organiser/refunds",
+      audience: "organiser",
+      respondBy: new Date("2027-03-04T00:00:00Z"),
     });
 
     expect(subject).toBe("Refund request: Harbour 10K");
+    // The organiser is told the decision is theirs, and by when.
+    expect(html).toContain("You decide on each request");
+    expect(html).toContain("Thursday 4 March");
     expect(html).toContain("Harper Jones");
     expect(html).toContain("harper@example.com");
     // Stored dates are shown the way the app writes them.

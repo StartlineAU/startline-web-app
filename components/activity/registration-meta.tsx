@@ -25,6 +25,8 @@ export type RegMeta = {
   teamName: string | null;
   /** A team place bought "details later": its member still needs naming. */
   detailsPending: boolean;
+  /** The event was cancelled: the entry is refunded in full, booking fee included. */
+  eventCancelled?: boolean;
 };
 
 export function currentCheckInState(meta: RegMeta, now: Date): CheckInState {
@@ -63,6 +65,18 @@ export function withdrawnCopy(meta: RegMeta): { heading: string; detail: string 
     };
   }
   const refundIssued = meta.status === "REFUNDED" && !freeEntry;
+  if (meta.eventCancelled) {
+    const amount = `$${(meta.refundAmountCents / 100).toFixed(2)}`;
+    return {
+      heading: "Event cancelled.",
+      detail: freeEntry
+        ? "Your spot has been released."
+        : refundIssued
+          ? `${amount} refunded in full, booking fee included. Allow 5 to 10 business days.`
+          : `Your full refund of ${amount}, booking fee included, is being processed.`,
+      refundIssued,
+    };
+  }
   if (refundIssued) return { heading: "Refund issued.", detail: null, refundIssued };
   if (freeEntry) {
     return { heading: "You withdrew from this event.", detail: "Your spot has been released.", refundIssued };

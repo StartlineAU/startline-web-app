@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, Eye, Pencil, X } from "lucide-react";
 import RejectPanel from "@/components/admin/RejectPanel";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED" | "CANCELLED";
 
 const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string; label: string }> = {
   DRAFT:    { bg: "bg-white/[0.05]", text: "text-muted",    dot: "bg-muted-dark", label: "Draft"    },
@@ -15,6 +15,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string;
   IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", dot: "bg-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-400",  dot: "bg-red-400",    label: "Rejected" },
   ARCHIVED: { bg: "bg-white/[0.05]", text: "text-muted",    dot: "bg-muted-dark", label: "Archived" },
+  CANCELLED: { bg: "bg-red-400/10",  text: "text-red-300",  dot: "bg-red-400",    label: "Cancelled" },
 };
 
 export interface AdminEventReviewBarProps {
@@ -226,7 +227,7 @@ export default function AdminEventReviewBar({
           </div>
         )}
 
-        {status !== "APPROVED" && status !== "IN_PROGRESS" && status !== "ARCHIVED" && (
+        {status !== "APPROVED" && status !== "IN_PROGRESS" && status !== "ARCHIVED" && status !== "CANCELLED" && (
           <p className="mt-2 text-[12px] text-muted-dark">
             This listing is not public yet. Registration and share links below only work once it is approved.
           </p>

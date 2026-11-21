@@ -11,7 +11,7 @@ export const NOTIFICATION_PREFERENCE_FIELD = {
   EVENT_APPROVED:   "notifyEventApproved",
   EVENT_REJECTED:   "notifyEventRejected",
   NEW_REGISTRATION: "notifyNewRegistration",
-} as const satisfies Record<NotificationType, keyof OrganiserNotificationPreferences>;
+} as const satisfies Partial<Record<NotificationType, keyof OrganiserNotificationPreferences>>;
 
 /**
  * Whether an organisation has asked to hear about this kind of event. Off means
@@ -21,5 +21,9 @@ export function wantsNotification(
   organiser: OrganiserNotificationPreferences,
   type: NotificationType,
 ): boolean {
-  return organiser[NOTIFICATION_PREFERENCE_FIELD[type]] !== false;
+  // Kinds with no switch (a refund override, a cancelled event) always go out:
+  // they are about money the organisation is answerable for.
+  const field = (NOTIFICATION_PREFERENCE_FIELD as Partial<Record<NotificationType, keyof OrganiserNotificationPreferences>>)[type];
+  if (!field) return true;
+  return organiser[field] !== false;
 }

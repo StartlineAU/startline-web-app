@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { entryOrganiserNetCents, ticketFeeBreakdown } from "@/lib/platform-fee";
 import { idParams } from "@/lib/schemas";
+import { checkInWindow, checkInWindowJson } from "@/lib/check-in-window";
 import { publishedEditNeedsReview } from "@/lib/event-revision";
 
 export async function GET(
@@ -121,6 +122,9 @@ export async function GET(
         cap:               event.cap,
         registrationCount: count,
         checkedInCount,
+        timeZone:          event.timeZone,
+        // When athletes can check in, and whether the organiser opened it early (#543).
+        checkIn:           checkInWindowJson(checkInWindow(event)),
         coverImageUrl:     event.coverImageUrl,
         waves: wavesWithSold,
         feeStructure:      event.feeStructure,

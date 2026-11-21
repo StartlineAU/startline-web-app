@@ -100,6 +100,14 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
+    // Cancelling is final. An edit would send the event back to review (or
+    // live), reopening sales while its entries are being refunded.
+    if (existing.status === "CANCELLED") {
+      return NextResponse.json(
+        { error: "This event is cancelled and can't be edited.", code: "CANCELLED" },
+        { status: 409 },
+      );
+    }
 
     // A ticket's team size is fixed once it has entries, for admins too.
     const teamTierError = await checkTeamTierChange(id, existing, { waves: data.waves, format: data.format });

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/skeleton";
 import RaceManagementPanel from "@/components/organiser/RaceManagementPanel";
 import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice";
+import CheckInOpeningCard, { type CheckInWindowData } from "@/components/organiser/CheckInOpeningCard";
 import EventChangeHistory from "@/components/event/EventChangeHistory";
 import PendingRevisionNotice from "@/components/event/PendingRevisionNotice";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
@@ -41,6 +42,8 @@ interface DashboardData {
     cap?: number | null; registrationCount: number;
     editNeedsReview?: boolean;
     checkedInCount: number;
+    timeZone: string;
+    checkIn: CheckInWindowData;
     coverImageUrl?: string | null; waves: Wave[];
     feeStructure: string; categories: string[];
   };
@@ -456,6 +459,15 @@ function EventDashboardInner({
               </div>
             ))}
           </div>
+
+          {!managePanel && !finished && (
+            <CheckInOpeningCard
+              eventId={event.id}
+              timeZone={event.timeZone}
+              checkIn={event.checkIn}
+              onChange={(checkIn) => setData((d) => (d ? { ...d, event: { ...d.event, checkIn } } : d))}
+            />
+          )}
 
           {!managePanel && finished && (
             <div className="mb-8 rounded-xl border border-dark-lighter bg-dark p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
