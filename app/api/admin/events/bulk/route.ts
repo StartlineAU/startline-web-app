@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: `BULK_${action.toUpperCase()}`,
       targetType: "event",

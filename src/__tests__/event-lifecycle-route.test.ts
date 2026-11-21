@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   transaction: vi.fn(),
   syncEventSchedules: vi.fn(),
+  pendingOrderDeleteMany: vi.fn(),
+  rateLimitDeleteMany: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -16,6 +18,8 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: mocks.findUnique,
       updateMany: mocks.updateMany,
     },
+    pendingOrder: { deleteMany: mocks.pendingOrderDeleteMany },
+    rateLimit: { deleteMany: mocks.rateLimitDeleteMany },
     $transaction: mocks.transaction,
   },
 }));
@@ -48,6 +52,8 @@ beforeEach(() => {
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.transaction.mockImplementation(async (ops: Promise<unknown>[]) => Promise.all(ops));
   mocks.syncEventSchedules.mockResolvedValue(undefined);
+  mocks.pendingOrderDeleteMany.mockResolvedValue({ count: 0 });
+  mocks.rateLimitDeleteMany.mockResolvedValue({ count: 0 });
 });
 
 afterEach(() => {
@@ -94,5 +100,21 @@ describe("POST /api/internal/events/lifecycle", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.findUnique).toHaveBeenCalled();
     expect(body).toMatchObject({ checked: 1, archived: 0, started: 0 });
+  });
+
+  it("answers 500 when a schedule sync fails, so the run counts as failed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.syncEventSchedules.mockRejectedValue(new Error("scheduler down"));
+    const res = await request();
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ ok: false, scheduleFailures: 1 });
+  });
+
+  it("purges expired pending orders and dead rate-limit rows on a sweep", async () => {
+    mocks.pendingOrderDeleteMany.mockResolvedValue({ count: 3 });
+    mocks.rateLimitDeleteMany.mockResolvedValue({ count: 7 });
+    const res = await request();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ purgedOrders: 3, purgedRateLimits: 7 });
   });
 });

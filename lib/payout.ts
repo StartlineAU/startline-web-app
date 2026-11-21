@@ -2,6 +2,7 @@ import { PayoutAttemptStatus, PayoutStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { entryOrganiserNetCents, type FeeSnapshot } from "@/lib/platform-fee";
+import { reportCaught } from "@/lib/error-reporting";
 
 const PAYOUT_CURRENCY = "aud";
 
@@ -583,6 +584,7 @@ async function recordSubmission(
     // Stripe has the money request, but we could not record it. Leave the
     // operation in SUBMITTING so the next request resumes the same key.
     console.error("Payout submitted but could not be recorded:", err);
+    reportCaught(err, "payout:record");
     throw new PayoutError(
       "The payout was sent but could not be recorded. Retry to confirm it.",
       503,
@@ -619,6 +621,7 @@ async function markFailed(
     ]);
   } catch (err) {
     console.error("Could not record the failed payout attempt:", err);
+    reportCaught(err, "payout:record-failure");
   }
 }
 
@@ -644,6 +647,7 @@ async function markReconciliationRequired(
     ]);
   } catch (err) {
     console.error("Could not record the unresolved payout attempt:", err);
+    reportCaught(err, "payout:record-unresolved");
   }
 }
 
@@ -676,6 +680,7 @@ async function requireReconciliation(
     }
   } catch (err) {
     console.error("Could not flag the payout for reconciliation:", err);
+    reportCaught(err, "payout:flag-reconcile");
   }
 
   throw reconciliationRequired();

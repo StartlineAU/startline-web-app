@@ -155,15 +155,36 @@ test("the listing editor sets this event's contact details, then hands them back
   test.slow();
   // Apex is verified, so saving its live listing applies at once rather than
   // waiting for review.
+  //
+  // Only a seeded event that has not started yet. Other specs add APPROVED Apex
+  // events of their own (event-lifecycle's already ended, event-edit's is
+  // deleted and recreated mid-run), and the seed keeps past ones. Saving an
+  // event that has finished is refused, and without an order Postgres returns
+  // whichever row it scans first, so the test failed whenever it drew one.
   const apex = await prisma.event.findFirstOrThrow({
-    where: { organiser: { orgName: "Apex Endurance Events" }, status: "APPROVED", registrations: { none: {} } },
+    where: {
+      id: { startsWith: "seed-event-" },
+      organiser: { orgName: "Apex Endurance Events" },
+      status: "APPROVED",
+      startsAtUtc: { gt: new Date(Date.now() + 7 * 86_400_000) },
+      registrations: { none: {} },
+    },
+    orderBy: { id: "asc" },
     select: { id: true, showContactPhone: true },
   });
   await prisma.event.update({ where: { id: apex.id }, data: { showContactPhone: null } });
 
   try {
     await signInAs(page, "organiser");
+    // The editor shows an empty form until the event loads, then replaces it
+    // with what was fetched. On a cold dev server that fetch takes seconds, and
+    // a toggle made before it lands is overwritten, so the save sent null.
+    const loaded = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`/organiser/new-listing?id=${apex.id}`);
+    expect((await loaded).ok()).toBe(true);
 
     const editor = page.getByTestId("contact-editor");
     const phone = editor.getByRole("button", { name: /^Phone/ });
@@ -172,7 +193,17 @@ test("the listing editor sets this event's contact details, then hands them back
 
     await phone.click();
     await expect(editor).toContainText("Set for this event");
+    // Wait on the save itself, so a refused save fails with the server's
+    // reason instead of a poll that only says the column stayed null.
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "PATCH",
+      { timeout: 30000 },
+    );
     await page.getByRole("button", { name: "Save changes" }).filter({ visible: true }).first().click();
+    const res = await saved;
+    const body = await res.text();
+    expect(res.status(), `PATCH ${apex.id} answered ${res.status()}: ${body}`).toBe(200);
+    expect(JSON.parse(body).pendingReview, `the save was queued for review: ${body}`).toBeFalsy();
     await expect
       .poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).showContactPhone, { timeout: 20000 })
       .not.toBeNull();

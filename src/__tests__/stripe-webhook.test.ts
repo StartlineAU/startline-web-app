@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   ensureCognitoUser: vi.fn(),
   refundCreate: vi.fn(),
+  pendingOrder: { findUnique: vi.fn(), deleteMany: vi.fn() },
 }));
 
 const tx = {
@@ -44,6 +45,7 @@ vi.mock("@/lib/prisma", () => ({
     notification: mocks.notification,
     userNotification: mocks.userNotification,
     organiser: mocks.organiser,
+    pendingOrder: mocks.pendingOrder,
     $transaction: async (cb: (t: typeof tx) => unknown) => cb(tx),
   },
 }));
@@ -130,6 +132,8 @@ beforeEach(() => {
   mocks.notification.create.mockResolvedValue({});
   mocks.userNotification.create.mockResolvedValue({});
   mocks.refundCreate.mockResolvedValue({ id: "re_123" });
+  mocks.pendingOrder.findUnique.mockResolvedValue(null);
+  mocks.pendingOrder.deleteMany.mockResolvedValue({ count: 1 });
 });
 
 describe("parseParticipantsFromMetadata", () => {
@@ -227,6 +231,77 @@ describe("POST /api/stripe/webhook", () => {
     });
     expect(mocks.notification.create).toHaveBeenCalled();
     expect(mocks.refundCreate).not.toHaveBeenCalled();
+  });
+
+  it("reads participants from the pending order, not the intent, and then deletes it", async () => {
+    signedEvent({
+      id: "pi_order",
+      amount_received: 10540,
+      // What checkout now sends Stripe: no participant details.
+      metadata: {
+        eventId: "seed-event-001",
+        organiserId: "org-1",
+        waveLabel: "General",
+        feeStructure: "athlete",
+        participantCount: "1",
+        orderId: "order-1",
+      },
+    });
+    mocks.pendingOrder.findUnique.mockResolvedValue({
+      eventId: "seed-event-001",
+      fields: {
+        ...ONE_PARTICIPANT,
+        userName: "Jordan Clarke",
+        userEmail: "jordan@example.com",
+        userId: "user-1",
+      },
+    });
+
+    const res = await post({ id: "pi_order", type: "payment_intent.succeeded" });
+    expect(res.status).toBe(200);
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0]).toMatchObject({
+      athleteName: "Jordan Clarke",
+      status: "CONFIRMED",
+      stripePaymentIntentId: "pi_order",
+    });
+    expect(mocks.pendingOrder.deleteMany).toHaveBeenCalledWith({ where: { id: "order-1" } });
+    expect(mocks.refundCreate).not.toHaveBeenCalled();
+  });
+
+  it("refunds a payment whose pending order has been swept", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    signedEvent({
+      id: "pi_gone",
+      amount_received: 10540,
+      metadata: {
+        eventId: "seed-event-001",
+        organiserId: "org-1",
+        waveLabel: "General",
+        participantCount: "1",
+        orderId: "order-gone",
+      },
+    });
+    mocks.pendingOrder.findUnique.mockResolvedValue(null);
+
+    const res = await post({ id: "pi_gone", type: "payment_intent.succeeded" });
+    expect(res.status).toBe(200);
+    expect(mocks.refundCreate).toHaveBeenCalled();
+    const written = mocks.registration.createMany.mock.calls[0][0].data;
+    expect(written.every((row: { status: string }) => row.status === "CANCELLED")).toBe(true);
+  });
+
+  it("keeps the pending order when the handler fails, for Stripe's retry", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    signedEvent({
+      id: "pi_retry",
+      amount_received: 10540,
+      metadata: { eventId: "seed-event-001", organiserId: "org-1", orderId: "order-2", participantCount: "1" },
+    });
+    mocks.registration.findMany.mockRejectedValue(new Error("db down"));
+
+    const res = await post({ id: "pi_retry", type: "payment_intent.succeeded" });
+    expect(res.status).toBe(500);
+    expect(mocks.pendingOrder.deleteMany).not.toHaveBeenCalled();
   });
 
   // #470: the Stripe fee the organiser absorbs is read off the intent's own

@@ -33,7 +33,7 @@ export async function PATCH(
       select: { id: true, status: true },
     });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: newStatus === "SUSPENDED" ? "SUSPEND_ORGANISER" : "ACTIVATE_ORGANISER",
       targetType: "organiser",

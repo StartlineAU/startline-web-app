@@ -31,7 +31,7 @@ export async function PATCH(
       select: { id: true, isBanned: true },
     });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: updated.isBanned ? "BAN_USER" : "UNBAN_USER",
       targetType: "user",
