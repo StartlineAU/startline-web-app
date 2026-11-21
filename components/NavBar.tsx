@@ -9,6 +9,7 @@ import SignInModal from "@/components/SignInModal";
 import AccountMenu from "@/components/AccountMenu";
 import { useAuthContext } from "@/context/AuthContext";
 import { useSettings } from "@/context/SettingsContext";
+import { readSignInRequest, PASSWORD_RESET_NOTICE } from "@/lib/password-reset-return";
 
 type NavItem = { href: string; label: string };
 
@@ -27,6 +28,9 @@ export default function NavBar() {
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   // Which tab the auth modal opens on. SIGN IN and SIGN UP share one modal.
   const [authView,     setAuthView]     = useState<"signin" | "signup">("signin");
+  // Set when ?signin=true came from a password reset: prefill and confirm it.
+  const [authEmail,    setAuthEmail]    = useState("");
+  const [authNotice,   setAuthNotice]   = useState<string | undefined>(undefined);
   const [isUserOpen,   setIsUserOpen]   = useState(false);
   const [profileName,  setProfileName]  = useState<string | null>(null);
   const [profilePic,   setProfilePic]   = useState<string | null>(null);
@@ -44,10 +48,12 @@ export default function NavBar() {
     // leaves the user staring at a page that ignored their click. If they turn
     // out to be signed in, the effect below closes it again.
     if (status === "authenticated") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("signin") !== "true") return;
+    const request = readSignInRequest(window.location.search);
+    if (!request) return;
     startTransition(() => {
       setAuthView("signin");
+      setAuthEmail(request.email);
+      setAuthNotice(request.afterReset ? PASSWORD_RESET_NOTICE : undefined);
       setIsSignInOpen(true);
     });
     router.replace(pathname ?? "/", { scroll: false });
@@ -105,6 +111,8 @@ export default function NavBar() {
 
   const openAuth = (view: "signin" | "signup") => {
     setAuthView(view);
+    setAuthEmail("");
+    setAuthNotice(undefined);
     setIsSignInOpen(true);
   };
 
@@ -276,7 +284,13 @@ export default function NavBar() {
         )}
       </nav>
 
-      <SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} initialView={authView} />
+      <SignInModal
+        isOpen={isSignInOpen}
+        onClose={() => setIsSignInOpen(false)}
+        initialView={authView}
+        initialEmail={authEmail}
+        notice={authNotice}
+      />
     </>
   );
 }
