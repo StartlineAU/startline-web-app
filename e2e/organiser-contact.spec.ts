@@ -187,12 +187,17 @@ test("the listing editor sets this event's contact details, then hands them back
 
     const editor = page.getByTestId("contact-editor");
     const phone = editor.getByRole("button", { name: /^Phone/ });
-    await expect(phone).toBeVisible({ timeout: 30000 });
+    const save = page.getByRole("button", { name: "Save changes" }).filter({ visible: true }).first();
+    // The editor renders an empty form first and fills it when the event's
+    // fetch lands. A click before then is overwritten by that fill, and a save
+    // before then has no event id. "Save changes" only appears once the event
+    // has loaded, so it is the gate.
+    await expect(save).toBeVisible({ timeout: 30000 });
     await expect(editor).toContainText("Following your organisation's setting");
 
     await phone.click();
     await expect(editor).toContainText("Set for this event");
-    await page.getByRole("button", { name: "Save changes" }).filter({ visible: true }).first().click();
+    await save.click();
     await expect
       .poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).showContactPhone, { timeout: 20000 })
       .not.toBeNull();
