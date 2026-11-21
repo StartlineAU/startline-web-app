@@ -165,7 +165,7 @@ export async function POST(
       );
     }
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: action === "approve" ? "APPROVE_EVENT" : "REJECT_EVENT",
       targetType: "event",

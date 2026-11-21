@@ -19,6 +19,7 @@ import {
   rsvpParticipantFromSession,
   type PricedEntry,
 } from "@/lib/registration-confirm";
+import { reportCaught } from "@/lib/error-reporting";
 
 const rsvpSchema = z.object({
   eventId: z.string().min(1).max(255),
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ alreadyRegistered: Boolean(existing) });
   } catch (err) {
     console.error("Free RSVP status error:", err);
+    reportCaught(err, "registrations:rsvp-status");
     return NextResponse.json({ error: "Failed to check your RSVP." }, { status: 503 });
   }
 }
@@ -201,6 +203,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("Free RSVP error:", err);
+    reportCaught(err, "registrations:rsvp");
     return NextResponse.json({ error: "Failed to complete RSVP." }, { status: 503 });
   }
 }

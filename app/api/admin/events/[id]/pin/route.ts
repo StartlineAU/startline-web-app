@@ -31,7 +31,7 @@ export async function PATCH(
       select: { id: true, isPinned: true },
     });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: updated.isPinned ? "PIN_EVENT" : "UNPIN_EVENT",
       targetType: "event",

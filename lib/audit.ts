@@ -1,4 +1,9 @@
 import prisma from "./prisma";
+import { reportCaught } from "./error-reporting";
+
+// Awaited by every caller: on Lambda an unawaited write can be lost when the
+// container freezes after the response. A failure does not undo the admin's
+// change, which has already happened, but it does reach the error alarm.
 
 export async function writeAuditLog(params: {
   adminId: string;
@@ -19,5 +24,6 @@ export async function writeAuditLog(params: {
     });
   } catch (err) {
     console.error("Audit log write failed:", err);
+    reportCaught(err, "audit:write");
   }
 }
