@@ -16,6 +16,14 @@ export interface RosterAthlete {
 
 const PAGE = 50;
 
+/** Race-day check-ins read as a clock time; older ones also show the date. */
+function checkInLabel(iso: string): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString("en-AU", { day: "numeric", month: "short" })}, ${time}`;
+}
+
 /**
  * The registrations list for an event without start waves (#566): who is in,
  * what they bought, and whether they have checked in. Bibs appear only once the
@@ -78,6 +86,7 @@ export default function SimpleRoster({
             <span role="columnheader" className={`min-w-0 flex-1 ${header}`}>Athlete</span>
             <span role="columnheader" className={`hidden sm:block w-32 ${header}`}>Ticket</span>
             {showBibs && <span role="columnheader" className={`w-14 text-right ${header}`}>Bib</span>}
+            <span role="columnheader" className={`w-28 text-right ${header}`}>Check-in</span>
             <span className="w-6" aria-hidden />
           </div>
           {visible.map((a) => (
@@ -95,18 +104,6 @@ export default function SimpleRoster({
                   )}
                 </span>
                 <span className="block text-[11px] text-muted-dark truncate mt-0.5">
-                  {a.checkedInAt ? (
-                    <span
-                      data-testid="roster-check-in"
-                      className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary mr-1.5"
-                    >
-                      <CheckCheck className="w-3 h-3" /> Checked in
-                    </span>
-                  ) : (
-                    <span className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark mr-1.5">
-                      Not checked in
-                    </span>
-                  )}
                   {a.email}
                   <span className="sm:hidden">{a.tier ? ` · ${a.tier}` : ""}</span>
                 </span>
@@ -119,6 +116,19 @@ export default function SimpleRoster({
                   {a.bibNumber ? `#${a.bibNumber}` : "-"}
                 </span>
               )}
+              <span role="cell" className="w-28 flex justify-end">
+                {a.checkedInAt ? (
+                  <span
+                    data-testid="roster-check-in"
+                    title={`Checked in ${new Date(a.checkedInAt).toLocaleString("en-AU")}`}
+                    className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 rounded px-1.5 py-0.5 whitespace-nowrap"
+                  >
+                    <CheckCheck className="w-3 h-3" /> {checkInLabel(a.checkedInAt)}
+                  </span>
+                ) : (
+                  <span className="text-[12px] text-muted-dark" aria-label="Not checked in">—</span>
+                )}
+              </span>
               <button
                 type="button"
                 onClick={() => onEdit(a.id)}
