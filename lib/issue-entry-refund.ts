@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import {
@@ -57,13 +58,30 @@ export interface RefundEntry {
   event: { id: string; title: string };
 }
 
+export interface RefundOptions {
+  /**
+   * Status written once the money has moved. REMOVED when an organiser takes
+   * the athlete out of the event (lib/remove-registration.ts, #571).
+   */
+  finalStatus?: "REFUNDED" | "REMOVED";
+  /** Further columns written in the same update, such as releasing the bib. */
+  extraData?: Prisma.RegistrationUncheckedUpdateManyInput;
+  /** False when the caller sends its own message instead of "Refund processed". */
+  notify?: boolean;
+}
+
 export interface RefundResult {
   method: "free" | "stripe";
   refundId: string | null;
   refundCents: number;
 }
 
-export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult> {
+export async function issueEntryRefund(
+  entry: RefundEntry,
+  options: RefundOptions = {},
+): Promise<RefundResult> {
+  const finalStatus = options.finalStatus ?? "REFUNDED";
+  const notify = options.notify ?? true;
   if (entry.status !== "CONFIRMED" && entry.status !== "REFUND_REQUESTED") {
     throw new RefundError(
       "Only confirmed or refund-requested registrations can be refunded.",
@@ -76,12 +94,12 @@ export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult
   if (!entry.stripePaymentIntentId) {
     const released = await prisma.registration.updateMany({
       where: { id: entry.id, status: { in: REFUNDABLE_STATUSES } },
-      data: { status: "REFUNDED" },
+      data: { ...options.extraData, status: finalStatus },
     });
     if (released.count !== 1) {
       throw new RefundError("This registration changed a moment ago. Refresh and try again.", 409, "STALE");
     }
-    await notifyAthlete(entry, 0);
+    if (notify) await notifyAthlete(entry, 0);
     return { method: "free", refundId: null, refundCents: 0 };
   }
 
@@ -131,7 +149,8 @@ export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult
   const recorded = await prisma.registration.updateMany({
     where: { id: entry.id, status: { in: REFUNDABLE_STATUSES } },
     data: {
-      status: "REFUNDED",
+      ...options.extraData,
+      status: finalStatus,
       stripeRefundId: refund.id,
       refundAmountCents: refundCents,
     },
@@ -140,7 +159,7 @@ export async function issueEntryRefund(entry: RefundEntry): Promise<RefundResult
     return { method: "stripe", refundId: refund.id, refundCents };
   }
 
-  await notifyAthlete(entry, refundCents);
+  if (notify) await notifyAthlete(entry, refundCents);
 
   return { method: "stripe", refundId: refund.id, refundCents };
 }

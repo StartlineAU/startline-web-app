@@ -10,13 +10,17 @@ import { getCapacityError } from "@/lib/registration-capacity";
 import { confirmedUnitsByWave } from "@/lib/team-tickets";
 import { lockEventEntries } from "@/lib/event-entry-lock";
 import { isFreeEntry, organiserStatusChange } from "@/lib/registration-status-policy";
+import { findOrganiserBlock } from "@/lib/organiser-blocks";
+import { entryPaidCents } from "@/lib/stripe-refunds";
 
 const registrationPatchRowSchema = z.object({
   registrationId: z.string().min(1).max(255),
   startWaveId: z.string().max(255).nullable().optional(),
   startWaveLabel: z.string().max(255).nullable().optional(),
   bibNumber: z.string().max(50).nullable().optional(),
-  status: z.enum(["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "CANCELLED"]).optional(),
+  // REMOVED is accepted only so the edit dialog can send an entry's current
+  // status back unchanged; organiserStatusChange refuses any move to it.
+  status: z.enum(["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "CANCELLED", "REMOVED"]).optional(),
   estimatedFinishMinutes: z.number().int().min(0).nullable().optional(),
 });
 
@@ -72,6 +76,7 @@ export async function GET(
       checkedInAt: true,
       amountCents: true,
       platformFeeCents: true,
+      feeStructure: true,
       stripePaymentIntentId: true,
       refundAmountCents: true,
       refundPercent: true,
@@ -137,6 +142,9 @@ export async function GET(
       // Only a free entry's status is the organiser's to change; see
       // lib/registration-status-policy.ts.
       statusEditable: isFreeEntry(r),
+      // What Remove from event would send back (#571): everything this entry
+      // paid through Startline, or 0 when nothing was charged.
+      removalRefundCents: r.stripePaymentIntentId ? entryPaidCents(r) : 0,
       resultDistance: r.resultDistance,
       resultTime: r.resultTime,
       resultPlacement: r.resultPlacement,
@@ -180,6 +188,7 @@ export async function PATCH(
     select: {
       id: true, bibNumber: true, teamId: true, status: true, waveLabel: true,
       amountCents: true, platformFeeCents: true, stripePaymentIntentId: true,
+      userId: true, athleteEmail: true,
     },
   });
   const byId = new Map(existing.map((r) => [r.id, r]));
@@ -334,6 +343,19 @@ export async function PATCH(
           requestedByWave,
         });
         if (error) return error;
+
+        // Someone on the organisation's block list (#571) can't be put back.
+        const blocked = await findOrganiserBlock(
+          session.sub,
+          {
+            userIds: reinstated.map((r) => byId.get(r.id)?.userId),
+            emails: reinstated.map((r) => byId.get(r.id)?.athleteEmail),
+          },
+          tx,
+        );
+        if (blocked) {
+          return `${blocked.email} is on your organisation's blocked list.`;
+        }
       }
 
       // Clear the bibs first so a swap inside one batch never trips the

@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronRight, Search, Users, AlertTriangle, AlertCircle,
-  ArrowRightLeft, X, Pencil, CheckSquare, Square, GripVertical, CheckCheck,
+  ArrowRightLeft, X, Pencil, CheckSquare, Square, GripVertical, CheckCheck, UserX,
 } from "lucide-react";
 import { animate } from "animejs";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,8 @@ interface Props {
   /** Confirmed athletes only; waves are for paid, registered athletes. */
   athletes: BoardAthlete[];
   onEdit: (athleteId: string) => void;
+  /** Opens Remove from event for this athlete (#571). */
+  onRemove?: (athleteId: string) => void;
   onMove: (
     ids: string[],
     destWaveId: string | null,
@@ -98,7 +100,7 @@ const CAP_STYLE = {
   over: "text-red-300 border-red-400/40 bg-red-400/10",
 } as const;
 
-export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }: Props) {
+export default function WaveAllocationBoard({ waves, athletes, onEdit, onRemove, onMove }: Props) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set([...waves.map((w) => w.id), UNASSIGNED]),
@@ -493,6 +495,17 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={() => onRemove(a.id)}
+            aria-label={`Remove ${a.name} from event`}
+            title="Remove from event"
+            className="shrink-0 p-1 text-muted-dark hover:text-red-300 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+          >
+            <UserX className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     );
   };

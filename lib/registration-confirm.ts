@@ -23,6 +23,7 @@ import {
   type OrderTeam,
 } from "@/lib/team-tickets";
 import { findTakenTeamNames } from "@/lib/team-entries";
+import { BLOCKED_ENTRY_MESSAGE, findOrganiserBlock } from "@/lib/organiser-blocks";
 
 /** One ticket, priced from the database rather than from the client. */
 export interface PricedEntry {
@@ -194,7 +195,7 @@ export type ConfirmOutcome =
   // alreadyRecorded: rows for this PaymentIntent already exist (a webhook
   // redelivery), so nothing was written and nothing should be announced.
   | { ok: true; registrationIds: string[]; alreadyRecorded?: boolean }
-  | { ok: false; error: string; reason: "capacity" | "duplicate" | "stale" };
+  | { ok: false; error: string; reason: "capacity" | "duplicate" | "stale" | "blocked" };
 
 /**
  * Write the registrations for an order.
@@ -232,8 +233,9 @@ export async function insertConfirmedRegistrations(opts: {
   rejectExistingUserEntries?: boolean;
   /**
    * Statuses that count as an existing entry for the duplicate guards above.
-   * Defaults to every status except CANCELLED, preserving the other order
-   * flows. The free RSVP passes RSVP_DUPLICATE_STATUSES so an entry that has
+   * Defaults to every status except CANCELLED and REMOVED, preserving the
+   * other order flows. A removed entry does not stop a fresh one by itself:
+   * the organisation's block list does that. The free RSVP passes RSVP_DUPLICATE_STATUSES so an entry that has
    * already been cancelled or refunded no longer blocks a fresh RSVP.
    */
   duplicateStatuses?: RegistrationStatus[];
@@ -255,7 +257,7 @@ export async function insertConfirmedRegistrations(opts: {
   const registrationIds = entries.map(() => randomUUID());
   const duplicateStatus = opts.duplicateStatuses
     ? { in: opts.duplicateStatuses }
-    : { not: "CANCELLED" as const };
+    : { notIn: ["CANCELLED", "REMOVED"] as RegistrationStatus[] };
 
   return prisma.$transaction(async (tx) => {
     // Confirms for one event run one at a time. Every check below (duplicate
@@ -276,6 +278,19 @@ export async function insertConfirmedRegistrations(opts: {
       const stale = await opts.beforeInsert(tx);
       if (stale) return { ok: false as const, reason: "stale" as const, error: stale };
     }
+
+    // Every path that creates an entry comes through here, so this is the
+    // backstop for the organisation's block list (#571). The routes check
+    // earlier too, so a blocked person is normally stopped before paying.
+    const block = await findOrganiserBlock(
+      organiserId,
+      {
+        userIds: [buyerUserId, ...Object.values(userIdByEmail)],
+        emails: entries.filter((e) => !e.participant.pnd).map((e) => e.participant.em),
+      },
+      tx,
+    );
+    if (block) return { ok: false as const, reason: "blocked" as const, error: BLOCKED_ENTRY_MESSAGE };
 
     if (opts.rejectExistingUserEntries && buyerUserId) {
       const existingForAccount = await tx.registration.findFirst({

@@ -18,6 +18,7 @@ import {
   buildEventEditPendingReviewEmail,
   buildEventEditDecisionEmail,
   buildRefundRequestEmail,
+  buildRemovedFromEventEmail,
 } from "@/lib/email";
 import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -148,6 +149,10 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
   )],
   ["edit decision", () => buildEventEditDecisionEmail({ eventTitle: "Harbour 10K", approved: false, reason: "Too vague", eventUrl: "https://x.test/e" })],
   ["refund", () => buildRefundRequestEmail({ ticketId: "t1", athleteName: "Harper", athleteEmail: "h@x.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "Clash", eventUrl: "https://x.test/r" })],
+  ["removed", () => buildRemovedFromEventEmail(
+    { athleteName: "Harper", eventTitle: "Harbour 10K", organiserName: "Apex", reasonLabel: "Code of conduct", note: null, refundCents: 10540, noRefund: false, blocked: true },
+    opts,
+  )],
   ["waitlist", () => renderEmail(WaitlistConfirmationEmail())],
   ["contact", () => renderEmail(ContactMessageEmail({ name: "Harper", email: "h@x.test", subject: "Hi", message: "Line one\nLine <two>" }))],
   ["feedback", () => renderEmail(FeedbackSubmittedEmail({ reference: "SL-1234", type: "Bug", title: "Broken", details: "It broke", filenames: ["a.png"] }))],
@@ -164,6 +169,57 @@ describe.each(allEmails)("%s email", (_name, build) => {
     expect(html).not.toContain("<script");
     expect(text.length).toBeGreaterThan(0);
     expect(text).not.toContain("<td");
+  });
+});
+
+// #571: an athlete removed by the organiser is told why, and what happens to
+// their money and to future entries.
+describe("removed from event email", () => {
+  const base = {
+    athleteName: "Harper Jones",
+    eventTitle: "Harbour 10K",
+    organiserName: "Apex",
+    reasonLabel: "Ineligible (age, category, medical)",
+    refundCents: 0,
+    noRefund: false,
+    blocked: false,
+  };
+
+  it("names the event, the organiser and the reason", async () => {
+    const { subject, text } = await buildRemovedFromEventEmail(base, opts);
+    expect(subject).toBe("You've been removed from Harbour 10K");
+    expect(text).toContain("Hi Harper,");
+    expect(text).toContain("Apex has removed your entry from Harbour 10K");
+    expect(text).toContain("Ineligible (age, category, medical)");
+    expect(text).not.toContain("Refund on its way");
+    expect(text).not.toContain("Future entries");
+  });
+
+  it("states the refund amount when there is one", async () => {
+    const { text } = await buildRemovedFromEventEmail({ ...base, refundCents: 10540 }, opts);
+    expect(text).toContain("$105.40");
+    expect(text).toContain("Refund on its way");
+  });
+
+  it("says when nothing is refunded, and when future entries are blocked", async () => {
+    const { text } = await buildRemovedFromEventEmail({ ...base, noRefund: true, blocked: true }, opts);
+    expect(text).toContain("No refund");
+    expect(text).toContain("won't accept further entries");
+  });
+
+  it("explains a place handed to someone else, with no refund due", async () => {
+    const { text } = await buildRemovedFromEventEmail({ ...base, teamName: "Rockets" }, opts);
+    expect(text).toContain("Your place was passed on");
+    expect(text).toContain("team Rockets");
+    expect(text).not.toContain("Refund on its way");
+  });
+
+  it("includes the organiser's note only when given, escaped", async () => {
+    const without = await buildRemovedFromEventEmail(base, opts);
+    expect(without.text).not.toContain("Note from the organiser");
+    const withNote = await buildRemovedFromEventEmail({ ...base, note: "Missed the <b>briefing</b>" }, opts);
+    expect(withNote.text).toContain("Note from the organiser");
+    expect(withNote.html).not.toContain("<b>briefing</b>");
   });
 });
 

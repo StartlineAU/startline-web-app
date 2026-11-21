@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, Users, UserPlus } from "lucide-react";
+import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, Users, UserPlus, UserX } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserEvent } from "@/types";
 import type { PublicEvent } from "@/lib/event-types";
@@ -52,6 +52,7 @@ const USER_NOTIF_STYLE: Record<string, { Icon: LucideIcon; tone: string }> = {
   ORGANISER_REFUND_REQUEST: { Icon: Undo2,     tone: "bg-amber-400/10 text-amber-300" },
   REFUND_PROCESSED:         { Icon: Banknote,  tone: "bg-primary/10 text-primary"   },
   TEAM_DETAILS_NEEDED:      { Icon: Users,     tone: "bg-amber-400/10 text-amber-300" },
+  REMOVED_FROM_EVENT:       { Icon: UserX,     tone: "bg-red-400/10 text-red-300"     },
 };
 
 const FALLBACK_NOTIF_STYLE = { Icon: Bell, tone: "bg-white/[0.06] text-muted" };

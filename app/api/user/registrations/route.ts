@@ -20,8 +20,9 @@ export async function GET() {
   const registrations = await prisma.registration.findMany({
     where: {
       // Show live entries plus any with a refund in flight, so the athlete can see
-      // the pending state rather than having the card vanish on request.
-      status: { in: ["CONFIRMED", "REFUND_REQUESTED", "REFUNDED"] },
+      // the pending state rather than having the card vanish on request. A
+      // removal by the organiser shows too, so it is never a silent disappearance.
+      status: { in: ["CONFIRMED", "REFUND_REQUESTED", "REFUNDED", "REMOVED"] },
       OR: [
         { userId: session.sub },
         { athleteEmail: { equals: session.email, mode: "insensitive" } },

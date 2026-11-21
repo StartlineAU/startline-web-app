@@ -14,6 +14,7 @@ import {
 import { athleteNameFromParticipant, type CompactParticipant } from "@/lib/registration-form";
 import { refundRefusedPayment } from "@/lib/refund-refused-payment";
 import { lockEventEntries } from "@/lib/event-entry-lock";
+import { isBlockedByOrganiser } from "@/lib/organiser-blocks";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -134,6 +135,19 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
   if (!event) return;
+
+  // A person the organisation has blocked (#571) is refunded, not entered.
+  // Checkout refuses them first; this catches a block added while they paid.
+  // insertConfirmedRegistrations checks again under the lock.
+  if (
+    await isBlockedByOrganiser(organiserId, {
+      userIds: [meta.userId],
+      emails: [meta.userEmail, ...participants.filter((p) => !p.pnd).map((p) => p.em)],
+    })
+  ) {
+    await refuse("blocked by organiser");
+    return;
+  }
 
   // Price every ticket from the DB wave definitions, never from metadata. A
   // free tier is priced at zero rather than rejected, so a mixed cart (a free
