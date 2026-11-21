@@ -56,7 +56,7 @@ export async function GET() {
           timeZone: true,
           startsAtUtc: true,
           endsAtUtc: true,
-          checkInOpensAt: true,
+          checkInLeadMinutes: true,
           status: true,
           city: true,
           state: true,
@@ -86,7 +86,7 @@ export async function GET() {
         status: r.event.status,
         startsAtUtc: r.event.startsAtUtc,
         endsAtUtc: r.event.endsAtUtc,
-        checkInOpensAt: r.event.checkInOpensAt,
+        checkInLeadMinutes: r.event.checkInLeadMinutes,
       });
       return {
         id: r.id,
@@ -101,7 +101,7 @@ export async function GET() {
         detailsPending: r.detailsPending,
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
-        checkInOpensAt: window.opensAt?.toISOString() ?? null,
+        checkInLeadMinutes: window.opensAt?.toISOString() ?? null,
         checkInClosesAt: window.closesAt?.toISOString() ?? null,
         timeZone: r.event.timeZone,
         paidCents,

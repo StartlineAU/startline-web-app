@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { idParams } from "@/lib/schemas";
 import {
   CHECK_IN_LEAD_OPTIONS,
-  checkInOpensAtFor,
+  checkInLeadMinutesFor,
   checkInStartsAt,
   checkInWindow,
   checkInWindowJson,
@@ -36,7 +36,7 @@ const EVENT_SELECT = {
   state: true,
   startsAtUtc: true,
   endsAtUtc: true,
-  checkInOpensAt: true,
+  checkInLeadMinutes: true,
 } as const;
 
 /**
@@ -77,10 +77,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Check-in is only available for published events." }, { status: 409 });
     }
 
-    const checkInOpensAt = checkInOpensAtFor(parsed.data.open as CheckInOpeningChoice, startsAt);
+    const checkInLeadMinutes = checkInLeadMinutesFor(parsed.data.open as CheckInOpeningChoice, startsAt);
     const updated = await prisma.event.update({
       where: { id },
-      data: { checkInOpensAt },
+      data: { checkInLeadMinutes },
       select: EVENT_SELECT,
     });
 

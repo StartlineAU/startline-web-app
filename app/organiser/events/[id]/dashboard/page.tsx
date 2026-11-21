@@ -40,8 +40,6 @@ interface DashboardData {
     cap?: number | null; registrationCount: number;
     checkedInCount: number;
     timeZone: string;
-    /** Event start in UTC, for matching the check-in lead time. */
-    startsAt: string | null;
     checkIn: CheckInWindowData;
     coverImageUrl?: string | null; waves: Wave[];
     feeStructure: string; categories: string[];
@@ -424,7 +422,6 @@ function EventDashboardInner({
             <CheckInOpeningCard
               eventId={event.id}
               timeZone={event.timeZone}
-              startsAt={event.startsAt}
               checkIn={event.checkIn}
               onChange={(checkIn) => setData((d) => (d ? { ...d, event: { ...d.event, checkIn } } : d))}
             />

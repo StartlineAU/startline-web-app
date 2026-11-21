@@ -19,8 +19,12 @@ export interface CheckInWindowInput extends EventTimeInput {
   status?: string | null;
   startsAtUtc?: Date | string | null;
   endsAtUtc?: Date | string | null;
-  /** The organiser's own opening time (#543). Null keeps the default. */
-  checkInOpensAt?: Date | string | null;
+  /**
+   * How many minutes before the start the organiser opened check-in (#543).
+   * Null keeps the default. A lead, not a time, so it follows the event when
+   * its start moves.
+   */
+  checkInLeadMinutes?: number | null;
 }
 
 export interface CheckInWindow {
@@ -31,6 +35,8 @@ export interface CheckInWindow {
   closesAt: Date | null;
   /** True when the organiser moved the opening earlier than the default. */
   custom: boolean;
+  /** Minutes before the start that check-in opens. */
+  leadMinutes: number;
 }
 
 export function asDate(value: Date | string | null | undefined): Date | null {
@@ -46,9 +52,9 @@ export function asDate(value: Date | string | null | undefined): Date | null {
  * The window an athlete can check themselves in.
  *
  * It opens 60 minutes before the event starts and stays open until the event
- * ends. An organiser can open it earlier (`checkInOpensAt`), never later: if
- * the event is later moved earlier, the default still wins, so a stale custom
- * time can never keep athletes out once the usual window has begun. The derived UTC fields are preferred; older rows without them fall back
+ * ends. An organiser can open it earlier (`checkInLeadMinutes`), never later.
+ * The opening is held as a lead before the start, so when the event's time
+ * changes the opening moves with it. The derived UTC fields are preferred; older rows without them fall back
  * to the venue-local date/time and timezone. Any row we cannot read fails
  * closed rather than allowing an early check-in.
  */
@@ -59,31 +65,30 @@ export function checkInWindow(
   const fallback = eventUtcWindow(event);
   const startsAt = asDate(event.startsAtUtc) ?? fallback.startsAtUtc;
   const closesAt = asDate(event.endsAtUtc) ?? fallback.endsAtUtc;
-  const defaultOpensAt = defaultCheckInOpensAt(startsAt);
-  const chosen = asDate(event.checkInOpensAt);
-  const custom = !!(chosen && defaultOpensAt && chosen < defaultOpensAt);
-  const opensAt = custom ? chosen : defaultOpensAt;
+  const leadMinutes = effectiveLeadMinutes(event.checkInLeadMinutes);
+  const custom = leadMinutes > CHECK_IN_OPENS_MINUTES_BEFORE;
+  const opensAt = startsAt ? new Date(startsAt.getTime() - leadMinutes * 60 * 1000) : null;
 
   if (!opensAt || !closesAt) {
-    return { state: "unavailable", opensAt, closesAt, custom: false };
+    return { state: "unavailable", opensAt, closesAt, custom: false, leadMinutes };
   }
 
   // A finished event reads as closed even after the lifecycle sweep renames it
   // ARCHIVED. A pending, rejected or draft event is not a check-in target.
-  if (now >= closesAt) return { state: "closed", opensAt, closesAt, custom };
+  if (now >= closesAt) return { state: "closed", opensAt, closesAt, custom, leadMinutes };
   if (event.status && !LIVE_EVENT_STATUSES.has(event.status)) {
-    return { state: "unavailable", opensAt, closesAt, custom };
+    return { state: "unavailable", opensAt, closesAt, custom, leadMinutes };
   }
 
-  if (now < opensAt) return { state: "before", opensAt, closesAt, custom };
-  return { state: "open", opensAt, closesAt, custom };
+  if (now < opensAt) return { state: "before", opensAt, closesAt, custom, leadMinutes };
+  return { state: "open", opensAt, closesAt, custom, leadMinutes };
 }
 
-/** The opening used when the organiser has not chosen one. */
-export function defaultCheckInOpensAt(startsAt: Date | null): Date | null {
-  return startsAt
-    ? new Date(startsAt.getTime() - CHECK_IN_OPENS_MINUTES_BEFORE * 60 * 1000)
-    : null;
+/** The stored lead, never shorter than the default and never unreadable. */
+function effectiveLeadMinutes(stored: number | null | undefined): number {
+  return typeof stored === "number" && Number.isFinite(stored) && stored > CHECK_IN_OPENS_MINUTES_BEFORE
+    ? Math.round(stored)
+    : CHECK_IN_OPENS_MINUTES_BEFORE;
 }
 
 /** The event start in UTC, preferring the derived field. */
@@ -95,21 +100,23 @@ export function checkInStartsAt(event: CheckInWindowInput): Date | null {
 export type CheckInOpeningChoice = "now" | "default" | CheckInLeadMinutes;
 
 /**
- * The `checkInOpensAt` to store for an organiser's choice. Null means "use the
- * default", which is also what any choice no earlier than the default becomes,
- * so the stored field only ever holds a real override.
+ * The `checkInLeadMinutes` to store for an organiser's choice. Null means "use
+ * the default", which is also what any choice no earlier than the default
+ * becomes, so the stored field only ever holds a real override.
+ *
+ * "Now" is stored as the lead from now to the start, so it too moves with the
+ * event if the start time changes afterwards.
  */
-export function checkInOpensAtFor(
+export function checkInLeadMinutesFor(
   choice: CheckInOpeningChoice,
   startsAt: Date,
   now: Date = new Date(),
-): Date | null {
+): number | null {
   if (choice === "default") return null;
-  const opensAt = choice === "now"
-    ? now
-    : new Date(startsAt.getTime() - choice * 60 * 1000);
-  const fallback = defaultCheckInOpensAt(startsAt);
-  return fallback && opensAt < fallback ? opensAt : null;
+  const lead = choice === "now"
+    ? Math.ceil((startsAt.getTime() - now.getTime()) / 60000)
+    : choice;
+  return lead > CHECK_IN_OPENS_MINUTES_BEFORE ? lead : null;
 }
 
 /** The check-in window as the API sends it. */
@@ -119,5 +126,6 @@ export function checkInWindowJson(window: CheckInWindow) {
     opensAt: window.opensAt?.toISOString() ?? null,
     closesAt: window.closesAt?.toISOString() ?? null,
     custom: window.custom,
+    leadMinutes: window.leadMinutes,
   };
 }

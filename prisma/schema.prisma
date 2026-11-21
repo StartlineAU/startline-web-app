@@ -174,10 +174,11 @@ model Event {
   // (/checkin/[eventId]/[checkInCode]). Generated lazily on first "Generate
   // Check-in QR"; null until then.
   checkInCode String? @unique
-  // When athletes can start checking in, set by the organiser to open it
-  // earlier than the default 60 minutes before start (#543). Null keeps the
-  // default; a time later than the default is ignored (lib/check-in-window.ts).
-  checkInOpensAt DateTime?
+  // How many minutes before the start athletes can check in, set by the
+  // organiser to open it earlier than the default 60 (#543). A lead rather
+  // than a time, so check-in moves with the event when its start changes.
+  // Null keeps the default; anything under 60 is ignored (lib/check-in-window.ts).
+  checkInLeadMinutes Int?
 
   // Step 1 — basics
   title       String

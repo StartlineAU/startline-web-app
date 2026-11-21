@@ -16,6 +16,8 @@ export interface CheckInWindowData {
   closesAt: string | null;
   /** The organiser opened check-in earlier than the default. */
   custom: boolean;
+  /** Minutes before the start that check-in opens. It moves with the event. */
+  leadMinutes: number;
 }
 
 const LEAD_LABELS: Record<number, string> = {
@@ -35,31 +37,47 @@ const OPTIONS: SelectOption[] = [
   { value: "now", label: "Now" },
 ];
 
-/** Which option matches the current window, so the menu shows what is in force. */
-function selectedValue(checkIn: CheckInWindowData, startsAt: string | null): string {
-  if (!checkIn.custom) return String(CHECK_IN_OPENS_MINUTES_BEFORE);
-  if (checkIn.opensAt && startsAt) {
-    const lead = Math.round((Date.parse(startsAt) - Date.parse(checkIn.opensAt)) / 60000);
-    if ((CHECK_IN_LEAD_OPTIONS as readonly number[]).includes(lead)) return String(lead);
+const CUSTOM = "custom";
+
+/** "3 days", "5 hours", "90 minutes": a lead that isn't one of the presets. */
+export function formatLead(minutes: number): string {
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (minutes >= 24 * 60 && minutes % (24 * 60) === 0) return unit(minutes / (24 * 60), "day");
+  if (minutes >= 24 * 60) return unit(Math.round(minutes / (24 * 60)), "day");
+  if (minutes % 60 === 0) return unit(minutes / 60, "hour");
+  return unit(minutes, "minute");
+}
+
+/**
+ * The menu, with the lead in force selected. "Now" is stored as the lead from
+ * that moment to the start, so it shows as its own length afterwards: if the
+ * event moves, so does check-in, and "Now" would no longer be true.
+ */
+function menu(checkIn: CheckInWindowData): { value: string; options: SelectOption[] } {
+  const lead = checkIn.custom ? checkIn.leadMinutes : CHECK_IN_OPENS_MINUTES_BEFORE;
+  if ((CHECK_IN_LEAD_OPTIONS as readonly number[]).includes(lead)) {
+    return { value: String(lead), options: OPTIONS };
   }
-  return "now";
+  return {
+    value: CUSTOM,
+    options: [{ value: CUSTOM, label: `${formatLead(lead)} before start` }, ...OPTIONS],
+  };
 }
 
 /**
  * Lets the organiser open athlete check-in earlier than the default hour
  * before start (#543). It can only move the opening earlier; the default is
- * the latest it can be.
+ * the latest it can be. The choice is a lead before the start, so moving the
+ * event moves check-in with it.
  */
 export default function CheckInOpeningCard({
   eventId,
   timeZone,
-  startsAt,
   checkIn,
   onChange,
 }: {
   eventId: string;
   timeZone: string;
-  startsAt: string | null;
   checkIn: CheckInWindowData;
   onChange: (next: CheckInWindowData) => void;
 }) {
@@ -72,6 +90,7 @@ export default function CheckInOpeningCard({
     });
 
   const save = async (value: string) => {
+    if (value === CUSTOM) return;
     setSaving(true);
     setError("");
     try {
@@ -89,6 +108,8 @@ export default function CheckInOpeningCard({
       setSaving(false);
     }
   };
+
+  const { value, options } = menu(checkIn);
 
   let summary: string;
   if (checkIn.state === "open") {
@@ -121,8 +142,8 @@ export default function CheckInOpeningCard({
             <SelectMenu
               size="sm"
               ariaLabel="When check-in opens"
-              value={selectedValue(checkIn, startsAt)}
-              options={OPTIONS}
+              value={value}
+              options={options}
               onChange={(v) => { if (!saving) void save(v); }}
             />
           </div>
