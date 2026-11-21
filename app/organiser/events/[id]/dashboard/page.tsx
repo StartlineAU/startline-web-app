@@ -434,13 +434,14 @@ function EventDashboardInner({
                   </span>
                 </div>
                 {recentRegistrations.length > 0 && (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     onClick={() => setManagePanel(true)}
-                    className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:underline"
                   >
-                    View all
-                  </button>
+                    <Users className="w-3.5 h-3.5" /> View all
+                  </Button>
                 )}
               </div>
 

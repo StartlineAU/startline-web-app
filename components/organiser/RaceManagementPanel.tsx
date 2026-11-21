@@ -2,8 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
-  Upload, Download,
-  RefreshCw, CheckCircle2, Circle, Bell,
+  Download,
+  RefreshCw, CheckCircle2, Circle,
   SlidersHorizontal, FileSpreadsheet, FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
-import ResultsImportDialog from "@/components/organiser/ResultsImportDialog";
 import WaveBuilderDialog from "@/components/organiser/WaveBuilderDialog";
 import {
   DEFAULT_EXPORT_COLUMN_KEYS,
@@ -73,12 +72,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const [savingResult, setSavingResult] = useState(false);
   const [resultError, setResultError] = useState("");
 
-  const [importOpen, setImportOpen] = useState(false);
-  const [importMessage, setImportMessage] = useState("");
-
-  const [notifyOpen, setNotifyOpen] = useState(false);
-  const [notifySaving, setNotifySaving] = useState(false);
-  const [notifyMsg, setNotifyMsg] = useState("");
 
   // Splits the page into before-race setup (waves, bibs) and after-race results.
   const [activeTab, setActiveTab] = useState<"setup" | "results" | "refunds">("setup");
@@ -346,32 +339,11 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
       });
       const json = await res.json();
       if (!res.ok) { setAssignMsg(json.error ?? "Could not assign waves."); return; }
-      setAssignMsg(`Waves saved and ${json.updated} athlete${json.updated === 1 ? "" : "s"} sorted. Notify them from the header when ready.`);
+      setAssignMsg(`Waves saved and ${json.updated} athlete${json.updated === 1 ? "" : "s"} sorted.`);
       load();
       setManageOpen(false);
     } finally {
       setAssignSaving(false);
-    }
-  };
-
-  const runNotifyWaves = async () => {
-    setNotifySaving(true);
-    setNotifyMsg("");
-    try {
-      const res = await fetch(`/api/organiser/events/${id}/waves/notify`, { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) {
-        setNotifyMsg(json.error ?? "Could not send notifications.");
-        return;
-      }
-      if (json.notified === 0) {
-        setNotifyMsg("Everyone is already up to date. Nothing to send.");
-      } else {
-        setNotifyMsg(`Notified ${json.notified} athlete${json.notified === 1 ? "" : "s"}.`);
-      }
-      load();
-    } finally {
-      setNotifySaving(false);
     }
   };
 
@@ -417,9 +389,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
   const withResults = confirmed.filter((r) => r.resultTime || r.resultPlacement).length;
   const wavesDone = !wavesConfigured || withWave === confirmedCount;
   const bibsDone = confirmedCount > 0 && withBib === confirmedCount;
-  // Athletes with a wave that differs from what they were last told about.
-  const pendingNotify = confirmed.filter((r) => r.wave && r.wave !== r.waveNotified).length;
-  const allSet = confirmedCount > 0 && wavesDone && bibsDone && pendingNotify === 0;
+  const allSet = confirmedCount > 0 && wavesDone && bibsDone;
 
   // Athletes who asked for a refund (pending) or have been refunded (done). These
   // sit outside wave assignment; the organiser only views them, admins action them.
@@ -427,8 +397,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     .filter((r) => r.status === "REFUND_REQUESTED" || r.status === "REFUNDED")
     .sort((a, b) => Number(a.status !== "REFUND_REQUESTED") - Number(b.status !== "REFUND_REQUESTED"));
   const refundPending = registrations.filter((r) => r.status === "REFUND_REQUESTED").length;
-
-  const openNotify = () => { setNotifyMsg(""); setNotifyOpen(true); };
 
   return (
     <div>
@@ -499,36 +467,15 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           <div className="flex flex-wrap gap-2">
             {activeTab === "setup" && (
               <>
-                {pendingNotify > 0 && (
-                  <Button variant="outline" onClick={openNotify}>
-                    <Bell className="w-4 h-4" /> Notify athletes
-                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black">
-                      {pendingNotify}
-                    </span>
-                  </Button>
-                )}
                 <Button variant="outline" onClick={openManageWaves}>
                   <SlidersHorizontal className="w-4 h-4" /> Manage waves
                 </Button>
               </>
             )}
-            {activeTab === "results" && (
-              <Button
-                onClick={() => { setImportMessage(""); setImportOpen(true); }}
-                className="shadow-machined"
-              >
-                <Upload className="w-4 h-4" /> Import results
-              </Button>
-            )}
-            <ExportMenu eventId={id} />
+            {/* Import results and Export are off the After race tab until #565. */}
+            {activeTab === "setup" && <ExportMenu eventId={id} />}
           </div>
         </div>
-
-        {activeTab === "results" && importMessage && (
-          <p className="flex items-center gap-2 text-[13px] text-primary mb-4">
-            <CheckCircle2 className="w-4 h-4" /> {importMessage}
-          </p>
-        )}
 
         {activeTab === "setup" && assignMsg && !manageOpen && (
           <p className="text-[13px] text-muted-light mb-4">{assignMsg}</p>
@@ -827,63 +774,6 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
             <Button onClick={saveResult} disabled={savingResult}>
               {savingResult ? "Saving…" : "Save result"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {importOpen && (
-        <ResultsImportDialog
-          eventId={id}
-          registrations={registrations}
-          onClose={() => setImportOpen(false)}
-          onImported={(count) => {
-            setImportOpen(false);
-            setImportMessage(`Updated ${count} result${count === 1 ? "" : "s"}.`);
-            load({ silent: true });
-          }}
-        />
-      )}
-
-      {/* Notify athletes of wave */}
-      <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Let athletes know their wave</DialogTitle>
-            <DialogDescription>
-              Sends each athlete their wave and start time, by app notification and email. Only people whose
-              wave changed since you last told them are messaged, so no one gets spammed by small edits.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {pendingNotify > 0 ? (
-              <p className="flex items-center gap-2 text-[13px] text-light bg-primary/10 border border-primary/20 rounded-lg px-3 py-2.5">
-                <Bell className="w-4 h-4 text-primary shrink-0" />
-                <span>
-                  <strong className="font-semibold text-primary">{pendingNotify} athlete{pendingNotify === 1 ? "" : "s"}</strong>{" "}
-                  {pendingNotify === 1 ? "has" : "have"} a new or changed wave and will be notified.
-                </span>
-              </p>
-            ) : (
-              <p className="flex items-center gap-2 text-[13px] text-muted-light bg-dark border border-dark-lighter rounded-lg px-3 py-2.5">
-                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                Everyone is up to date. There&apos;s nothing new to send right now.
-              </p>
-            )}
-            {notifyMsg && <p className="text-[13px] text-muted-light">{notifyMsg}</p>}
-          </div>
-          <DialogFooter>
-            {pendingNotify === 0 ? (
-              <Button onClick={() => setNotifyOpen(false)}>Done</Button>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => setNotifyOpen(false)}>Cancel</Button>
-                <Button onClick={runNotifyWaves} disabled={notifySaving} className="shadow-machined">
-                  {notifySaving
-                    ? "Sending…"
-                    : `Notify ${pendingNotify} athlete${pendingNotify === 1 ? "" : "s"}`}
-                </Button>
-              </>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
