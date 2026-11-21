@@ -7,7 +7,6 @@ export interface Registration {
   category: string | null;
   waveId: string | null;
   wave: string | null;
-  waveNotified: string | null;
   bibNumber: string | null;
   gender: string | null;
   dateOfBirth: string | null;

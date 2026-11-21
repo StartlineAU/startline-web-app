@@ -11,7 +11,6 @@ import {
   buildEventRejectedEmail,
   buildEventSubmittedForReviewEmail,
   buildReviewReportedEmail,
-  buildWaveUpdateEmail,
   buildFollowedOrganiserEventEmail,
   buildEventChangedEmail,
   buildEventEditPendingReviewEmail,
@@ -134,7 +133,6 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
     { reviewTitle: "Great", reviewBody: "Loved it", reviewerName: "Harper", organiserName: "Apex", reason: "Spam", reportCount: 1 },
     opts,
   )],
-  ["wave", () => buildWaveUpdateEmail("harper@example.com", { athleteName: "Harper Jones", eventTitle: "Harbour 10K", eventId: "evt-1", waveLabel: "Elite", waveTime: "06:30", eventDate: "2027-03-21" }, opts)],
   ["followed", () => buildFollowedOrganiserEventEmail("harper@example.com", { followerName: "Harper", organiserName: "Apex", eventTitle: "Harbour 10K", eventId: "evt-1", eventDate: "2027-03-21", city: "Sydney" }, opts)],
   ["changed", () => buildEventChangedEmail(
     { athleteName: "Harper", eventId: "evt-1", eventTitle: "Harbour 10K", organiserName: "Apex", changes: [{ label: "Start date", from: "14 Mar", to: "21 Mar" }] },
@@ -176,11 +174,6 @@ describe("escaping", () => {
   });
 
   it("formats dates on athlete and admin emails", async () => {
-    const wave = await buildWaveUpdateEmail("h@x.test", { eventTitle: "Harbour 10K", eventId: "e", waveLabel: "Elite", waveTime: "06:30", eventDate: "2027-03-21" }, opts);
-    expect(wave.html).toContain("Sun, 21 Mar 2027");
-    expect(wave.html).toContain("6:30 AM");
-    expect(wave.html).toContain("Hi,");
-
     const submitted = await buildEventSubmittedForReviewEmail(
       { eventId: "e", eventTitle: "T", organiserName: "O", eventDate: "2027-03-21", city: "Sydney", state: "nsw" },
       opts,

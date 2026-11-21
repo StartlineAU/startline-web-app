@@ -278,7 +278,8 @@ test.describe("race management", () => {
     await expect(dialog.getByText(/must look like/i)).toBeVisible();
   });
 
-  test("results import preview reports unmatched athletes and unreadable times", async ({ page }) => {
+  // Import results is off the After race tab until #565 brings it back.
+  test.fixme("results import preview reports unmatched athletes and unreadable times", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
@@ -419,7 +420,8 @@ test.describe("race management", () => {
     await expect(updated.getByText(/1st \/ 12/)).toBeVisible();
   });
 
-  test("imports results pasted from a spreadsheet", async ({ page }) => {
+  // Import results is off the After race tab until #565 brings it back.
+  test.fixme("imports results pasted from a spreadsheet", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
@@ -549,8 +551,8 @@ test.describe("athlete public profile race history", () => {
     await page.goto(MANAGE);
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /after race/i }).click();
-    // The results tab's own CTA proves the tab actually switched.
-    await expect(page.getByRole("button", { name: /import results/i })).toBeVisible();
+    // The results tab's own row actions prove the tab actually switched.
+    await expect(page.getByRole("button", { name: /add result|edit result/i }).first()).toBeVisible();
 
     // Jade is seeded onto this event's results board (profile-linked athlete).
     await page.getByPlaceholder(/search any wave by name, email, or bib/i).fill("jade.nguyen");
