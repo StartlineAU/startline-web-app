@@ -152,7 +152,6 @@ export async function POST(
         first: assignments[0]?.bibNumber ?? null,
         last: assignments.at(-1)?.bibNumber ?? null,
         skippedNoWave,
-        assignments: dryRun ? [] : assignments,
       };
     }, { timeout: 30_000 });
 
