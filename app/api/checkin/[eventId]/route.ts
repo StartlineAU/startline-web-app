@@ -19,6 +19,7 @@ const EVENT_SELECT = {
   timeZone: true,
   startsAtUtc: true,
   endsAtUtc: true,
+  checkInOpensAt: true,
   state: true,
   venue: true,
   city: true,
@@ -51,6 +52,7 @@ type CheckInEvent = {
   timeZone: string;
   startsAtUtc: Date | null;
   endsAtUtc: Date | null;
+  checkInOpensAt: Date | null;
   state: string;
   venue: string;
   city: string;
@@ -68,6 +70,7 @@ function checkInPayload(event: CheckInEvent) {
     status: event.status,
     startsAtUtc: event.startsAtUtc,
     endsAtUtc: event.endsAtUtc,
+    checkInOpensAt: event.checkInOpensAt,
   });
 
   return {

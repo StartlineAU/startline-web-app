@@ -56,6 +56,7 @@ export async function GET() {
           timeZone: true,
           startsAtUtc: true,
           endsAtUtc: true,
+          checkInOpensAt: true,
           status: true,
           city: true,
           state: true,
@@ -85,6 +86,7 @@ export async function GET() {
         status: r.event.status,
         startsAtUtc: r.event.startsAtUtc,
         endsAtUtc: r.event.endsAtUtc,
+        checkInOpensAt: r.event.checkInOpensAt,
       });
       return {
         id: r.id,

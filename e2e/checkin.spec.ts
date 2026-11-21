@@ -45,7 +45,8 @@ async function getCheckinUrl(page: Page): Promise<string> {
 async function setWindow(startsAtUtc: Date, endsAtUtc: Date) {
   await prisma.event.update({
     where: { id: EVENT_ID },
-    data: { startsAtUtc, endsAtUtc },
+    // Clearing the organiser's opening keeps each test on the default window.
+    data: { startsAtUtc, endsAtUtc, checkInOpensAt: null },
   });
 }
 
@@ -225,6 +226,81 @@ test("check-in is blocked before it opens", async ({ page }) => {
   } finally {
     await restoreWindow();
   }
+});
+
+test("organiser opens check-in early and the athlete can check in (#543)", async ({ page }) => {
+  const url = await getCheckinUrl(page);
+  const laterStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const laterEnd = new Date(laterStart.getTime() + 3 * 60 * 60 * 1000);
+
+  try {
+    await setWindow(laterStart, laterEnd);
+
+    // The dashboard offers the choice and starts on the default.
+    await page.goto(`/organiser/events/${EVENT_ID}/dashboard`);
+    const menu = page.getByRole("combobox", { name: "When check-in opens" });
+    await expect(menu).toContainText("1 hour before start (default)");
+    await expect(page.getByText(/Athletes can check in from/)).toBeVisible();
+
+    await menu.click();
+    await page.getByRole("option", { name: "Now" }).click();
+    await expect(page.getByText(/Athletes can check in now/)).toBeVisible();
+
+    // The choice is stored, so it survives a reload.
+    await page.reload();
+    await expect(page.getByRole("combobox", { name: "When check-in opens" })).toContainText("Now");
+
+    await page.context().clearCookies();
+    await setBypass(page, "member");
+    await page.goto(url);
+    await page.getByRole("button", { name: "Check In" }).click();
+    await expect(page.getByText("You're checked in")).toBeVisible();
+  } finally {
+    await restoreWindow();
+  }
+});
+
+test("putting check-in back to the default closes the early window", async ({ page }) => {
+  const laterStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const laterEnd = new Date(laterStart.getTime() + 3 * 60 * 60 * 1000);
+
+  try {
+    await setWindow(laterStart, laterEnd);
+    await organiserLogin(page);
+
+    const opened = await page.request.patch(`/api/organiser/events/${EVENT_ID}/check-in`, {
+      data: { open: 7 * 24 * 60 },
+    });
+    expect(opened.status()).toBe(200);
+    expect((await opened.json()).checkIn).toMatchObject({ state: "open", custom: true });
+
+    const reset = await page.request.patch(`/api/organiser/events/${EVENT_ID}/check-in`, {
+      data: { open: 60 },
+    });
+    expect(reset.status()).toBe(200);
+    expect((await reset.json()).checkIn).toMatchObject({ state: "before", custom: false });
+  } finally {
+    await restoreWindow();
+  }
+});
+
+test("only the event's own organisation can change when check-in opens", async ({ page }) => {
+  await setBypass(page, "user"); // Jade Nguyen, Coastal Fitness Collective
+  const res = await page.request.patch(`/api/organiser/events/${EVENT_ID}/check-in`, {
+    data: { open: "now" },
+  });
+  expect(res.status()).toBe(403);
+
+  const event = await prisma.event.findUnique({ where: { id: EVENT_ID }, select: { checkInOpensAt: true } });
+  expect(event?.checkInOpensAt).toBeNull();
+});
+
+test("an unsupported lead time is refused", async ({ page }) => {
+  await organiserLogin(page);
+  const res = await page.request.patch(`/api/organiser/events/${EVENT_ID}/check-in`, {
+    data: { open: 5 },
+  });
+  expect(res.status()).toBe(400);
 });
 
 test("check-in is closed after the event ends", async ({ page }) => {

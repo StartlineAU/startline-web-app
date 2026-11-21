@@ -24,7 +24,7 @@ export async function GET(
     select: {
       title: true, eventDate: true, endDate: true,
       startTime: true, endTime: true, timeZone: true,
-      startsAtUtc: true, endsAtUtc: true, status: true,
+      startsAtUtc: true, endsAtUtc: true, checkInOpensAt: true, status: true,
       venue: true, city: true, state: true,
     },
   });
@@ -69,6 +69,7 @@ export async function GET(
     status: event.status,
     startsAtUtc: event.startsAtUtc,
     endsAtUtc: event.endsAtUtc,
+    checkInOpensAt: event.checkInOpensAt,
   });
 
   return NextResponse.json({
