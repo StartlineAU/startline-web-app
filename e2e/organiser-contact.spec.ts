@@ -153,16 +153,36 @@ test("an owner chooses in Settings which contact details athletes see", async ({
 
 test("the listing editor sets this event's contact details, then hands them back to the organisation", async ({ page }) => {
   test.slow();
-  // Apex is verified, so saving its live listing applies at once rather than
-  // waiting for review.
-  const apex = await prisma.event.findFirstOrThrow({
-    where: { organiser: { orgName: "Apex Endurance Events" }, status: "APPROVED", registrations: { none: {} } },
-    select: { id: true, showContactPhone: true },
+  await signInAs(page, "organiser");
+
+  // A live event of its own. Borrowing a seeded Apex event raced the other
+  // specs that edit Apex's events in parallel: the one picked could be moved
+  // to draft or past its date mid-test, so Save changes never appeared or the
+  // save was refused. Apex is verified and the event is free, so the save
+  // applies at once rather than waiting for review.
+  const created = await page.request.post("/api/organiser/events", {
+    data: {
+      title: `E2E Contact Override ${Date.now()}`,
+      discipline: "Running",
+      eventDate: "2027-06-14",
+      startTime: "07:00",
+      endTime: "10:00",
+      venue: "Albert Park",
+      address: "Aughtie Dr, Albert Park VIC 3206",
+      city: "Melbourne",
+      state: "VIC",
+      format: "Individual",
+      level: "All levels",
+      registrationType: "startline",
+      waves: [{ label: "General", price: "0", closes: "", startTime: "" }],
+      submit: true,
+    },
   });
-  await prisma.event.update({ where: { id: apex.id }, data: { showContactPhone: null } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const apex = { id: (await created.json()).id as string };
+  expect((await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).status).toBe("APPROVED");
 
   try {
-    await signInAs(page, "organiser");
     await page.goto(`/organiser/new-listing?id=${apex.id}`);
 
     const editor = page.getByTestId("contact-editor");
@@ -177,6 +197,6 @@ test("the listing editor sets this event's contact details, then hands them back
       .poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).showContactPhone, { timeout: 20000 })
       .not.toBeNull();
   } finally {
-    await prisma.event.update({ where: { id: apex.id }, data: { showContactPhone: apex.showContactPhone } });
+    await prisma.event.deleteMany({ where: { id: apex.id } });
   }
 });
