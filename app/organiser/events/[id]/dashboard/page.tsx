@@ -350,8 +350,10 @@ function EventDashboardInner({
             <span className="text-primary">Dashboard</span>
           </div>
 
-          {/* Event header: identity on the left, the two actions on the right */}
-          <div className="flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-6 mb-6">
+          {/* Event header: identity across the full width, actions on their own
+              row beneath it, so a long title never fights the buttons for space. */}
+          <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
             {event.coverImageUrl && (
               <div className="relative w-full sm:w-40 h-28 rounded-xl overflow-hidden shrink-0">
                 <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover brightness-[.62] saturate-110" sizes="(max-width: 640px) 100vw, 160px" />
@@ -368,7 +370,10 @@ function EventDashboardInner({
                   {event.discipline.replace(/_/g, " ")}
                 </span>
               </div>
-              <h1 className="font-headline text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-none text-white mb-3">
+              <h1
+                title={event.title}
+                className="font-headline text-[28px] sm:text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-[1.05] text-white mb-3 break-words line-clamp-2"
+              >
                 {event.title}
               </h1>
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted">
@@ -382,7 +387,8 @@ function EventDashboardInner({
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row shrink-0">
+          </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center mt-5">
               {managePanel ? (
                 <Button variant="outline" type="button" className="col-span-2" onClick={() => setManagePanel(false)}>
                   <ArrowLeft className="w-4 h-4" /> Back to overview
