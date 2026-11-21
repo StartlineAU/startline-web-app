@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import prisma from "@/lib/prisma";
 import {
   applicationFeeCents,
@@ -9,15 +10,37 @@ import { getUserSession } from "@/lib/amplify-server";
 import {
   validateParticipants,
   athleteNameFromParticipant,
+  MAX_REGISTRATION_PARTICIPANTS,
   applySharedEmergencyContact,
+  MAX_MEDICAL_NOTES_LENGTH,
+  compactParticipant,
+  createEmptyParticipant,
+  type CompactParticipant,
   type RegistrationFormData,
   type EmergencyContact,
 } from "@/lib/registration-form";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
+import {
+  confirmedUnitsByWave,
+  groupOrderTeams,
+  requestedUnitsByWave,
+  MAX_TEAM_NAME_LENGTH,
+  type OrderTeam,
+} from "@/lib/team-tickets";
+import { findTakenTeamNames } from "@/lib/team-entries";
 import { todayIso } from "@/lib/event-types";
-import { registrationOpenAt } from "@/lib/event-lifecycle";
+import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 
-export type CheckoutParticipant = RegistrationFormData & { waveLabel?: string };
+export type CheckoutParticipant = RegistrationFormData & {
+  waveLabel?: string;
+  /** Index into the order's `teams`, for a member of a team ticket. */
+  team?: number;
+  /**
+   * A team member whose details the buyer will add later. The resolved order
+   * carries a placeholder for them: blank details and the buyer's email.
+   */
+  detailsLater?: boolean;
+};
 
 export type CheckoutWave = {
   label: string;
@@ -25,41 +48,65 @@ export type CheckoutWave = {
   qty?: number;
   closes?: string;
   date?: string;
+  /** Set on a team ticket: members per team. `price` stays per person. */
+  teamSize?: number;
 };
 
+// Every field is bounded. The client caps the order at
+// MAX_REGISTRATION_PARTICIPANTS, but only the server's limit counts: each
+// participant can mean a Cognito lookup, an account and a row.
+const NAME_MAX = 100;
+const EMAIL_MAX = 254;
+const PHONE_MAX = 32;
+const SHORT_MAX = 40;
+
 const participantSchema = z.object({
-  firstName: z.string(),
-  lastName: z.string(),
-  dateOfBirth: z.string(),
-  gender: z.string(),
-  email: z.string(),
-  mobile: z.string(),
-  emergencyContactName: z.string(),
-  emergencyContactPhone: z.string(),
-  medicalNotes: z.string(),
-  estimatedFinish: z.string(),
+  firstName: z.string().max(NAME_MAX),
+  lastName: z.string().max(NAME_MAX),
+  dateOfBirth: z.string().max(SHORT_MAX),
+  gender: z.string().max(SHORT_MAX),
+  email: z.string().max(EMAIL_MAX),
+  mobile: z.string().max(PHONE_MAX),
+  emergencyContactName: z.string().max(NAME_MAX),
+  emergencyContactPhone: z.string().max(PHONE_MAX),
+  medicalNotes: z.string().max(MAX_MEDICAL_NOTES_LENGTH),
+  estimatedFinish: z.string().max(SHORT_MAX),
   waiverAccepted: z.boolean(),
   waveLabel: z.string().max(255).optional(),
+  team: z.number().int().min(0).max(MAX_REGISTRATION_PARTICIPANTS).optional(),
+  detailsLater: z.boolean().optional(),
 });
 
 export const checkoutSchema = z.object({
   eventId: z.string().max(255).optional(),
   waveLabel: z.string().max(255).optional(),
   groupRegistration: z.boolean().optional(),
-  emergencyContact: z.object({ name: z.string(), phone: z.string() }).optional(),
+  emergencyContact: z.object({ name: z.string().max(NAME_MAX), phone: z.string().max(PHONE_MAX) }).optional(),
   turnstileToken: z.string().max(4000).optional(),
-  participants: z.array(participantSchema).optional(),
+  participants: z
+    .array(participantSchema)
+    .max(MAX_REGISTRATION_PARTICIPANTS, `An order can hold at most ${MAX_REGISTRATION_PARTICIPANTS} tickets.`)
+    .optional(),
+  // Team tickets: one entry per team in the order, referenced by each
+  // member's `team` index.
+  teams: z
+    .array(z.object({ name: z.string().max(MAX_TEAM_NAME_LENGTH * 2) }))
+    .max(MAX_REGISTRATION_PARTICIPANTS)
+    .optional(),
+  // The athlete ticked the terms and waiver on the review step. Required by the
+  // free path, which commits; checkout records it on the PaymentIntent instead.
+  acceptedTerms: z.boolean().optional(),
   // Legacy single-participant payload fields (pre multi-ticket).
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  dateOfBirth: z.string().optional(),
-  gender: z.string().optional(),
-  email: z.string().optional(),
-  mobile: z.string().optional(),
-  emergencyContactName: z.string().optional(),
-  emergencyContactPhone: z.string().optional(),
-  medicalNotes: z.string().optional(),
-  estimatedFinish: z.string().optional(),
+  firstName: z.string().max(NAME_MAX).optional(),
+  lastName: z.string().max(NAME_MAX).optional(),
+  dateOfBirth: z.string().max(SHORT_MAX).optional(),
+  gender: z.string().max(SHORT_MAX).optional(),
+  email: z.string().max(EMAIL_MAX).optional(),
+  mobile: z.string().max(PHONE_MAX).optional(),
+  emergencyContactName: z.string().max(NAME_MAX).optional(),
+  emergencyContactPhone: z.string().max(PHONE_MAX).optional(),
+  medicalNotes: z.string().max(MAX_MEDICAL_NOTES_LENGTH).optional(),
+  estimatedFinish: z.string().max(SHORT_MAX).optional(),
   waiverAccepted: z.boolean().optional(),
 });
 
@@ -95,6 +142,8 @@ export interface ResolvedOrder {
   participants: CheckoutParticipant[];
   /** Ticket tier per participant, aligned by index. */
   waveLabels: string[];
+  /** Teams in the order, each with the indexes of its members. */
+  teams: OrderTeam[];
   /** Per-tier price (p) and platform fee (f), both in cents. */
   wavePricing: Record<string, { p: number; f: number }>;
   /**
@@ -177,7 +226,10 @@ export async function resolveCheckoutOrder(
     ? normalizeSharedEmergencyContact(body)
     : undefined;
 
-  const { firstMessage } = validateParticipants(participants, {
+  // A member left for later has no details to check; everyone else does.
+  const named = participants.filter((p) => !p.detailsLater);
+  if (named.length === 0) return { error: "Enter your own details to register.", status: 400 };
+  const { firstMessage } = validateParticipants(named, {
     groupRegistration,
     sharedEmergencyContact,
     // Waiver/terms acceptance is gated client-side by the terms checkbox on the
@@ -195,7 +247,8 @@ export async function resolveCheckoutOrder(
   }
 
   const event = await prisma.event.findUnique({
-    where: { id: eventId },
+    // A suspended organisation takes no new entries.
+    where: { id: eventId, ...ACTIVE_ORGANISER_WHERE },
     select: {
       id: true, title: true, status: true, feeStructure: true, registrationType: true,
       waves: true, cap: true, eventDate: true, startTime: true,
@@ -243,6 +296,20 @@ export async function resolveCheckoutOrder(
     wavePricing[label] = { p: priceCents, f: pricing.platformFeeCents };
   }
 
+  // Team tickets: every member names a team of exactly the tier's size.
+  const grouped = groupOrderTeams(
+    participants.map((p, i) => ({ waveLabel: waveLabels[i], team: p.team, pending: p.detailsLater === true })),
+    waves,
+    (body.teams ?? []).map((t) => t.name),
+  );
+  if ("error" in grouped) return { error: grouped.error, status: 400 };
+  const { teams } = grouped;
+  if (teams.length > 0) {
+    const taken = await findTakenTeamNames(event.id, teams.map((t) => t.name));
+    if (taken) return { error: `A team called "${taken}" is already entered in this event.`, status: 409 };
+  }
+
+  // Each member is charged the per-person price, so a team costs price x size.
   let totalCents = 0;
   let platformFeeCents = 0;
   for (const label of waveLabels) {
@@ -257,7 +324,7 @@ export async function resolveCheckoutOrder(
   // Only an order that actually charges needs somewhere to send the money. A
   // free event is registerable whether or not its organiser has connected
   // Stripe, so this gate sits after pricing rather than before it.
-  const isDirectCharge = process.env.STRIPE_DEV_DIRECT_CHARGE === "true";
+  const isDirectCharge = isDevDirectCharge();
   if (totalCents > 0 && !isDirectCharge) {
     if (!event.organiser.stripeOnboardingComplete || !event.organiser.stripeAccountId) {
       return { error: "This event is not ready to accept payments.", status: 409 };
@@ -267,10 +334,11 @@ export async function resolveCheckoutOrder(
   // Capacity guard — never sell past the event cap or a tier's quantity. The
   // authoritative check runs again, atomically, when the registrations are
   // written; this one just fails fast with a useful message.
-  const requestedByWave = waveLabels.reduce<Record<string, number>>((acc, label) => {
-    acc[label] = (acc[label] ?? 0) + 1;
-    return acc;
-  }, {});
+  // Tier quantities count tickets, or teams for a team tier; the event cap
+  // counts people.
+  const requestedByWave = requestedUnitsByWave(
+    participants.map((p, i) => ({ waveLabel: waveLabels[i], team: p.team })),
+  );
   const needsCapCheck = event.cap != null;
   const needsWaveCheck = hasCappedWave(waves, usedLabels);
   if (needsCapCheck || needsWaveCheck) {
@@ -278,17 +346,14 @@ export async function resolveCheckoutOrder(
     const confirmedTotal = needsCapCheck
       ? await prisma.registration.count({ where: confirmedWhere })
       : 0;
-    const confirmedByWave: Record<string, number> = {};
-    if (needsWaveCheck) {
-      const grouped = await prisma.registration.groupBy({
-        by: ["waveLabel"],
-        where: confirmedWhere,
-        _count: { _all: true },
-      });
-      for (const row of grouped) {
-        if (row.waveLabel) confirmedByWave[row.waveLabel] = row._count._all;
-      }
-    }
+    const confirmedRows = needsWaveCheck
+      ? await prisma.registration.groupBy({
+          by: ["waveLabel", "teamId"],
+          where: confirmedWhere,
+          _count: { _all: true },
+        })
+      : [];
+    const confirmedByWave = confirmedUnitsByWave(confirmedRows);
     const capacityError = getCapacityError({
       cap: event.cap,
       confirmedTotal,
@@ -303,18 +368,32 @@ export async function resolveCheckoutOrder(
 
   const userSession = await getUserSession();
 
-  const resolvedParticipants =
+  const withContact =
     groupRegistration && sharedEmergencyContact
       ? applySharedEmergencyContact(participants, sharedEmergencyContact)
       : participants;
 
-  const primary = resolvedParticipants[0];
+  // The first participant is always named: an individual ticket, or the
+  // first member of a team, neither of which can be left for later.
+  const primary = withContact[0];
+  const buyerEmail = primary.email.trim().toLowerCase();
+
+  // A member left for later becomes a placeholder: no details of their own,
+  // and the buyer's email, so the place sits with the buyer (and shows in
+  // their Activity) until someone adds the member's details.
+  const resolvedParticipants: CheckoutParticipant[] = withContact.map((p, i) => {
+    const { waveLabel: label, team, detailsLater } = participants[i];
+    return detailsLater
+      ? { ...createEmptyParticipant(), email: buyerEmail, waiverAccepted: true, waveLabel: label, team, detailsLater: true }
+      : { ...p, waveLabel: label, team };
+  });
 
   return {
     event,
     waves,
     participants: resolvedParticipants,
     waveLabels,
+    teams,
     wavePricing,
     totalCents,
     platformFeeCents,
@@ -323,6 +402,18 @@ export async function resolveCheckoutOrder(
     groupRegistration,
     userSession: userSession ? { sub: userSession.sub, email: userSession.email } : null,
     athleteName: athleteNameFromParticipant(primary),
-    athleteEmail: primary.email.trim().toLowerCase(),
+    athleteEmail: buyerEmail,
+  };
+}
+
+/**
+ * A resolved participant in the compact form the confirm step reads: as
+ * stored in PaymentIntent metadata, or handed straight over on the free path.
+ * A member left for later carries `pnd` so the entry is written as pending.
+ */
+export function compactOrderParticipant(participant: CheckoutParticipant): CompactParticipant {
+  return {
+    ...compactParticipant(participant),
+    ...(participant.detailsLater ? { pnd: 1 as const } : {}),
   };
 }

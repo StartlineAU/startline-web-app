@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/amplify-server", () => ({ getUserSession: mocks.session }));
 vi.mock("@/lib/prisma", () => ({
   default: {
-    registration: { findUnique: mocks.findUnique, update: mocks.update },
+    registration: { findUnique: mocks.findUnique, updateMany: mocks.update },
     organiserMember: { findMany: mocks.members },
     userNotification: { createMany: mocks.createMany },
   },
@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.session.mockResolvedValue({ sub: "user-1", email: "harper.jones@startline.test" });
-  mocks.update.mockResolvedValue({});
+  mocks.update.mockResolvedValue({ count: 1 });
   mocks.members.mockResolvedValue([{ userId: "owner-1" }]);
   mocks.createMany.mockResolvedValue({ count: 1 });
 });
@@ -83,6 +83,18 @@ describe("a paid entry cannot be refunded from the entry itself", () => {
 
     expect(body).toMatchObject({ status: "REFUND_REQUESTED", refundPercent: 0, refundAmountCents: 0 });
     expect(mocks.update.mock.calls[0][0].data).toMatchObject({ status: "REFUND_REQUESTED" });
+  });
+
+  it("writes only while the entry is still CONFIRMED, and says so when it is not", async () => {
+    mocks.findUnique.mockResolvedValue(registration({ amountCents: 0, platformFeeCents: 0 }));
+    // An admin refund landed between the read and the write.
+    mocks.update.mockResolvedValue({ count: 0 });
+
+    const res = await request();
+
+    expect(res.status).toBe(409);
+    expect(mocks.update.mock.calls[0][0].where).toEqual({ id: "reg-1", status: "CONFIRMED" });
+    expect(mocks.createMany).not.toHaveBeenCalled();
   });
 
   it("does not cancel an entry for an event that already ran", async () => {

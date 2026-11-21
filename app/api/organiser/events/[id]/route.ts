@@ -7,6 +7,7 @@ import { getEventCoords } from "@/lib/australia-coords";
 import { notifyAdminsEventSubmitted } from "@/lib/notify-admins-event-submitted";
 import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { checkTeamTierChange } from "@/lib/team-entries";
 import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { eventTimeData } from "@/lib/event-time";
@@ -15,6 +16,7 @@ import { tidyLocationText } from "@/lib/event-location";
 import { checkEventLocation } from "@/lib/event-location-verify";
 import { effectiveEventStatus, type PersistedEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
 import { takesPayments } from "@/lib/event-approval";
 import {
   isLiveEventStatus, organiserCanEditEvent, organiserEditBlockedMessage,
@@ -28,6 +30,7 @@ import { notifyAdminsEventEditPending } from "@/lib/notify-event-revision";
 import {
   definedPayload, pendingRevision, publishedEditNeedsReview, queueEventRevision,
 } from "@/lib/event-revision";
+import { withTicketFormat } from "@/lib/team-tickets";
 
 export async function GET(
   _req: NextRequest,
@@ -101,7 +104,8 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const body = parsedBody.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsedBody.data);
   const { submit, ...data } = body;
 
   try {
@@ -123,6 +127,10 @@ export async function PATCH(
         { error: organiserEditBlockedMessage(currentStatus) },
         { status: 409 },
       );
+
+    // A ticket's team size is fixed once it has entries.
+    const teamTierError = await checkTeamTierChange(id, existing, { waves: data.waves, format: data.format });
+    if (teamTierError) return NextResponse.json({ error: teamTierError }, { status: 409 });
 
     // Judge required fields on the event as it will be once written. A partial
     // payload (the event page's "Submit for review" sends only `submit`) keeps
@@ -214,6 +222,10 @@ export async function PATCH(
       coverImageUrl:     data.coverImageUrl     ?? undefined,
       informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
       photos:            Array.isArray(data.photos) ? data.photos : undefined,
+      // Undefined leaves the choice alone; null hands it back to the organisation.
+      showContactName:   data.showContactName,
+      showContactEmail:  data.showContactEmail,
+      showContactPhone:  data.showContactPhone,
     };
 
     // ── Change log and the material-change handshake ──────────────────────
@@ -362,6 +374,9 @@ export async function DELETE(
 
     if (!existing) return NextResponse.json({ error: "Not found." }, { status: 404 });
     if (existing.organiserId !== session.sub) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    if ((await eventIdsWithEntries([id])).has(id)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
 
     await prisma.event.delete({ where: { id } });
     await cancelEventSchedules(id).catch((err) =>
@@ -369,6 +384,9 @@ export async function DELETE(
     );
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
     console.error("Event delete error:", err);
     return NextResponse.json({ error: "Failed to delete event." }, { status: 500 });
   }

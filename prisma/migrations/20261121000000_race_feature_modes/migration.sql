@@ -10,8 +10,12 @@ ALTER TABLE "events"
 UPDATE "events" e SET "waveMode" = 'SHARED'
 WHERE EXISTS (SELECT 1 FROM "start_waves" w WHERE w."eventId" = e."id");
 
+-- A team entry's bib lives on the team, so count those too.
 UPDATE "events" e SET "bibMode" = 'SHARED'
 WHERE EXISTS (
   SELECT 1 FROM "registrations" r
   WHERE r."eventId" = e."id" AND r."bibNumber" IS NOT NULL AND btrim(r."bibNumber") <> ''
+) OR EXISTS (
+  SELECT 1 FROM "teams" t
+  WHERE t."eventId" = e."id" AND t."bibNumber" IS NOT NULL AND btrim(t."bibNumber") <> ''
 );

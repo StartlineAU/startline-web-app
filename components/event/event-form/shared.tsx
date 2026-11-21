@@ -5,6 +5,8 @@ import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
 import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
+import { NO_CONTACT_OVERRIDE, type ContactOverride } from "@/lib/organiser-contact";
+import { teamSizeOf } from "@/lib/team-tickets";
 import { firstLocationError } from "@/lib/event-location";
 
 /**
@@ -54,6 +56,11 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   check("Description", "description", stripHtml(form.description).length > 0, "Write the event description");
   check("Tickets & prices", "tickets", form.waves.length > 0 && form.waves.every(waveIsComplete),
     "Every ticket category needs a name and a price");
+  // A team ticket needs a size; the format then follows from the tickets.
+  if (form.waves.some((w) => w.teamSize !== "")) {
+    check("Team tickets", "tickets", form.waves.every((w) => w.teamSize === "" || waveTeamSize(w) !== null),
+      "Give every team ticket 2 to 10 people per team");
+  }
   if (form.registrationType !== "startline") {
     check("Registration link", "registration", !!form.registrationUrl.trim(), "Add your registration link");
   }
@@ -64,7 +71,6 @@ export function requirementChecks(form: FormState): RequirementCheck[] {
   const locationError = firstLocationError(form, { required: true });
   check("Venue address", "location", !locationError,
     locationError ?? "Add the street address, city and state");
-  check("Format", "format", !!form.format, "Choose a format");
   if (DISCIPLINE_CATS[form.discipline as Discipline]) {
     check("Divisions", "divisions", form.categories.length > 0, "Choose at least one division");
   }
@@ -91,9 +97,21 @@ export type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "
  * organiser sets it and athletes never see it: checkout stops selling at it and
  * the register page shows the tier as sold out (#528).
  */
-export interface Wave { label: string; price: string; closes: string; startTime: string; qty: string; }
+export interface Wave {
+  label: string; price: string; closes: string; startTime: string; qty: string;
+  /**
+   * People per team ("" for an individual ticket). On a team ticket `price` is
+   * per person, so a team pays price x size, and `qty` counts teams (#541).
+   */
+  teamSize: string;
+}
 
-export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "" };
+export const EMPTY_WAVE: Wave = { label: "", price: "", closes: "", startTime: "", qty: "", teamSize: "" };
+
+/** A ticket category's team size, or null for an individual ticket. */
+export function waveTeamSize(w: Pick<Wave, "teamSize">): number | null {
+  return teamSizeOf({ teamSize: w.teamSize === "" ? undefined : Number(w.teamSize) });
+}
 
 /** A ticket category's quantity as a number, or null when it has no limit. */
 export function waveQty(w: Pick<Wave, "qty">): number | null {
@@ -110,7 +128,8 @@ export function waveQty(w: Pick<Wave, "qty">): number | null {
 export function eventCap(form: Pick<FormState, "waves" | "cap">): number | null {
   const quantities = form.waves.map(waveQty);
   if (quantities.length > 0 && quantities.every((q): q is number => q !== null)) {
-    return quantities.reduce((sum, q) => sum + q, 0);
+    // The cap counts people; a team ticket's quantity counts teams.
+    return form.waves.reduce((sum, w, i) => sum + (quantities[i] as number) * (waveTeamSize(w) ?? 1), 0);
   }
   const legacy = parseInt(form.cap, 10);
   return Number.isFinite(legacy) && legacy > 0 ? legacy : null;
@@ -156,6 +175,8 @@ export interface FormState {
   informationPdfs: InfoPdf[];
   photos: File[];
   photoUrls: string[];
+  /** This event's choice of organiser contact details; null follows the organisation. */
+  contactShow: ContactOverride;
 }
 
 export const INITIAL: FormState = {
@@ -170,6 +191,7 @@ export const INITIAL: FormState = {
   coverImage: null, coverImageUrl: "",
   informationPdfs: [],
   photos: [], photoUrls: [],
+  contactShow: NO_CONTACT_OVERRIDE,
 };
 
 /* ── Shared field primitive ─────────────────────────────────── */

@@ -13,18 +13,22 @@ import { isFreeEvent } from "@/lib/event-types";
 import { takesPayments } from "@/lib/event-approval";
 import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
+import { safeReturnPath } from "@/lib/safe-return-path";
 import {
-  DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty,
+  DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty, waveTeamSize,
   type Discipline, type FormState, type RegionId, type Wave,
 } from "./event-form/shared";
 import { popIn, revealWords, spotlight, staggerIn } from "./event-form/motion";
 import { formToDetailData } from "./event-form/to-detail";
 import { InfoTip } from "./event-form/info-tip";
 import {
-  BannerMeta, CoverControls, CoverMedia, DescriptionEditor, DetailsEditor, DisciplinePill,
+  BannerMeta, ContactEditor, CoverControls, CoverMedia, DescriptionEditor, DetailsEditor, DisciplinePill,
   GalleryEditor, InformationEditor, PrizePoolEditor, RefundCard, RegistrationEditor,
   ReviewsPlaceholder, TicketsEditor, TitleInput, useObjectUrls,
+  type OrganiserContactDefaults,
 } from "./event-form/regions";
+import { overrideFromColumns } from "@/lib/organiser-contact";
+import { formatFromTickets } from "@/lib/team-tickets";
 
 // Shown when an upload or the event save comes back 401. submitToApi refreshes
 // the token first, so landing here means the refresh token itself is gone.
@@ -32,7 +36,8 @@ const SESSION_EXPIRED_MESSAGE =
   "Your session has expired and nothing was saved. Please sign in again, then retry. Keep this tab open so you don't lose your event details.";
 
 /** Rows of the Event Details card, in order. Each opens in place rather than all at once. */
-const DETAIL_ROWS: RegionId[] = ["date", "time", "location", "format", "divisions", "intensity"];
+// Format is not a row to fill in: it follows the tickets (#541).
+const DETAIL_ROWS: RegionId[] = ["date", "time", "location", "divisions", "intensity"];
 const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
   date: "Date", time: "Time", location: "Location", format: "Format",
   divisions: "Divisions", intensity: "Intensity",
@@ -43,7 +48,7 @@ const DETAIL_LABELS: Partial<Record<RegionId, string>> = {
  * are complete before their optional fields (cut-off time, venue name) are
  * reached, so moving on would cut those off.
  */
-const AUTO_ADVANCE = new Set<RegionId>(["date", "format", "intensity"]);
+const AUTO_ADVANCE = new Set<RegionId>(["date", "intensity"]);
 /** A picker or suggestion list still open inside a row: the organiser is mid-choice. */
 const OPEN_PICKER = '[aria-haspopup][aria-expanded="true"], [role="combobox"][aria-expanded="true"]';
 
@@ -63,7 +68,9 @@ interface EditContext {
 function returnPath(): string | null {
   if (typeof window === "undefined") return null;
   const from = new URLSearchParams(window.location.search).get("from");
-  return from && from.startsWith("/") && !from.startsWith("//") ? from : null;
+  if (!from) return null;
+  const safe = safeReturnPath(from, { fallback: "" });
+  return safe || null;
 }
 
 /** `leaveTo` when the leave prompt was opened by the browser's Back button. */
@@ -78,6 +85,7 @@ interface EventPageEditorProps {
   requireOrganiser?: boolean;  // admin create — block submit until an organiser is selected
   headingLabel?: string;       // breadcrumb label, default "Create new listing"
   organiserHasAbn?: boolean;   // false shows a non-blocking "profile incomplete" notice
+  organiserContact?: OrganiserContactDefaults; // the contact region's preview; absent in admin
 }
 
 /**
@@ -100,6 +108,7 @@ export default function EventPageEditor({
   requireOrganiser = false,
   headingLabel = "Create new listing",
   organiserHasAbn = true,
+  organiserContact,
 }: EventPageEditorProps) {
   const router = useRouter();
   const termsHref = customerHref("/terms#organisers", usePortalHost());
@@ -232,9 +241,10 @@ export default function EventPageEditor({
         if (e.editContext?.pendingRevision?.payload) Object.assign(e, e.editContext.pendingRevision.payload);
         originalFields.current = { inclusions: e.inclusions, activations: e.activations, accessibilityInfo: e.accessibilityInfo };
         const waves: Wave[] = Array.isArray(e.waves) && e.waves.length
-          ? e.waves.map((w: { label?: string; price?: string; closes?: string; startTime?: string; qty?: number }) => ({
+          ? e.waves.map((w: { label?: string; price?: string; closes?: string; startTime?: string; qty?: number; teamSize?: number }) => ({
               label: w.label ?? "", price: w.price ?? "", closes: w.closes ?? "", startTime: w.startTime ?? "",
               qty: typeof w.qty === "number" && w.qty > 0 ? String(w.qty) : "",
+              teamSize: typeof w.teamSize === "number" && w.teamSize > 0 ? String(w.teamSize) : "",
             }))
           : [EMPTY_WAVE];
         // An overall cap from before ticket quantities. One ticket category
@@ -278,6 +288,7 @@ export default function EventPageEditor({
             : [],
           photos:            [],
           photoUrls:         Array.isArray(e.photos) ? e.photos.filter((p: unknown): p is string => typeof p === "string") : [],
+          contactShow:       overrideFromColumns(e),
         });
       })
       .catch(() => setLoadError("This event could not be loaded. Check your connection and try again."));
@@ -444,16 +455,19 @@ export default function EventPageEditor({
         state:             form.state,
         latitude:          form.latitude,
         longitude:         form.longitude,
-        format:            form.format,
+        format:            formatFromTickets(form.waves),
         level:             form.level,
         categories:        form.categories,
         // The total of the ticket quantities, which every capacity check reads.
         cap:               eventCap(form),
         // A quantity is only stored when the organiser set one: no `qty` is
         // what checkout already reads as "no limit".
-        waves:             form.waves.map(({ qty, ...w }) => {
+        // Team size is stored as a number on team tickets only; an
+        // individual ticket carries no `teamSize`.
+        waves:             form.waves.map(({ qty, teamSize, ...w }) => {
           const n = waveQty({ qty });
-          return n === null ? w : { ...w, qty: n };
+          const size = waveTeamSize({ teamSize });
+          return { ...w, ...(n === null ? {} : { qty: n }), ...(size === null ? {} : { teamSize: size }) };
         }),
         inclusions:        originalFields.current.inclusions ?? null,
         activations:       originalFields.current.activations ?? null,
@@ -468,6 +482,9 @@ export default function EventPageEditor({
         coverImageUrl:     coverImageUrl ?? form.coverImageUrl ?? null,
         informationPdfs,
         photos:            photoUrls,
+        showContactName:   form.contactShow.name,
+        showContactEmail:  form.contactShow.email,
+        showContactPhone:  form.contactShow.phone,
         ...(!eventId && organiserId ? { organiserId } : {}),
       };
 
@@ -714,6 +731,7 @@ export default function EventPageEditor({
             prizePool:     <PrizePoolEditor form={form} update={update} />,
             pricing:       <TicketsEditor form={form} update={update} missing={missingFor("tickets")} />,
             gallery:       <GalleryEditor form={form} update={update} photoSrcs={photoSrcs} />,
+            contact:       <ContactEditor form={form} update={update} organisation={organiserContact} />,
             reviews:       <ReviewsPlaceholder />,
             actions:       <RegistrationEditor form={form} update={update} missing={missingFor("registration")} />,
             details: (

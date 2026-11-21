@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { teammatesOf } from "@/lib/team-entries";
+import { findTeamResultConflict, pickTeamResult } from "@/lib/team-results";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { isValidRaceTime, normalisePlacement, normaliseRaceTime } from "@/lib/race-results";
@@ -61,11 +63,13 @@ export async function PATCH(
 
   const registrations = await prisma.registration.findMany({
     where: { eventId: id },
-    select: { id: true, athleteEmail: true },
+    select: { id: true, athleteEmail: true, detailsPending: true },
   });
   const byId = new Map(registrations.map((r) => [r.id, r]));
+  // A team place still waiting for its member's details carries the buyer's
+  // email, so it is matched by id only.
   const byEmail = new Map(
-    registrations.map((r) => [r.athleteEmail.toLowerCase(), r])
+    registrations.filter((r) => !r.detailsPending).map((r) => [r.athleteEmail.toLowerCase(), r])
   );
 
   // Divisions match the event's list case-insensitively and take its spelling;
@@ -122,7 +126,32 @@ export async function PATCH(
     updates.push({ id: match.id, data });
   }
 
-  if (updates.length > 0) {
+  // A team is ranked as one: its distance, time and placement are written to
+  // every member still holding a place. Personal best and top result stay
+  // with the row they were set on: they describe a person, not the team.
+  const teammates = await teammatesOf(id, updates.map((u) => u.id));
+  const conflict = findTeamResultConflict(updates, teammates);
+  if (conflict) {
+    const who = conflict.registrationIds.map((rid) => byId.get(rid)?.athleteEmail ?? rid).join(" and ");
+    return NextResponse.json(
+      {
+        error: `${who} are on the same team but have a different ${conflict.label}. A team shares one result: make their rows match, or fill in one row per team. Nothing was saved.`,
+        conflict,
+      },
+      { status: 409 },
+    );
+  }
+  const writes = new Map<string, Prisma.RegistrationUpdateInput>();
+  for (const u of updates) {
+    const shared = pickTeamResult(u.data);
+    for (const mate of teammates.get(u.id) ?? [u.id]) {
+      const data = mate === u.id ? u.data : shared;
+      if (Object.keys(data).length === 0) continue;
+      writes.set(mate, { ...(writes.get(mate) ?? {}), ...data });
+    }
+  }
+
+  if (writes.size > 0) {
     await prisma.$transaction(async (tx) => {
       if (addedDivisions.length > 0) {
         const next = [...existingDivisions, ...addedDivisions];
@@ -147,8 +176,8 @@ export async function PATCH(
           }],
         });
       }
-      for (const u of updates) {
-        await tx.registration.update({ where: { id: u.id }, data: u.data });
+      for (const [rid, data] of writes) {
+        await tx.registration.update({ where: { id: rid }, data });
       }
     });
   }
@@ -160,3 +189,4 @@ export async function PATCH(
     invalidTimes,
   });
 }
+

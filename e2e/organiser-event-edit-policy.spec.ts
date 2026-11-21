@@ -105,7 +105,7 @@ test.describe("organiser event edit policy", () => {
     await page.goto(`/organiser/new-listing?id=${id}`);
 
     await expect(page.getByText("Editing is locked")).toBeVisible();
-    await expect(page.getByText(/Archived events can't be edited/)).toBeVisible();
+    await expect(page.getByText(/Completed events can't be edited/)).toBeVisible();
   });
 
   test("keeps the pending edit path without moving the event out of review", async ({ page }) => {

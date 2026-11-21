@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { athleteRaceFields } from "@/lib/race-features";
+import { entryBib } from "@/lib/team-entries";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import {
@@ -35,6 +36,8 @@ export async function GET() {
       athleteName: true,
       startWaveLabel: true,
       bibNumber: true,
+      team: { select: { name: true, bibNumber: true, size: true } },
+      detailsPending: true,
       checkedInAt: true,
       amountCents: true,
       platformFeeCents: true,
@@ -86,15 +89,20 @@ export async function GET() {
         startsAtUtc: r.event.startsAtUtc,
         endsAtUtc: r.event.endsAtUtc,
       });
-      const race = athleteRaceFields(r.event, r);
+      const race = athleteRaceFields(r.event, { startWaveLabel: r.startWaveLabel, bibNumber: entryBib(r) });
       return {
         id: r.id,
         eventId: r.eventId,
         status: r.status,
         athleteName: r.athleteName,
-        // Private until the organiser shares them (#566).
+        // Private until the organiser shares them (#566). A team entry
+        // carries the team's bib.
         wave: race.wave,
         bibNumber: race.bib,
+        teamName: r.team?.name ?? null,
+        teamSize: r.team?.size ?? null,
+        // A team place bought "details later": Activity asks for its member.
+        detailsPending: r.detailsPending,
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
         checkInOpensAt: window.opensAt?.toISOString() ?? null,

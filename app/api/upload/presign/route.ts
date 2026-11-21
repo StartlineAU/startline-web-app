@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import { getOrganiserSession, getAdminSession, getUserSession } from "@/lib/amplify-server";
+import { pendingKey, uploadOwner } from "@/lib/upload-access";
 import { UPLOAD_LIMITS, TYPE_MIMES, MIME_EXT, isUploadType, uploadSizeError } from "@/lib/upload-limits";
-import { s3, S3_BUCKET, S3_PUBLIC_BASE_URL, UPLOADS_USE_S3 } from "@/lib/s3";
+import { s3, S3_BUCKET, UPLOADS_USE_S3 } from "@/lib/s3";
 import { rateLimit } from "@/lib/rate-limit";
 
 // Hands the browser a short-lived signature so the file goes straight to S3.
@@ -27,10 +27,15 @@ import { rateLimit } from "@/lib/rate-limit";
 const PRESIGN_EXPIRY_SECONDS = 300;
 
 export async function POST(req: NextRequest) {
-  const session =
-    (await getOrganiserSession()) ??
-    (await getAdminSession()) ??
-    (await getUserSession());
+  const body: { type?: unknown; contentType?: unknown; size?: unknown } = await req
+    .json()
+    .catch(() => ({}));
+  const { type, contentType, size } = body;
+  if (!isUploadType(type)) {
+    return NextResponse.json({ error: "Invalid upload type." }, { status: 400 });
+  }
+
+  const session = await uploadOwner(type);
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   // This is the gate on the whole upload surface: no bytes reach the bucket
@@ -51,14 +56,6 @@ export async function POST(req: NextRequest) {
   // rather than failing: on a laptop the payload ceiling does not exist.
   if (!UPLOADS_USE_S3) return NextResponse.json({ mode: "proxy" });
 
-  const body: { type?: unknown; contentType?: unknown; size?: unknown } = await req
-    .json()
-    .catch(() => ({}));
-  const { type, contentType, size } = body;
-
-  if (!isUploadType(type)) {
-    return NextResponse.json({ error: "Invalid upload type." }, { status: 400 });
-  }
   if (typeof contentType !== "string" || !TYPE_MIMES[type].includes(contentType)) {
     return NextResponse.json({ error: "File type not allowed for this upload." }, { status: 400 });
   }
@@ -68,7 +65,10 @@ export async function POST(req: NextRequest) {
   const sizeError = uploadSizeError(type, size);
   if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
 
-  const key = `uploads/${session.sub}/${type}/${randomUUID()}.${MIME_EXT[contentType] ?? "bin"}`;
+  // Signed into the pending prefix, which nothing serves. Only
+  // /api/upload/complete moves a checked object to where the CDN reads it,
+  // so skipping that step leaves nothing anyone can link to.
+  const key = pendingKey(session.sub, type, `${randomUUID()}.${MIME_EXT[contentType] ?? "bin"}`);
 
   try {
     const { url, fields } = await createPresignedPost(s3, {
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         ["eq", "$Content-Type", contentType],
       ],
     });
-    return NextResponse.json({ mode: "s3", url, fields, key, fileUrl: `${S3_PUBLIC_BASE_URL}/${key}` });
+    return NextResponse.json({ mode: "s3", url, fields, key });
   } catch (err) {
     console.error("Presign failed:", { type, size, bucket: S3_BUCKET }, err);
     return NextResponse.json({ error: "Could not start the upload. Please try again." }, { status: 500 });

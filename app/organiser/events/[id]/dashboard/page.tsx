@@ -6,8 +6,8 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
-  MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
-  Download, ImageDown, AlertTriangle, Trophy,
+  MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2, Trophy,
+  Download, ImageDown, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,8 @@ interface Wave { label: string; price: string; qty?: number; sold?: number }
 interface DashboardData {
   event: {
     id: string; title: string; organiserName?: string | null; discipline: string;
-    status: "APPROVED" | "IN_PROGRESS";
+    /** ARCHIVED is a finished event; organisers see it as "Completed". */
+    status: "APPROVED" | "IN_PROGRESS" | "ARCHIVED";
     eventDate: string; endDate?: string | null;
     startTime: string; endTime: string;
     venue: string; city: string; state: string;
@@ -307,14 +308,19 @@ function EventDashboardInner({
 
   const { event, announcements, recentRegistrations } = data;
   const canEdit = organiserCanEditEvent(event.status);
-  // Once the event is under way, results are the job: "Enter results" becomes
-  // the primary action and race management opens on After race.
-  const started = event.status === "IN_PROGRESS";
+  // Once the event is over, check-in and announcements are closed (their
+  // APIs refuse a finished event), but results and registrations stay open.
+  const finished = event.status === "ARCHIVED";
+  // Once the event is under way (or over), results are the job: "Enter results"
+  // becomes the primary action and race management opens on After race.
+  const started = event.status === "IN_PROGRESS" || finished;
   const initialTab = tabParam === "results" || tabParam === "setup" ? tabParam : started ? "results" : "setup";
   const editHref = `/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`;
   // Entrants are told about material changes, so say so before the editor
   // opens rather than inside it.
   const entered = event.registrationCount;
+  // Two-column grid on phones: with three secondary buttons the last spans both.
+  const editSpan = !finished ? "col-span-2 sm:col-span-1" : "";
   const location = [event.venue, event.city].map((s) => s?.trim()).filter(Boolean).join(", ");
 
   const stats = [
@@ -362,8 +368,8 @@ function EventDashboardInner({
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-light">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" aria-hidden />
-                  Live
+                  <span className={`w-1.5 h-1.5 rounded-full ${finished ? "bg-muted" : "bg-primary"}`} aria-hidden />
+                  {finished ? "Completed" : "Live"}
                 </span>
                 <span className="text-muted-dark" aria-hidden>·</span>
                 <span className="font-headline text-[11px] uppercase tracking-widest text-muted-dark">
@@ -400,7 +406,7 @@ function EventDashboardInner({
                       <Button type="button" className="col-span-2" onClick={() => setManagePanel(true, "results")}>
                         <Trophy className="w-4 h-4" /> Enter results
                       </Button>
-                      <Button variant="outline" type="button" onClick={() => setManagePanel(true, "setup")}>
+                      <Button variant="outline" type="button" className={!finished || canEdit ? "" : "col-span-2"} onClick={() => setManagePanel(true, "setup")}>
                         <Users className="w-4 h-4" /> Manage registrations
                       </Button>
                     </>
@@ -414,16 +420,18 @@ function EventDashboardInner({
                       </Button>
                     </>
                   )}
-                  <Button variant="outline" type="button" onClick={openCheckInQr}>
-                    <QrCode className="w-4 h-4" /> Check-in QR
-                  </Button>
-                  {/* Two-column grid on phones: the last of three secondary buttons spans both. */}
+                  {/* Check-in closes with the event. */}
+                  {!finished && (
+                    <Button variant="outline" type="button" onClick={openCheckInQr}>
+                      <QrCode className="w-4 h-4" /> Check-in QR
+                    </Button>
+                  )}
                   {canEdit && (entered > 0 ? (
-                    <Button variant="outline" type="button" className="col-span-2 sm:col-span-1" onClick={() => setEditWarnOpen(true)}>
+                    <Button variant="outline" type="button" className={editSpan} onClick={() => setEditWarnOpen(true)}>
                       <Pencil className="w-4 h-4" /> Edit event
                     </Button>
                   ) : (
-                    <Button variant="outline" className="col-span-2 sm:col-span-1" asChild>
+                    <Button variant="outline" className={editSpan} asChild>
                       <Link href={editHref}>
                         <Pencil className="w-4 h-4" /> Edit event
                       </Link>
@@ -449,7 +457,26 @@ function EventDashboardInner({
             ))}
           </div>
 
-          {!managePanel && !canEdit && (
+          {!managePanel && finished && (
+            <div className="mb-8 rounded-xl border border-dark-lighter bg-dark p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+              <div className="flex items-start gap-3 min-w-0">
+                <Trophy className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h2 className="font-headline text-[15px] font-black italic tracking-tight text-light">
+                    This event is complete
+                  </h2>
+                  <p className="text-[13px] text-muted-light leading-relaxed mt-1">
+                    Enter or import results so athletes can see their time and placing.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" type="button" className="shrink-0" onClick={() => setManagePanel(true)}>
+                Go to results
+              </Button>
+            </div>
+          )}
+
+          {!managePanel && !canEdit && !finished && (
             <div className="mb-8">
               <EventEditLockedNotice eventId={id} status={event.status} compact />
             </div>
@@ -457,7 +484,7 @@ function EventDashboardInner({
 
           {managePanel ? (
             <div className="mb-8">
-              <RaceManagementPanel eventId={id} initialTab={initialTab} />
+              <RaceManagementPanel eventId={id} finished={finished} initialTab={initialTab} />
             </div>
           ) : (
           <>
@@ -649,20 +676,24 @@ function EventDashboardInner({
                       <span className="font-headline text-[13px] tabular-nums text-muted-dark">{announcements.length}</span>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    aria-label="New announcement"
-                    onClick={() => setPanel("announce")}
-                  >
-                    <Plus className="w-3.5 h-3.5" /> New
-                  </Button>
+                  {!finished && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      aria-label="New announcement"
+                      onClick={() => setPanel("announce")}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> New
+                    </Button>
+                  )}
                 </div>
 
                 {announcements.length === 0 ? (
                   <p className="mt-4 text-[13px] text-muted-dark">
-                    No announcements yet. Post one to notify registered athletes.
+                    {finished
+                      ? "No announcements were posted for this event."
+                      : "No announcements yet. Post one to notify registered athletes."}
                   </p>
                 ) : (
                   <div className="mt-4 space-y-3">
@@ -707,7 +738,7 @@ function EventDashboardInner({
       </main>
 
       {/* New announcement: driven by ?panel=announce so the link stays shareable */}
-      <Dialog open={announcePanel} onOpenChange={open => { if (!open) setPanel(null); }}>
+      <Dialog open={announcePanel && !finished} onOpenChange={open => { if (!open) setPanel(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-1">

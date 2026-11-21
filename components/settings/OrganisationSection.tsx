@@ -9,8 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { uploadFile } from "@/lib/upload-client";
 import { TYPE_MIMES } from "@/lib/upload-limits";
 import {
-  ErrorNote, FieldLabel, GroupHeading, SaveFooter, SectionShell, inputCls,
+  ErrorNote, FieldLabel, GroupHeading, SaveFooter, SectionShell, Switch, inputCls,
 } from "@/components/settings/primitives";
+import { DEFAULT_CONTACT_VISIBILITY } from "@/lib/organiser-contact";
 
 const linkBtnCls = "font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-1 transition-colors disabled:opacity-40";
 const Dot = () => <span className="text-white/20 text-xs">·</span>;
@@ -125,6 +126,7 @@ function ImageEditor({
 interface ProfileForm {
   orgName: string; bio: string; contactName: string;
   contactEmail: string; phone: string;
+  showContactName: boolean; showContactEmail: boolean; showContactPhone: boolean;
   logoUrl: string; logoPosition: string; coverImageUrl: string; coverPosition: string;
 }
 
@@ -132,7 +134,11 @@ type ImageFields = Pick<ProfileForm, "logoUrl" | "logoPosition" | "coverImageUrl
 
 const EMPTY_FORM: ProfileForm = {
   orgName: "", bio: "", contactName: "", contactEmail: "",
-  phone: "", logoUrl: "", logoPosition: "50% 50%", coverImageUrl: "", coverPosition: "50% 50%",
+  phone: "",
+  showContactName:  DEFAULT_CONTACT_VISIBILITY.name,
+  showContactEmail: DEFAULT_CONTACT_VISIBILITY.email,
+  showContactPhone: DEFAULT_CONTACT_VISIBILITY.phone,
+  logoUrl: "", logoPosition: "50% 50%", coverImageUrl: "", coverPosition: "50% 50%",
 };
 
 const TITLE = "Organisation profile";
@@ -147,6 +153,8 @@ export default function OrganisationSection() {
   const [saved,     setSaved]     = useState(false);
   const [error,     setError]     = useState("");
   const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
+  // Only an owner can change the contact email; the server enforces it too.
+  const [isOwner,   setIsOwner]   = useState(false);
   const logoRef  = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
 
@@ -159,12 +167,16 @@ export default function OrganisationSection() {
       .then(data => {
         if (cancelled) return;
         if (!data) { setLoadState("failed"); return; }
+        setIsOwner(data.role === "OWNER");
         setForm({
           orgName:       data.orgName       ?? "",
           bio:           data.bio           ?? "",
           contactName:   data.contactName   ?? "",
           contactEmail:  data.contactEmail  ?? "",
           phone:         data.phone         ?? "",
+          showContactName:  data.showContactName  ?? DEFAULT_CONTACT_VISIBILITY.name,
+          showContactEmail: data.showContactEmail ?? DEFAULT_CONTACT_VISIBILITY.email,
+          showContactPhone: data.showContactPhone ?? DEFAULT_CONTACT_VISIBILITY.phone,
           logoUrl:       data.logoUrl       ?? "",
           logoPosition:  data.logoPosition  ?? "50% 50%",
           coverImageUrl: data.coverImageUrl ?? "",
@@ -338,8 +350,14 @@ export default function OrganisationSection() {
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
                 <input id="settings-org-email" className={`${inputCls} pl-9`} type="email" value={form.contactEmail}
+                  readOnly={!isOwner} aria-describedby={isOwner ? undefined : "settings-org-email-note"}
                   onChange={e => patch({ contactEmail: e.target.value })} placeholder="events@yourorg.com.au" />
               </div>
+              {!isOwner && (
+                <p id="settings-org-email-note" className="text-[12px] text-muted-dark mt-1.5">
+                  Only an Owner can change the contact email.
+                </p>
+              )}
             </div>
             <div>
               <FieldLabel label="Contact phone" required htmlFor="settings-org-phone" />
@@ -349,6 +367,25 @@ export default function OrganisationSection() {
                   onChange={e => patch({ phone: e.target.value })} placeholder="+61 4xx xxx xxx" />
               </div>
             </div>
+          </div>
+
+          {/* Organisers asked to choose what athletes see. Phone starts off: it
+              is often someone's own mobile. Saved with the fields above. */}
+          <div className="mt-5 border border-dark-lighter rounded-lg p-4" data-testid="contact-visibility">
+            <div className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">Shown to athletes</div>
+            <p className="text-[11px] text-muted-dark mt-0.5 mb-2">
+              On your event pages and on entrants&apos; tickets. Each event can change this in its listing.
+            </p>
+            {([
+              ["showContactName",  "contact-show-name",  "Show name"],
+              ["showContactEmail", "contact-show-email", "Show email"],
+              ["showContactPhone", "contact-show-phone", "Show phone"],
+            ] as const).map(([key, id, label]) => (
+              <div key={key} className="flex items-center justify-between gap-4 py-2.5 border-b border-dark-lighter last:border-0">
+                <span id={id} className="font-headline text-[12px] font-bold uppercase tracking-widest text-muted-light">{label}</span>
+                <Switch checked={form[key]} onChange={() => patch({ [key]: !form[key] })} labelledBy={id} />
+              </div>
+            ))}
           </div>
         </div>
 

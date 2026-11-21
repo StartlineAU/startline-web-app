@@ -23,11 +23,17 @@ export interface Registration {
   refundRequestedAt: string | null;
   refundOutsidePolicy: boolean;
   createdAt: string;
+  /** Free entries only: a paid entry's status changes through a refund. */
+  statusEditable: boolean;
   resultDistance: string | null;
   resultTime: string | null;
   resultPlacement: string | null;
   isPersonalBest: boolean;
   isTopResult: boolean;
+  /** Set for a team entry. Bib, start wave, check-in and result are the team's. */
+  team: { id: string; name: string; size: number; captain: boolean } | null;
+  /** Team place whose member the buyer has not named yet ("Team member 2"). */
+  detailsPending?: boolean;
 }
 
 export interface StartWave extends WaveDef {

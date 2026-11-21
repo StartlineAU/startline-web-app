@@ -249,6 +249,11 @@ test.describe("events page", () => {
   // it on a phone (#481). The test supplies a spare Mapbox style because E2E
   // runs with a placeholder token; no tiles or network data are needed.
   test("the selected event pin renders above every other pin", async ({ page }) => {
+    // This is the only spec that lets Mapbox finish loading, and pins render
+    // only after its load event. In CI that means software WebGL on a runner
+    // shared with a second worker and the dev server: passing runs already
+    // took up to 18s, so a 20s wait failed on a slow one.
+    test.slow();
     await page.setViewportSize({ width: 414, height: 768 });
     await page.route("https://api.mapbox.com/**", async (route) => {
       const { pathname } = new URL(route.request().url());
@@ -272,9 +277,11 @@ test.describe("events page", () => {
       route.fulfill({ status: 204, body: "" }),
     );
 
-    await page.goto("/events?view=map");
+    // Don't wait for the window load event: the dev-mode Mapbox bundle can hold
+    // it past the test timeout on its own. The pin wait below is the real gate.
+    await page.goto("/events?view=map", { waitUntil: "domcontentloaded" });
     const pins = page.getByRole("button", { name: /^View / }).filter({ visible: true });
-    await expect(pins.first()).toBeVisible({ timeout: 20000 });
+    await expect(pins.first()).toBeVisible({ timeout: 90000 });
     await expect.poll(() => page.locator(".mapboxgl-marker").count()).toBeGreaterThan(1);
     // Several seed events share a city-centre coordinate. Pick the last pin so
     // the click starts on the topmost marker rather than one already covered.

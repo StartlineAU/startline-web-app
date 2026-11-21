@@ -117,6 +117,43 @@ export async function verifyAuthenticatorStepUp({
   }
 }
 
+/**
+ * Checks the password alone, for an account without an authenticator app. An
+ * account that answers with an MFA challenge has one, and must use
+ * verifyAuthenticatorStepUp instead.
+ */
+export async function verifyPasswordStepUp({
+  username,
+  password,
+}: {
+  username: string;
+  password: string;
+}): Promise<void> {
+  if (!userPoolId || !linkClientId) {
+    throw new SignInMethodError("unavailable", 503, "Sign-in methods cannot be managed in this environment.");
+  }
+  try {
+    const result = await client.send(new AdminInitiateAuthCommand({
+      UserPoolId: userPoolId,
+      ClientId: linkClientId,
+      AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
+      AuthParameters: { USERNAME: username, PASSWORD: password },
+    }));
+    if (!result.AuthenticationResult) {
+      throw new SignInMethodError("step-up-failed", 403, PASSWORD_REFUSED);
+    }
+  } catch (error) {
+    if (error instanceof SignInMethodError) throw error;
+    const name = error instanceof Error ? error.name : "";
+    if (name === "NotAuthorizedException" || name === "UserNotFoundException") {
+      throw new SignInMethodError("step-up-failed", 403, PASSWORD_REFUSED);
+    }
+    throw mapCognitoError(error, "Could not check your password.");
+  }
+}
+
+const PASSWORD_REFUSED = "That password didn't match. Check it and try again.";
+
 export async function getSignInMethods(
   username: string,
   enabledProviders: SocialProvider[],

@@ -55,7 +55,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: strin
   APPROVED: { bg: "bg-primary/10",   text: "text-primary",   label: "Published" },
   IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
-  ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Archived"  },
+  ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Completed" },
 };
 
 type SortField = "status" | "date" | "name";
@@ -69,7 +69,7 @@ const FILTERS: { k: Filter; l: string }[] = [
   { k: "PENDING",  l: "Pending"   },
   { k: "DRAFT",    l: "Drafts"    },
   { k: "REJECTED", l: "Rejected"  },
-  { k: "ARCHIVED", l: "Archived"  },
+  { k: "ARCHIVED", l: "Completed" },
 ];
 
 const SORT_LABELS: Record<SortField, string> = { status: "Status", date: "Date", name: "Name" };
@@ -250,8 +250,9 @@ export default function ListingsPage() {
     }
   };
 
+  // Finished events open their dashboard too: results go in after the race.
   const handleRowClick = (e: EventRow) => {
-    if (e.status === "APPROVED" || e.status === "IN_PROGRESS") {
+    if (e.status === "APPROVED" || e.status === "IN_PROGRESS" || e.status === "ARCHIVED") {
       router.push(`/organiser/events/${e.id}/dashboard`);
     } else {
       router.push(`/organiser/events/${e.id}`);

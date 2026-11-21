@@ -86,6 +86,7 @@ export async function GET(
       startWave: {
         select: { label: true, startTime: true },
       },
+      team: { select: { name: true, bibNumber: true } },
     },
   });
 
@@ -94,7 +95,9 @@ export async function GET(
     athleteName: r.athleteName,
     athleteEmail: r.athleteEmail,
     mobile: r.mobile,
-    bibNumber: bibsOn ? r.bibNumber : null,
+    // A team member carries the team's bib. Features that are off are blanked (#566).
+    bibNumber: bibsOn ? (r.team ? r.team.bibNumber : r.bibNumber) : null,
+    teamName: r.team?.name ?? null,
     startWaveLabel: wavesOn ? r.startWave?.label ?? r.startWaveLabel : null,
     startWaveStartTime:
       wavesOn && (r.startWave || r.startWaveLabel)

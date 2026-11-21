@@ -101,8 +101,8 @@ test.describe("admin event creation", () => {
     await page.getByPlaceholder(/e.g. Melbourne/i).fill("Sydney");
     await page.getByRole("combobox", { name: /state/i }).click();
     await page.getByRole("option", { name: /NSW/ }).click();
-    await openDetail(page, "format");
-    await page.getByRole("button", { name: /individual solo athletes/i }).click();
+    // No format to pick: it follows the tickets (#541).
+    await expect(page.getByTestId("event-format")).toContainText("Individual");
     await openDetail(page, "divisions");
     await page.getByRole("button", { name: /^10km$/i }).click();
     await openDetail(page, "intensity");

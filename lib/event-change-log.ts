@@ -34,7 +34,10 @@ export type LoggedEventField = (typeof LOGGED_EVENT_FIELDS)[number];
 export const MATERIAL_FIELD_GROUPS = {
   "date and time": ["eventDate", "endDate", "startTime", "endTime"],
   location: ["venue", "address", "city", "state"],
-  "event type": ["discipline", "format"],
+  // Format is not here: it is worked out from the tickets (#541), so adding a
+  // team ticket would otherwise tell every entrant they are owed a refund.
+  // Tickets that already have entries cannot change type.
+  "event type": ["discipline"],
 } as const satisfies Record<string, readonly LoggedEventField[]>;
 
 const MATERIAL_FIELDS = new Set<string>(Object.values(MATERIAL_FIELD_GROUPS).flat());

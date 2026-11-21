@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { entryBib } from "@/lib/team-entries";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { checkinParams } from "@/lib/schemas";
@@ -37,7 +38,7 @@ export async function GET(
 
   const registrationSelect = {
     id: true, athleteName: true, waveLabel: true, bibNumber: true,
-    checkedInAt: true,
+    checkedInAt: true, team: { select: { name: true, bibNumber: true } },
   } as const;
 
   // Match the signed-in athlete to their registration by verified email first
@@ -48,13 +49,15 @@ export async function GET(
     where: {
       eventId,
       status: "CONFIRMED",
+      // A team place waiting for its member's details carries the buyer's email.
+      detailsPending: false,
       athleteEmail: { equals: session.email, mode: "insensitive" },
     },
     select: registrationSelect,
   });
   if (!registration) {
     registration = await prisma.registration.findFirst({
-      where: { eventId, status: "CONFIRMED", userId: session.sub },
+      where: { eventId, status: "CONFIRMED", userId: session.sub, detailsPending: false },
       select: registrationSelect,
     });
   }
@@ -73,9 +76,13 @@ export async function GET(
 
   return NextResponse.json({
     event,
-    // A bib stays private until the organiser shares bibs (#566).
+    // The team's bib for a team entry, hidden until the organiser shares bibs (#566).
     registration: registration
-      ? { ...registration, bibNumber: athleteSeesBibs({ bibMode }) ? registration.bibNumber : null }
+      ? (({ team, ...rest }) => ({
+          ...rest,
+          bibNumber: athleteSeesBibs({ bibMode }) ? entryBib(registration) : null,
+          teamName: team?.name ?? null,
+        }))(registration)
       : null,
     checkIn: {
       state: window.state,

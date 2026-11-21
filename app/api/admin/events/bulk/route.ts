@@ -4,8 +4,9 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { writeAuditLog } from "@/lib/audit";
 import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
-import { syncEventSchedules, type SchedulableEvent } from "@/lib/event-scheduler";
+import { cancelEventSchedules, syncEventSchedules, type SchedulableEvent } from "@/lib/event-scheduler";
 import { approvalBlocker } from "@/lib/event-approval";
+import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
 import { z } from "zod";
 
 const bulkActionSchema = z.object({
@@ -36,8 +37,34 @@ export async function POST(req: NextRequest) {
     let blocked: { id: string; title: string; reason: string }[] = [];
 
     if (action === "delete") {
-      const result = await prisma.event.deleteMany({ where: { id: { in: ids } } });
-      affected = result.count;
+      // Events that have taken entries are kept (see lib/event-deletion.ts);
+      // report them as blocked and delete the rest.
+      const withEntries = await eventIdsWithEntries(ids);
+      if (withEntries.size > 0) {
+        const kept = await prisma.event.findMany({
+          where: { id: { in: [...withEntries] } },
+          select: { id: true, title: true },
+        });
+        blocked = kept.map((e) => ({ id: e.id, title: e.title, reason: EVENT_HAS_ENTRIES_ERROR }));
+      }
+      const deletable = ids.filter((id) => !withEntries.has(id));
+      try {
+        const result = await prisma.event.deleteMany({ where: { id: { in: deletable } } });
+        affected = result.count;
+      } catch (err) {
+        // An entry landed between the check and the delete. Nothing was
+        // deleted (one statement), so say so rather than reporting a failure.
+        if (!isForeignKeyViolation(err)) throw err;
+        return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+      }
+      // Deleted events must not fire their scheduled lifecycle transitions.
+      await Promise.all(
+        deletable.map((id) =>
+          cancelEventSchedules(id).catch((err) =>
+            console.error(`Event schedule cleanup failed for ${id}:`, err),
+          ),
+        ),
+      );
     } else {
       if (action === "approve") {
         const candidates = await prisma.event.findMany({

@@ -16,37 +16,38 @@ function generateTempPassword(): string {
   return rand + "A!";
 }
 
-export async function ensureAthleteCognitoUser(email: string): Promise<string> {
+function subAttribute(attributes: { Name?: string; Value?: string }[] | undefined): string | null {
+  return attributes?.find((attribute) => attribute.Name === "sub")?.Value ?? null;
+}
+
+/**
+ * Create a Cognito user for a guest's email unless one exists, and return the
+ * new user's `sub`, which is what a session carries and what User.cognitoSub
+ * must hold. Returns null when the email already belongs to someone: a guest
+ * checkout must not attach anything to an existing person's account.
+ *
+ * Google and Apple users have a provider-generated username, so AdminGetUser by
+ * email misses them; findCognitoUserByEmail also searches the email attribute,
+ * which stops a second, native user being created beside theirs.
+ */
+export async function ensureAthleteCognitoUser(email: string): Promise<string | null> {
   const normalized = email.toLowerCase().trim();
 
-  try {
-    const result = await client.send(new AdminGetUserCommand({
-      UserPoolId: userPoolId,
-      Username: normalized,
-    }));
-    return result.Username ?? normalized;
-  } catch (err) {
-    if (!(err instanceof UsernameExistsException) && (err as { name?: string }).name !== "UserNotFoundException") {
-      throw err;
-    }
-  }
+  if (await findCognitoUserByEmail(normalized)) return null;
 
   try {
-    await client.send(new AdminCreateUserCommand({
+    const created = await client.send(new AdminCreateUserCommand({
       UserPoolId: userPoolId,
       Username: normalized,
       TemporaryPassword: generateTempPassword(),
       MessageAction: "SUPPRESS",
     }));
+    return subAttribute(created.User?.Attributes);
   } catch (err) {
-    if (!(err instanceof UsernameExistsException)) throw err;
+    // Created by a concurrent checkout a moment ago: it is not ours either.
+    if (err instanceof UsernameExistsException) return null;
+    throw err;
   }
-
-  const result = await client.send(new AdminGetUserCommand({
-    UserPoolId: userPoolId,
-    Username: normalized,
-  }));
-  return result.Username ?? normalized;
 }
 
 /**

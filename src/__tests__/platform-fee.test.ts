@@ -180,6 +180,47 @@ describe("ticketFeeBreakdown — the issue's A$50 example", () => {
   });
 });
 
+describe("ticketFeeBreakdown — a team ticket is one payment", () => {
+  // A$40 per person, team of 4: four booking fees, but one Stripe fee on the
+  // A$172.12 charge. Pricing one ticket and multiplying by four would count
+  // Stripe's fixed 30c four times and show the organiser 89c too little.
+  it("athlete pays: one Stripe fee on the whole team", () => {
+    expect(ticketFeeBreakdown(4000, "athlete", 4)).toEqual({
+      athletePaysCents: 17212,
+      platformFeeCents: 1212,
+      stripeFeeCents: 331,
+      organiserReceivesCents: 15669,
+    });
+    expect(ticketFeeBreakdown(4000, "athlete").organiserReceivesCents * 4).toBe(15580);
+  });
+
+  it("organiser pays: one Stripe fee on the whole team", () => {
+    expect(ticketFeeBreakdown(4000, "organiser", 4)).toEqual({
+      athletePaysCents: 16000,
+      platformFeeCents: 1212,
+      stripeFeeCents: 310,
+      organiserReceivesCents: 14478,
+    });
+  });
+
+  it("splits back into member entries that sum to the payout", () => {
+    for (const feeStructure of ["athlete", "organiser"]) {
+      const team = ticketFeeBreakdown(4000, feeStructure, 4);
+      const each = ticketFeeBreakdown(4000, feeStructure).athletePaysCents;
+      const shares = allocateStripeFeeCents(team.stripeFeeCents, [each, each, each, each]);
+      const nets = shares.map((stripeFeeCents) => entryOrganiserNetCents({
+        amountCents: 4000,
+        platformFeeCents: 303,
+        stripeFeeCents,
+        feeStructure,
+      }));
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(team.organiserReceivesCents);
+    }
+    // The rounding remainder lands on the first member, the captain.
+    expect(allocateStripeFeeCents(331, [4303, 4303, 4303, 4303])).toEqual([85, 82, 82, 82]);
+  });
+});
+
 describe("allocateStripeFeeCents", () => {
   it("splits an order's fee so the parts sum to the whole", () => {
     const parts = allocateStripeFeeCents(101, [2000, 2000, 2000]);

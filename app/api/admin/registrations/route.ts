@@ -61,6 +61,15 @@ export async function GET(req: NextRequest) {
           createdAt: true,
           event:     { select: { id: true, title: true, eventDate: true, city: true, state: true } },
           organiser: { select: { id: true, orgName: true, contactName: true, email: true } },
+          // A team is refunded as one; `held` is how many of its members
+          // still hold a place, so a part-finished team refund can be resumed.
+          team: {
+            select: {
+              name: true,
+              size: true,
+              _count: { select: { members: { where: { status: { in: ["CONFIRMED", "REFUND_REQUESTED"] } } } } },
+            },
+          },
         },
         skip,
         take: limit,
@@ -68,7 +77,15 @@ export async function GET(req: NextRequest) {
       prisma.registration.count({ where }),
     ]);
 
-    return NextResponse.json({ registrations, total, page, totalPages: Math.ceil(total / limit) });
+    return NextResponse.json({
+      registrations: registrations.map(({ team, ...r }) => ({
+        ...r,
+        team: team ? { name: team.name, size: team.size, held: team._count.members } : null,
+      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (err) {
     console.error("Admin registrations fetch error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });

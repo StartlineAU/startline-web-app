@@ -4,9 +4,11 @@ import { getUserSession } from "@/lib/amplify-server";
 import { validateUsername } from "@/lib/username-validation";
 import { containsProfanity } from "@/lib/profanity";
 import { getOrganiserRatings } from "@/lib/reviews";
+import { PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, withRacePhase } from "@/lib/profile-history";
 import { GENDER_OPTIONS } from "@/lib/registration-form";
 import { isAtLeastYearsOld, MIN_AGE } from "@/lib/age";
 import { z } from "zod";
+import { assetUrl } from "@/lib/asset-url";
 
 function badRequest(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
@@ -16,7 +18,7 @@ const profileUpdateSchema = z.object({
   name: z.string().max(200).nullable().optional(),
   username: z.string().max(50).optional(),
   bio: z.string().max(2000).nullable().optional(),
-  profilePicUrl: z.string().max(3000).nullable().optional(),
+  profilePicUrl: assetUrl().nullable().optional(),
   isPublic: z.boolean().optional(),
   city: z.string().max(100).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
@@ -93,26 +95,16 @@ export async function GET() {
       isPersonalBest: true,
       isTopResult: true,
       category: true,
-      event: {
-        select: {
-          id: true,
-          title: true,
-          discipline: true,
-          eventDate: true,
-          city: true,
-          state: true,
-          coverImageUrl: true,
-          organiser: { select: { id: true, orgName: true, logoUrl: true } },
-        },
-      },
+      event: { select: PROFILE_HISTORY_EVENT_SELECT },
     },
   });
+  const history = withRacePhase(registrations);
 
-  const completed = registrations.length;
+  const completed = countCompletedRaces(history);
   const ratings = await getOrganiserRatings(
     registrations.map((r) => r.event.organiser.id),
   );
-  const historyRegistrations = registrations.map((r) => ({
+  const historyRegistrations = history.map((r) => ({
     ...r,
     event: {
       ...r.event,

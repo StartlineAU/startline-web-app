@@ -17,6 +17,7 @@ import { withUniqueSlug } from "@/lib/slugs";
 import { hasAbn, ABN_REQUIRED_MESSAGE } from "@/lib/abn";
 import { takesPayments } from "@/lib/event-approval";
 import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
+import { withTicketFormat } from "@/lib/team-tickets";
 export async function GET() {
   const auth = await requireOrganiser();
   if (auth.error) return auth.error;
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const body = parsed.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsed.data);
   const { submit, organiserId: requestedOrganiserId } = body;
 
   // Multi-org scoping: the organiser portal sends the active organiserId (the
@@ -201,6 +203,9 @@ export async function POST(req: NextRequest) {
         coverImageUrl:    body.coverImageUrl      ?? null,
         informationPdfs:  Array.isArray(body.informationPdfs) ? body.informationPdfs : [],
         photos:           Array.isArray(body.photos) ? body.photos : [],
+        showContactName:  body.showContactName  ?? null,
+        showContactEmail: body.showContactEmail ?? null,
+        showContactPhone: body.showContactPhone ?? null,
       },
       });
       if (created.status !== "DRAFT") {

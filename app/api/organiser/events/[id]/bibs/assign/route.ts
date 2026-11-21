@@ -73,42 +73,78 @@ export async function POST(
       if (!organiserSeesBibs(modes)) throw new BibsOff();
       const wavesOn = organiserSeesWaves(modes);
 
-      const [registrations, waves] = await Promise.all([
+      const [registrations, teams, waves] = await Promise.all([
         tx.registration.findMany({
           where: { eventId: id },
-          select: { id: true, athleteName: true, status: true, bibNumber: true, startWaveId: true, startWaveLabel: true },
+          select: {
+            id: true, athleteName: true, status: true, bibNumber: true,
+            startWaveId: true, startWaveLabel: true, teamId: true,
+          },
         }),
+        tx.team.findMany({ where: { eventId: id }, select: { id: true, name: true, bibNumber: true } }),
         tx.startWave.findMany({ where: { eventId: id }, select: { id: true, sortOrder: true } }),
       ]);
       const waveSort = new Map(waves.map((w) => [w.id, w.sortOrder]));
+      const sortOf = (startWaveId: string | null) =>
+        wavesOn && startWaveId ? waveSort.get(startWaveId) ?? null : null;
 
-      // Every bib on the event is taken, refunded and cancelled entries included:
-      // a number printed for someone who later dropped out is not handed out again.
-      const taken = new Set(registrations.map((r) => r.bibNumber?.trim()).filter((b): b is string => !!b));
+      // Every bib on the event is taken, solo and team alike (they share one
+      // numbering), refunded and cancelled entries included: a number printed
+      // for someone who later dropped out is not handed out again.
+      const taken = new Set(
+        [...registrations.map((r) => r.bibNumber), ...teams.map((t) => t.bibNumber)]
+          .map((b) => b?.trim())
+          .filter((b): b is string => !!b),
+      );
 
-      const candidates: BibCandidate[] = registrations
-        .filter((r) => r.status === "CONFIRMED")
+      // A team takes one bib, so it is one candidate, named and waved like the
+      // team. It needs at least one confirmed member to be numbered.
+      const TEAM = "team:";
+      const confirmedByTeam = new Map<string, (typeof registrations)[number]>();
+      for (const r of registrations) {
+        if (r.teamId && r.status === "CONFIRMED" && !confirmedByTeam.has(r.teamId)) confirmedByTeam.set(r.teamId, r);
+      }
+      const solo: BibCandidate[] = registrations
+        .filter((r) => r.status === "CONFIRMED" && !r.teamId)
         .map((r) => ({
           id: r.id,
           name: r.athleteName,
           bibNumber: r.bibNumber,
           waveLabel: wavesOn ? r.startWaveLabel : null,
-          waveSort: wavesOn && r.startWaveId ? waveSort.get(r.startWaveId) ?? null : null,
-        }))
-        // With waves on, athletes still waiting for a wave are skipped unless the
-        // organiser asks for them. With waves off there are no waves to wait for.
-        .filter((c) => !wavesOn || includeUnassigned || c.waveSort != null);
+          waveSort: sortOf(r.startWaveId),
+        }));
+      const teamCandidates: BibCandidate[] = teams
+        .filter((t) => confirmedByTeam.has(t.id))
+        .map((t) => {
+          const member = confirmedByTeam.get(t.id)!;
+          return {
+            id: `${TEAM}${t.id}`,
+            name: t.name,
+            bibNumber: t.bibNumber,
+            waveLabel: wavesOn ? member.startWaveLabel : null,
+            waveSort: sortOf(member.startWaveId),
+          };
+        });
+
+      const all = [...solo, ...teamCandidates];
+      // With waves on, athletes still waiting for a wave are skipped unless the
+      // organiser asks for them. With waves off there are no waves to wait for.
+      const candidates = all.filter((c) => !wavesOn || includeUnassigned || c.waveSort != null);
 
       const assignments = assignSequentialBibs({ candidates, start, onlyWithoutBib: true, taken });
 
       if (!dryRun) {
         for (const a of assignments) {
-          await tx.registration.update({ where: { id: a.registrationId }, data: { bibNumber: a.bibNumber } });
+          if (a.registrationId.startsWith(TEAM)) {
+            await tx.team.update({ where: { id: a.registrationId.slice(TEAM.length) }, data: { bibNumber: a.bibNumber } });
+          } else {
+            await tx.registration.update({ where: { id: a.registrationId }, data: { bibNumber: a.bibNumber } });
+          }
         }
       }
 
       const skippedNoWave = wavesOn && !includeUnassigned
-        ? registrations.filter((r) => r.status === "CONFIRMED" && !r.bibNumber?.trim() && !(r.startWaveId && waveSort.has(r.startWaveId))).length
+        ? all.filter((c) => !c.bibNumber?.trim() && c.waveSort == null).length
         : 0;
 
       return {
