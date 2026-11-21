@@ -63,6 +63,14 @@ export interface RefundRequest {
    * refund_application_fee to describe, so the flag is left off.
    */
   hasApplicationFee: boolean;
+  /**
+   * Override REFUND_APPLICATION_FEE for this refund. A cancelled event sets it:
+   * Startline returns its booking fee then, so the organiser is not charged a
+   * fee on a sale it had to give back in full (lib/event-cancellation.ts).
+   */
+  refundApplicationFee?: boolean;
+  /** Recorded on the Stripe refund, so a retry can find a refund it already made. */
+  metadata?: Record<string, string>;
 }
 
 /**
@@ -83,8 +91,9 @@ export function buildRefundParams(
       amount: request.amountCents,
       ...(request.hasTransfer ? { reverse_transfer: true } : {}),
       ...(request.hasApplicationFee
-        ? { refund_application_fee: REFUND_APPLICATION_FEE }
+        ? { refund_application_fee: request.refundApplicationFee ?? REFUND_APPLICATION_FEE }
         : {}),
+      ...(request.metadata ? { metadata: request.metadata } : {}),
     },
     { idempotencyKey: request.idempotencyKey },
   ];
@@ -140,6 +149,23 @@ export function entryRefundAmountCents(input: EntryRefundInput): number {
   const snapshot = input.refundAmountCents;
   if (snapshot == null) return Math.max(0, paid);
   return Math.max(0, Math.min(snapshot, paid));
+}
+
+/**
+ * Cents still owed to this entry's payer because the event was cancelled:
+ * everything they paid at checkout, less anything already refunded.
+ *
+ * A cancelled event ignores the change-of-mind policy. An entry refunded 50%
+ * under a policy tier last week is owed the other 50% now. On a REFUNDED row
+ * refundAmountCents is what went back; on any other row it is only the quote
+ * frozen when the athlete asked, and nothing has been returned yet.
+ */
+export function entryCancellationOwedCents(
+  input: EntryRefundInput & { status: string },
+): number {
+  const paid = entryPaidCents(input);
+  const alreadyRefunded = input.status === "REFUNDED" ? (input.refundAmountCents ?? paid) : 0;
+  return Math.max(0, paid - alreadyRefunded);
 }
 
 

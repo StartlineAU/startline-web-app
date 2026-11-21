@@ -7,6 +7,10 @@ import {
   transitionDueEvents,
 } from "@/lib/event-lifecycle";
 import { syncEventSchedules, type SchedulableEvent } from "@/lib/event-scheduler";
+import {
+  eventsOwingCancellationRefunds,
+  processCancellationRefunds,
+} from "@/lib/event-cancellation";
 
 export const dynamic = "force-dynamic";
 
@@ -64,12 +68,30 @@ async function run(req: NextRequest) {
     }
   }
 
+  // A cancelled event owes every entrant a full refund. Anything that failed
+  // when it was cancelled (Stripe down, a balance shortfall) is retried on
+  // every sweep until it goes through.
+  const cancellationRefunds = { events: 0, refunded: 0, failed: 0 };
+  if (sweep) {
+    for (const owingEventId of await eventsOwingCancellationRefunds()) {
+      try {
+        const result = await processCancellationRefunds(owingEventId);
+        cancellationRefunds.events++;
+        cancellationRefunds.refunded += result.refunded;
+        cancellationRefunds.failed += result.failed;
+      } catch (err) {
+        console.error(`Cancellation refund retry failed for ${owingEventId}:`, err);
+      }
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     checked: events.length,
     archived: transitions.archived,
     started: transitions.started,
     scheduleFailures: failures.length,
+    cancellationRefunds,
   });
 }
 

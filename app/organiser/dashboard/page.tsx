@@ -18,7 +18,7 @@ import { useApiResource } from "@/hooks/useApiResource";
 import { useOnOrganiserEventsChanged } from "@/lib/organiser-events-changed";
 import { formatEventArea } from "@/lib/event-place";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED" | "CANCELLED";
 
 const STATUS_ORDER: Record<EventStatus, number> = {
   IN_PROGRESS: 0,
@@ -27,6 +27,7 @@ const STATUS_ORDER: Record<EventStatus, number> = {
   REJECTED: 3,
   DRAFT:    4,
   ARCHIVED: 5,
+  CANCELLED: 6,
 };
 
 interface EventRow {
@@ -86,6 +87,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; label: strin
   IN_PROGRESS: { bg: "bg-amber-300/10", text: "text-amber-300", label: "In progress" },
   REJECTED: { bg: "bg-red-400/10",   text: "text-red-300",   label: "Rejected"  },
   ARCHIVED: { bg: "bg-white/5",      text: "text-muted",     label: "Completed" },
+  CANCELLED: { bg: "bg-red-400/10",  text: "text-red-300",   label: "Cancelled" },
 };
 
 function MetricCell({
@@ -159,7 +161,7 @@ export default function DashboardPage() {
   const events = data?.events ?? [];
 
   const recent = [...events]
-    .filter((e) => e.status !== "ARCHIVED")
+    .filter((e) => e.status !== "ARCHIVED" && e.status !== "CANCELLED")
     .sort((a, b) => {
       const diff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
       if (diff !== 0) return diff;

@@ -286,7 +286,16 @@ async function claimRefusal(opts: {
 }
 
 async function finishRefusedRefund(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-  const refundId = await refundRefusedPayment(paymentIntent);
+  // Re-read under no assumption about why it was refused: an event cancelled
+  // while the athlete was paying also gets Startline's fee back to the payer's
+  // side, exactly as a cancellation refunds every other entry.
+  const claimed = await prisma.registration.findFirst({
+    where: { stripePaymentIntentId: paymentIntent.id },
+    select: { event: { select: { status: true } } },
+  });
+  const refundId = await refundRefusedPayment(paymentIntent, {
+    returnApplicationFee: claimed?.event?.status === "CANCELLED",
+  });
   if (!refundId) return;
   await prisma.registration.updateMany({
     where: { stripePaymentIntentId: paymentIntent.id, stripeRefundId: null },

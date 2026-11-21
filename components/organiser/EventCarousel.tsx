@@ -5,7 +5,7 @@ import Image from "next/image";
 import { MapPin, ChevronLeft, ChevronRight, Bookmark, BookmarkCheck } from "lucide-react";
 import { formatEventArea } from "@/lib/event-place";
 
-type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED";
+type EventStatus = "DRAFT" | "PENDING" | "APPROVED" | "IN_PROGRESS" | "REJECTED" | "ARCHIVED" | "CANCELLED";
 
 export interface CarouselEvent {
   id: string;
@@ -27,6 +27,7 @@ const STATUS_STYLE: Record<EventStatus, { bg: string; text: string; dot: string;
   DRAFT:    { bg: "bg-dark-lighter",text: "text-muted",    dot: "bg-muted",     label: "DRAFT"    },
   REJECTED: { bg: "bg-red-900/30",  text: "text-red-400",  dot: "bg-red-400",   label: "REJECTED" },
   ARCHIVED: { bg: "bg-dark-lighter",text: "text-muted-dark",dot: "bg-muted-dark",label: "COMPLETED"},
+  CANCELLED: { bg: "bg-red-900/30", text: "text-red-300",  dot: "bg-red-400",   label: "CANCELLED"},
 };
 
 function formatDate(dateStr: string) {

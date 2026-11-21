@@ -8,7 +8,7 @@ import prisma from "@/lib/prisma";
  * well, so a delete that races a new entry fails in the database instead.
  */
 export const EVENT_HAS_ENTRIES_ERROR =
-  "This event has taken entries, so its records have to be kept and it can't be deleted. Contact Startline support if it needs to be withdrawn.";
+  "This event has taken entries, so its records have to be kept and it can't be deleted. Cancel it instead: every athlete is refunded everything they paid.";
 
 /** The subset of `eventIds` that have at least one registration, in any status. */
 export async function eventIdsWithEntries(eventIds: string[]): Promise<Set<string>> {

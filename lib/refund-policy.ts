@@ -29,8 +29,10 @@ export const DEFAULT_REFUND_TIERS: RefundTier[] = [
  * other, which is exactly what happened before.
  */
 export const REFUND_PROCESS_COPY =
-  "Startline processes approved refunds back to your original payment method. " +
-  "Allow 5 to 10 business days for it to appear.";
+  "Refunds are requested through Support. The organiser decides on each request, usually within " +
+  "3 business days, and Startline issues approved refunds to the original payment method. " +
+  "Allow 5 to 10 business days for it to appear. If the event is cancelled, everything paid " +
+  "is refunded, booking fee included.";
 
 /** Shown on the organisation refund settings. Not editable. */
 export const ACL_REFUND_NOTE =

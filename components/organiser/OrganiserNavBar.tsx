@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Building2, Bell,
   Check, TriangleAlert, Menu, X, ChevronDown, ChevronRight,
-  UserRound, RefreshCw,
+  UserRound, RefreshCw, Ban, Undo2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
@@ -30,7 +30,7 @@ const ORGANISER_NAV: NavItem[] = [
 
 interface Notification {
   id: string;
-  type: "EVENT_APPROVED" | "EVENT_REJECTED" | "NEW_REGISTRATION";
+  type: "EVENT_APPROVED" | "EVENT_REJECTED" | "NEW_REGISTRATION" | "REFUND_TICKET_OVERRIDE" | "EVENT_CANCELLED";
   title: string;
   body: string;
   eventId: string | null;
@@ -58,7 +58,12 @@ const NOTIF_STYLE: Record<Notification["type"], { Icon: LucideIcon; tone: string
   EVENT_APPROVED:   { Icon: Check,         tone: "bg-primary/10 text-primary"    },
   EVENT_REJECTED:   { Icon: TriangleAlert, tone: "bg-red-400/10 text-red-300"    },
   NEW_REGISTRATION: { Icon: UserRound,     tone: "bg-white/[0.06] text-white/70" },
+  REFUND_TICKET_OVERRIDE: { Icon: Undo2,   tone: "bg-amber-400/10 text-amber-300" },
+  EVENT_CANCELLED:  { Icon: Ban,           tone: "bg-red-400/10 text-red-300"    },
 };
+
+/** A type this build does not know yet (a newer server) still renders. */
+const NOTIF_FALLBACK = { Icon: Bell, tone: "bg-white/[0.06] text-white/70" };
 
 export default function OrganiserNavBar() {
   const router   = useRouter();
@@ -307,7 +312,7 @@ export default function OrganiserNavBar() {
                       </div>
                     ) : (
                       notifications.map(n => {
-                        const { Icon, tone } = NOTIF_STYLE[n.type];
+                        const { Icon, tone } = NOTIF_STYLE[n.type] ?? NOTIF_FALLBACK;
                         const isFresh = !n.read || freshIds.has(n.id);
                         const href    = n.eventId ? `/organiser/events/${n.eventId}/dashboard` : null;
                         const rowClass = `group flex items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors ${

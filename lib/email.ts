@@ -11,6 +11,8 @@ import { EventChangedEmail } from "@/emails/event-changed";
 import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
+import { RefundOverrideEmail } from "@/emails/refund-override";
+import { EventCancelledEmail } from "@/emails/event-cancelled";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
 import { SUPPORT_EMAIL } from "@/lib/contact";
@@ -339,8 +341,8 @@ export async function sendFollowedOrganiserEventEmails(
 // ── Event changed (athlete) ───────────────────────────────────────────────────
 // The organiser moved the date, time or venue, or changed the type of an event
 // this athlete had already entered. There is no automatic refund: anyone
-// affected is told to raise it through Support, where the organiser
-// decides it and Startline issues it (#570).
+// affected is told to raise it through Support, where the organiser decides
+// and Startline issues the refund.
 export interface EventChangeLine {
   label: string;
   from: string;
@@ -438,8 +440,9 @@ export async function sendEventEditDecisionEmail(to: string, data: EventEditDeci
 }
 
 // ── Refund request (organiser and admins) ─────────────────────────────────────
-// A refund is reviewed from a support ticket: the organisation whose event it
-// is, and Startline. Nothing is issued from the form.
+// The organiser decides on a refund ticket and Startline issues the refund
+// (#570). Admins are told too, so they can issue it or step in once the
+// organiser's window has passed. Nothing is issued from the form.
 export interface RefundRequestEmailData {
   ticketId: string;
   athleteName: string;
@@ -448,11 +451,25 @@ export interface RefundRequestEmailData {
   eventDate: string | null;
   reason: string;
   eventUrl: string;
+  audience: "organiser" | "admin";
+  /** When the organiser's window to respond closes. */
+  respondBy: Date;
 }
+
+const RESPOND_BY_FORMAT = new Intl.DateTimeFormat("en-AU", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "Australia/Sydney",
+});
 
 export async function buildRefundRequestEmail(data: RefundRequestEmailData): Promise<BuiltEmail> {
   const rendered = await renderEmail(
-    RefundRequestEmail({ ...data, eventDate: formatEmailDate(data.eventDate) }),
+    RefundRequestEmail({
+      ...data,
+      eventDate: formatEmailDate(data.eventDate),
+      respondBy: RESPOND_BY_FORMAT.format(data.respondBy),
+    }),
   );
   return { subject: `Refund request: ${data.eventTitle}`, ...rendered };
 }
@@ -460,6 +477,63 @@ export async function buildRefundRequestEmail(data: RefundRequestEmailData): Pro
 export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
   if (!getResend()) return;
   await sendOne(to, await buildRefundRequestEmail(data));
+}
+
+// ── Refund override (organiser) ───────────────────────────────────────────────
+// Startline decided a refund ticket over the organisation's head. Always sent:
+// an override is the exception the organisation must hear about.
+export interface RefundOverrideEmailData {
+  athleteName: string;
+  eventTitle: string;
+  organiserDecision: "approved" | "declined" | null;
+  decision: "approved" | "declined";
+  note: string;
+}
+
+export async function buildRefundOverrideEmail(data: RefundOverrideEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    RefundOverrideEmail({ ...data, refundsUrl: organiserUrl("/organiser/refunds", SITE) }),
+  );
+  return { subject: `Startline changed a refund decision: ${data.eventTitle}`, ...rendered };
+}
+
+export async function sendRefundOverrideEmails(to: string[], data: RefundOverrideEmailData): Promise<number> {
+  if (to.length === 0) return 0;
+  const email = await buildRefundOverrideEmail(data);
+  return sendEmailBatch(to.map((addr) => ({ to: addr, email })), "refund override");
+}
+
+// ── Event cancelled (athletes) ────────────────────────────────────────────────
+// The event is off. Says how much is coming back so the athlete can check it
+// against what they paid: everything, booking fee included.
+export interface EventCancelledEmailData {
+  eventTitle: string;
+  eventDate: string | null;
+  /** Cents being returned to this athlete. 0 for a free entry. */
+  refundCents: number;
+  reason: string | null;
+}
+
+export async function buildEventCancelledEmail(data: EventCancelledEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventCancelledEmail({
+      eventTitle: data.eventTitle,
+      eventDate: formatEmailDate(data.eventDate),
+      refundAmount: data.refundCents > 0 ? `$${(data.refundCents / 100).toFixed(2)}` : null,
+      reason: data.reason,
+      activityUrl: `${SITE}/activity`,
+    }),
+  );
+  return { subject: `Cancelled: ${data.eventTitle}`, ...rendered };
+}
+
+export async function sendEventCancelledEmails(
+  items: { to: string; data: EventCancelledEmailData }[],
+): Promise<number> {
+  const messages = await Promise.all(
+    items.map(async ({ to, data }) => ({ to, email: await buildEventCancelledEmail(data) })),
+  );
+  return sendEmailBatch(messages, "event cancelled");
 }
 
 // ── Account security notice ──────────────────────────────────────────────────

@@ -21,13 +21,26 @@ import { getStripe } from "@/lib/stripe";
  * after this succeeds, so a failed refund leaves nothing behind that would stop
  * the retry from refunding.
  */
-export async function refundRefusedPayment(paymentIntent: Stripe.PaymentIntent): Promise<string | null> {
+export async function refundRefusedPayment(
+  paymentIntent: Stripe.PaymentIntent,
+  opts: {
+    /**
+     * Return Startline's application fee too. Set when the event was
+     * cancelled: Startline gives its fee back on a cancellation
+     * (lib/event-cancellation.ts), so a late payment is treated the same.
+     */
+    returnApplicationFee?: boolean;
+  } = {},
+): Promise<string | null> {
   if (!paymentIntent.amount_received || paymentIntent.amount_received <= 0) return null;
 
   const refund = await getStripe().refunds.create(
     {
       payment_intent: paymentIntent.id,
       ...(paymentIntent.transfer_data?.destination ? { reverse_transfer: true } : {}),
+      ...(opts.returnApplicationFee && paymentIntent.application_fee_amount
+        ? { refund_application_fee: true }
+        : {}),
       metadata: { reason: "registration_refused" },
     },
     { idempotencyKey: `refused-payment-refund-${paymentIntent.id}` },

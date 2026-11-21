@@ -792,7 +792,7 @@ export default function RaceManagementPanel({
                 <p className="text-[13px] text-muted leading-relaxed max-w-[600px]">
                   Athletes who asked for a refund.{" "}
                   {wavesOn ? "They come out of wave assignment automatically and free up their spot." : "Their spot is freed automatically."} Refund due is worked out from your event&apos;s policy at the moment they asked,
-                  and is fixed from then on. {REFUND_PROCESS_COPY} This list is for your visibility.
+                  and is fixed from then on. {REFUND_PROCESS_COPY} Decide on requests from the Refunds page.
                 </p>
               </CardContent>
             </Card>

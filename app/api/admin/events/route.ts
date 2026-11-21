@@ -16,7 +16,7 @@ import { withTicketFormat } from "@/lib/team-tickets";
 import { tidyLocationText } from "@/lib/event-location";
 import { checkEventLocation } from "@/lib/event-location-verify";
 
-const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED"] as const;
+const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED", "CANCELLED"] as const;
 type EventStatus = (typeof VALID_STATUSES)[number];
 
 const eventListQuery = z.object({
