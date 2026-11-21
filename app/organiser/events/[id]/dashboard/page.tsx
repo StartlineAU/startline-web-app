@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
   MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2,
-  Download, ImageDown,
+  Download, ImageDown, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -152,6 +152,8 @@ function EventDashboardInner({
   const [deleting,  setDeleting]  = useState(false);
 
 
+  // Warns before editing an event athletes have already entered.
+  const [editWarnOpen, setEditWarnOpen] = useState(false);
   const [qrOpen,    setQrOpen]    = useState(false);
   const [qr,        setQr]        = useState<{ url: string; qrDataUrl: string } | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -300,6 +302,10 @@ function EventDashboardInner({
 
   const { event, announcements, recentRegistrations } = data;
   const canEdit = organiserCanEditEvent(event.status);
+  const editHref = `/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`;
+  // Entrants are told about material changes, so say so before the editor
+  // opens rather than inside it.
+  const entered = event.registrationCount;
   const location = [event.venue, event.city].map((s) => s?.trim()).filter(Boolean).join(", ");
 
   const stats = [
@@ -380,13 +386,17 @@ function EventDashboardInner({
                   <Button variant="outline" type="button" className={canEdit ? "" : "col-span-2"} onClick={openCheckInQr}>
                     <QrCode className="w-4 h-4" /> Check-in QR
                   </Button>
-                  {canEdit && (
+                  {canEdit && (entered > 0 ? (
+                    <Button variant="outline" type="button" onClick={() => setEditWarnOpen(true)}>
+                      <Pencil className="w-4 h-4" /> Edit event
+                    </Button>
+                  ) : (
                     <Button variant="outline" asChild>
-                      <Link href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`}>
+                      <Link href={editHref}>
                         <Pencil className="w-4 h-4" /> Edit event
                       </Link>
                     </Button>
-                  )}
+                  ))}
                 </>
               )}
             </div>
@@ -713,6 +723,34 @@ function EventDashboardInner({
       </Dialog>
 
       {/* Check-in QR */}
+      <Dialog open={editWarnOpen} onOpenChange={setEditWarnOpen}>
+        <DialogContent className="max-w-md" data-testid="edit-warning">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-300" />
+              </div>
+              <DialogTitle>
+                {entered} athlete{entered === 1 ? " has" : "s have"} entered
+              </DialogTitle>
+            </div>
+            <DialogDescription>
+              Changing the category, format, date, times or location emails each of them, and the change is
+              kept in this event&apos;s history. Anyone who no longer wants to take part asks for a refund
+              through Support, which you and Startline review.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" type="button" onClick={() => setEditWarnOpen(false)}>Cancel</Button>
+            <Button asChild>
+              <Link href={editHref}>
+                <Pencil className="w-4 h-4" /> Continue to edit
+              </Link>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={qrOpen} onOpenChange={open => { if (!open) setQrOpen(false); }}>
         <DialogContent>
           <DialogHeader>

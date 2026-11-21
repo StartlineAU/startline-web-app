@@ -125,13 +125,25 @@ test.describe("editing a published event", () => {
     expect(changes[1].material).toBe(false);
   });
 
+  test("Edit event warns about entrants before the editor opens", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto(`/organiser/events/${EVENT_ID}/dashboard`);
+    await page.getByRole("button", { name: /^edit event$/i }).click();
+
+    const warning = page.getByTestId("edit-warning");
+    await expect(warning).toContainText("2 athletes have entered");
+    await warning.getByRole("link", { name: /continue to edit/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/organiser/new-listing\\?id=${EVENT_ID}`));
+  });
+
   test("a venue change saves and is logged, and offers no automatic refund", async ({ page }) => {
     await organiserLogin(page);
     await openEditor(page);
     await openDetail(page, "location");
     await expect(page.getByPlaceholder("Sydney Olympic Park")).toHaveValue("Albert Park");
 
-    await expect(page.getByTestId("change-notice")).toContainText("2 athletes have entered");
+    // The entrant warning lives on the dashboard now, not inside the editor.
+    await expect(page.getByTestId("change-notice")).toHaveCount(0);
     await page.getByPlaceholder("Sydney Olympic Park").fill("Princes Park");
     await saveChanges(page);
 
