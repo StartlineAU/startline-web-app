@@ -753,7 +753,7 @@ function EventDashboardInner({
                 {!isFreeEvent(event.waves) && (
                   <p>
                     Anyone who no longer wants to take part can ask for a refund through Support, up to{" "}
-                    {REFUND_CUTOFF_HOURS} hours before the start. You and Startline review each request.
+                    {REFUND_CUTOFF_HOURS} hours before the start. You decide on each request, and Startline issues the refund.
                   </p>
                 )}
               </div>
