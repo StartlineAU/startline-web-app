@@ -29,6 +29,7 @@ const prismaMock = vi.hoisted(() => {
     },
     user: { upsert: mocks.userUpsert, findUnique: mocks.userFindUnique, create: mocks.userCreate },
     notification: { create: mocks.notificationCreate },
+    pendingOrder: { create: async () => ({ id: "order-1" }) },
     // The capacity check and the insert share one transaction; the mock hands
     // the callback the same client so both are observed by the spies above.
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
