@@ -427,8 +427,9 @@ test.describe("race management", () => {
       .locator("div.flex.items-center.gap-2", { hasText: "Alex Turner" })
       .filter({ hasText: /@/ })
       .first();
-    await expect(updated.getByText(/55:01/)).toBeVisible();
-    await expect(updated.getByText(/1st/)).toBeVisible();
+    // Phones stack these under the name, so match the copy that is showing.
+    await expect(updated.getByText(/55:01/).locator("visible=true")).toBeVisible();
+    await expect(updated.getByText(/^1st$/).locator("visible=true")).toBeVisible();
   });
 
   // Import results is off the After race tab until #565 brings it back.

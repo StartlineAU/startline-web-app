@@ -86,7 +86,7 @@ export default function SimpleRoster({
             <span role="columnheader" className={`min-w-0 flex-1 ${header}`}>Athlete</span>
             <span role="columnheader" className={`hidden sm:block w-32 ${header}`}>Ticket</span>
             {showBibs && <span role="columnheader" className={`w-14 text-right ${header}`}>Bib</span>}
-            <span role="columnheader" className={`w-28 text-right ${header}`}>Check-in</span>
+            <span role="columnheader" className={`w-[72px] sm:w-28 text-right ${header}`}>Check-in</span>
             <span className="w-6" aria-hidden />
           </div>
           {visible.map((a) => (
@@ -116,12 +116,12 @@ export default function SimpleRoster({
                   {a.bibNumber ? `#${a.bibNumber}` : "-"}
                 </span>
               )}
-              <span role="cell" className="w-28 flex justify-end">
+              <span role="cell" className="w-[72px] sm:w-28 flex justify-end">
                 {a.checkedInAt ? (
                   <span
                     data-testid="roster-check-in"
                     title={`Checked in ${new Date(a.checkedInAt).toLocaleString("en-AU")}`}
-                    className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 rounded px-1.5 py-0.5 whitespace-nowrap"
+                    className="inline-flex items-center gap-1 font-headline text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 border border-primary/30 rounded px-1.5 py-0.5 text-right sm:whitespace-nowrap"
                   >
                     <CheckCheck className="w-3 h-3" /> {checkInLabel(a.checkedInAt)}
                   </span>

@@ -128,30 +128,51 @@ export default function WaveResultsBoard({ waves, athletes, showBibs = true, onE
             {a.name}
           </span>
           <span className="block text-[11px] text-muted-dark truncate mt-0.5">{a.email}</span>
+          {/* Phones have no room for columns: the same values stack under the name. */}
+          <span className="sm:hidden mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-headline text-[11px]" data-testid="result-summary">
+            {showBibs && (
+              <span className={a.bibNumber ? "text-light" : "text-muted-dark"}>
+                <span className="text-muted-dark uppercase tracking-widest text-[9px] mr-1">Bib</span>
+                {a.bibNumber ? `#${a.bibNumber}` : "-"}
+              </span>
+            )}
+            <span className={a.category ? "text-white/80" : "text-muted-dark"}>
+              <span className="text-muted-dark uppercase tracking-widest text-[9px] mr-1">Division</span>
+              {a.category || "-"}
+            </span>
+            <span className={a.resultTime ? "text-white/80" : "text-muted-dark"}>
+              <span className="text-muted-dark uppercase tracking-widest text-[9px] mr-1">Time</span>
+              {a.resultTime || "-"}
+            </span>
+            <span className={a.resultPlacement ? "text-white/80" : "text-muted-dark"}>
+              <span className="text-muted-dark uppercase tracking-widest text-[9px] mr-1">Place</span>
+              {a.resultPlacement || "-"}
+            </span>
+          </span>
         </span>
         {showBibs && (
           <span
-            className={`shrink-0 w-12 text-right font-headline text-[13px] font-black italic ${
+            className={`hidden sm:block shrink-0 w-12 text-right font-headline text-[13px] font-black italic ${
               a.bibNumber ? "text-light" : "text-muted-dark"
             }`}
           >
             {a.bibNumber ? `#${a.bibNumber}` : "-"}
           </span>
         )}
-        <span className={`${cell} w-[88px] sm:w-[110px] ${a.category ? "text-white/80" : "text-muted-dark"}`}>
+        <span className={`${cell} hidden sm:block w-[110px] ${a.category ? "text-white/80" : "text-muted-dark"}`}>
           {a.category || "-"}
         </span>
-        <span className={`${cell} w-14 sm:w-16 ${a.resultTime ? "text-white/80" : "text-muted-dark"}`}>
+        <span className={`${cell} hidden sm:block w-16 ${a.resultTime ? "text-white/80" : "text-muted-dark"}`}>
           {a.resultTime || "-"}
         </span>
-        <span className={`${cell} w-16 sm:w-24 ${a.resultPlacement ? "text-white/80" : "text-muted-dark"}`}>
+        <span className={`${cell} hidden sm:block w-24 ${a.resultPlacement ? "text-white/80" : "text-muted-dark"}`}>
           {a.resultPlacement || "-"}
         </span>
         <button
           type="button"
           onClick={() => onEditResult(a.id)}
           aria-label={hasResult ? `Edit result for ${a.name}` : `Add result for ${a.name}`}
-          className="shrink-0 p-1.5 text-muted-dark hover:text-primary transition-colors"
+          className="shrink-0 self-start sm:self-center p-1.5 text-muted-dark hover:text-primary transition-colors"
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
@@ -232,17 +253,17 @@ export default function WaveResultsBoard({ waves, athletes, showBibs = true, onE
                     Athlete
                   </span>
                   {showBibs && (
-                    <span className="shrink-0 w-12 text-right font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
+                    <span className="hidden sm:block shrink-0 w-12 text-right font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
                       Bib
                     </span>
                   )}
-                  <span className="shrink-0 w-[88px] sm:w-[110px] font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
+                  <span className="hidden sm:block shrink-0 w-[110px] font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
                     Division
                   </span>
-                  <span className="shrink-0 w-14 sm:w-16 font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
+                  <span className="hidden sm:block shrink-0 w-16 font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
                     Time
                   </span>
-                  <span className="shrink-0 w-16 sm:w-24 font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
+                  <span className="hidden sm:block shrink-0 w-24 font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
                     Placement
                   </span>
                   <span className="shrink-0 w-8" aria-hidden />
