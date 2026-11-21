@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
+import { isValidRaceTime, normalisePlacement, normaliseRaceTime } from "@/lib/race-results";
 import type { Prisma } from "@prisma/client";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
@@ -84,7 +84,8 @@ export async function PATCH(
     const data: Prisma.RegistrationUpdateInput = {};
     if ("resultDistance" in row)  data.resultDistance  = row.resultDistance?.trim() || null;
     if ("resultTime" in row)      data.resultTime      = rawTime ? normaliseRaceTime(rawTime) : null;
-    if ("resultPlacement" in row) data.resultPlacement = row.resultPlacement?.trim() || null;
+    // A bare number ("43") is stored as the ordinal athletes read ("43rd").
+    if ("resultPlacement" in row) data.resultPlacement = normalisePlacement(row.resultPlacement);
     if ("isPersonalBest" in row)  data.isPersonalBest  = !!row.isPersonalBest;
     if ("isTopResult" in row)     data.isTopResult     = !!row.isTopResult;
 

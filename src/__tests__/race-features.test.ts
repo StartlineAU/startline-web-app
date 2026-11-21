@@ -105,3 +105,37 @@ describe("bulk bib assignment ordering (#566)", () => {
     expect(result.map((a) => a.registrationId)).toEqual(["b", "a"]);
   });
 });
+
+import { normalisePlacement, ordinal, placementNumber, raceTimeFromParts, raceTimeParts } from "@/lib/race-results";
+
+describe("result entry helpers", () => {
+  it("adds the right ordinal suffix", () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111, 112].map(ordinal)).toEqual([
+      "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st", "111th", "112th",
+    ]);
+  });
+
+  it("stores a bare position as its ordinal and keeps anything else as written", () => {
+    expect(normalisePlacement("43")).toBe("43rd");
+    expect(normalisePlacement(" 8 ")).toBe("8th");
+    expect(normalisePlacement("0")).toBeNull();
+    expect(normalisePlacement("")).toBeNull();
+    expect(normalisePlacement("12th / 340")).toBe("12th / 340");
+  });
+
+  it("reads the position back out of a stored placement", () => {
+    expect(placementNumber("43rd")).toBe(43);
+    expect(placementNumber("12th / 340")).toBe(12);
+    expect(placementNumber("DNF")).toBeNull();
+    expect(placementNumber(null)).toBeNull();
+  });
+
+  it("round-trips a finish time through hours, minutes and seconds", () => {
+    expect(raceTimeParts("00:48:22")).toEqual({ hours: 0, minutes: 48, seconds: 22 });
+    expect(raceTimeParts("1:08:22")).toEqual({ hours: 1, minutes: 8, seconds: 22 });
+    expect(raceTimeParts(null)).toEqual({ hours: 0, minutes: 0, seconds: 0 });
+    expect(raceTimeFromParts({ hours: 0, minutes: 48, seconds: 22 })).toBe("48:22");
+    expect(raceTimeFromParts({ hours: 1, minutes: 8, seconds: 2 })).toBe("1:08:02");
+    expect(raceTimeFromParts({ hours: 0, minutes: 0, seconds: 0 })).toBeNull();
+  });
+});

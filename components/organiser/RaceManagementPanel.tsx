@@ -19,7 +19,9 @@ import {
 import { nextAvailableBib } from "@/lib/bib-assignment";
 import { assignAthletesToWaves, unassignedReason, type WaveDef } from "@/lib/wave-assignment";
 import { parseFinishToMinutes, formatFinishMinutes, calcAgeFromIsoDate } from "@/lib/registration-form";
-import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
+import {
+  normalisePlacement, ordinal, placementNumber, raceTimeFromParts, raceTimeParts, type RaceTimeParts,
+} from "@/lib/race-results";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
@@ -77,7 +79,8 @@ export default function RaceManagementPanel({
   const [assignBibsKey, setAssignBibsKey] = useState(0);
 
   const [editingResult, setEditingResult] = useState<Registration | null>(null);
-  const [resultTime, setResultTime] = useState("");
+  const [resultTime, setResultTime] = useState<RaceTimeParts>({ hours: 0, minutes: 0, seconds: 0 });
+  // Digits only: the ordinal ("st", "nd", "rd", "th") is added for the athlete.
   const [resultPlacement, setResultPlacement] = useState("");
   const [savingResult, setSavingResult] = useState(false);
   const [resultError, setResultError] = useState("");
@@ -243,20 +246,17 @@ export default function RaceManagementPanel({
 
   const openResultEditor = (reg: Registration) => {
     setEditingResult(reg);
-    setResultTime(reg.resultTime ?? "");
-    setResultPlacement(reg.resultPlacement ?? "");
+    setResultTime(raceTimeParts(reg.resultTime));
+    const place = placementNumber(reg.resultPlacement);
+    setResultPlacement(place ? String(place) : "");
     setResultError("");
   };
 
   const saveResult = async () => {
     if (!editingResult) return;
-    // Results publish straight to the athlete's public profile, so an unreadable
-    // time must never get that far.
-    const trimmedTime = resultTime.trim();
-    if (trimmedTime && !isValidRaceTime(trimmedTime)) {
-      setResultError("Finish time must look like 41:05 or 1:08:22.");
-      return;
-    }
+    // Built from the dropdowns, so it is always a readable time (or none at 0:00:00).
+    const timeValue = raceTimeFromParts(resultTime);
+    const placementValue = normalisePlacement(resultPlacement);
     setSavingResult(true);
     setResultError("");
     try {
@@ -266,8 +266,8 @@ export default function RaceManagementPanel({
         body: JSON.stringify({
           results: [{
             registrationId: editingResult.id,
-            resultTime: trimmedTime || null,
-            resultPlacement: resultPlacement.trim() || null,
+            resultTime: timeValue,
+            resultPlacement: placementValue,
           }],
         }),
       });
@@ -276,19 +276,14 @@ export default function RaceManagementPanel({
         setResultError(json?.error ?? "Could not save this result.");
         return;
       }
-      if (json?.invalidTimes?.length) {
-        setResultError("Finish time must look like 41:05 or 1:08:22.");
-        return;
-      }
-      const savedTime = trimmedTime ? normaliseRaceTime(trimmedTime) : null;
       setData((d) => d ? {
         ...d,
         registrations: d.registrations.map((r) =>
           r.id === editingResult.id
             ? {
                 ...r,
-                resultTime: savedTime,
-                resultPlacement: resultPlacement.trim() || null,
+                resultTime: timeValue,
+                resultPlacement: placementValue,
               }
             : r
         ),
@@ -856,25 +851,50 @@ export default function RaceManagementPanel({
                 {editingResult?.category?.trim() || "No division on registration"}
               </div>
             </div>
-            <div>
-              <label htmlFor="result-time" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Time</label>
-              <input
-                id="result-time"
-                value={resultTime}
-                onChange={(e) => setResultTime(e.target.value)}
-                placeholder="e.g. 41:05"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
-              />
-            </div>
+            <fieldset>
+              <legend className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Time</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: "hours", label: "Hours", max: 99 },
+                  { key: "minutes", label: "Minutes", max: 59 },
+                  { key: "seconds", label: "Seconds", max: 59 },
+                ] as const).map((unit) => (
+                  <div key={unit.key}>
+                    <FormSelect
+                      aria-label={unit.label}
+                      value={String(resultTime[unit.key])}
+                      onChange={(v) => setResultTime((t) => ({ ...t, [unit.key]: Number(v) }))}
+                      options={Array.from({ length: unit.max + 1 }, (_, n) => ({
+                        value: String(n),
+                        label: unit.key === "hours" ? String(n) : String(n).padStart(2, "0"),
+                      }))}
+                    />
+                    <span className="block mt-1 font-headline text-[10px] uppercase tracking-widest text-muted-dark">{unit.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[12px] text-muted-dark mt-1.5">Leave all three at 0 for no time.</p>
+            </fieldset>
             <div>
               <label htmlFor="result-placement" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Placement</label>
-              <input
-                id="result-placement"
-                value={resultPlacement}
-                onChange={(e) => setResultPlacement(e.target.value)}
-                placeholder="e.g. 8th / 512"
-                className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  id="result-placement"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={resultPlacement}
+                  onChange={(e) => setResultPlacement(e.target.value.replace(/\D/g, ""))}
+                  placeholder="e.g. 8"
+                  className="w-32 bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                />
+                {Number(resultPlacement) >= 1 && (
+                  <span className="font-headline text-[13px] font-bold text-muted-light" aria-live="polite">
+                    Shows as {ordinal(Number(resultPlacement))}
+                  </span>
+                )}
+              </div>
             </div>
             {resultError && <p className="text-[13px] text-red-300">{resultError}</p>}
           </div>
