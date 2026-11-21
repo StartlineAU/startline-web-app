@@ -25,7 +25,7 @@ const registrationPatchSchema = z.object({
 async function assertOwnedEvent(eventId: string, organiserId: string) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, organiserId: true, waves: true, title: true, ...RACE_FEATURES_SELECT },
+    select: { id: true, organiserId: true, waves: true, title: true, categories: true, ...RACE_FEATURES_SELECT },
   });
   if (!event) return { error: NextResponse.json({ error: "Not found." }, { status: 404 }) };
   if (event.organiserId !== organiserId) {
@@ -90,6 +90,9 @@ export async function GET(
       title: owned.event!.title,
       waves,
       startWaves,
+      divisions: Array.isArray(owned.event!.categories)
+        ? (owned.event!.categories as unknown[]).filter((c): c is string => typeof c === "string")
+        : [],
       waveMode: owned.event!.waveMode,
       bibMode: owned.event!.bibMode,
     },

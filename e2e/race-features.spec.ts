@@ -240,3 +240,34 @@ test("once the event has started, Enter results is the main action and opens Aft
   await expect(page.getByText(/^results/i).first()).toBeVisible();
   await expect(page.getByTestId("simple-roster")).toHaveCount(0);
 });
+
+test("an organiser can add a division the event was missing while entering a result", async ({ page }) => {
+  await prisma.event.update({ where: { id: EVENT_ID }, data: { categories: ["10K"] } });
+  await prisma.registration.update({
+    where: { id: "e2e-race-features-alice" },
+    data: { category: "General", resultTime: null, resultPlacement: null },
+  });
+
+  await organiserLogin(page);
+  await page.goto(`${MANAGE}&tab=results`);
+  const row = page.locator("div.flex.items-center", { hasText: "Alice Archer" }).filter({ hasText: /@/ }).first();
+  await row.getByRole("button", { name: /add result|edit result/i }).click();
+
+  const dialog = page.getByRole("dialog");
+  // The entry starts on its ticket name, which isn't one of the event's divisions.
+  await expect(dialog.getByRole("button", { name: "Division" })).toHaveText(/General \(not an event division\)/);
+  await dialog.getByRole("button", { name: "Division" }).click();
+  await dialog.getByRole("option", { name: "+ Add a division" }).click();
+  await dialog.getByLabel("New division name").fill("Masters 40+");
+  await dialog.getByLabel(/placement/i).fill("3");
+  await dialog.getByRole("button", { name: /save result/i }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const event = await prisma.event.findUnique({ where: { id: EVENT_ID }, select: { categories: true } });
+  expect(event?.categories).toEqual(["10K", "Masters 40+"]);
+  const alice = await prisma.registration.findUnique({
+    where: { id: "e2e-race-features-alice" },
+    select: { category: true, resultPlacement: true },
+  });
+  expect(alice).toEqual({ category: "Masters 40+", resultPlacement: "3rd" });
+});

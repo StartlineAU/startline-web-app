@@ -35,6 +35,7 @@ import AssignBibsDialog from "@/components/organiser/race-management/AssignBibsD
 
 import { useApiResource } from "@/hooks/useApiResource";
 import ExportMenu from "@/components/organiser/race-management/ExportMenu";
+import { InfoTip } from "@/components/event/event-form/info-tip";
 import type { PageData, Registration, StartWave } from "@/components/organiser/race-management/types";
 
 const STATUS_STYLE: Record<Registration["status"], string> = {
@@ -43,6 +44,9 @@ const STATUS_STYLE: Record<Registration["status"], string> = {
   REFUNDED:         "bg-red-400/10 text-red-300 border-red-400/20",
   CANCELLED:        "bg-white/5 text-muted border-dark-lighter",
 };
+
+/** Sentinel option in the division picker that reveals a "new division" field. */
+const ADD_DIVISION = "__add_division__";
 
 const STATUS_LABEL: Record<Registration["status"], string> = {
   CONFIRMED:        "Confirmed",
@@ -82,6 +86,9 @@ export default function RaceManagementPanel({
   const [resultTime, setResultTime] = useState<RaceTimeParts>({ hours: 0, minutes: 0, seconds: 0 });
   // Digits only: the ordinal ("st", "nd", "rd", "th") is added for the athlete.
   const [resultPlacement, setResultPlacement] = useState("");
+  // The athlete's division, or ADD_DIVISION while typing a new one in.
+  const [resultDivision, setResultDivision] = useState("");
+  const [newDivision, setNewDivision] = useState("");
   const [savingResult, setSavingResult] = useState(false);
   const [resultError, setResultError] = useState("");
 
@@ -249,6 +256,8 @@ export default function RaceManagementPanel({
     setResultTime(raceTimeParts(reg.resultTime));
     const place = placementNumber(reg.resultPlacement);
     setResultPlacement(place ? String(place) : "");
+    setResultDivision(reg.category?.trim() ?? "");
+    setNewDivision("");
     setResultError("");
   };
 
@@ -257,6 +266,12 @@ export default function RaceManagementPanel({
     // Built from the dropdowns, so it is always a readable time (or none at 0:00:00).
     const timeValue = raceTimeFromParts(resultTime);
     const placementValue = normalisePlacement(resultPlacement);
+    const addingDivision = resultDivision === ADD_DIVISION;
+    if (addingDivision && !newDivision.trim()) {
+      setResultError("Name the new division, or pick one from the list.");
+      return;
+    }
+    const divisionValue = addingDivision ? newDivision.trim() : resultDivision || null;
     setSavingResult(true);
     setResultError("");
     try {
@@ -268,6 +283,7 @@ export default function RaceManagementPanel({
             registrationId: editingResult.id,
             resultTime: timeValue,
             resultPlacement: placementValue,
+            division: divisionValue,
           }],
         }),
       });
@@ -278,10 +294,13 @@ export default function RaceManagementPanel({
       }
       setData((d) => d ? {
         ...d,
+        // The server answers with the event's divisions, including one just added.
+        event: Array.isArray(json?.divisions) ? { ...d.event, divisions: json.divisions } : d.event,
         registrations: d.registrations.map((r) =>
           r.id === editingResult.id
             ? {
                 ...r,
+                category: divisionValue,
                 resultTime: timeValue,
                 resultPlacement: placementValue,
               }
@@ -435,6 +454,17 @@ export default function RaceManagementPanel({
   const nextFreeBib = Number(nextAvailableBib({
     taken: registrations.map((r) => r.bibNumber).filter(Boolean) as string[],
   }));
+  // The event's divisions, plus the athlete's current one if the event doesn't
+  // list it (entries start with their ticket name), plus "add a division".
+  const currentDivision = editingResult?.category?.trim() || "";
+  const divisionOptions = [
+    { value: "", label: "No division" },
+    ...event.divisions.map((d) => ({ value: d, label: d })),
+    ...(currentDivision && !event.divisions.some((d) => d.toLowerCase() === currentDivision.toLowerCase())
+      ? [{ value: currentDivision, label: `${currentDivision} (not an event division)` }]
+      : []),
+    { value: ADD_DIVISION, label: "+ Add a division" },
+  ];
   const hiddenExportColumns: ExportColumnKey[] = [
     ...(bibsOn ? [] : (["bib"] as const)),
     ...(wavesOn ? [] : (["startWave", "waveStart"] as const)),
@@ -846,10 +876,40 @@ export default function RaceManagementPanel({
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <div className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Division</div>
-              <div className="w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-muted-light">
-                {editingResult?.category?.trim() || "No division on registration"}
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span id="result-division-label" className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted">Division</span>
+                <InfoTip label="Division">
+                  <p>
+                    The race or group an athlete is placed in, such as 10K or Women 40-49. Placements are
+                    usually counted within a division.
+                  </p>
+                  <p className="mt-2">
+                    Athletes don&apos;t choose one when they register yet, so an entry starts with its ticket
+                    name (like General). Pick the right one here, or add a division this event is missing.
+                  </p>
+                </InfoTip>
               </div>
+              <FormSelect
+                id="result-division"
+                aria-label="Division"
+                value={resultDivision}
+                onChange={setResultDivision}
+                options={divisionOptions}
+              />
+              {resultDivision === ADD_DIVISION && (
+                <input
+                  aria-label="New division name"
+                  autoFocus
+                  value={newDivision}
+                  onChange={(e) => setNewDivision(e.target.value)}
+                  maxLength={60}
+                  placeholder="e.g. Half Marathon or Women 40-49"
+                  className="mt-2 w-full bg-dark border border-dark-lighter rounded-lg px-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
+                />
+              )}
+              {resultDivision === ADD_DIVISION && (
+                <p className="text-[12px] text-muted-dark mt-1.5">Added to this event&apos;s divisions and kept in its change history.</p>
+              )}
             </div>
             <fieldset>
               <legend className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted block mb-1.5">Time</legend>
