@@ -27,16 +27,24 @@ const SIX_MB_JPEG = Buffer.concat([
 ]);
 
 // The profile page is server-rendered: a click before hydration does nothing,
-// so keep clicking until the settings menu is actually up.
+// so keep clicking until the settings menu is actually up. Retry on the dialog,
+// not its contents: once it is open the button sits under its overlay, and the
+// organisation section can take seconds to load on a cold dev server.
 async function openProfileSettings(page: Page) {
-  const cover = page.getByText("Cover photo");
+  const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(async () => {
-    if (!(await cover.isVisible())) await page.getByRole("button", { name: "Edit Profile" }).click();
-    await expect(cover).toBeVisible({ timeout: 2000 });
+    if (!(await settings.isVisible())) {
+      await page.getByRole("button", { name: "Edit Profile" }).click({ timeout: 2000 });
+    }
+    await expect(settings).toBeVisible({ timeout: 2000 });
   }).toPass({ timeout: 30000 });
+  await expect(settings.getByText("Cover photo")).toBeVisible({ timeout: 30000 });
 }
 
 test.describe("image upload", () => {
+  // Cold compiles of the profile page and the settings section on CI.
+  test.slow();
+
   test("posts the file straight to S3 and has the server verify it", async ({ page }) => {
     let presignBody: Record<string, unknown> | null = null;
     let completeBody: Record<string, unknown> | null = null;
