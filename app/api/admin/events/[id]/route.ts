@@ -5,12 +5,14 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
 import { eventPayloadSchema, idParams } from "@/lib/schemas";
+import { checkTeamTierChange } from "@/lib/team-entries";
 import { eventTimeData } from "@/lib/event-time";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { tidyLocationText } from "@/lib/event-location";
 import { checkEventLocation } from "@/lib/event-location-verify";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { cancelEventSchedules, syncEventSchedules } from "@/lib/event-scheduler";
+import { EVENT_HAS_ENTRIES_ERROR, eventIdsWithEntries, isForeignKeyViolation } from "@/lib/event-deletion";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import {
@@ -20,6 +22,7 @@ import {
 import { notifyEventChange } from "@/lib/notify-event-change";
 import { supersedePendingRevision } from "@/lib/event-revision";
 import { notifyOrganiserRevisionSuperseded } from "@/lib/notify-event-revision";
+import { withTicketFormat } from "@/lib/team-tickets";
 
 const AUDIT_FIELDS = [
   "title", "discipline", "description", "eventDate", "endDate", "startTime", "endTime",
@@ -27,6 +30,7 @@ const AUDIT_FIELDS = [
   "categories", "cap", "minAge", "waves", "inclusions", "extras", "activations",
   "refundTiers", "refundPolicy", "registrationType", "feeStructure", "registrationUrl",
   "accessibilityInfo", "coverImageUrl", "informationPdfs", "photos", "status",
+  "showContactName", "showContactEmail", "showContactPhone",
 ] as const;
 
 function auditChanges(before: Record<string, unknown>, after: Record<string, unknown>) {
@@ -83,7 +87,8 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const body = parsedBody.data;
+  // The format follows the tickets (#541).
+  const body = withTicketFormat(parsedBody.data);
   const { submit, ...data } = body;
 
   try {
@@ -95,6 +100,10 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
+
+    // A ticket's team size is fixed once it has entries, for admins too.
+    const teamTierError = await checkTeamTierChange(id, existing, { waves: data.waves, format: data.format });
+    if (teamTierError) return NextResponse.json({ error: teamTierError }, { status: 409 });
 
     if (submit) {
       const required = ["title", "discipline", "eventDate", "startTime", "city", "state", "format", "level"] as const;
@@ -161,6 +170,10 @@ export async function PATCH(
       coverImageUrl:     data.coverImageUrl     ?? undefined,
       informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
       photos:            Array.isArray(data.photos) ? data.photos : undefined,
+      // Undefined leaves the choice alone; null hands it back to the organisation.
+      showContactName:   data.showContactName,
+      showContactEmail:  data.showContactEmail,
+      showContactPhone:  data.showContactPhone,
     };
 
     // Same change log as an organiser edit (app/api/organiser/events/[id]/route.ts).
@@ -268,6 +281,9 @@ export async function DELETE(
     if (!event) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
     }
+    if ((await eventIdsWithEntries([id])).has(id)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
 
     await prisma.event.delete({ where: { id } });
     await cancelEventSchedules(id).catch((err) =>
@@ -284,6 +300,9 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return NextResponse.json({ error: EVENT_HAS_ENTRIES_ERROR, code: "HAS_ENTRIES" }, { status: 409 });
+    }
     console.error("Admin delete event error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }

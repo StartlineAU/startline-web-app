@@ -5,11 +5,15 @@ import { EventApprovedEmail } from "@/emails/event-approved";
 import { EventRejectedEmail } from "@/emails/event-rejected";
 import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
 import { ReviewReportedEmail } from "@/emails/review-reported";
+import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
 import { FollowedOrganiserEventEmail } from "@/emails/followed-organiser-event";
 import { EventChangedEmail } from "@/emails/event-changed";
 import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
+import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
+import { OrganiserInviteEmail } from "@/emails/organiser-invite";
+import { SUPPORT_EMAIL } from "@/lib/contact";
 import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
@@ -97,6 +101,8 @@ export interface RegistrationEmailData {
   /** Display-ready; see formatEventPlace. */
   location: string;
   bib?: string;
+  /** Team entry, display-ready: "Harbour Hustlers (team of 4)". */
+  team?: string;
   registrationFee: string;
   serviceFee: string;
   total: string;
@@ -258,6 +264,37 @@ export async function buildReviewReportedEmail(
 export async function sendReviewReportedEmails(recipients: string[], data: ReviewReportedEmailData) {
   if (recipients.length === 0) return;
   await sendToEachAdmin(recipients, await buildReviewReportedEmail(data), "review report notification");
+}
+
+// ── Team details needed (buyer) ───────────────────────────────────────────────
+export interface TeamDetailsNeededEmailData {
+  buyerName?: string | null;
+  eventTitle: string;
+  eventDate?: string | null;
+  teams: { name: string; size: number; missing: number }[];
+}
+
+export async function buildTeamDetailsNeededEmail(
+  to: string,
+  data: TeamDetailsNeededEmailData,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    TeamDetailsNeededEmail({
+      greeting: firstNameGreeting(data.buyerName),
+      eventTitle: data.eventTitle,
+      eventDate: formatEmailDate(data.eventDate),
+      teams: data.teams,
+      activityUrl: `${siteUrl}/activity`,
+      sentTo: to,
+    }),
+  );
+  return { subject: `Add your team's details for ${data.eventTitle}`, ...rendered };
+}
+
+export async function sendTeamDetailsNeededEmail(to: string, data: TeamDetailsNeededEmailData) {
+  if (!getResend()) return;
+  await sendOne(to, await buildTeamDetailsNeededEmail(to, data));
 }
 
 // ── Followed organiser event live ─────────────────────────────────────────────
@@ -423,4 +460,39 @@ export async function buildRefundRequestEmail(data: RefundRequestEmailData): Pro
 export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
   if (!getResend()) return;
   await sendOne(to, await buildRefundRequestEmail(data));
+}
+
+// ── Account security notice ──────────────────────────────────────────────────
+// Something that controls access to the account changed. Sent so that a change
+// made with a stolen session reaches the owner. Never throws: the change has
+// already happened and must not be reported as failed over an email.
+export async function buildAccountSecurityNoticeEmail(change: string): Promise<BuiltEmail> {
+  const rendered = await renderEmail(AccountSecurityNoticeEmail({ change, supportEmail: SUPPORT_EMAIL }));
+  return { subject: "A security change was made to your Startline account", ...rendered };
+}
+
+export async function sendAccountSecurityNotice(to: string | null | undefined, change: string): Promise<void> {
+  if (!to || !to.includes("@") || !getResend()) return;
+  try {
+    await sendOne(to, await buildAccountSecurityNoticeEmail(change));
+  } catch (err) {
+    console.error("Account security notice failed:", err);
+  }
+}
+
+// ── Organiser invitation ─────────────────────────────────────────────────────
+export interface OrganiserInviteEmailData {
+  organisationName: string;
+  inviteUrl: string;
+  expiresInDays: number;
+}
+
+export async function buildOrganiserInviteEmail(data: OrganiserInviteEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(OrganiserInviteEmail(data));
+  return { subject: `You're invited to help run ${data.organisationName} on Startline`, ...rendered };
+}
+
+export async function sendOrganiserInviteEmail(to: string, data: OrganiserInviteEmailData): Promise<void> {
+  if (!getResend()) return;
+  await sendOne(to, await buildOrganiserInviteEmail(data));
 }

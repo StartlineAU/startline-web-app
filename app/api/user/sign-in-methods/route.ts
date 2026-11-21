@@ -7,6 +7,7 @@ import {
   unlinkProvider,
   verifyAuthenticatorStepUp,
 } from "@/lib/cognito-sign-in-methods";
+import { requireAccountProof } from "@/lib/account-proof";
 import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import {
   createLinkRequest,
@@ -122,17 +123,18 @@ export async function POST(req: Request) {
     }
 
     const current = await getSignInMethods(session.username, enabled);
-    await requireStepUp(session.username, current, body);
+    // Linking adds a way into the account that survives a password change and
+    // signing out everywhere, so a session alone (which may be stolen) is not
+    // enough.
+    await requireAccountProof(session, current, body);
 
     const request = createLinkRequest(body.provider, new URL(req.url).origin);
     if (!request) return unavailable();
 
-    // The callback links an account with an authenticator app only when this
-    // grant comes back with it, so a cookie set by hand cannot skip the check.
-    const grant = current.mfaRequired
-      ? signLinkGrant({ state: request.state, sub: session.sub, provider: body.provider })
-      : null;
-    if (current.mfaRequired && !grant) return unavailable();
+    // The callback links only when this grant comes back with the request, so
+    // cookies set by hand cannot skip the proof above.
+    const grant = signLinkGrant({ state: request.state, sub: session.sub, provider: body.provider });
+    if (!grant) return unavailable();
 
     const response = NextResponse.json({ url: request.url });
     const cookieOptions = {

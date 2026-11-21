@@ -8,6 +8,7 @@ import prisma from "@/lib/prisma";
 import { hasAbn } from "@/lib/abn";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
+import { organiserContactSelect, visibilityFromColumns } from "@/lib/organiser-contact";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export default async function NewListingPage({
   // whether to show an advisory notice, and this page already has the session.
   const organiser = await prisma.organiser.findUnique({
     where:  { id: session.sub },
-    select: { abn: true },
+    select: { abn: true, ...organiserContactSelect },
   });
 
   return (
@@ -68,6 +69,10 @@ export default async function NewListingPage({
       cancelRedirect="/organiser/dashboard"
       organiserId={session.sub}
       organiserHasAbn={hasAbn(organiser?.abn)}
+      organiserContact={organiser ? {
+        details: { name: organiser.contactName, email: organiser.contactEmail, phone: organiser.phone },
+        visibility: visibilityFromColumns(organiser),
+      } : undefined}
     />
   );
 }

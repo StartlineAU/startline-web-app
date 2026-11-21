@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { DeleteUserCommand } from "@aws-sdk/client-cognito-identity-provider";
 import prisma from "@/lib/prisma";
-import { getUserSession } from "@/lib/amplify-server";
+import { getServerSession, getUserSession } from "@/lib/amplify-server";
+import { accountProofKind, requireAccountProof } from "@/lib/account-proof";
+import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
+import { SignInMethodError } from "@/lib/cognito-sign-in-methods";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { accountDeletionStatus } from "@/lib/account-deletion";
 import { z } from "zod";
 
-const deleteSchema = z.object({ confirm: z.literal("DELETE") });
+const deleteSchema = z.object({
+  confirm: z.literal("DELETE"),
+  password: z.string().min(1).max(256).optional(),
+  code: z.string().regex(/^\d{6}$/).optional(),
+});
 
 // GET /api/user/account
 // What deleting this account would run into: the organisations that have to be
@@ -17,7 +24,14 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
 
   try {
-    return NextResponse.json({ email: session.email, ...(await accountDeletionStatus(session.sub)) });
+    // Which proof the delete will ask for, so the screen shows the right fields.
+    const cognitoSession = await getServerSession();
+    const methods = cognitoSession ? await getSessionSignInMethods(cognitoSession) : null;
+    return NextResponse.json({
+      email: session.email,
+      proof: methods ? accountProofKind(methods) : "password",
+      ...(await accountDeletionStatus(session.sub)),
+    });
   } catch {
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
@@ -55,6 +69,22 @@ export async function DELETE(req: Request) {
       },
       { status: 409 },
     );
+  }
+
+  // A session alone is not enough to delete the account: see lib/account-proof.ts.
+  const cognitoSession = await getServerSession();
+  const methods = cognitoSession ? await getSessionSignInMethods(cognitoSession) : null;
+  if (!cognitoSession || !methods) {
+    return NextResponse.json({ error: "Could not read your sign-in methods." }, { status: 503 });
+  }
+  try {
+    await requireAccountProof(cognitoSession, methods, parsed.data);
+  } catch (err) {
+    if (err instanceof SignInMethodError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    console.error("Account deletion proof failed:", err);
+    return NextResponse.json({ error: "Could not check your password." }, { status: 500 });
   }
 
   // The sign-in goes first. If it cannot be removed nothing else is touched,

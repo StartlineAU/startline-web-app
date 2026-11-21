@@ -68,6 +68,8 @@ test.beforeAll(async () => {
   });
   expect(user, `seeded user ${USER_EMAIL} should exist`).toBeTruthy();
 
+  // Registrations block deleting their event (onDelete: Restrict).
+  await prisma.registration.deleteMany({ where: { eventId: EVENT_ID } });
   await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
   await prisma.event.create({
     data: {
@@ -119,6 +121,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // Registrations block deleting their event (onDelete: Restrict).
+  await prisma.registration.deleteMany({ where: { eventId: EVENT_ID } });
   await prisma.event.delete({ where: { id: EVENT_ID } }).catch(() => {});
   await prisma.$disconnect();
 });
@@ -249,7 +253,12 @@ test("Activity opens the athlete's registration-specific check-in page", async (
   await setBypass(page, "member");
   await page.goto("/activity");
 
-  const checkIn = page.getByTestId("activity-check-in");
+  // Check-in lives on the ticket the card opens (#552).
+  await page
+    .locator(`[data-testid="registration-entry"][data-event-id="${EVENT_ID}"]`)
+    .getByTestId("event-card")
+    .click();
+  const checkIn = page.getByTestId("ticket-dialog").getByTestId("activity-check-in");
   await expect(checkIn).toBeVisible();
   await checkIn.click();
 

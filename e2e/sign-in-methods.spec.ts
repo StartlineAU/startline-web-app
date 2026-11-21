@@ -113,9 +113,28 @@ test.describe("linked Google and Apple accounts", () => {
 
     const settings = await openSettings(page);
     await settings.getByRole("button", { name: "Connect", exact: true }).first().click();
+    // An account with a password confirms it before a new way in is added.
+    // exact: the change-password form's "Current password" etc. also match.
+    await settings.getByLabel("Password", { exact: true }).fill("Password123!");
+    await expect(settings.getByLabel("Authenticator code")).toHaveCount(0);
+    await settings.getByRole("button", { name: "Connect Google" }).click();
 
     await expect.poll(() => page.url()).toContain("linked=google");
-    expect(requests).toEqual([{ action: "link", provider: "google", returnTo: "/" }]);
+    expect(requests).toEqual([{ action: "link", provider: "google", returnTo: "/", password: "Password123!" }]);
+  });
+
+  test("a provider-only account connects without a password prompt", async ({ page }) => {
+    await loginAs(page, "athlete");
+    const requests = await mockMethods(page, {
+      hasPassword: false,
+      providers: [google(true, false), apple(false)],
+    });
+
+    const settings = await openSettings(page);
+    await settings.getByRole("button", { name: "Connect", exact: true }).click();
+
+    await expect.poll(() => page.url()).toContain("linked=google");
+    expect(requests).toEqual([{ action: "link", provider: "apple", returnTo: "/" }]);
   });
 
   test("a provider-only account cannot disconnect its last way in", async ({ page }) => {

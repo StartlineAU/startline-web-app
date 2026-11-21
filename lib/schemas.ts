@@ -1,4 +1,6 @@
+import { teamSizeOf, MIN_TEAM_SIZE, MAX_TEAM_SIZE } from "@/lib/team-tickets";
 import { z } from "zod";
+import { assetUrl, documentUrl, externalUrl } from "@/lib/asset-url";
 
 // Path params — untrusted input, whitelisted before it reaches Prisma.
 export const idParams = z.object({ id: z.string().min(1).max(255) });
@@ -61,20 +63,25 @@ export const eventPayloadSchema = z
     refundPolicy: z.string().max(10000).nullable().optional(),
     registrationType: z.enum(["startline", "external"]).optional(),
     feeStructure: z.enum(["athlete", "organiser"]).optional(),
-    registrationUrl: z.string().max(2000).nullable().optional(),
+    registrationUrl: externalUrl(2000).nullable().optional(),
     accessibilityInfo: z.string().max(10000).nullable().optional(),
-    coverImageUrl: z.string().max(2000).nullable().optional(),
+    coverImageUrl: assetUrl(2000).nullable().optional(),
     informationPdfs: z
       .array(
         z.object({
-          url: z.string().max(2000),
+          url: documentUrl(2000),
           label: z.string().max(120).nullable().optional(),
           name: z.string().max(255).nullable().optional(),
         }),
       )
       .max(20)
       .optional(),
-    photos: z.array(z.string().max(3000)).optional(),
+    photos: z.array(assetUrl(3000)).max(50).optional(),
+    // Which organiser contact details this event shows. Null follows the
+    // organisation's setting (lib/organiser-contact.ts).
+    showContactName: z.boolean().nullable().optional(),
+    showContactEmail: z.boolean().nullable().optional(),
+    showContactPhone: z.boolean().nullable().optional(),
   })
   .superRefine((data, ctx) => {
     // Cross-field ordering checks (only when both values are present, so
@@ -97,6 +104,22 @@ export const eventPayloadSchema = z
         code: z.ZodIssueCode.custom,
         path: ["endTime"],
         message: "End time must be after start time.",
+      });
+    }
+    // Team tickets: a whole-number team size in range. The format is set from
+    // the tickets on save (withTicketFormat), so it never has to agree here.
+    if (Array.isArray(data.waves)) {
+      data.waves.forEach((w: unknown, i: number) => {
+        if (!w || typeof w !== "object" || !("teamSize" in w)) return;
+        const size = (w as { teamSize: unknown }).teamSize;
+        if (size == null) return;
+        if (teamSizeOf({ teamSize: size }) == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["waves", i, "teamSize"],
+            message: `A team ticket needs between ${MIN_TEAM_SIZE} and ${MAX_TEAM_SIZE} people per team.`,
+          });
+        }
       });
     }
     // Ticket categories cannot close after the event ends.
