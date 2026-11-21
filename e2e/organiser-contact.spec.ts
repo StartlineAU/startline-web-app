@@ -176,7 +176,15 @@ test("the listing editor sets this event's contact details, then hands them back
 
   try {
     await signInAs(page, "organiser");
+    // The editor shows an empty form until the event loads, then replaces it
+    // with what was fetched. On a cold dev server that fetch takes seconds, and
+    // a toggle made before it lands is overwritten, so the save sent null.
+    const loaded = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "GET",
+      { timeout: 30000 },
+    );
     await page.goto(`/organiser/new-listing?id=${apex.id}`);
+    expect((await loaded).ok()).toBe(true);
 
     const editor = page.getByTestId("contact-editor");
     const phone = editor.getByRole("button", { name: /^Phone/ });
@@ -185,7 +193,17 @@ test("the listing editor sets this event's contact details, then hands them back
 
     await phone.click();
     await expect(editor).toContainText("Set for this event");
+    // Wait on the save itself, so a refused save fails with the server's
+    // reason instead of a poll that only says the column stayed null.
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith(`/api/organiser/events/${apex.id}`) && r.request().method() === "PATCH",
+      { timeout: 30000 },
+    );
     await page.getByRole("button", { name: "Save changes" }).filter({ visible: true }).first().click();
+    const res = await saved;
+    const body = await res.text();
+    expect(res.status(), `PATCH ${apex.id} answered ${res.status()}: ${body}`).toBe(200);
+    expect(JSON.parse(body).pendingReview, `the save was queued for review: ${body}`).toBeFalsy();
     await expect
       .poll(async () => (await prisma.event.findUniqueOrThrow({ where: { id: apex.id } })).showContactPhone, { timeout: 20000 })
       .not.toBeNull();

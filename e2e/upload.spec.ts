@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { organiserLogin } from "./helpers";
 
 // Uploads used to POST the file through /api/upload, which runs on Amplify's
@@ -25,6 +25,16 @@ const SIX_MB_JPEG = Buffer.concat([
   Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
   Buffer.alloc(6 * 1024 * 1024, 0x7f),
 ]);
+
+// The profile page is server-rendered: a click before hydration does nothing,
+// so keep clicking until the settings menu is actually up.
+async function openProfileSettings(page: Page) {
+  const cover = page.getByText("Cover photo");
+  await expect(async () => {
+    if (!(await cover.isVisible())) await page.getByRole("button", { name: "Edit Profile" }).click();
+    await expect(cover).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 30000 });
+}
 
 test.describe("image upload", () => {
   test("posts the file straight to S3 and has the server verify it", async ({ page }) => {
@@ -77,8 +87,7 @@ test.describe("image upload", () => {
 
     await organiserLogin(page);
     await page.goto("/organiser/profile");
-    await page.getByRole("button", { name: "Edit Profile" }).click();
-    await expect(page.getByText("Cover photo")).toBeVisible();
+    await openProfileSettings(page);
 
     await page.locator('input[type="file"]').first().setInputFiles({
       name: "pexels-runffwpu-5840726.jpg",
@@ -106,8 +115,7 @@ test.describe("image upload", () => {
 
     await organiserLogin(page);
     await page.goto("/organiser/profile");
-    await page.getByRole("button", { name: "Edit Profile" }).click();
-    await expect(page.getByText("Cover photo")).toBeVisible();
+    await openProfileSettings(page);
 
     await page.locator('input[type="file"]').first().setInputFiles({
       name: "too-big.jpg",
