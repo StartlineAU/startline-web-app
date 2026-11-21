@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronRight, Search, Users, AlertTriangle, AlertCircle,
@@ -78,6 +78,10 @@ interface Props {
   waves: BoardWave[];
   /** Confirmed athletes only; waves are for paid, registered athletes. */
   athletes: BoardAthlete[];
+  /** False while bib numbers are turned off for the event (#566). */
+  showBibs?: boolean;
+  /** Buttons that sit beside the search field (manage waves, assign bibs, export). */
+  actions?: ReactNode;
   onEdit: (athleteId: string) => void;
   onMove: (
     ids: string[],
@@ -98,7 +102,7 @@ const CAP_STYLE = {
   over: "text-red-300 border-red-400/40 bg-red-400/10",
 } as const;
 
-export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }: Props) {
+export default function WaveAllocationBoard({ waves, athletes, showBibs = true, actions, onEdit, onMove }: Props) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set([...waves.map((w) => w.id), UNASSIGNED]),
@@ -158,10 +162,10 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
         (a) =>
           a.name.toLowerCase().includes(q) ||
           a.email.toLowerCase().includes(q) ||
-          (a.bibNumber ?? "").toLowerCase().includes(q),
+          (showBibs && (a.bibNumber ?? "").toLowerCase().includes(q)),
       )
       .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
-  }, [query, athletes]);
+  }, [query, athletes, showBibs]);
 
   const waveLabel = (waveId: string | null) =>
     waveId ? waves.find((w) => w.id === waveId)?.label ?? "Unknown" : null;
@@ -399,9 +403,11 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
           Wave
         </span>
       )}
-      <span className="shrink-0 w-14 text-right font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
-        Bib
-      </span>
+      {showBibs && (
+        <span className="shrink-0 w-14 text-right font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark">
+          Bib
+        </span>
+      )}
       <span className="shrink-0 w-6" aria-hidden />
     </div>
   );
@@ -482,9 +488,11 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
             {waveLabel(a.waveId) ?? "No wave"}
           </span>
         )}
-        <span className="shrink-0 w-14 text-right font-headline text-[13px] font-bold text-muted-light">
-          {a.bibNumber ? `#${a.bibNumber}` : "-"}
-        </span>
+        {showBibs && (
+          <span className="shrink-0 w-14 text-right font-headline text-[13px] font-bold text-muted-light">
+            {a.bibNumber ? `#${a.bibNumber}` : "-"}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => onEdit(a.id)}
@@ -595,7 +603,7 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
               className={`shrink-0 mt-0.5 inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest border rounded-full px-2.5 py-1 ${
                 needsAction ? CAP_STYLE.near : "text-muted border-dark-lighter"
               }`}
-              title="No start wave. Bib numbers are separate."
+              title={showBibs ? "No start wave. Bib numbers are separate." : "No start wave."}
             >
               <Users className="w-3 h-3" /> {list.length}
             </span>
@@ -624,7 +632,7 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
               <>
                 {waveId === UNASSIGNED && (
                   <p className="px-3 pt-2 pb-1 text-[12px] text-amber-200/80">
-                    No start wave yet. They didn&apos;t match your rules (pace, gender, age, or a wave was full). Bib numbers are separate.
+                    No start wave yet. They didn&apos;t match your rules (pace, gender, age, or a wave was full).{showBibs ? " Bib numbers are separate." : ""}
                   </p>
                 )}
                 {renderColumnHeaders(false)}
@@ -648,15 +656,18 @@ export default function WaveAllocationBoard({ waves, athletes, onEdit, onMove }:
 
   return (
     <div className="space-y-3">
-      <div className="relative">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="relative flex-1 sm:max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-dark" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any wave by name, email, or bib"
+          placeholder={showBibs ? "Search any wave by name, email, or bib" : "Search any wave by name or email"}
           aria-label="Search athletes"
           className="w-full bg-dark border border-dark-lighter rounded-lg pl-10 pr-3 py-2.5 text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none"
         />
+      </div>
+      {actions && <div className="flex flex-wrap gap-2 sm:ml-auto">{actions}</div>}
       </div>
 
       {(msg || error) && (
