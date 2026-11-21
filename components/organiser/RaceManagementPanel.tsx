@@ -21,6 +21,7 @@ import { assignAthletesToWaves, unassignedReason, type WaveDef } from "@/lib/wav
 import { parseFinishToMinutes, formatFinishMinutes, calcAgeFromIsoDate } from "@/lib/registration-form";
 import { isValidRaceTime, normaliseRaceTime } from "@/lib/race-results";
 import { REFUND_PROCESS_COPY } from "@/lib/refund-policy";
+import { isFreeEvent } from "@/lib/event-types";
 import WaveAllocationBoard from "@/components/organiser/WaveAllocationBoard";
 import WaveResultsBoard from "@/components/organiser/WaveResultsBoard";
 import WaveBuilderDialog from "@/components/organiser/WaveBuilderDialog";
@@ -443,6 +444,11 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
     .filter((r) => r.status === "REFUND_REQUESTED" || r.status === "REFUNDED")
     .sort((a, b) => Number(a.status !== "REFUND_REQUESTED") - Number(b.status !== "REFUND_REQUESTED"));
   const refundPending = registrations.filter((r) => r.status === "REFUND_REQUESTED").length;
+  // A free event takes no money, so there is nothing to refund. The tab still
+  // shows if refund records exist (the event was paid before it went free), so
+  // they never become unreachable.
+  const showRefunds = !isFreeEvent(event.waves) || refundsList.length > 0;
+  const tab = activeTab === "refunds" && !showRefunds ? "setup" : activeTab;
 
   return (
     <div>
@@ -450,9 +456,9 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           {([
             { id: "setup", label: "Before race" },
             { id: "results", label: "After race" },
-            { id: "refunds", label: "Refunds" },
+            ...(showRefunds ? [{ id: "refunds" as const, label: "Refunds" }] : []),
           ] as const).map((t) => {
-            const on = activeTab === t.id;
+            const on = tab === t.id;
             const badge = t.id === "refunds" ? refundPending : 0;
             return (
               <button
@@ -477,12 +483,12 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
         {/* Tab-scoped progress + actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div className="min-h-[20px]">
-            {activeTab === "setup" && confirmedCount > 0 && !wavesOn && !bibsOn && (
+            {tab === "setup" && confirmedCount > 0 && !wavesOn && !bibsOn && (
               <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
                 Confirmed <span className="text-light">{confirmedCount}</span>
               </p>
             )}
-            {activeTab === "setup" && confirmedCount > 0 && (wavesOn || bibsOn) && (
+            {tab === "setup" && confirmedCount > 0 && (wavesOn || bibsOn) && (
               allSet ? (
                 <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
                   Ready for race day
@@ -512,7 +518,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
                 </div>
               )
             )}
-            {activeTab === "results" && confirmedCount > 0 && (
+            {tab === "results" && confirmedCount > 0 && (
               <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
                 Results{" "}
                 <span className="text-light">{withResults}/{confirmedCount}</span>
@@ -520,30 +526,30 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {activeTab === "setup" && wavesOn && (
+            {tab === "setup" && wavesOn && (
               <Button variant="outline" onClick={openManageWaves}>
                 <SlidersHorizontal className="w-4 h-4" /> Manage waves
               </Button>
             )}
-            {activeTab === "setup" && bibsOn && (
+            {tab === "setup" && bibsOn && (
               <Button variant="outline" onClick={() => { setAssignMsg(""); setAssignBibsKey((k) => k + 1); setAssignBibsOpen(true); }} disabled={confirmedCount === 0}>
                 <Hash className="w-4 h-4" /> Assign bibs
               </Button>
             )}
             {/* Import results and Export are off the After race tab until #565. */}
-            {activeTab === "setup" && <ExportMenu eventId={id} hiddenColumns={hiddenExportColumns} />}
+            {tab === "setup" && <ExportMenu eventId={id} hiddenColumns={hiddenExportColumns} />}
           </div>
         </div>
 
-        {activeTab === "setup" && assignMsg && !manageOpen && (
+        {tab === "setup" && assignMsg && !manageOpen && (
           <p className="text-[13px] text-muted-light mb-4">{assignMsg}</p>
         )}
 
-        {activeTab === "setup" && (
+        {tab === "setup" && (
           <RaceFeatureControls modes={{ waveMode: event.waveMode, bibMode: event.bibMode }} onChange={updateModes} />
         )}
 
-        {activeTab === "setup" && !wavesOn && (
+        {tab === "setup" && !wavesOn && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <SimpleRoster
@@ -563,7 +569,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           </Card>
         )}
 
-        {activeTab === "setup" && wavesOn && (
+        {tab === "setup" && wavesOn && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveAllocationBoard
@@ -612,7 +618,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           </Card>
         )}
 
-        {activeTab === "results" && (
+        {tab === "results" && (
           <Card className="mb-6">
             <CardContent className="p-4 sm:p-5">
               <WaveResultsBoard
@@ -646,7 +652,7 @@ export default function RaceManagementPanel({ eventId }: { eventId: string }) {
           </Card>
         )}
 
-        {activeTab === "refunds" && (
+        {tab === "refunds" && (
           <>
             <Card className="mb-6">
               <CardContent className="p-5 sm:p-6">

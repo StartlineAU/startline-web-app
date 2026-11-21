@@ -121,6 +121,10 @@ test("an event without waves or bibs opens on the simple registrations list", as
   await expect(page.getByRole("button", { name: /assign bibs/i })).toHaveCount(0);
   await expect(page.getByText(/needs a wave/i)).toHaveCount(0);
   await expect(page.getByText(/^Bibs$/)).toHaveCount(0);
+
+  // The event is free: nothing was paid, so there is nothing to refund.
+  await expect(page.getByRole("button", { name: /^before race$/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^refunds/i })).toHaveCount(0);
 });
 
 test("set up bibs, then number the whole field in one go", async ({ page }) => {

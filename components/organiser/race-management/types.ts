@@ -36,7 +36,8 @@ export interface StartWave extends WaveDef {
 }
 
 export interface PageData {
-  event: { id: string; title: string; startWaves: StartWave[] } & RaceFeatures;
+  /** waves are the ticket tiers (label + price), not start waves. */
+  event: { id: string; title: string; waves: { label: string; price: string }[]; startWaves: StartWave[] } & RaceFeatures;
   registrations: Registration[];
 }
 
