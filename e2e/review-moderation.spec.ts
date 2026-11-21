@@ -112,6 +112,9 @@ test.describe("review moderation (#374)", () => {
   });
 
   test("Report opens a reason overlay and the admin sees it under Reported", async ({ page, browser }) => {
+    // Three cold dev-server compiles in one test (organiser page, admin
+    // dashboard, admin reviews): on CI they alone can exhaust 45s.
+    test.slow();
     await signInAsAthlete(page);
     await seedReportTarget();
     await page.goto(`/organisers/${await apexOrganiserId()}`);

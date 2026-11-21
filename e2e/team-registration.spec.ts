@@ -70,6 +70,8 @@ async function createTeamEvent(id: string, title: string, waves: unknown[]) {
       minAge: 16,
       waves: waves as object[],
       photos: [],
+      // Bibs are opt-in (#566); the race-management tests set a team's bib.
+      bibMode: "PRIVATE",
     },
   });
 }

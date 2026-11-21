@@ -1263,6 +1263,20 @@ async function main() {
   }
   console.log(`  Admin audit log entries: ${auditEntries.length}`);
 
+  // ── Race features (#566) ──────────────────────────────────────────────
+  // Waves and bibs are opt-in. Mirror the migration's backfill: events the
+  // seed gave waves or bibs show them to athletes (the Apex Throwdown board),
+  // and every other event opens on the simple registrations view.
+  const waveEvents = await prisma.startWave.findMany({ select: { eventId: true }, distinct: ["eventId"] });
+  const bibEvents = [
+    ...(await prisma.registration.findMany({ where: { bibNumber: { not: null } }, select: { eventId: true }, distinct: ["eventId"] })),
+    // A team entry's bib lives on the team.
+    ...(await prisma.team.findMany({ where: { bibNumber: { not: null } }, select: { eventId: true }, distinct: ["eventId"] })),
+  ];
+  await prisma.event.updateMany({ where: { id: { in: waveEvents.map((w) => w.eventId) } }, data: { waveMode: "SHARED" } });
+  await prisma.event.updateMany({ where: { id: { in: [...new Set(bibEvents.map((r) => r.eventId))] } }, data: { bibMode: "SHARED" } });
+  console.log(`  Race features: waves on ${waveEvents.length} events, bibs on ${bibEvents.length}`);
+
   console.log("\n✅ Database seeding complete!");
   if (mayWriteCognito) console.log(`   Password for all seed users in pool ${userPoolName}: ${PASSWORD}`);
   console.log("   Users: marcus.stirling@startline.test, sarah.mitchell@startline.test, jade.nguyen@startline.test");

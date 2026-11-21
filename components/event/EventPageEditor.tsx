@@ -676,7 +676,7 @@ export default function EventPageEditor({
         )}
       </div>
 
-      {(showAbnNotice || editContext?.pendingRevision || (isEditingPublished && (editContext?.enteredCount ?? 0) > 0)) && (
+      {(showAbnNotice || editContext?.pendingRevision) && (
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-4 space-y-3">
           {/* Deliberately advisory, not a block. Publishing still works; the
               event waits for review instead of going live, and the organiser
@@ -702,20 +702,8 @@ export default function EventPageEditor({
               </p>
             </div>
           )}
-          {isEditingPublished && (editContext?.enteredCount ?? 0) > 0 && (
-            <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 flex items-start gap-3" data-testid="change-notice">
-              <AlertTriangle className="w-5 h-5 text-amber-300 shrink-0 mt-0.5" />
-              <p className="text-[13px] text-muted-light leading-relaxed">
-                <span className="font-headline font-bold text-light">
-                  {editContext!.enteredCount} athlete{editContext!.enteredCount === 1 ? " has" : "s have"} entered.
-                </span>{" "}
-                Changing the category, format, date, times or location emails each of them, and the change is
-                kept in this event&apos;s history. Anyone who no longer wants to take part asks for a refund
-                through Support. You decide on each request, and Startline issues the refund.
-                {awaitsReview && " The listing stays as it is until Startline approves the edit."}
-              </p>
-            </div>
-          )}
+          {/* The "N athletes have entered" warning is shown on the dashboard
+              before the editor opens, not here. */}
         </div>
       )}
 

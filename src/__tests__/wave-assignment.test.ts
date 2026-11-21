@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assignAthletesToWaves, matchesWave, unassignedReason, type WaveSortCandidate, type WaveDef } from "@/lib/wave-assignment";
+import { assignAthletesToWaves, describeWaveRules, hasRules, matchesWave, unassignedReason, type WaveSortCandidate, type WaveDef } from "@/lib/wave-assignment";
 import { parseFinishToMinutes, formatFinishMinutes } from "@/lib/registration-form";
 
 const c = (
@@ -117,5 +117,37 @@ describe("parseFinishToMinutes / formatFinishMinutes", () => {
     expect(formatFinishMinutes(210)).toBe("3:30");
     expect(formatFinishMinutes(45)).toBe("0:45");
     expect(formatFinishMinutes(null)).toBe("");
+  });
+});
+
+describe("hasRules", () => {
+  it("is false for a wave anyone can join", () => {
+    expect(hasRules(wave("W"))).toBe(false);
+    expect(hasRules(wave("W", { genders: [], capacity: 50 }))).toBe(false);
+  });
+
+  it("is true once any condition is set", () => {
+    expect(hasRules(wave("W", { finishMax: 40 }))).toBe(true);
+    expect(hasRules(wave("W", { ageMin: 0 }))).toBe(true);
+    expect(hasRules(wave("W", { genders: ["Female"] }))).toBe(true);
+  });
+});
+
+describe("describeWaveRules", () => {
+  it("says Anyone when there are no conditions", () => {
+    expect(describeWaveRules(wave("W", { capacity: 10 }))).toBe("Anyone");
+  });
+
+  it("describes closed and one-sided bands", () => {
+    expect(describeWaveRules(wave("W", { ageMin: 18, ageMax: 39 }))).toBe("age 18–39");
+    expect(describeWaveRules(wave("W", { ageMin: 50 }))).toBe("age 50+");
+    expect(describeWaveRules(wave("W", { finishMax: 40 }))).toBe("finish up to 40 min");
+    expect(describeWaveRules(wave("W", { finishMin: 60 }))).toBe("finish 60+ min");
+  });
+
+  it("joins several genders and conditions in a fixed order", () => {
+    expect(
+      describeWaveRules(wave("W", { finishMin: 45, finishMax: 60, genders: ["Female", "Non-binary"], ageMin: 18, ageMax: 39 })),
+    ).toBe("Female or Non-binary · age 18–39 · finish 45–60 min");
   });
 });

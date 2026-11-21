@@ -9,6 +9,12 @@ export interface BibCandidate {
   name: string;
   waveLabel: string | null;
   bibNumber: string | null;
+  /**
+   * The athlete's wave position on the board (StartWave.sortOrder). Bibs run
+   * wave by wave in this order, so a wave's numbers are consecutive. Athletes
+   * with no wave sort after every wave.
+   */
+  waveSort?: number | null;
 }
 
 export interface AssignBibsInput {
@@ -76,7 +82,11 @@ export function assignSequentialBibs(input: AssignBibsInput): BibAssignment[] {
     pool = pool.filter((c) => !c.bibNumber?.trim());
   }
 
-  pool.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
+  const waveRank = (c: BibCandidate) => c.waveSort ?? Number.POSITIVE_INFINITY;
+  pool.sort((a, b) =>
+    waveRank(a) - waveRank(b) ||
+    a.name.localeCompare(b.name, "en", { sensitivity: "base" }) ||
+    a.id.localeCompare(b.id));
 
   const assignments: BibAssignment[] = [];
   let next = start;

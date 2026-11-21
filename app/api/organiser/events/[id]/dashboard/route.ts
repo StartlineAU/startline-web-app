@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { entryOrganiserNetCents, ticketFeeBreakdown } from "@/lib/platform-fee";
 import { idParams } from "@/lib/schemas";
+import { publishedEditNeedsReview } from "@/lib/event-revision";
 
 export async function GET(
   _req: NextRequest,
@@ -124,6 +125,9 @@ export async function GET(
         waves: wavesWithSold,
         feeStructure:      event.feeStructure,
         categories:        event.categories,
+        // An unverified organiser's edit to a live event waits for Startline,
+        // and entrants are only emailed once it is approved.
+        editNeedsReview:   publishedEditNeedsReview(session.verified, event.status),
       },
       payout: {
         registrationCount: count,

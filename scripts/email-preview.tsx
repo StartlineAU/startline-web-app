@@ -19,7 +19,6 @@ import {
   buildEventRejectedEmail,
   buildEventSubmittedForReviewEmail,
   buildReviewReportedEmail,
-  buildWaveUpdateEmail,
   buildFollowedOrganiserEventEmail,
   buildEventChangedEmail,
   buildEventEditPendingReviewEmail,
@@ -83,8 +82,6 @@ const emails: Record<string, () => Promise<{ html: string }>> = {
       { reviewTitle: "Best race of the year", reviewBody: "Great course, well marshalled.\nWould run again.", reviewerName: "Harper Jones", organiserName: "Apex Endurance Events", eventTitle: "Harbour 10K", reason: "Spam or advertising: links to a shop", reportCount: 3 },
       opts,
     ),
-  "wave-update": () =>
-    buildWaveUpdateEmail("harper.jones@startline.test", { athleteName: "Harper Jones", eventTitle: "Harbour 10K", eventId: "evt-1", waveLabel: "Elite", waveTime: "06:30", eventDate: "2027-03-21" }, opts),
   "followed-organiser-event": () =>
     buildFollowedOrganiserEventEmail("harper.jones@startline.test", { followerName: "Harper Jones", organiserName: "Apex Endurance Events", eventTitle: "Harbour 10K", eventId: "evt-1", eventDate: "2027-03-21", city: "Sydney" }, opts),
   "event-changed": () =>

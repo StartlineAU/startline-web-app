@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
   MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2, Trophy,
-  Download, ImageDown,
+  Download, ImageDown, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import EventEditLockedNotice from "@/components/organiser/EventEditLockedNotice"
 import EventChangeHistory from "@/components/event/EventChangeHistory";
 import PendingRevisionNotice from "@/components/event/PendingRevisionNotice";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
+import { isFreeEvent } from "@/lib/event-types";
+import { REFUND_CUTOFF_HOURS } from "@/lib/refund-policy";
 import RichTextEditor from "@/components/ui/RichTextEditor";
 import CapacityBar from "@/components/ui/CapacityBar";
 import { buildCheckInQrImage, checkInQrImageFilename } from "@/lib/check-in-qr-image";
@@ -37,6 +39,7 @@ interface DashboardData {
     startTime: string; endTime: string;
     venue: string; city: string; state: string;
     cap?: number | null; registrationCount: number;
+    editNeedsReview?: boolean;
     checkedInCount: number;
     coverImageUrl?: string | null; waves: Wave[];
     feeStructure: string; categories: string[];
@@ -118,17 +121,19 @@ function EventDashboardInner({
   const panel = searchParams.get("panel");
   const managePanel = panel === "manage";
   const announcePanel = panel === "announce";
+  // ?tab= picks the race-management tab, so "Enter results" is a shareable link.
+  const tabParam = searchParams.get("tab");
 
-  const setPanel = (next: "manage" | "announce" | null) => {
+  const setPanel = (next: "manage" | "announce" | null, tab?: "setup" | "results") => {
     router.replace(
       next
-        ? `/organiser/events/${id}/dashboard?panel=${next}`
+        ? `/organiser/events/${id}/dashboard?panel=${next}${tab ? `&tab=${tab}` : ""}`
         : `/organiser/events/${id}/dashboard`,
       { scroll: false },
     );
   };
 
-  const setManagePanel = (on: boolean) => setPanel(on ? "manage" : null);
+  const setManagePanel = (on: boolean, tab?: "setup" | "results") => setPanel(on ? "manage" : null, tab);
 
   const fetchDashboard = useCallback(async (signal: AbortSignal) => {
     const response = await fetch(`/api/organiser/events/${id}/dashboard`, { signal });
@@ -153,6 +158,8 @@ function EventDashboardInner({
   const [deleting,  setDeleting]  = useState(false);
 
 
+  // Warns before editing an event athletes have already entered.
+  const [editWarnOpen, setEditWarnOpen] = useState(false);
   const [qrOpen,    setQrOpen]    = useState(false);
   const [qr,        setQr]        = useState<{ url: string; qrDataUrl: string } | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -304,6 +311,16 @@ function EventDashboardInner({
   // Once the event is over, check-in and announcements are closed (their
   // APIs refuse a finished event), but results and registrations stay open.
   const finished = event.status === "ARCHIVED";
+  // Once the event is under way (or over), results are the job: "Enter results"
+  // becomes the primary action and race management opens on After race.
+  const started = event.status === "IN_PROGRESS" || finished;
+  const initialTab = tabParam === "results" || tabParam === "setup" ? tabParam : started ? "results" : "setup";
+  const editHref = `/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`;
+  // Entrants are told about material changes, so say so before the editor
+  // opens rather than inside it.
+  const entered = event.registrationCount;
+  // Two-column grid on phones: with three secondary buttons the last spans both.
+  const editSpan = !finished ? "col-span-2 sm:col-span-1" : "";
   const location = [event.venue, event.city].map((s) => s?.trim()).filter(Boolean).join(", ");
 
   const stats = [
@@ -339,8 +356,10 @@ function EventDashboardInner({
             <span className="text-primary">Dashboard</span>
           </div>
 
-          {/* Event header: identity on the left, the two actions on the right */}
-          <div className="flex flex-col lg:flex-row lg:items-center gap-5 lg:gap-6 mb-6">
+          {/* Event header: identity across the full width, actions on their own
+              row beneath it, so a long title never fights the buttons for space. */}
+          <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
             {event.coverImageUrl && (
               <div className="relative w-full sm:w-40 h-28 rounded-xl overflow-hidden shrink-0">
                 <Image src={event.coverImageUrl} alt={event.title} fill className="pointer-events-none object-cover brightness-[.62] saturate-110" sizes="(max-width: 640px) 100vw, 160px" />
@@ -357,7 +376,10 @@ function EventDashboardInner({
                   {event.discipline.replace(/_/g, " ")}
                 </span>
               </div>
-              <h1 className="font-headline text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-none text-white mb-3">
+              <h1
+                title={event.title}
+                className="font-headline text-[28px] sm:text-[32px] lg:text-[40px] font-black italic tracking-tighter leading-[1.05] text-white mb-3 break-words line-clamp-2"
+              >
                 {event.title}
               </h1>
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-x-5 gap-y-1 text-[13px] text-muted">
@@ -371,30 +393,50 @@ function EventDashboardInner({
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row shrink-0">
+          </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center mt-5">
               {managePanel ? (
                 <Button variant="outline" type="button" className="col-span-2" onClick={() => setManagePanel(false)}>
                   <ArrowLeft className="w-4 h-4" /> Back to overview
                 </Button>
               ) : (
                 <>
-                  <Button type="button" className="col-span-2" onClick={() => setManagePanel(true)}>
-                    {finished
-                      ? <><Trophy className="w-4 h-4" /> Enter results</>
-                      : <><Users className="w-4 h-4" /> Manage registrations</>}
-                  </Button>
+                  {started ? (
+                    <>
+                      <Button type="button" className="col-span-2" onClick={() => setManagePanel(true, "results")}>
+                        <Trophy className="w-4 h-4" /> Enter results
+                      </Button>
+                      <Button variant="outline" type="button" className={!finished || canEdit ? "" : "col-span-2"} onClick={() => setManagePanel(true, "setup")}>
+                        <Users className="w-4 h-4" /> Manage registrations
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button type="button" className="col-span-2" onClick={() => setManagePanel(true, "setup")}>
+                        <Users className="w-4 h-4" /> Manage registrations
+                      </Button>
+                      <Button variant="outline" type="button" onClick={() => setManagePanel(true, "results")}>
+                        <Trophy className="w-4 h-4" /> Enter results
+                      </Button>
+                    </>
+                  )}
+                  {/* Check-in closes with the event. */}
                   {!finished && (
-                    <Button variant="outline" type="button" className={canEdit ? "" : "col-span-2"} onClick={openCheckInQr}>
+                    <Button variant="outline" type="button" onClick={openCheckInQr}>
                       <QrCode className="w-4 h-4" /> Check-in QR
                     </Button>
                   )}
-                  {canEdit && (
-                    <Button variant="outline" asChild>
-                      <Link href={`/organiser/new-listing?id=${event.id}&from=${encodeURIComponent(`/organiser/events/${event.id}/dashboard`)}`}>
+                  {canEdit && (entered > 0 ? (
+                    <Button variant="outline" type="button" className={editSpan} onClick={() => setEditWarnOpen(true)}>
+                      <Pencil className="w-4 h-4" /> Edit event
+                    </Button>
+                  ) : (
+                    <Button variant="outline" className={editSpan} asChild>
+                      <Link href={editHref}>
                         <Pencil className="w-4 h-4" /> Edit event
                       </Link>
                     </Button>
-                  )}
+                  ))}
                 </>
               )}
             </div>
@@ -442,7 +484,7 @@ function EventDashboardInner({
 
           {managePanel ? (
             <div className="mb-8">
-              <RaceManagementPanel eventId={id} finished={finished} />
+              <RaceManagementPanel eventId={id} finished={finished} initialTab={initialTab} />
             </div>
           ) : (
           <>
@@ -461,13 +503,14 @@ function EventDashboardInner({
                   </span>
                 </div>
                 {recentRegistrations.length > 0 && (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     onClick={() => setManagePanel(true)}
-                    className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary hover:underline"
                   >
-                    View all
-                  </button>
+                    <Users className="w-3.5 h-3.5" /> View all
+                  </Button>
                 )}
               </div>
 
@@ -515,7 +558,7 @@ function EventDashboardInner({
                     <table className="w-full min-w-[520px] border-collapse">
                       <thead>
                         <tr className="border-b border-white/5">
-                          {["Athlete", "Wave", "Registered", "Paid", "Check-in"].map((h) => (
+                          {["Athlete", "Ticket", "Registered", "Paid", "Check-in"].map((h) => (
                             <th key={h} className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark text-left px-2 py-2 last:text-right">
                               {h}
                             </th>
@@ -743,6 +786,50 @@ function EventDashboardInner({
       </Dialog>
 
       {/* Check-in QR */}
+      <Dialog open={editWarnOpen} onOpenChange={setEditWarnOpen}>
+        <DialogContent className="max-w-md" data-testid="edit-warning">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-300" />
+              </div>
+              <DialogTitle>
+                {entered} athlete{entered === 1 ? " has" : "s have"} entered
+              </DialogTitle>
+            </div>
+            {/* Field list mirrors MATERIAL_FIELD_GROUPS in lib/event-change-log.ts. */}
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Changing the date, start or finish time, location, event type or format emails each of them,
+                  and the change is kept in this event&apos;s history.
+                </p>
+                {event.editNeedsReview && (
+                  <p>
+                    Your edit goes to Startline for review first. The listing stays as it is, and athletes are
+                    only emailed once the edit is approved.
+                  </p>
+                )}
+                {!isFreeEvent(event.waves) && (
+                  <p>
+                    Anyone who no longer wants to take part can ask for a refund through Support, up to{" "}
+                    {REFUND_CUTOFF_HOURS} hours before the start. You decide on each request, and Startline issues the refund.
+                  </p>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" type="button" onClick={() => setEditWarnOpen(false)}>Cancel</Button>
+            <Button asChild>
+              <Link href={editHref}>
+                <Pencil className="w-4 h-4" /> Continue to edit
+              </Link>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={qrOpen} onOpenChange={open => { if (!open) setQrOpen(false); }}>
         <DialogContent>
           <DialogHeader>
