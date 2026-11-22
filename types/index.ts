@@ -1,6 +1,7 @@
 export type EventType =
   | "running"
   | "run_club"
+  | "functional_fitness"
   | "other";
 
 export type AustralianState =
@@ -120,12 +121,14 @@ export interface EventTypeOption {
 export const EVENT_TYPE_OPTIONS: EventTypeOption[] = [
   { value: "running",  label: "Running (5K–Ultra)", shortLabel: "Running" },
   { value: "run_club", label: "Run Clubs",          shortLabel: "Run Clubs" },
+  { value: "functional_fitness", label: "Functional Fitness", shortLabel: "Functional Fitness" },
   { value: "other",    label: "Other",              shortLabel: "Other" },
 ];
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   running:  "Running",
   run_club: "Run Clubs",
+  functional_fitness: "Functional Fitness",
   other:    "Other",
 };
 

@@ -2,7 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import { sanitizeRichTextClient } from "@/lib/sanitize-html-client";
-import { Bold, Italic, Underline, AlignLeft } from "lucide-react";
+import { Bold, Italic, Underline } from "lucide-react";
 import { DEFAULT_REFUND_TIERS, tiersAreValid, type RefundTier } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
 import { NO_CONTACT_OVERRIDE, type ContactOverride } from "@/lib/organiser-contact";
@@ -87,7 +87,7 @@ export function missingRequirements(form: FormState): Requirement[] {
   return requirementChecks(form).filter((c) => !c.done).map(({ row, region, message }) => ({ row, region, message }));
 }
 
-export type Discipline = "running" | "run_club" | "other" | "";
+export type Discipline = "running" | "run_club" | "functional_fitness" | "other" | "";
 export type Format     = "individual" | "team" | "both" | "";
 export type Intensity  = "low" | "moderate" | "high" | "extreme" | "";
 export type AusState   = "nsw" | "vic" | "qld" | "wa" | "sa" | "tas" | "act" | "nt" | "";
@@ -245,11 +245,6 @@ export function RichTextEditor({ value, onChange, invalid = false }: { value: st
     editorRef.current?.focus();
   };
 
-  const setBlock = (tag: string) => {
-    document.execCommand("formatBlock", false, tag);
-    editorRef.current?.focus();
-  };
-
   const toolbarBtn = "w-8 h-8 rounded flex items-center justify-center text-light hover:bg-white/5 hover:text-light transition-colors font-headline font-bold text-[13px]";
 
   return (
@@ -259,10 +254,6 @@ export function RichTextEditor({ value, onChange, invalid = false }: { value: st
         <button type="button" title="Bold (Ctrl+B)"      onClick={() => exec("bold")}      className={toolbarBtn}><Bold      className="w-3.5 h-3.5" /></button>
         <button type="button" title="Italic (Ctrl+I)"    onClick={() => exec("italic")}    className={toolbarBtn}><Italic    className="w-3.5 h-3.5" /></button>
         <button type="button" title="Underline (Ctrl+U)" onClick={() => exec("underline")} className={toolbarBtn}><Underline className="w-3.5 h-3.5" /></button>
-        <div className="w-px h-5 bg-dark-lighter mx-1" />
-        <button type="button" title="Heading"   onClick={() => setBlock("h3")} className={`${toolbarBtn} text-[11px] font-black uppercase tracking-widest`}>H</button>
-        <button type="button" title="Subheading" onClick={() => setBlock("h4")} className={`${toolbarBtn} text-[10px] font-black uppercase tracking-widest`}>H2</button>
-        <button type="button" title="Normal text" onClick={() => setBlock("p")} className={toolbarBtn}><AlignLeft className="w-3.5 h-3.5" /></button>
         <div className="w-px h-5 bg-dark-lighter mx-1" />
         <button type="button" title="Bullet list" onClick={() => exec("insertUnorderedList")} className={`${toolbarBtn} text-[11px]`}>• List</button>
       </div>
@@ -300,6 +291,7 @@ export function RichTextEditor({ value, onChange, invalid = false }: { value: st
 export const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
   { v: "running",   l: "Running",   d: "5km · 10km · Half · Marathon" },
   { v: "run_club",  l: "Run Club",  d: "Group runs & club sessions"   },
+  { v: "functional_fitness", l: "Functional Fitness", d: "Hybrid racing & fitness comps" },
   { v: "other",     l: "Other",     d: "Another discipline"           },
 ];
 
