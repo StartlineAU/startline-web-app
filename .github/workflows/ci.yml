@@ -103,15 +103,16 @@ jobs:
   e2e:
     continue-on-error: false
     runs-on: ubuntu-latest
-    # Two shards, each with its own Postgres and dev server. One dev server
-    # running the whole suite grew past next dev's memory restart line even
-    # with a 10 GB heap, and the tests in flight failed on dropped
-    # connections. Playwright shards by file here (fullyParallel is off).
+    # Four shards, each with its own Postgres and dev server. A dev server's
+    # heap grows with every page it compiles, and one running the whole suite
+    # (or half of it) passed next dev's memory restart line even with a 10 GB
+    # heap, so the tests in flight failed on dropped connections. Playwright
+    # shards by file here (fullyParallel is off).
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
-    name: e2e (${{ matrix.shard }}/2)
+        shard: [1, 2, 3, 4]
+    name: e2e (${{ matrix.shard }}/4)
     # Hermetic: local Postgres, no AWS secrets. Stripe's live-lifecycle and the
     # real-Cognito auth specs guard on their own env vars and skip when those
     # are absent, which is what we want here. Turnstile is absent, so the
@@ -181,7 +182,16 @@ jobs:
           # keeps each server under it; the heap alone stopped being enough.
           NODE_OPTIONS=--max-old-space-size=10240 NEXT_PUBLIC_COGNITO_USER_POOL_ID=ap-southeast-2_test NEXT_PUBLIC_COGNITO_CLIENT_ID=testclientid NEXT_PUBLIC_COGNITO_LINK_CLIENT_ID=testlinkclientid NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk_test pnpm dev -p 3000 > "$RUNNER_TEMP/next-dev.log" 2>&1 &
           npx wait-on http://localhost:3000/admin/login --timeout 60000
-      - run: pnpm test:e2e --shard=${{ matrix.shard }}/2
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/4
+      # A restart drops whatever was in flight, so say so even when the
+      # retries happened to absorb it.
+      - name: Check the dev server never restarted for memory
+        if: always()
+        shell: bash
+        run: |
+          if grep -q "approaching the used memory threshold" "$RUNNER_TEMP/next-dev.log"; then
+            echo "::warning::next dev restarted for memory during this shard. Add a shard to the e2e matrix."
+          fi
       - name: Dev server log
         if: failure()
         shell: bash
