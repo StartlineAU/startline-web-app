@@ -145,8 +145,10 @@ describe("PATCH /api/organiser/events/[id] — edit policy", () => {
     mocks.eventFindUnique.mockResolvedValue({
       ...baseEvent,
       status: "IN_PROGRESS",
-      eventDate: format(addDays(new Date(), -1), "yyyy-MM-dd"),
-      endDate: format(addDays(new Date(), 1), "yyyy-MM-dd"),
+      // Days either side, not one: the dates are formatted in the runner's
+      // timezone but judged in the event's (VIC), which can be a day ahead.
+      eventDate: format(addDays(new Date(), -2), "yyyy-MM-dd"),
+      endDate: format(addDays(new Date(), 2), "yyyy-MM-dd"),
     });
 
     const res = await patch({ title: "Changed" });

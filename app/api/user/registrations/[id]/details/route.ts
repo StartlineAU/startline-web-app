@@ -19,6 +19,7 @@ import {
   memberDetailsError,
   memberExtrasData,
 } from "@/lib/team-members";
+import { BLOCKED_ENTRY_MESSAGE, isBlockedByOrganiser } from "@/lib/organiser-blocks";
 
 const bodySchema = z.object({
   firstName: z.string().max(100),
@@ -125,6 +126,11 @@ export async function POST(
     );
   }
 
+  // The organisation's block list (#571) covers a member added later too.
+  if (await isBlockedByOrganiser(registration.event.organiserId, { emails: [person.email] })) {
+    return NextResponse.json({ error: BLOCKED_ENTRY_MESSAGE }, { status: 403 });
+  }
+
   // The member gets an account like any guest entrant, so the entry shows on
   // their own Activity. Done before the transaction: it calls Cognito. The
   // place stays on the buyer's account too, as a place bought for someone at
@@ -148,6 +154,9 @@ export async function POST(
       if (updated.count === 0) throw new Conflict("This team member's details have already been added, or the place was released.");
       if (await findHeldEntryFor(registration.eventId, registration.id, person, tx)) {
         throw new Conflict("That person already holds an entry for this event.");
+      }
+      if (await isBlockedByOrganiser(registration.event.organiserId, { emails: [person.email] }, tx)) {
+        throw new Conflict(BLOCKED_ENTRY_MESSAGE);
       }
 
       await tx.teamMemberChange.create({

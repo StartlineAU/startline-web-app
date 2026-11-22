@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
-  Bell, BellRing, Building2, ChevronLeft, ChevronRight, Cookie, CreditCard, IdCard, Lock, Undo2, User, Users, X,
+  Bell, BellRing, Building2, ChevronLeft, ChevronRight, Cookie, CreditCard, IdCard, Lock, Undo2, User, Users, UserX, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ import OrganisationNotificationsSection from "@/components/settings/Organisation
 import AthleteNotificationsSection from "@/components/settings/AthleteNotificationsSection";
 import { MembersSection, PaymentsSection } from "@/components/settings/OrganisationLinkSections";
 import OrganisationRefundsSection from "@/components/settings/OrganisationRefundsSection";
+import OrganisationBlockedAthletesSection from "@/components/settings/OrganisationBlockedAthletesSection";
 
 type Item = { id: SettingsSection; label: string; icon: LucideIcon };
 
@@ -47,6 +48,7 @@ const ORGANISATION_ITEMS: Item[] = [
   { id: "notifications", label: "Notifications",        icon: Bell       },
   { id: "payments",      label: "Payments",             icon: CreditCard },
   { id: "refunds",       label: "Refunds",              icon: Undo2 },
+  { id: "blocked",       label: "Blocked athletes",     icon: UserX },
 ];
 
 type Membership = { organiserId: string; organiserName: string | null; role: string; logoUrl: string | null };
@@ -91,6 +93,7 @@ function SectionContent({ section }: { section: SettingsSection }) {
     case "notifications": return <OrganisationNotificationsSection />;
     case "payments":      return <PaymentsSection />;
     case "refunds":       return <OrganisationRefundsSection />;
+    case "blocked":       return <OrganisationBlockedAthletesSection />;
   }
 }
 

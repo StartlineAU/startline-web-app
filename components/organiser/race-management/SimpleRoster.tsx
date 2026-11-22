@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCheck, Pencil, Search } from "lucide-react";
+import { AlertCircle, CheckCheck, Pencil, Search, UserX } from "lucide-react";
 
 export interface RosterAthlete {
   id: string;
@@ -35,11 +35,14 @@ export default function SimpleRoster({
   athletes,
   showBibs,
   onEdit,
+  onRemove,
   actions,
 }: {
   athletes: RosterAthlete[];
   showBibs: boolean;
   onEdit: (athleteId: string) => void;
+  /** Opens Remove from event for this athlete (#571). */
+  onRemove?: (athleteId: string) => void;
   /** Buttons that sit beside the search field (export, assign bibs). */
   actions?: ReactNode;
 }) {
@@ -89,7 +92,7 @@ export default function SimpleRoster({
             <span role="columnheader" className={`hidden sm:block w-32 ${header}`}>Ticket</span>
             {showBibs && <span role="columnheader" className={`w-14 text-right ${header}`}>Bib</span>}
             <span role="columnheader" className={`w-[72px] sm:w-28 text-right ${header}`}>Check-in</span>
-            <span className="w-6" aria-hidden />
+            <span className={onRemove ? "w-14" : "w-6"} aria-hidden />
           </div>
           {visible.map((a) => (
             <div key={a.id} role="row" className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/[0.03] group">
@@ -144,6 +147,17 @@ export default function SimpleRoster({
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(a.id)}
+                  aria-label={`Remove ${a.name} from event`}
+                  title="Remove from event"
+                  className="w-6 shrink-0 p-1 text-muted-dark hover:text-red-300 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           ))}
           {filtered.length > visible.length && (
