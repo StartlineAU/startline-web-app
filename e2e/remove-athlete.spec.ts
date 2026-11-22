@@ -109,7 +109,11 @@ async function removeFromBoard(page: Page, opts: { reason: RegExp; block?: boole
   await page.getByRole("option", { name: opts.reason }).click();
   if (opts.block) await dialog.getByLabel(/also block from entering again/i).check();
   await dialog.getByRole("button", { name: /^remove from event$/i }).click();
-  await expect(page.getByTestId("remove-message")).toContainText("Harper Jones was removed and emailed.");
+  // Longer than the default: when this spec runs early in a shard the first
+  // removal compiles the route cold, which took 15.3s on a CI dev server.
+  await expect(page.getByTestId("remove-message")).toContainText("Harper Jones was removed and emailed.", {
+    timeout: 45_000,
+  });
 }
 
 test("an organiser removes an athlete, who is told and loses their bib", async ({ page }) => {
