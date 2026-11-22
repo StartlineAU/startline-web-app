@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { chooseDiscipline, organiserLogin } from "./helpers";
+import { organiserLogin } from "./helpers";
 
 // Listing editor fixes from #579.
 test.describe("listing editor (#579)", () => {
@@ -16,7 +16,8 @@ test.describe("listing editor (#579)", () => {
     await expect(page.getByRole("dialog", { name: "Category" })).toHaveCount(0);
     await expect(page.getByRole("listbox", { name: "Category" })).toBeVisible({ timeout: 15000 });
 
-    await chooseDiscipline(page, "Functional Fitness");
+    // The list is already open: chooseDiscipline would click the pill again and close it.
+    await page.getByRole("listbox", { name: "Category" }).getByRole("option", { name: /^Functional Fitness/ }).click();
     await expect(page.getByRole("listbox", { name: "Category" })).toHaveCount(0);
     await expect(pill).toContainText("Functional Fitness");
   });
