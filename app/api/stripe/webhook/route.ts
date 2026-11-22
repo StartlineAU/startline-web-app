@@ -14,6 +14,7 @@ import {
 import { athleteNameFromParticipant, type CompactParticipant } from "@/lib/registration-form";
 import { refundRefusedPayment } from "@/lib/refund-refused-payment";
 import { lockEventEntries } from "@/lib/event-entry-lock";
+import { syncChargeRefunds, syncDispute } from "@/lib/payment-adjustments";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -45,6 +46,14 @@ export async function POST(req: NextRequest) {
         break;
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
+        break;
+      // Refunds and disputes made in Stripe rather than through Startline (#550).
+      case "charge.refunded":
+        await syncChargeRefunds(event.data.object as Stripe.Charge);
+        break;
+      case "charge.dispute.created":
+      case "charge.dispute.closed":
+        await syncDispute(event.data.object as Stripe.Dispute);
         break;
       default:
         break;

@@ -32,8 +32,9 @@
  * refund_application_fee stays false where there is a fee to refund: Startline
  * retains its booking fee on a refund, which is what covers the Stripe
  * processing fee Stripe does not return. That is a commercial decision, signed
- * off, not a default left unexamined. It means the organiser bears the booking
- * fee on a sale that was refunded, and the organiser terms need to say so.
+ * off, not a default left unexamined. A change-of-mind refund is a share of the
+ * ticket price only, so the athlete does not get the booking fee back either
+ * (terms 3.4). Only a cancelled event returns it.
  */
 
 import type Stripe from "stripe";

@@ -60,6 +60,7 @@ describe("issueEntryRefund — the reviewed policy refund", () => {
 
     expect(mocks.createRefund.mock.calls[0][0]).toEqual({
       charge: "ch_1", amount: 10540, reverse_transfer: true, refund_application_fee: false,
+      metadata: { registrationId: "reg-1", reason: "entry_refund" },
     });
     expect(mocks.createRefund.mock.calls[0][1]).toEqual({ idempotencyKey: "entry-refund-reg-1" });
     expect(mocks.registrationUpdate.mock.calls[0][0].data).toMatchObject({
@@ -73,7 +74,10 @@ describe("issueEntryRefund — the reviewed policy refund", () => {
 
     await issueEntryRefund(entry);
 
-    expect(mocks.createRefund.mock.calls[0][0]).toEqual({ charge: "ch_1", amount: 10540 });
+    expect(mocks.createRefund.mock.calls[0][0]).toEqual({
+      charge: "ch_1", amount: 10540,
+      metadata: { registrationId: "reg-1", reason: "entry_refund" },
+    });
   });
 
   it("refuses an outside-policy request", async () => {

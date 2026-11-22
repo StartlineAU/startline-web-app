@@ -143,7 +143,8 @@ const SECTIONS: LegalSection[] = [
           <p>
             Every paid event shows its refund policy before you pay. The policy says what
             percentage you get back depending on how many days before the event you cancel. That
-            percentage applies to the full amount you paid, including the Startline booking fee. You
+            percentage applies to the ticket price. The Startline booking fee is not refunded when
+            you cancel, only when the organiser cancels the event (3.5). You
             can ask for a refund from your entry in your account. Startline processes approved
             refunds back to your original payment method, which usually takes 5 to 10 business
             days. A request outside the policy is up to the organiser.

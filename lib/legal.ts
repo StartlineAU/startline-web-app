@@ -16,7 +16,7 @@ export const LEGAL_CONTACT_EMAIL = "admin@startlineau.com";
 /** Governing law and the forum for disputes (Terms of Service §9.1). */
 export const LEGAL_JURISDICTION = "Victoria";
 
-export const TERMS_LAST_UPDATED = "8 November 2026";
+export const TERMS_LAST_UPDATED = "22 November 2026";
 export const PRIVACY_LAST_UPDATED = "17 October 2026";
 export const COOKIES_LAST_UPDATED = "17 October 2026";
 

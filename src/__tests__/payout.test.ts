@@ -45,7 +45,10 @@ vi.mock("@/lib/stripe", () => ({
 }));
 
 import {
+  adjustmentDeductionCents,
+  eventPayoutCents,
   getPayoutEligibleEvents,
+  hasOpenDispute,
   PAYOUT_IDEMPOTENCY_WINDOW_MS,
   PayoutError,
   registrationPayoutCents,
@@ -94,6 +97,7 @@ function event(overrides: Record<string, unknown> = {}) {
     payoutAmountCents: null,
     organiser: { id: "org-1", stripeAccountId: "acct_1" },
     registrations: [entry(10000, 540, "athlete")],
+    paymentAdjustments: [],
     payoutOperation: null,
     ...overrides,
   };
@@ -191,6 +195,7 @@ describe("getPayoutEligibleEvents", () => {
           entry(10000, 540, "athlete"),
           entry(10000, 540, "organiser"),
         ],
+        paymentAdjustments: [],
       },
     ]);
 
@@ -236,6 +241,57 @@ describe("cancelled events", () => {
     await runPayoutForEvent("event-1").catch(() => undefined);
     // Not refused up front: the in-flight attempt is resumed, not abandoned.
     expect(mocks.payoutAttempt.findFirst).toHaveBeenCalled();
+  });
+});
+
+describe("refunds and disputes from Stripe (#550)", () => {
+  const refund = (unallocatedCents: number) =>
+    ({ kind: "REFUND", unallocatedCents, feeCents: 0, disputeStatus: null }) as const;
+  const dispute = (disputeStatus: "OPEN" | "WON" | "LOST", feeCents = 2500, unallocatedCents = 0) =>
+    ({ kind: "DISPUTE", unallocatedCents, feeCents, disputeStatus }) as const;
+
+  it("takes unmatched refunds and a lost dispute's fee off the payout", () => {
+    expect(adjustmentDeductionCents([refund(3000), dispute("LOST", 2500, 1000)])).toBe(6500);
+    expect(eventPayoutCents([entry(10000, 540, "athlete")], [refund(3000)])).toBe(7000);
+  });
+
+  it("charges nothing for an open or won dispute", () => {
+    expect(adjustmentDeductionCents([dispute("OPEN"), dispute("WON")])).toBe(0);
+  });
+
+  it("never pays out a negative amount", () => {
+    expect(eventPayoutCents([entry(10000, 540, "athlete")], [refund(50000)])).toBe(0);
+  });
+
+  it("holds only while a dispute is open", () => {
+    expect(hasOpenDispute([dispute("OPEN")])).toBe(true);
+    expect(hasOpenDispute([dispute("WON"), dispute("LOST"), refund(0)])).toBe(false);
+  });
+
+  it("marks a held event on the payout list instead of hiding it", async () => {
+    mocks.event.findMany.mockResolvedValue([
+      {
+        id: "event-1",
+        title: "Apex Throwdown",
+        eventDate: "2026-08-15",
+        endDate: null,
+        organiser: { id: "org-1", orgName: "Apex", stripeAccountId: "acct_1" },
+        payoutOperation: null,
+        registrations: [entry(10000, 540, "athlete")],
+        paymentAdjustments: [dispute("OPEN"), refund(2000)],
+      },
+    ]);
+
+    const [listed] = await getPayoutEligibleEvents();
+
+    expect(listed).toMatchObject({ onHold: true, deductedCents: 2000, netCents: 8000 });
+  });
+
+  it("refuses to pay out while a dispute is open", async () => {
+    mocks.event.findUnique.mockResolvedValue(event({ paymentAdjustments: [dispute("OPEN")] }));
+    await expect(runPayoutForEvent("event-1")).rejects.toMatchObject({ status: 409, code: "DISPUTE_OPEN" });
+    expect(mocks.createPayout).not.toHaveBeenCalled();
+    expect(mocks.payoutOperation.create).not.toHaveBeenCalled();
   });
 });
 

@@ -482,11 +482,13 @@ function RegisterContent() {
   const refundTiers = parseTiers(event?.refundTiers);
   const refundLines = freeEvent ? [] : describeTiers(refundTiers);
   const daysToEvent = event ? daysUntil(event.eventDate, new Date().toISOString().slice(0, 10)) : 0;
-  const refundIfCancelledNow = refundAmountCents(refundTiers, Math.round(ticketTotal * 100), daysToEvent) / 100;
+  // A change-of-mind refund is a share of the ticket price. The booking fee is
+  // never part of it (terms 3.4); only a cancelled event returns the fee.
+  const refundIfCancelledNow = refundAmountCents(refundTiers, Math.round(subtotal * 100), daysToEvent) / 100;
   const refundHeadline = freeEvent
     ? ""
     : refundIfCancelledNow > 0
-      ? `Cancel today and you get ${money(refundIfCancelledNow)} of ${money(ticketTotal)} back on your entry. The amount drops as the event gets closer.`
+      ? `Cancel today and you get ${money(refundIfCancelledNow)} of the ${money(subtotal)} ticket price back. The booking fee is not refunded, and the amount drops as the event gets closer.`
       : `This event's policy does not cover a refund at this date, so treat this entry as final.`;
 
   const isMulti = participants.length > 1;

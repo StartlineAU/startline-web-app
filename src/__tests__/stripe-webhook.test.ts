@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
   ensureCognitoUser: vi.fn(),
   refundCreate: vi.fn(),
+  syncChargeRefunds: vi.fn(),
+  syncDispute: vi.fn(),
 }));
 
 const tx = {
@@ -51,6 +53,11 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/email", () => ({
   sendRegistrationConfirmationEmail: mocks.sendEmail,
+}));
+
+vi.mock("@/lib/payment-adjustments", () => ({
+  syncChargeRefunds: mocks.syncChargeRefunds,
+  syncDispute: mocks.syncDispute,
 }));
 
 vi.mock("@/lib/athlete-accounts", () => ({
@@ -558,10 +565,31 @@ describe("POST /api/stripe/webhook", () => {
   });
 
   it("acknowledges unhandled event types", async () => {
-    signedEvent({ id: "evt_1" }, "charge.refunded");
+    signedEvent({ id: "evt_1" }, "customer.created");
     const res = await post({ id: "evt_1" });
     expect(res.status).toBe(200);
     expect(mocks.registration.create).not.toHaveBeenCalled();
+  });
+
+  it("hands a refund made in Stripe to the payment adjustment sync (#550)", async () => {
+    signedEvent({ id: "ch_1" }, "charge.refunded");
+    const res = await post({ id: "evt_1" });
+    expect(res.status).toBe(200);
+    expect(mocks.syncChargeRefunds).toHaveBeenCalledWith({ id: "ch_1" });
+  });
+
+  it.each(["charge.dispute.created", "charge.dispute.closed"])("hands %s to the dispute sync", async (type) => {
+    signedEvent({ id: "du_1" }, type);
+    const res = await post({ id: "evt_1" });
+    expect(res.status).toBe(200);
+    expect(mocks.syncDispute).toHaveBeenCalledWith({ id: "du_1" });
+  });
+
+  it("fails the delivery so Stripe retries when the sync throws", async () => {
+    mocks.syncChargeRefunds.mockRejectedValueOnce(new Error("db down"));
+    signedEvent({ id: "ch_1" }, "charge.refunded");
+    const res = await post({ id: "evt_1" });
+    expect(res.status).toBe(500);
   });
 });
 

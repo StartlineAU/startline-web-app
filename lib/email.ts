@@ -15,6 +15,7 @@ import { RefundOverrideEmail } from "@/emails/refund-override";
 import { EventCancelledEmail } from "@/emails/event-cancelled";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
+import { PaymentAdjustmentEmail } from "@/emails/payment-adjustment";
 import { SUPPORT_EMAIL } from "@/lib/contact";
 import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -266,6 +267,37 @@ export async function buildReviewReportedEmail(
 export async function sendReviewReportedEmails(recipients: string[], data: ReviewReportedEmailData) {
   if (recipients.length === 0) return;
   await sendToEachAdmin(recipients, await buildReviewReportedEmail(data), "review report notification");
+}
+
+// ── Refund or dispute in Stripe (admins) ──────────────────────────────────────
+export interface PaymentAdjustmentEmailData {
+  heading: string;
+  tone: "success" | "info" | "danger" | "warning";
+  title: string;
+  sub: string;
+  eventTitle: string;
+  organiserName: string;
+  items: { label: string; value: string }[];
+}
+
+export async function buildPaymentAdjustmentEmail(
+  data: PaymentAdjustmentEmailData,
+  { environment = process.env.ENV, siteUrl = SITE }: AdminEmailOptions = {},
+): Promise<BuiltEmail> {
+  const tag = stagingTag(environment);
+  const rendered = await renderEmail(
+    PaymentAdjustmentEmail({
+      tag,
+      ...data,
+      payoutsUrl: adminUrl("/admin/payouts", siteUrl),
+    }),
+  );
+  return { subject: `${tag}${data.heading}: ${data.eventTitle}`, ...rendered };
+}
+
+export async function sendPaymentAdjustmentEmails(recipients: string[], data: PaymentAdjustmentEmailData) {
+  if (recipients.length === 0) return;
+  await sendToEachAdmin(recipients, await buildPaymentAdjustmentEmail(data), "payment adjustment alert");
 }
 
 // ── Team details needed (buyer) ───────────────────────────────────────────────
