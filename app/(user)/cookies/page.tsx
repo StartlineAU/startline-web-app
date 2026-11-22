@@ -19,17 +19,25 @@ export const metadata: Metadata = {
 
 type Row = { name: string; purpose: string; lasts: string };
 
-/** Cookies Startline itself sets. Keep in step with AmplifyProvider and the switch-org route. */
+/**
+ * Cookies Startline itself sets. Keep in step with AmplifyProvider, the
+ * switch-org route and LINK_COOKIES in lib/cognito-oauth.ts.
+ */
 const COOKIES: Row[] = [
   {
     name: "CognitoIdentityServiceProvider.*",
     purpose: "Keeps you signed in. Shared across startlineau.com and its organiser and admin portals, so one sign-in covers all three.",
-    lasts: "Until you sign out or your session expires",
+    lasts: "Until you sign out, or 30 days",
   },
   {
     name: "startline_active_org",
     purpose: "Remembers which organisation you are working in on the organiser portal.",
     lasts: "1 year",
+  },
+  {
+    name: "startline_link_*",
+    purpose: "Carries a security check and the page to come back to while you connect Google or Apple to your account in Settings.",
+    lasts: "10 minutes",
   },
 ];
 
@@ -46,9 +54,24 @@ const STORAGE: Row[] = [
     lasts: "Until you clear it (local storage)",
   },
   {
+    name: "CognitoIdentityServiceProvider.* (local storage)",
+    purpose: "Holds a security check while a Google or Apple sign-in is in progress, and whether you signed in that way.",
+    lasts: "Until you sign out or clear it (local storage)",
+  },
+  {
     name: "startline_pending_*, startline_intent_organiser",
     purpose: "Carries your details between the steps of signing up, and whether you started from Become an organiser.",
     lasts: "Until you close the tab (session storage)",
+  },
+  {
+    name: "startline_social_*",
+    purpose: "Remembers the page you started a Google or Apple sign-in from, so you come back to it.",
+    lasts: "Until you close the tab (session storage)",
+  },
+  {
+    name: "startline_native_oauth_*",
+    purpose: "In the Startline app only: holds a security check while a Google or Apple sign-in is in progress.",
+    lasts: "Until the sign-in finishes (local storage)",
   },
   {
     name: "Page history",
@@ -67,15 +90,27 @@ const THIRD_PARTIES: { name: string; where: string; why: string; policy: string 
   },
   {
     name: "Cloudflare Turnstile",
-    where: "Contact, feedback and review forms",
+    where: "Event entry, waitlist, contact, feedback, support and review forms",
     why: "Checks that a person, not a bot, is filling in the form.",
     policy: "https://www.cloudflare.com/privacypolicy/",
   },
   {
     name: "Mapbox",
-    where: "Event maps and address search",
+    where: "Event maps",
     why: "Shows maps and may store data in your browser to load them faster.",
     policy: "https://www.mapbox.com/legal/privacy",
+  },
+  {
+    name: "Google",
+    where: "Continue with Google, only if you choose it",
+    why: "Signs you in on Google’s own site, which sets Google’s cookies.",
+    policy: "https://policies.google.com/privacy",
+  },
+  {
+    name: "Apple",
+    where: "Continue with Apple, only if you choose it",
+    why: "Signs you in on Apple’s own site, which sets Apple’s cookies.",
+    policy: "https://www.apple.com/legal/privacy/",
   },
 ];
 
