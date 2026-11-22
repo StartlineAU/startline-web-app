@@ -10,8 +10,8 @@ describe("event status labels", () => {
 
 describe("competition types", () => {
   it("lists only running, run clubs and other (#536)", () => {
-    expect(EVENT_TYPE_OPTIONS.map((o) => o.value)).toEqual(["running", "run_club", "other"]);
-    expect(Object.keys(EVENT_TYPE_LABELS).sort()).toEqual(["other", "run_club", "running"]);
+    expect(EVENT_TYPE_OPTIONS.map((o) => o.value)).toEqual(["running", "run_club", "functional_fitness", "other"]);
+    expect(Object.keys(EVENT_TYPE_LABELS).sort()).toEqual(["functional_fitness", "other", "run_club", "running"]);
   });
 });
 

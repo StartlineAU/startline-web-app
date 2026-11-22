@@ -5,6 +5,7 @@ function mapDiscipline(discipline: string): EventType {
   const d = discipline.toLowerCase();
   if (d === "running")  return "running";
   if (d === "run_club") return "run_club";
+  if (d === "functional_fitness") return "functional_fitness";
   return "other";
 }
 

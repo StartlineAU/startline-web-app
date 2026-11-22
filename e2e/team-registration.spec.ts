@@ -380,6 +380,7 @@ test.describe("team registration", () => {
     await expect(ticket.getByLabel("People per team", { exact: true })).toHaveValue("4");
     await expect(ticket.getByText("Price per person")).toBeVisible();
     await expect(ticket.getByText("Teams available")).toBeVisible();
+    await page.getByTestId("fee-breakdown").first().getByRole("button", { name: "About fees and payout" }).click();
     await expect(page.getByTestId("fee-breakdown-team")).toContainText(/a team of 4 pays/i);
   });
 

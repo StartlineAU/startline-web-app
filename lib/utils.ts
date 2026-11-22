@@ -62,6 +62,7 @@ export function formatLevel(level: string): string {
 const DISCIPLINE_LABELS: Record<string, string> = {
   running: "Running",
   run_club: "Run Clubs",
+  functional_fitness: "Functional Fitness",
   other: "Other",
 };
 

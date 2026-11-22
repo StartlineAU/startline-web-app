@@ -15,8 +15,12 @@ test.describe("ticket fee preview", () => {
 
     await page.getByLabel("Ticket price").fill("50");
 
-    const preview = page.getByTestId("fee-breakdown").first();
-    await expect(preview).toBeVisible();
+    // The card states the advertised price; the breakdown is in its info bubble (#579).
+    const summary = page.getByTestId("fee-breakdown").first();
+    await expect(summary).toContainText("A$50.00");
+    await summary.getByRole("button", { name: "About fees and payout" }).click();
+    const preview = page.getByTestId("fee-breakdown-details");
+    await expect(preview).toContainText("stays the price athletes see");
     const row = (label: string) => preview.locator(`[data-fee-row="${label}"]`);
     await expect(row("Athlete pays")).toContainText("A$53.43");
     await expect(row("You receive")).toContainText("A$48.76");
