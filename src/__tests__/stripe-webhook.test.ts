@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
     findFirst: vi.fn(),
     updateMany: vi.fn(),
   },
-  user: { upsert: vi.fn() },
+  user: { upsert: vi.fn(), findMany: vi.fn(async () => []) },
+  organiserBlock: { findFirst: vi.fn() },
   event: { findUnique: vi.fn() },
   notification: { create: vi.fn() },
   userNotification: { create: vi.fn() },
@@ -26,6 +27,8 @@ const mocks = vi.hoisted(() => ({
 const tx = {
   registration: mocks.registration,
   event: mocks.event,
+  user: mocks.user,
+  organiserBlock: mocks.organiserBlock,
   // The per-event advisory lock taken before the capacity count.
   $executeRaw: vi.fn(async () => 0),
 };
@@ -41,6 +44,7 @@ vi.mock("@/lib/prisma", () => ({
   default: {
     registration: mocks.registration,
     user: mocks.user,
+    organiserBlock: mocks.organiserBlock,
     event: mocks.event,
     notification: mocks.notification,
     userNotification: mocks.userNotification,
@@ -132,6 +136,7 @@ beforeEach(() => {
   mocks.notification.create.mockResolvedValue({});
   mocks.userNotification.create.mockResolvedValue({});
   mocks.refundCreate.mockResolvedValue({ id: "re_123" });
+  mocks.organiserBlock.findFirst.mockResolvedValue(null);
 });
 
 describe("parseParticipantsFromMetadata", () => {
@@ -430,6 +435,24 @@ describe("POST /api/stripe/webhook", () => {
     await post({ id: "pi_123" });
     expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
     expect(mocks.registration.createMany.mock.calls[0][0].data[0].status).toBe("CANCELLED");
+  });
+
+  // #571: someone blocked while their payment was in flight is refunded, not entered.
+  it("refunds a payment from someone the organisation has blocked", async () => {
+    mocks.organiserBlock.findFirst.mockResolvedValue({ id: "blk-1", email: "jordan@example.com" });
+    signedEvent({ id: "pi_123", amount_received: 10540, metadata: metadata({ ...ONE_PARTICIPANT, userId: "user-7" }) });
+
+    await post({ id: "pi_123" });
+
+    const where = mocks.organiserBlock.findFirst.mock.calls[0][0].where;
+    expect(where.organiserId).toBe("org-1");
+    expect(where.OR).toEqual([
+      { userId: { in: ["user-7"] } },
+      { email: { in: ["jordan@example.com"] } },
+    ]);
+    expect(mocks.refundCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.registration.createMany.mock.calls[0][0].data[0].status).toBe("CANCELLED");
+    expect(mocks.notification.create).not.toHaveBeenCalled();
   });
 
   it("refunds a payment for a cancelled event in full, booking fee included", async () => {

@@ -15,7 +15,7 @@ export interface Registration {
   dateOfBirth: string | null;
   estimatedFinishMinutes: number | null;
   medicalNotes: string | null;
-  status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED";
+  status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED" | "REMOVED";
   checkedInAt: string | null;
   amount: number;
   refundAmountCents: number | null;
@@ -25,6 +25,8 @@ export interface Registration {
   createdAt: string;
   /** Free entries only: a paid entry's status changes through a refund. */
   statusEditable: boolean;
+  /** What Remove from event refunds, in cents. 0 for an entry nothing was charged for. */
+  removalRefundCents: number;
   resultDistance: string | null;
   resultTime: string | null;
   resultPlacement: string | null;

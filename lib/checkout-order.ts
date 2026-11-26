@@ -30,6 +30,7 @@ import {
 import { findTakenTeamNames } from "@/lib/team-entries";
 import { todayIso } from "@/lib/event-types";
 import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
+import { BLOCKED_ENTRY_MESSAGE, isBlockedByOrganiser } from "@/lib/organiser-blocks";
 
 export type CheckoutParticipant = RegistrationFormData & {
   waveLabel?: string;
@@ -367,6 +368,17 @@ export async function resolveCheckoutOrder(
   }
 
   const userSession = await getUserSession();
+
+  // Someone this organisation has blocked (#571) is refused before a card is
+  // charged. The insert checks again under the event lock.
+  if (
+    await isBlockedByOrganiser(event.organiser.id, {
+      userIds: [userSession?.sub],
+      emails: [userSession?.email, ...named.map((p) => p.email)],
+    })
+  ) {
+    return { error: BLOCKED_ENTRY_MESSAGE, status: 403 };
+  }
 
   const withContact =
     groupRegistration && sharedEmergencyContact

@@ -185,6 +185,7 @@ const STATUS_LABELS: Record<string, string> = {
   REFUND_REQUESTED: "Refund requested",
   REFUNDED: "Refunded",
   CANCELLED: "Cancelled",
+  REMOVED: "Removed by organiser",
 };
 
 export function formatRegistrationStatus(status: string): string {

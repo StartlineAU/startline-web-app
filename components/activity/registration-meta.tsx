@@ -3,7 +3,7 @@ import { CheckCheck, Clock, UserCheck } from "lucide-react";
 import { formatInEventTimeZone } from "@/lib/event-time";
 import type { CheckInState } from "@/lib/check-in-window";
 
-export type RegStatus = "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED";
+export type RegStatus = "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "REMOVED";
 
 /** One of the athlete's entries, as GET /api/user/registrations returns it. */
 export type RegMeta = {
@@ -53,6 +53,17 @@ function formatCheckInTime(iso: string, timeZone: string) {
  */
 export function withdrawnCopy(meta: RegMeta): { heading: string; detail: string | null; refundIssued: boolean } {
   const freeEntry = meta.paidCents === 0;
+  // The organiser took the entry out (#571): the athlete did not withdraw.
+  if (meta.status === "REMOVED") {
+    const refunded = !freeEntry && meta.refundAmountCents > 0;
+    return {
+      heading: "Removed by the organiser.",
+      detail: refunded
+        ? `Your refund of $${(meta.refundAmountCents / 100).toFixed(2)} is on its way.`
+        : "Your place has been released. Contact the organiser with any questions.",
+      refundIssued: refunded,
+    };
+  }
   const refundIssued = meta.status === "REFUNDED" && !freeEntry;
   if (meta.eventCancelled) {
     const amount = `$${(meta.refundAmountCents / 100).toFixed(2)}`;

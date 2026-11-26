@@ -208,7 +208,7 @@ export async function pickSingleDayToday(page: Page): Promise<void> {
 /** Pick the category (stored as discipline) from the pill on the listing editor's banner. */
 export async function chooseDiscipline(page: Page, name: string): Promise<void> {
   await page.getByRole("button", { name: "Choose category" }).click();
-  await page.getByRole("dialog", { name: "Category" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
+  await page.getByRole("listbox", { name: "Category" }).getByRole("option", { name: new RegExp(`^${name}`) }).click();
 }
 
 /**

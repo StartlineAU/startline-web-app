@@ -163,7 +163,7 @@ const PROFILE_PICS: Record<string, string> = {
 
 // Disciplines the site lists (#536). Seed events keep their original sport for
 // photos and copy, but are stored under a supported discipline.
-const SUPPORTED_DISCIPLINES = new Set(["running", "run_club", "other"]);
+const SUPPORTED_DISCIPLINES = new Set(["running", "run_club", "functional_fitness", "other"]);
 const seedDiscipline = (d: string) => (SUPPORTED_DISCIPLINES.has(d) ? d : "other");
 
 // Discipline-appropriate cover photos for events that don't have one set.

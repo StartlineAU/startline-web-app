@@ -1,7 +1,9 @@
 "use client";
 
 import { MIN_TEAM_SIZE, MAX_TEAM_SIZE, ticketFormatLabel } from "@/lib/team-tickets";
-import { useEffect, useLayoutEffect, useRef, useState, startTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, startTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   ArrowRight, Calendar, Check, ChevronDown, ChevronUp, Clock, ExternalLink, EyeOff, FileText,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/utils";
 import { STATE_LABELS } from "@/types";
 import OrganiserContactDetails from "@/components/OrganiserContactDetails";
+import { useSettings } from "@/context/SettingsContext";
 import {
   CONTACT_FIELDS, NO_CONTACT_OVERRIDE, effectiveVisibility,
   type ContactField, type ContactVisibility, type OrganiserContact,
@@ -265,62 +268,114 @@ export function CoverControls({ form, update, missing }: Props & { missing?: str
 }
 
 /**
- * The category pill (stored as `discipline`). Picking one opens a sheet, since
- * the banner clips popovers. Organisers see it called "Category".
+ * The category pill (stored as `discipline`). Organisers see it called
+ * "Category". It opens a dropdown listbox under the pill (#579). The banner
+ * clips anything that overflows it, so the list is portalled to <body> and
+ * placed with fixed positioning against the pill.
  */
 export function DisciplinePill({ form, update, missing }: Props & { missing?: string }) {
   const [open, setOpen] = useState(false);
-  const sheetRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<{ left: number; top: number; up: boolean } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listId = "discipline-listbox";
+
+  const place = useCallback(() => {
+    const r = buttonRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = 288;
+    const left = Math.min(Math.max(r.left, 16), window.innerWidth - width - 16);
+    const up = window.innerHeight - r.bottom < 300 && r.top > 300;
+    setPos({ left, top: up ? r.top - 6 : r.bottom + 6, up });
+  }, []);
+
+  const openMenu = () => {
+    const i = DISCIPLINES.findIndex(d => d.v === form.discipline);
+    setActive(i >= 0 ? i : 0);
+    place();
+    setOpen(true);
+  };
+  const close = (refocus = false) => {
+    setOpen(false);
+    if (refocus) buttonRef.current?.focus();
+  };
+  const choose = (v: Discipline) => {
+    if (v !== form.discipline) update({ discipline: v, categories: [] });
+    setOpen(false);
+    // Next on the banner is the name, so the cursor goes there.
+    const title = document.querySelector<HTMLTextAreaElement>("#region-title textarea");
+    if (title && !title.value.trim()) requestAnimationFrame(() => title.focus());
+    else buttonRef.current?.focus();
+  };
+
   useEffect(() => {
     if (!open) return;
-    popIn(sheetRef.current, 0.97);
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+    popIn(listRef.current, 0.97);
+    listRef.current?.focus();
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!buttonRef.current?.contains(t) && !listRef.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, place]);
+
+  const onListKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); close(true); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive(a => (a + 1) % DISCIPLINES.length); }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setActive(a => (a - 1 + DISCIPLINES.length) % DISCIPLINES.length); }
+    if (e.key === "Home")      { e.preventDefault(); setActive(0); }
+    if (e.key === "End")       { e.preventDefault(); setActive(DISCIPLINES.length - 1); }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(DISCIPLINES[active].v); }
+  };
 
   return (
     <span id="region-discipline" data-region="discipline" data-missing={missing ? "true" : undefined} className="inline-block scroll-mt-48">
-      <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Choose category"
+      <button ref={buttonRef} type="button" onClick={() => (open ? close() : openMenu())}
+        onKeyDown={e => { if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); openMenu(); } }}
+        aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} aria-label="Choose category"
         className={form.discipline
           ? `${DISCIPLINE_PILL_CLASS} inline-flex items-center gap-1.5 hover:brightness-110`
           : `inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest px-3.5 py-1.5 rounded-full border-2 border-dashed shadow-lg ${
               missing ? "border-orange-400/80 text-orange-300" : "border-primary text-primary"
             } bg-darker/90 backdrop-blur-sm hover:bg-primary/15 transition-colors`}>
         {form.discipline ? formatDiscipline(form.discipline) : <><Plus className="w-3.5 h-3.5" /> Category<RequiredMark /></>}
-        <ChevronDown className="w-3 h-3" />
+        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 overlay-in" role="dialog" aria-modal="true" aria-label="Category">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div ref={sheetRef} className="relative w-full sm:max-w-lg bg-dark border border-dark-lighter rounded-t-2xl sm:rounded-2xl p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-headline text-[18px] font-black italic tracking-tight text-light">Category</h2>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close"
-                className="w-8 h-8 rounded-full text-light hover:text-primary flex items-center justify-center"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {DISCIPLINES.map(d => {
-                const on = form.discipline === d.v;
-                return (
-                  <button key={d.v} type="button"
-                    onClick={() => {
-                      if (!on) update({ discipline: d.v, categories: [] });
-                      setOpen(false);
-                      // Next on the banner is the name, so the cursor goes there.
-                      const title = document.querySelector<HTMLTextAreaElement>("#region-title textarea");
-                      if (title && !title.value.trim()) requestAnimationFrame(() => title.focus());
-                    }}
-                    className={`text-left p-3.5 rounded-md border transition-colors ${on ? "border-primary bg-primary/10" : "border-dark-lighter hover:border-primary/40"}`}>
-                    <div className={`font-headline text-[15px] font-black italic tracking-tighter ${on ? "text-primary" : "text-light"}`}>{d.l}</div>
-                    <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-1">{d.d}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div ref={listRef} id={listId} role="listbox" aria-label="Category" tabIndex={-1}
+          aria-activedescendant={`discipline-option-${DISCIPLINES[active].v}`}
+          onKeyDown={onListKey}
+          style={{ left: pos.left, top: pos.top, transform: pos.up ? "translateY(-100%)" : undefined }}
+          className="fixed z-[70] w-72 max-w-[calc(100vw-32px)] rounded-lg border border-dark-lighter bg-dark-light p-1.5 shadow-2xl focus:outline-none">
+          {DISCIPLINES.map((d, i) => {
+            const on = form.discipline === d.v;
+            return (
+              <div key={d.v} id={`discipline-option-${d.v}`} role="option" aria-selected={on}
+                data-active={i === active ? "true" : undefined}
+                onPointerEnter={() => setActive(i)}
+                onClick={() => choose(d.v)}
+                className={`flex items-start justify-between gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors ${
+                  i === active ? "bg-white/[0.06]" : ""
+                }`}>
+                <div className="min-w-0">
+                  <div className={`font-headline text-[13px] font-bold uppercase tracking-widest ${on ? "text-primary" : "text-light"}`}>{d.l}</div>
+                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted mt-0.5">{d.d}</div>
+                </div>
+                {on && <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />}
+              </div>
+            );
+          })}
+        </div>,
+        document.body,
       )}
     </span>
   );
@@ -341,26 +396,35 @@ export function TitleInput({ form, update, missing }: Props & { missing?: string
     // The size sits on the wrapper too: globals.css lifts phone inputs to
     // max(16px, 1em) against iOS zoom, and 1em is the parent's size.
     <div id="region-title" data-region="title" data-missing={missing ? "true" : undefined} className="scroll-mt-48 mb-4 sm:mb-3 text-[28px] sm:text-4xl lg:text-5xl">
-      <textarea
-        ref={ref}
-        rows={1}
-        maxLength={80}
-        value={form.title}
-        onChange={e => update({ title: e.target.value.replace(/\n/g, " ") })}
-        onKeyDown={e => {
-          if (e.key !== "Enter") return;
-          // Enter finishes the name and moves on to the description below it.
-          e.preventDefault();
-          const next = document.querySelector<HTMLElement>("#region-description [contenteditable]");
-          next?.scrollIntoView({ behavior: "smooth", block: "center" });
-          next?.focus({ preventScroll: true });
-        }}
-        placeholder="e.g. Apex Throwdown Sydney 2026"
-        aria-label="Event title"
-        className={`${BANNER_TITLE_CLASS} !mb-0 block w-full resize-none overflow-hidden [field-sizing:content] ${ghostInput} ${
-          missing ? "!border-orange-400" : ""
-        }`}
-      />
+      {/* The box is drawn here rather than on the textarea, so slanting the
+          text below does not slant its border too. */}
+      <div onClick={() => ref.current?.focus()}
+        className={`bg-dark/60 backdrop-blur-sm border rounded-md px-3 py-1.5 transition-colors cursor-text ${
+          missing ? "border-orange-400" : "border-light/20 hover:border-light/40 focus-within:border-primary"
+        }`}>
+        <textarea
+          ref={ref}
+          rows={1}
+          maxLength={80}
+          value={form.title}
+          onChange={e => update({ title: e.target.value.replace(/\n/g, " ") })}
+          onKeyDown={e => {
+            if (e.key !== "Enter") return;
+            // Enter finishes the name and moves on to the description below it.
+            e.preventDefault();
+            const next = document.querySelector<HTMLElement>("#region-description [contenteditable]");
+            next?.scrollIntoView({ behavior: "smooth", block: "center" });
+            next?.focus({ preventScroll: true });
+          }}
+          placeholder="e.g. Apex Throwdown Sydney 2026"
+          aria-label="Event title"
+          // The title is italic on the event page, but a browser always draws the
+          // caret upright, so typing into italic text left a straight cursor
+          // beside slanted letters (#579). Upright glyphs sheared by the same
+          // angle look the same as the italic and lean the caret with them.
+          className={`${BANNER_TITLE_CLASS} !not-italic [transform:skewX(-10deg)] !mb-0 block w-full resize-none overflow-hidden [field-sizing:content] bg-transparent placeholder:text-placeholder focus:outline-none`}
+        />
+      </div>
       <div className="flex items-start justify-between gap-4 mt-2 text-[10px] leading-snug">
         <div className="min-w-0 flex-1 flex [&>p]:mt-0">
           {missing ? <MissingHint message={missing} /> : (
@@ -450,6 +514,12 @@ export function PrizePoolEditor({ form, update }: Props) {
   );
 }
 
+/**
+ * The fees on one paid ticket. The page shows only the advertised price; the
+ * breakdown sits in an info bubble beside it (#579), since a grid of four
+ * figures read as if athletes would see the checkout total instead of the
+ * price the organiser typed in.
+ */
 function FeeBreakdown({ price, feeStructure, teamSize }: {
   price: string; feeStructure: FormState["feeStructure"]; teamSize?: number | null;
 }) {
@@ -459,29 +529,48 @@ function FeeBreakdown({ price, feeStructure, teamSize }: {
   // payout to the cent: the Stripe fee is estimated on the whole charge,
   // booking fee included, and the organiser absorbs it (#470). A team ticket
   // is one payment, so it carries one Stripe fee, not one per member.
-  const fees = ticketFeeBreakdown(Math.round(p * 100), feeStructure, teamSize ?? 1);
-  const eachPays = teamSize ? ticketFeeBreakdown(Math.round(p * 100), feeStructure).athletePaysCents : null;
+  const priceCents = Math.round(p * 100);
+  const fees = ticketFeeBreakdown(priceCents, feeStructure, teamSize ?? 1);
+  const eachPays = ticketFeeBreakdown(priceCents, feeStructure).athletePaysCents;
   const fmt = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
-  const cell = (label: string, value: string, note?: string) => (
-    <div className="min-w-0" data-fee-row={label}>
-      <div className="font-headline text-[9px] font-bold uppercase tracking-widest text-muted">{label}</div>
-      <div className="font-headline text-[14px] font-bold text-light tabular-nums">{value}</div>
-      {note && <div className="font-headline text-[9px] uppercase tracking-widest text-muted-dark">{note}</div>}
-    </div>
+  const advertised = fmt(priceCents);
+  const feeOnTop = eachPays > priceCents;
+  const row = (label: string, value: string, note?: string) => (
+    <span className="flex items-baseline justify-between gap-4" data-fee-row={label}>
+      <span>
+        <span className="block font-headline text-[10px] font-bold uppercase tracking-widest text-muted">{label}</span>
+        {note && <span className="block font-headline text-[9px] uppercase tracking-widest text-muted-dark">{note}</span>}
+      </span>
+      <span className="font-headline text-[13px] font-bold text-light tabular-nums">{value}</span>
+    </span>
   );
   return (
-    <div className="rounded-lg bg-dark-darker/60 px-4 py-3 space-y-2" data-testid="fee-breakdown">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {cell(teamSize ? "Team pays" : "Athlete pays", fmt(fees.athletePaysCents), teamSize ? `Team of ${teamSize}` : undefined)}
-        {cell("You receive", fmt(fees.organiserReceivesCents), "After Stripe fee")}
-        {cell("Startline fee", fmt(fees.platformFeeCents))}
-        {cell("Stripe fee", fmt(fees.stripeFeeCents), "Estimate, from your payout")}
-      </div>
-      {teamSize && eachPays !== null && (
-        <p className="font-headline text-[10px] uppercase tracking-widest text-muted" data-testid="fee-breakdown-team">
-          A team of {teamSize} pays {fmt(fees.athletePaysCents)} in one payment · {fmt(eachPays)} per person
-        </p>
-      )}
+    <div className="flex items-center gap-1.5" data-testid="fee-breakdown">
+      <p className="font-headline text-[11px] uppercase tracking-widest text-muted">
+        Advertised at <span className="text-light font-bold tabular-nums">{advertised}</span>
+        {teamSize ? " per person" : ""} on your event page
+      </p>
+      <InfoTip label="Fees and payout">
+        <span className="block" data-testid="fee-breakdown-details">
+          <span className="block mb-2.5">
+            {advertised} stays the price athletes see on your event page.{" "}
+            {feeOnTop
+              ? "The Startline booking fee is added at checkout, so the athlete pays the total below."
+              : "You cover the Startline booking fee, so athletes pay the advertised price."}
+          </span>
+          <span className="block space-y-1.5">
+            {row(teamSize ? "Team pays" : "Athlete pays", fmt(fees.athletePaysCents), teamSize ? `Team of ${teamSize}` : "At checkout")}
+            {row("Startline fee", fmt(fees.platformFeeCents))}
+            {row("Stripe fee", fmt(fees.stripeFeeCents), "Estimate, from your payout")}
+            {row("You receive", fmt(fees.organiserReceivesCents), "After fees")}
+          </span>
+          {teamSize && (
+            <span className="block mt-2.5 font-headline text-[10px] uppercase tracking-widest text-muted" data-testid="fee-breakdown-team">
+              A team of {teamSize} pays {fmt(fees.athletePaysCents)} in one payment · {fmt(eachPays)} per person
+            </span>
+          )}
+        </span>
+      </InfoTip>
     </div>
   );
 }
@@ -788,12 +877,25 @@ export function ContactEditor({ form, update, organisation }: Props & { organisa
   } : null;
   const hasPreview = !!preview && !!(preview.name || preview.email || preview.phone);
 
+  // The details themselves belong to the organisation, so they are edited in
+  // Settings, opened over the editor (#579). A save there reloads the page's
+  // server data, which carries the new details into the preview without
+  // touching what has been typed into the listing.
+  const router = useRouter();
+  const { open: openSettings, profileSavedAt } = useSettings();
+  const seenSave = useRef(profileSavedAt);
+  useEffect(() => {
+    if (profileSavedAt === seenSave.current) return;
+    seenSave.current = profileSavedAt;
+    router.refresh();
+  }, [profileSavedAt, router]);
+
   return (
     <div id="region-contact" data-testid="contact-editor">
       <SectionHeading info={
         <InfoTip label="Contact the organiser">
-          Athletes see these on this page and on their ticket. They come from your organisation&apos;s
-          contact details in Settings, which also sets what shows by default.
+          Athletes see these on this page and on their ticket. Tap a detail to show or hide it on this
+          event. Edit contact details changes them for your whole organisation.
         </InfoTip>
       }>
         Contact the organiser
@@ -822,17 +924,25 @@ export function ContactEditor({ form, update, organisation }: Props & { organisa
           {organisation ? "No contact details are shown on this event." : "Uses the organisation's contact details."}
         </p>
       )}
-      <p className="mt-2 font-headline text-[10px] uppercase tracking-widest text-muted-dark">
-        {overridden ? (
-          <>
-            Set for this event ·{" "}
-            <button type="button" onClick={() => update({ contactShow: NO_CONTACT_OVERRIDE })}
-              className="text-muted hover:text-primary underline underline-offset-2">
-              Use organisation setting
-            </button>
-          </>
-        ) : "Following your organisation's setting"}
-      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="font-headline text-[12px] uppercase tracking-widest text-muted">
+          {overridden ? (
+            <>
+              Set for this event ·{" "}
+              <button type="button" onClick={() => update({ contactShow: NO_CONTACT_OVERRIDE })}
+                className="text-light hover:text-primary underline underline-offset-2 transition-colors">
+                Reset to organisation default
+              </button>
+            </>
+          ) : "Following your organisation's setting"}
+        </p>
+        {organisation && (
+          <button type="button" onClick={() => openSettings("organisation")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-dark-lighter px-3.5 py-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-light hover:border-primary/60 hover:text-primary transition-colors">
+            <Pencil className="w-3.5 h-3.5" /> Edit contact details
+          </button>
+        )}
+      </div>
     </div>
   );
 }
