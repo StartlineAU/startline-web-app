@@ -112,6 +112,29 @@ secret the route answers 503 and onboarding only completes when the organiser
 returns from Stripe to `/organiser/payments/return`. The secret is not in the
 prod precondition list yet, so a missing one does not fail an apply.
 
+### Refunds and disputes made in Stripe
+
+A refund issued from the Stripe dashboard, or a card dispute, reaches the
+database through `/api/stripe/webhook` (#550), handled in
+`lib/payment-adjustments.ts`. The webhook endpoint must be subscribed to
+`charge.refunded`, `charge.dispute.created` and `charge.dispute.closed` as well
+as `payment_intent.succeeded` and `account.updated`, in **both** Stripe modes.
+The endpoint is configured by hand in the Dashboard, so adding an event type
+here means adding it there too.
+
+- Each refund or dispute is one `PaymentAdjustment` row, keyed on the Stripe id,
+  so a redelivery is a no-op. Startline's own refunds carry `metadata.reason`
+  (`entry_refund`, `event_cancelled`, `registration_refused`) and are skipped;
+  any new refund path must set one too, or its refunds are counted twice.
+- A refund that matches particular entries marks them `REFUNDED`. One that does
+  not (a part refund on a group payment) leaves the entries alone and comes off
+  the payout as `unallocatedCents`, and admins are emailed.
+- An open dispute holds the event's payout (`DISPUTE_OPEN`). Lost, the entries
+  become `REFUNDED` and Stripe's dispute fee comes off the payout. Won, the hold
+  lifts.
+- Anything that lands after the payout is flagged `afterPayout` and emailed to
+  admins: the money has to be recovered from the organiser by hand (terms 5.6).
+
 ## Uploads
 
 **File bytes must never pass through a route handler on a deployed

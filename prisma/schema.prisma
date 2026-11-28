@@ -246,6 +246,8 @@ model Event {
   payoutAmountCents Int?
   payoutAt          DateTime?
   payoutOperation   PayoutOperation?
+  // Refunds and disputes that happened in Stripe rather than through Startline (#550).
+  paymentAdjustments PaymentAdjustment[]
 
   // Step 5 — media & logistics
   coverImageUrl       String?
@@ -341,6 +343,47 @@ model PayoutOperation {
 
   @@index([status])
   @@map("payout_operations")
+}
+
+enum PaymentAdjustmentKind {
+  REFUND
+  DISPUTE
+}
+
+enum DisputeStatus {
+  OPEN
+  WON
+  LOST
+}
+
+// Money that moved on a registration payment outside Startline's own refund
+// paths: a refund issued in the Stripe dashboard, or a card dispute (#550).
+// One row per Stripe object, so a redelivered webhook is a no-op.
+// lib/payment-adjustments.ts writes these; lib/payout.ts reads them.
+model PaymentAdjustment {
+  id                    String                @id @default(uuid())
+  // re_… for a refund, du_… or dp_… for a dispute.
+  stripeObjectId        String                @unique
+  kind                  PaymentAdjustmentKind
+  eventId               String
+  event                 Event                 @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  stripePaymentIntentId String
+  amountCents           Int
+  // Refunded (or lost) cents that could not be matched to particular entries.
+  // The entries stay CONFIRMED, so this is taken off the event's payout instead.
+  unallocatedCents      Int                   @default(0)
+  // Stripe's dispute fee, net of any fee Stripe returned. Taken off the payout.
+  feeCents              Int                   @default(0)
+  disputeStatus         DisputeStatus?
+  // The event had already been paid out when this arrived, so the money has to
+  // be recovered from the organiser by hand (terms 5.6).
+  afterPayout           Boolean               @default(false)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([eventId])
+  @@index([stripePaymentIntentId])
+  @@map("payment_adjustments")
 }
 
 model PayoutAttempt {

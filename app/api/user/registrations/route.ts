@@ -117,7 +117,8 @@ export async function GET() {
         // A cancelled event owes everything back, whatever the policy said.
         refundAmountCents: r.event.status === "CANCELLED"
           ? paidCents
-          : r.refundAmountCents ?? refundAmountCents(tiers, paidCents, days),
+          // Change of mind returns a share of the ticket price, never the booking fee.
+          : r.refundAmountCents ?? refundAmountCents(tiers, r.amountCents, days),
         eventCancelled: r.event.status === "CANCELLED",
         refundPercent: r.refundPercent ?? refundPercentFor(tiers, days),
         outsidePolicy: r.refundOutsidePolicy,

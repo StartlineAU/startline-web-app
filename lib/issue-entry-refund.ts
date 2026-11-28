@@ -174,6 +174,9 @@ export async function issueEntryRefund(
     // expires an idempotency key after 24 hours, so a refund that failed
     // for a transient reason can still be retried tomorrow.
     idempotencyKey: `entry-refund-${entry.id}`,
+    // Marks the refund as Startline's own, so the charge.refunded webhook does
+    // not also record it as a dashboard refund before this row is written.
+    metadata: { registrationId: entry.id, reason: "entry_refund" },
   });
 
   // The refund is idempotent per entry, so a concurrent second attempt gets the

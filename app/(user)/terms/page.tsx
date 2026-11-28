@@ -144,8 +144,9 @@ const SECTIONS: LegalSection[] = [
             Every paid event shows its organiser’s refund policy before you pay. The policy says
             what percentage you get back depending on how many days before the event you cancel, and
             the policy shown when you bought your entry is the one that applies to it, even if the
-            organiser changes it later. That percentage applies to the full amount you paid,
-            including the Startline booking fee.
+            organiser changes it later. That percentage applies to the ticket price. The Startline
+            booking fee is not refunded when you cancel, only when the organiser cancels the event
+            (3.5).
           </p>
           <p>
             You ask for a refund through Support. The organiser decides on each request, usually
@@ -324,10 +325,11 @@ const SECTIONS: LegalSection[] = [
           </p>
           <p>
             Startline issues every refund from the event’s takings. When an entry is refunded under
-            your policy or at your discretion, Startline keeps its booking fee, so the whole refund,
-            booking fee included, comes from your share of the sale. Once an event has entries it
-            can be cancelled but not deleted, by an owner or by Startline. Cancelling refunds every
-            paid entrant everything they paid; Startline returns its booking fee on those refunds.
+            your policy or at your discretion, Startline keeps its booking fee and the entrant does
+            not get it back, so the whole refund comes from your share of the sale. Once an event
+            has entries it can be cancelled but not deleted, by an owner or by Startline. Cancelling
+            refunds every paid entrant everything they paid; Startline returns its booking fee on
+            those refunds.
             If you postpone an event or change it significantly, you must offer a full refund
             (3.5).
           </p>

@@ -21,6 +21,10 @@ interface PayoutEvent {
   endDate: string | null;
   organiser: { id: string; orgName: string | null };
   netCents: number;
+  /** Refunds and disputes in Stripe already taken off netCents. */
+  deductedCents: number;
+  /** A card dispute is open, so the payout is held. */
+  onHold: boolean;
 }
 
 interface PayoutAttention {
@@ -266,13 +270,24 @@ export default function AdminPayoutsPage() {
                   <p className="font-headline text-[11px] uppercase tracking-widest text-muted mt-0.5">
                     {event.organiser.orgName ?? "Organiser"} · ended {formatDate(event.endDate ?? event.eventDate)}
                   </p>
+                  {event.deductedCents > 0 && (
+                    <p className="font-headline text-[11px] uppercase tracking-widest text-amber-200/80 mt-0.5">
+                      Less {formatAud(event.deductedCents)} refunded or disputed in Stripe
+                    </p>
+                  )}
+                  {event.onHold && (
+                    <p className="inline-flex items-center gap-1.5 font-headline text-[11px] uppercase tracking-widest text-red-300 mt-0.5">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      On hold: card dispute open
+                    </p>
+                  )}
                 </div>
                 <span className="font-headline text-[15px] font-black text-primary shrink-0">
                   {formatAud(event.netCents)}
                 </span>
                 <button
                   onClick={() => runPayout(event.id)}
-                  disabled={running === event.id || done.includes(event.id)}
+                  disabled={event.onHold || running === event.id || done.includes(event.id)}
                   className="inline-flex items-center gap-1.5 rounded bg-primary px-3 py-2 font-headline text-[11px] font-bold uppercase tracking-widest text-[#141414] disabled:opacity-50 shrink-0"
                 >
                   {done.includes(event.id) ? (

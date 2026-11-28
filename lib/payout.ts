@@ -66,6 +66,7 @@ type PayoutEventRecord = {
   payoutAmountCents: number | null;
   organiser: { id: string; stripeAccountId: string | null };
   registrations: PayoutRegistration[];
+  paymentAdjustments: PayoutAdjustment[];
   payoutOperation: PayoutOperationRecord | null;
 };
 
@@ -76,7 +77,44 @@ export type PayoutEligibleEvent = {
   endDate: string | null;
   organiser: { id: string; orgName: string | null; stripeAccountId: string | null };
   netCents: number;
+  /** Taken off for refunds and disputes that happened in Stripe (#550). */
+  deductedCents: number;
+  /** A card dispute is still open, so the payout cannot run yet. */
+  onHold: boolean;
 };
+
+/** The part of a PaymentAdjustment (lib/payment-adjustments.ts) a payout reads. */
+export type PayoutAdjustment = {
+  kind: "REFUND" | "DISPUTE";
+  unallocatedCents: number;
+  feeCents: number;
+  disputeStatus: "OPEN" | "WON" | "LOST" | null;
+};
+
+const payoutAdjustmentsQuery = {
+  select: { kind: true, unallocatedCents: true, feeCents: true, disputeStatus: true },
+} as const;
+
+/**
+ * Cents to take off a payout for money that left in Stripe without an entry to
+ * mark: refunded cents that matched no particular entry, and the fee on a
+ * lost dispute. A refund or a lost dispute that did match entries is already
+ * out of the payout, because those entries are no longer CONFIRMED.
+ */
+export function adjustmentDeductionCents(adjustments: PayoutAdjustment[]): number {
+  return adjustments.reduce((sum, adjustment) => {
+    if (adjustment.kind === "REFUND") return sum + adjustment.unallocatedCents;
+    if (adjustment.disputeStatus === "LOST") {
+      return sum + adjustment.unallocatedCents + adjustment.feeCents;
+    }
+    return sum;
+  }, 0);
+}
+
+/** An open dispute holds the payout until Stripe decides it. */
+export function hasOpenDispute(adjustments: PayoutAdjustment[]): boolean {
+  return adjustments.some((a) => a.kind === "DISPUTE" && a.disputeStatus === "OPEN");
+}
 
 /**
  * stripeFeeCents is required here, unlike on FeeSnapshot: a payout read that
@@ -107,11 +145,15 @@ export function registrationsPayoutCents(registrations: PayoutRegistration[]): n
 
 /**
  * The event's payout: every confirmed entry's share. A refunded entry is no
- * longer confirmed, so its share simply is not paid out.
+ * longer confirmed, so its share simply is not paid out. Refunds and disputes
+ * from Stripe that matched no entry come off the total (#550).
  */
-export function eventPayoutCents(registrations: PayoutRegistration[]): number {
+export function eventPayoutCents(
+  registrations: PayoutRegistration[],
+  adjustments: PayoutAdjustment[] = [],
+): number {
   const confirmed = registrations.filter((r) => (r.status ?? "CONFIRMED") === "CONFIRMED");
-  return Math.max(0, registrationsPayoutCents(confirmed));
+  return Math.max(0, registrationsPayoutCents(confirmed) - adjustmentDeductionCents(adjustments));
 }
 
 /** Entries the payout reads: the confirmed ones. */
@@ -188,6 +230,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       organiser: { select: { id: true, orgName: true, stripeAccountId: true } },
       payoutOperation: { select: { status: true } },
       registrations: payoutRegistrationsQuery,
+      paymentAdjustments: payoutAdjustmentsQuery,
     },
   });
 
@@ -198,7 +241,8 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       continue;
     }
 
-    const netCents = eventPayoutCents(event.registrations);
+    const adjustments = event.paymentAdjustments as PayoutAdjustment[];
+    const netCents = eventPayoutCents(event.registrations, adjustments);
     if (netCents <= 0) continue;
 
     eligible.push({
@@ -208,6 +252,8 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       endDate: event.endDate,
       organiser: event.organiser,
       netCents,
+      deductedCents: adjustmentDeductionCents(adjustments),
+      onHold: hasOpenDispute(adjustments),
     });
   }
   return eligible;
@@ -296,7 +342,17 @@ export async function runPayoutForEvent(eventId: string): Promise<PayoutResult> 
     throw new PayoutError("Organiser has no Stripe account.", 422, "NO_STRIPE_ACCOUNT");
   }
 
-  const netCents = eventPayoutCents(event.registrations);
+  // Held, not refused for good: once Stripe closes the dispute the payout runs
+  // with whatever the outcome took off it.
+  if (hasOpenDispute(event.paymentAdjustments)) {
+    throw new PayoutError(
+      "A card dispute on this event is still open. The payout is held until Stripe closes it.",
+      409,
+      "DISPUTE_OPEN",
+    );
+  }
+
+  const netCents = eventPayoutCents(event.registrations, event.paymentAdjustments);
   if (netCents <= 0) {
     throw new PayoutError("No confirmed registrations to pay out.", 422, "NOTHING_TO_PAY");
   }
@@ -319,6 +375,7 @@ async function loadEvent(eventId: string): Promise<PayoutEventRecord> {
       payoutAmountCents: true,
       organiser: { select: { id: true, stripeAccountId: true } },
       registrations: payoutRegistrationsQuery,
+      paymentAdjustments: payoutAdjustmentsQuery,
       payoutOperation: { select: operationSelect },
     },
   });

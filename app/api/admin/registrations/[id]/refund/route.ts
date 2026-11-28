@@ -5,7 +5,6 @@ import { writeAuditLog } from "@/lib/audit";
 import { idParams } from "@/lib/schemas";
 import { RefundError, issueEntryRefund, refundEntrySelect } from "@/lib/issue-entry-refund";
 import { refundWithinCutoff } from "@/lib/refund-policy";
-import { entryPaidCents } from "@/lib/stripe-refunds";
 import { TEAM_HELD_STATUSES } from "@/lib/team-tickets";
 
 export async function POST(
@@ -151,7 +150,8 @@ async function refundTeammates(
     try {
       let entry = mate;
       if (mate.refundAmountCents == null && teamPercent != null) {
-        const refundAmountCents = Math.round((entryPaidCents(mate) * teamPercent) / 100);
+        // The same share of the ticket price; the booking fee is not refunded.
+        const refundAmountCents = Math.round((mate.amountCents * teamPercent) / 100);
         entry = await prisma.registration.update({
           where: { id: mate.id },
           data: { refundAmountCents, refundPercent: teamPercent },
