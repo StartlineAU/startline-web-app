@@ -37,6 +37,22 @@ test.afterAll(async () => {
 
 test.beforeEach(clearFixture);
 
+/**
+ * Harper's User row, as the "athlete" bypass resolves it: the seeded row is
+ * adopted by email and re-pointed at the bypass sub. Registration.userId is the
+ * row's cuid, not the sub, and nothing guarantees a bypass request has created
+ * or claimed the row before this spec runs.
+ */
+async function harperUserId() {
+  const user = await prisma.user.upsert({
+    where: { email: "harper.jones@startline.test" },
+    update: { cognitoSub: "dev-bypass-harper-jones" },
+    create: { cognitoSub: "dev-bypass-harper-jones", email: "harper.jones@startline.test", name: "Harper Jones" },
+    select: { id: true },
+  });
+  return user.id;
+}
+
 /** Harper's entry, bought by Harper, for Harper or for someone else. */
 async function seedEntry(id: string, athlete: { name: string; email: string }) {
   const event = await prisma.event.findUniqueOrThrow({ where: { id: EVENT_ID }, select: { organiserId: true } });
@@ -45,7 +61,7 @@ async function seedEntry(id: string, athlete: { name: string; email: string }) {
       id,
       eventId: EVENT_ID,
       organiserId: event.organiserId,
-      userId: "dev-bypass-harper-jones",
+      userId: await harperUserId(),
       athleteName: athlete.name,
       athleteEmail: athlete.email,
       status: "CONFIRMED",
