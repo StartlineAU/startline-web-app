@@ -30,12 +30,40 @@ async function signInAs(page: Page, identity: "athlete" | "user") {
   ]);
 }
 
+type Mode = "OFF" | "PRIVATE" | "SHARED";
+
+// Waves and bibs are opt-in per event (#566). Each test sets them, and the
+// event's own modes are put back afterwards.
+let originalModes: { waveMode: Mode; bibMode: Mode } | null = null;
+
+async function setModes(waveMode: Mode, bibMode: Mode) {
+  await prisma.event.update({ where: { id: EVENT_ID }, data: { waveMode, bibMode } });
+}
+
+test.beforeAll(async () => {
+  originalModes = await prisma.event.findUniqueOrThrow({
+    where: { id: EVENT_ID },
+    select: { waveMode: true, bibMode: true },
+  });
+});
+
 test.beforeEach(cleanUp);
 
 test.afterAll(async () => {
   await cleanUp();
+  if (originalModes) await setModes(originalModes.waveMode, originalModes.bibMode);
   await prisma.$disconnect();
 });
+
+async function openTicket(page: Page) {
+  await page.goto("/activity");
+  const card = page.locator(`[data-testid="registration-entry"][data-event-id="${EVENT_ID}"]`);
+  await expect(card).toBeVisible({ timeout: 15000 });
+  await card.getByTestId("event-card").click();
+  const dialog = page.getByTestId("ticket-dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
 
 async function seedEntry() {
   const event = await prisma.event.findUniqueOrThrow({
@@ -65,6 +93,7 @@ async function seedEntry() {
 }
 
 test("a registered card in Activity opens the athlete's ticket over the page", async ({ page }) => {
+  await setModes("SHARED", "SHARED");
   await seedEntry();
   await signInAs(page, "athlete");
 
@@ -96,6 +125,50 @@ test("a registered card in Activity opens the athlete's ticket over the page", a
 
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
+});
+
+test("the ticket shows no wave or bib when the event does not use them", async ({ page }) => {
+  await setModes("OFF", "OFF");
+  await seedEntry();
+  await signInAs(page, "athlete");
+
+  const entry = (await openTicket(page)).getByTestId("ticket-entry");
+  await expect(entry).toHaveCount(1);
+  // The tier and what was paid for it stay; no placeholder for a wave or bib.
+  await expect(entry.getByTestId("ticket-tier")).toContainText("Sprint");
+  await expect(entry.getByTestId("ticket-wave")).toHaveCount(0);
+  await expect(entry.getByTestId("ticket-bib")).toHaveCount(0);
+  await expect(entry.getByText("TBC")).toHaveCount(0);
+});
+
+test("a private wave or bib never reaches the athlete", async ({ page }) => {
+  await setModes("PRIVATE", "PRIVATE");
+  await seedEntry();
+  await signInAs(page, "athlete");
+
+  const res = await page.request.get(`/api/user/tickets/${EVENT_ID}`);
+  expect(res.status()).toBe(200);
+  const body = await res.text();
+  expect(body).not.toContain(BIB);
+  expect(body).not.toContain("Wave 3");
+
+  const entry = (await openTicket(page)).getByTestId("ticket-entry");
+  await expect(entry.getByTestId("ticket-wave")).toHaveCount(0);
+  await expect(entry.getByTestId("ticket-bib")).toHaveCount(0);
+});
+
+test("a shared wave not yet assigned says so quietly", async ({ page }) => {
+  await setModes("SHARED", "OFF");
+  await seedEntry();
+  await prisma.registration.updateMany({
+    where: { eventId: EVENT_ID, bibNumber: BIB },
+    data: { startWaveLabel: null },
+  });
+  await signInAs(page, "athlete");
+
+  const entry = (await openTicket(page)).getByTestId("ticket-entry");
+  await expect(entry.getByTestId("ticket-wave")).toHaveText("Not assigned yet");
+  await expect(entry.getByTestId("ticket-bib")).toHaveCount(0);
 });
 
 test("the ticket API refuses someone without an entry", async ({ page }) => {
