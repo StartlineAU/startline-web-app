@@ -149,13 +149,16 @@ const SECTIONS: LegalSection[] = [
             (3.5).
           </p>
           <p>
-            You ask for a refund through Support. The organiser decides on each request, usually
+            You ask for a refund on the Refunds page, for an entry that is yours or that you paid
+            for. On a group purchase the refund goes back to the card that paid, whoever asks.
+            The organiser decides on each request, usually
             within 3 business days. If the organiser does not respond in that time, Startline may
             decide instead, and Startline may also change an organiser’s decision where that is
             needed, for example to meet the Australian Consumer Law. Startline issues approved
             refunds back to your original payment method, which usually takes 5 to 10 business
-            days. Refunds under the policy cannot be requested within 24 hours of the event’s start.
-            A request the policy does not cover is up to the organiser.
+            days. The policy gives no refund within 24 hours of the event’s start, but you can still
+            ask: your rights under the Australian Consumer Law apply at any time. A request the
+            policy does not cover is up to the organiser.
           </p>
         </Clause>
         <Clause n="3.5" title="Cancelled or changed events">
@@ -164,7 +167,7 @@ const SECTIONS: LegalSection[] = [
             Startline booking fee, less anything already refunded to you. Free entries are released.
             If an organiser changes an event’s date, time, location or type after you have entered,
             we will email you about it. If the change means the event is no longer what you paid
-            for, or it is postponed, you can choose to keep your entry or ask through Support for a
+            for, or it is postponed, you can choose to keep your entry or ask on the Refunds page for a
             full refund.
           </p>
         </Clause>
@@ -317,7 +320,7 @@ const SECTIONS: LegalSection[] = [
           <p>
             You set your organisation’s refund policy in Settings, under Refunds, and it applies to all of your
             paid events. Each entry keeps the policy it was sold under, even if you change it later,
-            and you must honour it. You decide on refund requests made through Support, within 3
+            and you must honour it. You decide on refund requests made on the Refunds page, within 3
             business days. If you do not, Startline may decide instead. Startline may also override
             your decision where that is needed, for example to meet the Australian Consumer Law; it
             will record why and tell you. Your policy cannot remove an entrant’s rights under the
@@ -575,8 +578,8 @@ export default function TermsPage() {
             organiser runs the event; we run the platform and process payments.
           </p>
           <p>
-            Each paid event shows its refund policy before you pay. You ask for refunds through
-            Support, the organiser decides, and Startline issues them. A cancelled event is refunded
+            Each paid event shows its refund policy before you pay. You ask for refunds on the
+            Refunds page, the organiser decides, and Startline issues them. A cancelled event is refunded
             in full, booking fee included.
           </p>
           <p>

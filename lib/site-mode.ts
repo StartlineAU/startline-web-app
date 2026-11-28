@@ -64,6 +64,8 @@ const PUBLIC_WHILE_WAITLISTED = new Set([
   "/api/auth/recovery",
   // Refunds now go through a support ticket, and an athlete who has entered may
   // need to reach it even while the catalogue is closed to the public.
+  // `/support` is the old address, kept so links in sent emails still land.
+  "/refunds",
   "/support",
   "/api/support",
   // iOS and Android fetch these from the apex to decide whether startlineau.com

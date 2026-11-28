@@ -10,10 +10,25 @@ import {
   organiserNotificationRecipients,
 } from "@/lib/organiser-notification-recipients";
 import { sendRefundOverrideEmails } from "@/lib/email";
+import {
+  approvalBlocker,
+  issueTicketRefund,
+  notifyApprovedWithoutEntry,
+  restoreDeclinedEntry,
+  settleWithStripeRefund,
+} from "@/lib/refund-ticket-outcome";
 
 const bodySchema = z.object({
-  action: z.enum(["approve", "decline", "refunded"]),
+  // `issue` retries the Stripe refund on an approved ticket whose refund failed.
+  // `match_stripe` records that an unmatched Stripe dashboard refund on the
+  // payment was this request's money, so nothing more is sent.
+  action: z.enum(["approve", "decline", "refunded", "issue", "match_stripe"]),
   note: z.string().max(2000).optional(),
+  /**
+   * How much an approval returns: the policy quote (default) or everything the
+   * entry paid. Only read on approve.
+   */
+  refundType: z.enum(["POLICY", "FULL"]).optional(),
   /** Decide over the organiser's head. Needs a note; audited; the organiser is told. */
   override: z.boolean().optional(),
 });
@@ -21,7 +36,9 @@ const bodySchema = z.object({
 // PATCH — Startline acting on a refund ticket. The organiser's decision stands
 // (#570): `refunded` records that Startline issued the money for an approved
 // request; approve/decline is allowed only once the organiser's window has
-// passed, or as an explicit override (lib/refund-ticket-rules.ts).
+// passed, or as an explicit override (lib/refund-ticket-rules.ts). On a ticket
+// raised from an entry, approving issues the refund and declining gives the
+// athlete their entry back (lib/refund-ticket-outcome.ts, #492).
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -43,13 +60,83 @@ export async function PATCH(
     select: {
       id: true, status: true, organiserDecision: true, createdAt: true,
       eventName: true, name: true, organiserId: true, eventId: true,
+      registrationId: true, policyRefundCents: true,
+      registration: { select: { status: true } },
     },
   });
   if (!ticket) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  const verdict = evaluateAdminAction(ticket, parsed.data, new Date());
+  if (parsed.data.action === "issue") {
+    if (ticket.status !== "APPROVED" || !ticket.registrationId) {
+      return NextResponse.json(
+        { error: "Only an approved request linked to an entry can be issued from here." },
+        { status: 409 },
+      );
+    }
+    const issued = await issueTicketRefund(id, { firstAttempt: false });
+    await writeAuditLog({
+      adminId: session.sub,
+      action: "REFUND_TICKET_ISSUE_RETRY",
+      targetType: "support_ticket",
+      targetId: id,
+      meta: issued.ok ? { refundCents: issued.refundCents } : { error: issued.error },
+    });
+    return issued.ok
+      ? NextResponse.json({ id, status: "REFUNDED", refundCents: issued.refundCents })
+      : NextResponse.json({ error: issued.error }, { status: 502 });
+  }
+  if (parsed.data.action === "match_stripe") {
+    const settled = ticket.status === "APPROVED" && ticket.registrationId
+      ? await settleWithStripeRefund(id)
+      : null;
+    if (!settled) {
+      return NextResponse.json(
+        { error: "There is no unmatched Stripe refund on this payment to match to this request." },
+        { status: 409 },
+      );
+    }
+    await writeAuditLog({
+      adminId: session.sub,
+      action: "REFUND_TICKET_MATCH_STRIPE",
+      targetType: "support_ticket",
+      targetId: id,
+      meta: settled.ok ? { refundCents: settled.refundCents } : { error: settled.error },
+    });
+    return settled.ok
+      ? NextResponse.json({ id, status: "REFUNDED", refundCents: settled.refundCents })
+      : NextResponse.json({ error: settled.error }, { status: 502 });
+  }
+
+  const action = parsed.data.action;
+
+  // A ticket linked to an entry is refunded by approving it, and closes itself
+  // once Stripe has the money. Marking it refunded by hand would close it with
+  // nothing sent and leave the entry waiting forever. Retry the refund instead.
+  if (action === "refunded" && ticket.registrationId) {
+    return NextResponse.json(
+      { error: "This request is refunded automatically. Use Retry refund if it failed." },
+      { status: 409 },
+    );
+  }
+
+  // Once any of an approved refund has gone back, it cannot be declined: the
+  // athlete would be told their entry stands when it does not. Finish it.
+  if (action === "decline" && ticket.status === "APPROVED" && ticket.registration?.status === "REFUNDED") {
+    return NextResponse.json(
+      { error: "Part of this refund has already been issued, so it cannot be declined. Retry the refund to finish it." },
+      { status: 409 },
+    );
+  }
+
+  const verdict = evaluateAdminAction(ticket, { ...parsed.data, action }, new Date());
   if (!verdict.ok) {
     return NextResponse.json({ error: verdict.error }, { status: verdict.httpStatus });
+  }
+
+  const refundType = verdict.status === "APPROVED" ? (parsed.data.refundType ?? "POLICY") : null;
+  if (refundType) {
+    const blocker = approvalBlocker(ticket, refundType, "admin");
+    if (blocker) return NextResponse.json({ error: blocker }, { status: 409 });
   }
 
   // Conditional on the status read above, so an organiser decision that lands
@@ -63,6 +150,8 @@ export async function PATCH(
           adminDecidedById: session.sub,
           adminDecidedAt: new Date(),
           adminNote: verdict.note,
+          // A decision replaces the refund type; an override to decline clears it.
+          refundType,
         }
       : { status: verdict.status },
   });
@@ -97,6 +186,19 @@ export async function PATCH(
       decision: verdict.status === "APPROVED" ? "approved" : "declined",
       note: verdict.note ?? "",
     }).catch((err) => console.error("Refund override notify failed:", err));
+  }
+
+  if (verdict.kind && verdict.status === "DECLINED") {
+    await restoreDeclinedEntry(id);
+  } else if (verdict.kind && verdict.status === "APPROVED") {
+    if (!ticket.registrationId) {
+      await notifyApprovedWithoutEntry(id);
+    } else {
+      const issued = await issueTicketRefund(id, { firstAttempt: true });
+      return issued.ok
+        ? NextResponse.json({ id, status: "REFUNDED", refundCents: issued.refundCents })
+        : NextResponse.json({ id, status: verdict.status, issued: false, refundError: issued.error });
+    }
   }
 
   return NextResponse.json({ id, status: verdict.status });

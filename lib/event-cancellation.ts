@@ -202,6 +202,9 @@ export async function cancelEvent(opts: {
       where: { eventId: event.id, requestType: "refund", status: { in: ["OPEN", "APPROVED"] } },
       data: {
         status: "REFUNDED",
+        // The amount is the cancellation refund's, issued per entry below, so
+        // refundCents stays empty rather than claiming a number not yet sent.
+        refundType: "FULL",
         adminNote: "Event cancelled. Everything paid is refunded in full, booking fee included.",
       },
     });

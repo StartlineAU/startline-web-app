@@ -1,12 +1,13 @@
 import { randomUUID } from "crypto";
 import type { Prisma, RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { entryClaimUrl, sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
-import { signEntryClaim } from "@/lib/entry-claim-token";
+import { entryClaimUrl, entryRefundUrl, sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
+import { signEntryClaim, signEntryRefund } from "@/lib/entry-claim-token";
 import { googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import { lockEventEntries } from "@/lib/event-entry-lock";
+import { HOLDS_PLACE_WHERE } from "@/lib/registration-status";
 import {
   createEmptyParticipant,
   expandCompactParticipant,
@@ -356,12 +357,12 @@ export async function insertConfirmedRegistrations(opts: {
     const needsCapCheck = event.cap != null;
     const needsWaveCheck = hasCappedWave(waves, usedLabels);
     const confirmedTotal = needsCapCheck
-      ? await tx.registration.count({ where: { eventId: event.id, status: "CONFIRMED" } })
+      ? await tx.registration.count({ where: { eventId: event.id, ...HOLDS_PLACE_WHERE } })
       : 0;
     const confirmedRows = needsWaveCheck
       ? await tx.registration.groupBy({
           by: ["waveLabel", "teamId"],
-          where: { eventId: event.id, status: "CONFIRMED" },
+          where: { eventId: event.id, ...HOLDS_PLACE_WHERE },
           _count: { _all: true },
         })
       : [];
@@ -679,6 +680,11 @@ export async function sendEntryConfirmation(
   try {
     const token = signEntryClaim({ registrationId: entry.registrationId, athleteEmail: entry.email });
     const claimUrl = token ? entryClaimUrl(token) : null;
+    // A free entry withdraws from Activity; only a paid one has a refund to ask for.
+    const refundToken = entry.priceCents > 0
+      ? signEntryRefund({ registrationId: entry.registrationId, athleteEmail: entry.email })
+      : null;
+    const refundUrl = refundToken ? entryRefundUrl(refundToken, event.id) : null;
     const athletePaysFee = event.feeStructure === "athlete";
     const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
     const location = formatEventPlace(event);
@@ -697,6 +703,7 @@ export async function sendEntryConfirmation(
       location,
       calendarUrl,
       claimUrl,
+      refundUrl,
       ...(entry.team ? { team: `${entry.team.name} (team of ${entry.team.size})` } : {}),
       registrationFee:  formatCents(entry.priceCents),
       serviceFee:       formatCents(feeCents),

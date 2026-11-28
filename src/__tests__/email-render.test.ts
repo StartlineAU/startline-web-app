@@ -82,6 +82,16 @@ describe("registration confirmation email", () => {
     expect(text).toContain("Sat, 21 Nov 2026");
   });
 
+  it("offers a refund link for a paid entry, and none without one", async () => {
+    const refundUrl = "https://startlineau.com/refunds?event=evt-1&t=tok";
+    const html = await render(RegistrationConfirmationEmail({ ...data, refundUrl }));
+    expect(html).toContain("Request a refund");
+    expect(html).toContain("/refunds?event=evt-1&amp;t=tok");
+
+    const without = await render(RegistrationConfirmationEmail(data));
+    expect(without).not.toContain("Request a refund");
+  });
+
   it("opens the ticket in Activity, and links to a calendar when there is a start time", async () => {
     const calendarUrl = googleCalendarUrl({
       title: data.eventName,

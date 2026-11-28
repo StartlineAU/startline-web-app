@@ -15,6 +15,12 @@ import { createHash, createHmac, timingSafeEqual } from "crypto";
  */
 
 const PURPOSE = "entry-claim:v1";
+/**
+ * The "Request a refund" link in the same email. Its own purpose, so a
+ * refund link never adds a race to a profile and a claim link never opens a
+ * refund request: each signature only verifies under the purpose it was made for.
+ */
+const REFUND_PURPOSE = "entry-refund:v1";
 let warnedMissingKey = false;
 
 function key(): string | null {
@@ -31,16 +37,25 @@ function emailHash(email: string): string {
   return createHash("sha256").update(email.trim().toLowerCase()).digest("base64url").slice(0, 22);
 }
 
-function mac(secret: string, payload: string): string {
-  return createHmac("sha256", secret).update(`${PURPOSE}.${payload}`).digest("base64url");
+function mac(secret: string, purpose: string, payload: string): string {
+  return createHmac("sha256", secret).update(`${purpose}.${payload}`).digest("base64url");
+}
+
+function sign(purpose: string, entry: { registrationId: string; athleteEmail: string }): string | null {
+  const secret = key();
+  if (!secret || !entry.registrationId || !entry.athleteEmail.trim()) return null;
+  const payload = Buffer.from(JSON.stringify({ r: entry.registrationId, h: emailHash(entry.athleteEmail) })).toString("base64url");
+  return `${payload}.${mac(secret, purpose, payload)}`;
 }
 
 /** A token for one entry as it stands now, or null when no key is configured. */
 export function signEntryClaim(entry: { registrationId: string; athleteEmail: string }): string | null {
-  const secret = key();
-  if (!secret || !entry.registrationId || !entry.athleteEmail.trim()) return null;
-  const payload = Buffer.from(JSON.stringify({ r: entry.registrationId, h: emailHash(entry.athleteEmail) })).toString("base64url");
-  return `${payload}.${mac(secret, payload)}`;
+  return sign(PURPOSE, entry);
+}
+
+/** A refund-request token for one entry, or null when no key is configured. */
+export function signEntryRefund(entry: { registrationId: string; athleteEmail: string }): string | null {
+  return sign(REFUND_PURPOSE, entry);
 }
 
 /**
@@ -48,12 +63,21 @@ export function signEntryClaim(entry: { registrationId: string; athleteEmail: st
  * Call `entryClaimMatches` against the row before acting on it.
  */
 export function readEntryClaim(token: string | null | undefined): { registrationId: string; emailHash: string } | null {
+  return read(PURPOSE, token);
+}
+
+/** As `readEntryClaim`, for a refund link. Check it with `entryClaimMatches` too. */
+export function readEntryRefund(token: string | null | undefined): { registrationId: string; emailHash: string } | null {
+  return read(REFUND_PURPOSE, token);
+}
+
+function read(purpose: string, token: string | null | undefined): { registrationId: string; emailHash: string } | null {
   const secret = key();
   if (!secret || !token || token.length > 512) return null;
   const [payload, signature, extra] = token.split(".");
   if (!payload || !signature || extra !== undefined) return null;
 
-  const expected = Buffer.from(mac(secret, payload));
+  const expected = Buffer.from(mac(secret, purpose, payload));
   const actual = Buffer.from(signature);
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
 

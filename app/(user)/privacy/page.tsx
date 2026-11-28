@@ -137,7 +137,7 @@ const SECTIONS: LegalSection[] = [
         <Clause n="2.8" title="Support requests and when you contact us">
           <p>
             Your name, email address and message when you use the contact, feedback or support form,
-            and your email address when you join the waitlist. A refund request made through Support
+            and your email address when you join the waitlist. A refund request made on the Refunds page
             also records the event and your reason, and the decisions the organiser and Startline
             make on it.
           </p>

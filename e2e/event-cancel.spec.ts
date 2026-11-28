@@ -171,15 +171,22 @@ test("cancelling flags every paid entry for a full refund and releases free ones
   expect(patch.status).toBe(409);
 
   // A refund request for it is answered with the automatic refund instead.
+  // Every refund request names its entry and comes from the entry's athlete,
+  // so the entry is handed to Harper and she asks for it.
+  await prisma.registration.update({
+    where: { id: PAID_B },
+    data: { athleteEmail: "harper.jones@startline.test" },
+  });
   const support = await fetch(`${BASE_URL}/api/support`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...cookie("athlete"), "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: "Athlete", email: `${PAID_B}@startline.test`, requestType: "refund",
-      eventId: EVENT_ID, reason: "Event cancelled",
+      name: "Harper Jones", email: "harper.jones@startline.test", requestType: "refund",
+      registrationId: PAID_B, reason: "Event cancelled",
     }),
   });
   expect(support.status).toBe(409);
+  expect((await support.json()).error).toContain("This event was cancelled");
 });
 
 test("an event with no entries can still be deleted", async () => {

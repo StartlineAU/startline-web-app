@@ -554,13 +554,29 @@ athlete already paid against. The section always shows `ACL_REFUND_NOTE`: the
 Australian Consumer Law rows apply whatever the preset says. The event wizard
 does not collect a policy.
 
-Change-of-mind refunds stop 24 hours before the start (`refundWithinCutoff`).
-A full entitlement from a material change, and a free cancellation, are not
-change-of-mind refunds.
+Change-of-mind refunds owe nothing inside 24 hours of the start
+(`refundWithinCutoff`, applied by `changeOfMindQuote` when the athlete asks).
+The athlete can still ask: a material change or an event not delivered is owed
+at any time, and the organiser may choose goodwill. Nothing blocks issuing a
+refund inside 24 hours.
 
-**Paid refunds are a support ticket.** Activity has no refund button for a paid
-entry; it links to `/support`, which opens a `SupportTicket` and emails
-`admin@startlineau.com`. `POST /api/user/registrations/[id]/refund-request`
+**Paid refunds are a support ticket about one entry.** Activity has no refund
+button for a paid entry; it links to `/refunds?registration=<id>`, which opens a
+`SupportTicket` linked to that entry (`registrationId`), takes the policy quote
+and moves the entry to `REFUND_REQUESTED`. `/support` redirects there for links
+in old emails, keeping `registration` and `event`. Either the athlete whose
+place it is or the buyer who paid for it can ask (`canRequestRefund` in
+`lib/own-entry.ts`); the refund goes back to the paying card either way. A
+request that names no entry is refused. One open request per entry.
+
+A paid entry's confirmation email also carries a "Request a refund" link
+(`/refunds?event=…&t=…`), for an athlete entered under an address they don't
+sign in with. The token is signed like the "Add to my profile" link
+(`ENTRY_CLAIM_SECRET`, `lib/entry-claim-token.ts`) under its own purpose, so
+neither link works as the other. It counts as ownership without signing in,
+stops working once the entry's address changes, and the ticket is recorded
+against the entry's address (`lib/entry-refund-link.ts`). Without the secret
+the email goes out with no link. `POST /api/user/registrations/[id]/refund-request`
 answers 409 for a paid entry and still cancels a free one. Issuing the money
 stays with staff on the admin registrations page.
 
@@ -568,7 +584,7 @@ stays with staff on the admin registrations page.
 discipline or format is material. Material text is compared ignoring case and
 spacing. A material change is recorded in the change log and the athletes
 already confirmed are told in-app and by email. There is no automatic refund:
-anyone affected asks through Support. That happens when the change becomes the
+anyone affected asks on the Refunds page. That happens when the change becomes the
 public offer: immediately for a verified organiser, and only after an admin
 approves a revision for an unverified one.
 

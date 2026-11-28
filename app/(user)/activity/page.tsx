@@ -552,6 +552,8 @@ function ActivityContent() {
               eventCancelled: r.eventCancelled === true,
               onProfile: r.onProfile === true,
               canAddToProfile: r.canAddToProfile === true,
+              ownEntry: r.ownEntry === true,
+              canRefund: r.canRefund === true,
             };
             (meta[r.eventId] ??= []).push(entry);
             regIds.push(r.eventId);
@@ -857,7 +859,7 @@ function ActivityContent() {
                   your spot back to the event and takes you out of the start list.
                 </p>
                 <p className="text-[12px] text-muted-dark leading-relaxed mt-2">
-                  Paid an entry fee? Ask for a refund through Support.
+                  Paid an entry fee? Request a refund on the Refunds page.
                 </p>
               </div>
             </div>
