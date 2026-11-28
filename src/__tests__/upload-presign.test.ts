@@ -130,11 +130,11 @@ describe("POST /api/upload/presign", () => {
     });
 
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("Image must be 10 MB or smaller.");
+    expect((await res.json()).error).toBe("Image must be 25 MB or smaller.");
     expect(mocks.createPresignedPost).not.toHaveBeenCalled();
   });
 
-  // The 8 MB case is the reported bug: it is under our 10 MB cap but over the
+  // The 8 MB case is the reported bug: it is under our image cap but over the
   // ~4.4 MB that survives Amplify's Lambda payload ceiling, so it has to be
   // signed for a direct upload rather than proxied.
   it("signs an 8 MB photo that the compute runtime would have rejected", async () => {

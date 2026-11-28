@@ -66,6 +66,8 @@ export interface UserEvent {
   refundPolicy?: string;
   refundTiers?: unknown;
   image: string;
+  /** CSS object-position for `image`: the part of the cover the organiser chose to keep (#586). */
+  coverPosition?: string | null;
   registrationUrl: string | null;
   registrationType: string;
   feeStructure: string;

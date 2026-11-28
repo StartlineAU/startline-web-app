@@ -4,7 +4,7 @@ import { organiserLogin } from "./helpers";
 // Uploads used to POST the file through /api/upload, which runs on Amplify's
 // WEB_COMPUTE platform. Its Lambda payload ceiling lands just under 4.5 MB of
 // file once the multipart body is base64-encoded (measured: 4.30 MB reaches the
-// handler, 4.50 MB gets an empty-bodied 413), well under the 10 MB the app
+// handler, 4.50 MB gets an empty-bodied 413), well under the image cap the app
 // allows, so a normal phone or stock photo was rejected by the platform before
 // any of our code ran. The browser now asks for a signature and posts straight
 // to S3 instead.
@@ -117,7 +117,7 @@ test.describe("image upload", () => {
       route.fulfill({
         status: 400,
         contentType: "application/json",
-        body: JSON.stringify({ error: "Image must be 10 MB or smaller." }),
+        body: JSON.stringify({ error: "Image must be 25 MB or smaller." }),
       })
     );
 
@@ -132,6 +132,6 @@ test.describe("image upload", () => {
     });
 
     // The reason has to reach the organiser rather than a blanket failure.
-    await expect(page.getByText("Image must be 10 MB or smaller.")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText("Image must be 25 MB or smaller.")).toBeVisible({ timeout: 20000 });
   });
 });

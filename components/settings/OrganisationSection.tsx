@@ -12,14 +12,14 @@ import {
   ErrorNote, FieldLabel, GroupHeading, SaveFooter, SectionShell, Switch, inputCls,
 } from "@/components/settings/primitives";
 import { DEFAULT_CONTACT_VISIBILITY } from "@/lib/organiser-contact";
+import { useDragPosition } from "@/hooks/useDragPosition";
 
 const linkBtnCls = "font-headline text-[11px] font-bold uppercase tracking-widest text-muted hover:text-light flex items-center gap-1 transition-colors disabled:opacity-40";
 const Dot = () => <span className="text-white/20 text-xs">·</span>;
 
 // ── ImageEditor ─────────────────────────────────────────────────────────────
 // The cover and the logo are the same control at two shapes: pick a file, then
-// optionally drag the picture to choose which part shows. Pointer events cover
-// mouse, touch and pen alike.
+// optionally drag the picture to choose which part shows (useDragPosition).
 
 function ImageEditor({
   shape, imageUrl, position, placeholder, uploading, hint,
@@ -33,28 +33,9 @@ function ImageEditor({
   onPositionCommit: () => void;
   onRemove: () => void;
 }) {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const dragStart = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const [reposition, setReposition] = useState(false);
   const active = reposition && Boolean(imageUrl);
-
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!active) return;
-    e.preventDefault();
-    const [x, y] = position.split(" ").map(v => parseFloat(v));
-    dragStart.current = { x: e.clientX, y: e.clientY, px: isNaN(x) ? 50 : x, py: isNaN(y) ? 50 : y };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const start = dragStart.current;
-    if (!start || !frameRef.current) return;
-    const rect = frameRef.current.getBoundingClientRect();
-    const clamp = (n: number) => Math.min(100, Math.max(0, n));
-    const x = clamp(start.px + ((e.clientX - start.x) / rect.width)  * -100);
-    const y = clamp(start.py + ((e.clientY - start.y) / rect.height) * -100);
-    onPositionChange(`${x.toFixed(1)}% ${y.toFixed(1)}%`);
-  };
-  const endDrag = () => { dragStart.current = null; };
+  const { frameRef, handlers } = useDragPosition({ enabled: active, position, onChange: onPositionChange });
 
   const frame = (
     <div
@@ -62,8 +43,7 @@ function ImageEditor({
       className={`relative overflow-hidden border border-dark-lighter select-none shrink-0
         ${shape === "cover" ? "h-28 w-full rounded-xl bg-dark-light" : "w-24 h-24 rounded-2xl bg-primary"}
         ${active ? "cursor-grab active:cursor-grabbing touch-none" : ""}`}
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-      onPointerUp={endDrag} onPointerCancel={endDrag}
+      {...handlers}
     >
       {imageUrl
         ? <Image src={imageUrl} alt="" fill draggable={false}

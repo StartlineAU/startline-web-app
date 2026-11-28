@@ -220,6 +220,7 @@ export default function EventDetailView({
             fill
             unoptimized={event.image.startsWith("blob:")}
             className="object-cover"
+            style={event.coverPosition ? { objectPosition: event.coverPosition } : undefined}
             sizes={isPanel ? "(max-width: 1024px) 100vw, 60vw" : "100vw"}
           />
         ) : (

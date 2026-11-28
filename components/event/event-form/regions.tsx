@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   ArrowRight, Calendar, Check, ChevronDown, ChevronUp, Clock, ExternalLink, EyeOff, FileText,
-  MapPin, Pencil, Plus, Ticket, Trash2, Upload, X,
+  MapPin, Move, Pencil, Plus, Ticket, Trash2, Upload, X,
 } from "lucide-react";
 import { collapsePanel, keepInView, popIn, revealPanel, settleIn } from "./motion";
 import { InfoTip } from "./info-tip";
@@ -28,7 +28,8 @@ import { locationFieldErrors } from "@/lib/event-location";
 import { ticketFeeBreakdown } from "@/lib/platform-fee";
 import { normalisePrizeAmount } from "@/lib/prize-pool";
 import { describeTiers } from "@/lib/refund-policy";
-import { UPLOAD_LIMITS, TYPE_MIMES } from "@/lib/upload-limits";
+import { UPLOAD_LIMITS, TYPE_MIMES, MAX_GALLERY_PHOTOS } from "@/lib/upload-limits";
+import { CENTRED, useDragPosition } from "@/hooks/useDragPosition";
 import {
   formatCompetitionFormat, formatDiscipline, formatEventDate, formatEventDateRange, formatLevel, formatLongDate,
 } from "@/lib/utils";
@@ -49,13 +50,13 @@ import {
 type Update = (patch: Partial<FormState>) => void;
 interface Props { form: FormState; update: Update }
 
-export const MAX_GALLERY_PHOTOS = 8;
 export const MAX_INFO_PDFS = 10;
 // Same caps the upload routes enforce. Checking at pick time matters because
 // uploads are deferred to save: without this an oversized file is accepted
 // silently and only fails when the organiser publishes (issue #300).
 const MAX_PDF_BYTES   = UPLOAD_LIMITS.document.bytes;
-const MAX_IMAGE_BYTES = UPLOAD_LIMITS.cover.bytes;
+const MAX_COVER_BYTES = UPLOAD_LIMITS.cover.bytes;
+const MAX_PHOTO_BYTES = UPLOAD_LIMITS.photo.bytes;
 const formatMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const oversizedMessage = (rejected: File[], maxBytes: number, kind: string) => {
   const first = rejected[0];
@@ -208,27 +209,42 @@ function MiniField({ label, hint, info, error, children }: { label: string; hint
 
 /* ── Banner ────────────────────────────────────────────────── */
 
-export function CoverMedia({ src }: { src: string | null }) {
+export function CoverMedia({ src, position }: { src: string | null; position?: string }) {
   return src
-    ? <Image src={src} alt="Cover preview" fill unoptimized={src.startsWith("blob:")} sizes="100vw" className="object-cover" />
+    ? <Image src={src} alt="Cover preview" fill unoptimized={src.startsWith("blob:")} sizes="100vw" className="object-cover"
+        style={{ objectPosition: position || CENTRED }} />
     : <div className="absolute inset-0 placeholder-stripes scan-grid" />;
 }
 
 /**
  * The banner itself is the cover upload: click anywhere above the title. With
  * a cover in place the controls move to the corner, out of the photo's way.
+ *
+ * Reposition lays a drag surface over the whole banner, title included, so the
+ * organiser chooses which part of the photo the banner and the cards keep
+ * (issue #586). It is the same frame the public page crops to, so what they
+ * see while dragging is what athletes get.
  */
 export function CoverControls({ form, update, missing }: Props & { missing?: string }) {
   const [error, setError] = useState("");
+  const [reposition, setReposition] = useState(false);
   const hasCover = !!(form.coverImage || form.coverImageUrl);
+  const active = reposition && hasCover;
+  const { frameRef, handlers } = useDragPosition({
+    enabled: active,
+    position: form.coverPosition,
+    onChange: coverPosition => update({ coverPosition }),
+  });
 
   const pick = (file: File | null) => {
-    if (file && file.size > MAX_IMAGE_BYTES) {
-      setError(oversizedMessage([file], MAX_IMAGE_BYTES, "Images"));
+    if (file && file.size > MAX_COVER_BYTES) {
+      setError(oversizedMessage([file], MAX_COVER_BYTES, "Images"));
       return;
     }
     setError("");
-    update({ coverImage: file });
+    setReposition(false);
+    // A new photo has its own composition: start it centred.
+    update({ coverImage: file, coverPosition: CENTRED });
   };
   const input = (
     <input type="file" accept={TYPE_MIMES.cover.join(",")} className="sr-only" aria-label="Cover image"
@@ -237,16 +253,44 @@ export function CoverControls({ form, update, missing }: Props & { missing?: str
 
   return (
     <div id="region-cover" data-region="cover" data-missing={missing ? "true" : undefined} className="absolute inset-0">
+      {active && (
+        <div
+          ref={frameRef}
+          {...handlers}
+          role="application"
+          tabIndex={0}
+          aria-label="Cover position. Drag, or use the arrow keys, to choose which part of the photo shows."
+          data-testid="cover-reposition-surface"
+          className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing touch-none select-none bg-black/20 flex items-center justify-center focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
+        >
+          <span className="pointer-events-none flex items-center gap-1.5 rounded-lg bg-black/60 px-3 py-2 font-headline text-[11px] font-bold uppercase tracking-wider text-white">
+            <Move className="w-3.5 h-3.5" /> Drag to reposition
+          </span>
+        </div>
+      )}
       {hasCover ? (
-        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 flex items-center gap-2">
-          <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full bg-dark/80 backdrop-blur px-3.5 py-2 font-headline text-[10px] font-bold uppercase tracking-widest text-light hover:text-primary transition-colors">
-            <Upload className="w-3.5 h-3.5" /> Change cover
-            {input}
-          </label>
-          <button type="button" onClick={() => update({ coverImage: null, coverImageUrl: "" })} aria-label="Remove cover image"
-            className="w-8 h-8 rounded-full bg-dark/80 backdrop-blur text-light hover:text-primary flex items-center justify-center transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 flex items-center gap-2">
+          {active ? (
+            <button type="button" onClick={() => setReposition(false)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 font-headline text-[10px] font-bold uppercase tracking-widest text-dark hover:opacity-90 transition-opacity">
+              <Check className="w-3.5 h-3.5" /> Done
+            </button>
+          ) : (
+            <>
+              <button type="button" onClick={() => setReposition(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-dark/80 backdrop-blur px-3.5 py-2 font-headline text-[10px] font-bold uppercase tracking-widest text-light hover:text-primary transition-colors">
+                <Move className="w-3.5 h-3.5" /> Reposition
+              </button>
+              <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full bg-dark/80 backdrop-blur px-3.5 py-2 font-headline text-[10px] font-bold uppercase tracking-widest text-light hover:text-primary transition-colors">
+                <Upload className="w-3.5 h-3.5" /> Change cover
+                {input}
+              </label>
+              <button type="button" onClick={() => update({ coverImage: null, coverImageUrl: "", coverPosition: CENTRED })} aria-label="Remove cover image"
+                className="w-8 h-8 rounded-full bg-dark/80 backdrop-blur text-light hover:text-primary flex items-center justify-center transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <label className="absolute inset-0 cursor-pointer group flex items-start justify-center pt-5 sm:pt-6">
@@ -806,9 +850,9 @@ export function GalleryEditor({ form, update, photoSrcs }: Props & { photoSrcs: 
   const count = form.photoUrls.length + form.photos.length;
   const add = (list: FileList | null) => {
     const picked = Array.from(list ?? []).filter(f => (TYPE_MIMES.photo as readonly string[]).includes(f.type));
-    const files = picked.filter(f => f.size <= MAX_IMAGE_BYTES);
-    const rejected = picked.filter(f => f.size > MAX_IMAGE_BYTES);
-    setError(rejected.length ? oversizedMessage(rejected, MAX_IMAGE_BYTES, "Images") : "");
+    const files = picked.filter(f => f.size <= MAX_PHOTO_BYTES);
+    const rejected = picked.filter(f => f.size > MAX_PHOTO_BYTES);
+    setError(rejected.length ? oversizedMessage(rejected, MAX_PHOTO_BYTES, "Images") : "");
     const remaining = MAX_GALLERY_PHOTOS - count;
     if (files.length && remaining > 0) update({ photos: [...form.photos, ...files.slice(0, remaining)] });
   };

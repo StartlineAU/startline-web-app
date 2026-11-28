@@ -281,6 +281,7 @@ export default function EventPageEditor({
           registrationUrl:   e.registrationUrl   ?? "",
           coverImage:        null,
           coverImageUrl:     e.coverImageUrl  ?? "",
+          coverPosition:     e.coverPosition  ?? "50% 50%",
           informationPdfs:   Array.isArray(e.informationPdfs)
             ? e.informationPdfs.map((p: { url: string; label?: string | null; name?: string | null }) => ({
                 file: null, url: p.url ?? "", label: p.label ?? "", name: p.name ?? "",
@@ -480,6 +481,7 @@ export default function EventPageEditor({
         accessibilityInfo: originalFields.current.accessibilityInfo ?? null,
         submit:            !asDraft,
         coverImageUrl:     coverImageUrl ?? form.coverImageUrl ?? null,
+        coverPosition:     form.coverPosition,
         informationPdfs,
         photos:            photoUrls,
         showContactName:   form.contactShow.name,
@@ -711,7 +713,7 @@ export default function EventPageEditor({
           data={data}
           mode="edit"
           slots={{
-            bannerMedia:   <CoverMedia src={coverSrc} />,
+            bannerMedia:   <CoverMedia src={coverSrc} position={form.coverPosition} />,
             bannerOverlay: <CoverControls form={form} update={update} missing={missingFor("cover")} />,
             discipline:    <DisciplinePill form={form} update={update} missing={missingFor("discipline")} />,
             title:         <TitleInput form={form} update={update} missing={missingFor("title")} />,
