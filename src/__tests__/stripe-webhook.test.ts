@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type Stripe from "stripe";
 import { NextRequest } from "next/server";
 
@@ -645,8 +645,10 @@ describe("POST /api/stripe/webhook", () => {
     expect(mocks.refundCreate).not.toHaveBeenCalled();
   });
 
-  it("marks stripeOnboardingComplete when account.updated enables charges and payouts", async () => {
-    signedEvent({ id: "acct_123", charges_enabled: true, payouts_enabled: true }, "account.updated");
+  // Stripe sets event.account on every connected account's account.updated,
+  // so these mirror a real Connect delivery (#607).
+  it("marks stripeOnboardingComplete when a connected account's account.updated enables charges and payouts", async () => {
+    signedEvent({ id: "acct_123", charges_enabled: true, payouts_enabled: true }, "account.updated", { account: "acct_123" });
     mocks.organiser.updateMany.mockResolvedValue({ count: 1 });
 
     const res = await post({ id: "acct_123" });
@@ -657,8 +659,82 @@ describe("POST /api/stripe/webhook", () => {
     });
   });
 
+  it("still handles an account.updated without event.account", async () => {
+    signedEvent({ id: "acct_123", charges_enabled: true, payouts_enabled: true }, "account.updated");
+    mocks.organiser.updateMany.mockResolvedValue({ count: 1 });
+
+    await post({ id: "acct_123" });
+    expect(mocks.organiser.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores an account.updated whose account does not match the sender", async () => {
+    signedEvent({ id: "acct_other", charges_enabled: true, payouts_enabled: true }, "account.updated", { account: "acct_123" });
+
+    const res = await post({ id: "acct_other" });
+    expect(res.status).toBe(200);
+    expect(mocks.organiser.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe("Connect endpoint secret", () => {
+    const PLATFORM = "whsec_test_00000000000000000000000000000000";
+    const CONNECT = "whsec_connect_000000000000000000000000000";
+
+    // Verifies only under the given secret, as Stripe's real check would.
+    const signedWith = (secret: string, event: Record<string, unknown>) =>
+      mocks.constructEvent.mockImplementation((_b: string, _s: string, used: string) => {
+        if (used !== secret) throw new Error("bad signature");
+        return event;
+      });
+
+    beforeEach(() => {
+      process.env.STRIPE_CONNECT_WEBHOOK_SECRET = CONNECT;
+    });
+    afterEach(() => {
+      delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+    });
+
+    it("accepts a connected account's account.updated signed by the Connect endpoint", async () => {
+      signedWith(CONNECT, {
+        type: "account.updated",
+        account: "acct_123",
+        data: { object: { id: "acct_123", charges_enabled: true, payouts_enabled: true } },
+      });
+      mocks.organiser.updateMany.mockResolvedValue({ count: 1 });
+
+      const res = await post({ id: "acct_123" });
+      expect(res.status).toBe(200);
+      expect(mocks.organiser.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses a platform event signed with the Connect secret", async () => {
+      signedWith(CONNECT, {
+        type: "payment_intent.succeeded",
+        data: { object: { id: "pi_123", currency: "aud", amount_received: 10540, metadata: metadata(ONE_PARTICIPANT) } },
+      });
+
+      const res = await post({ id: "pi_123" });
+      expect(res.status).toBe(400);
+      expect(mocks.registration.createMany).not.toHaveBeenCalled();
+    });
+
+    it("still verifies platform events with the platform secret", async () => {
+      signedWith(PLATFORM, { type: "customer.created", data: { object: { id: "cus_1" } } });
+
+      const res = await post({ id: "cus_1" });
+      expect(res.status).toBe(200);
+    });
+
+    it("rejects a delivery neither secret signed", async () => {
+      signedWith("whsec_someone_else", { type: "account.updated", account: "acct_123", data: { object: { id: "acct_123" } } });
+
+      const res = await post({ id: "acct_123" });
+      expect(res.status).toBe(400);
+      expect(mocks.organiser.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
   it("does not update the organiser when payouts are disabled", async () => {
-    signedEvent({ id: "acct_123", charges_enabled: true, payouts_enabled: false }, "account.updated");
+    signedEvent({ id: "acct_123", charges_enabled: true, payouts_enabled: false }, "account.updated", { account: "acct_123" });
 
     await post({ id: "acct_123" });
     expect(mocks.organiser.updateMany).not.toHaveBeenCalled();

@@ -48,7 +48,7 @@ the route handlers. `STRIPE_SECRET_KEY` sat on the staging branch, listed in
 the console, and was still undefined at runtime (#363).
 
 So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
 `TURNSTILE_SECRET_KEY`, `ABR_GUID`, `ENTRY_CLAIM_SECRET`, `EDGE_SHARED_SECRET`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
@@ -68,7 +68,7 @@ a missing key.
 **Rotating a runtime credential:** set it on the app secret that owns it —
 `startline/prod/app` or `startline/staging/app` — and rebuild that branch. No
 Terraform change and no apply needed. The keys an environment owns are
-`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`,
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`,
 `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM` and
 `ABR_GUID`. Anything the app needs that Terraform generates still goes through
 `startline-infra/startline-web-app/modules/environment/main.tf`.
@@ -128,6 +128,18 @@ Locally, `pnpm stripe:listen:accounts` forwards the same events. Without the
 secret the route answers 503 and onboarding only completes when the organiser
 returns from Stripe to `/organiser/payments/return`. The secret is not in the
 prod precondition list yet, so a missing one does not fail an apply.
+
+**v1 accounts' `account.updated` needs a Connect-scope endpoint (#607).**
+Stripe sends a connected account's events only to an endpoint that listens
+to *connected accounts*, never to the platform endpoint that carries
+`payment_intent.succeeded`. Add a second endpoint at the same
+`/api/stripe/webhook` URL, scoped to connected accounts, subscribed to
+`account.updated`, and store its signing secret as
+`STRIPE_CONNECT_WEBHOOK_SECRET` on the environment's app secret. The route
+tries the platform secret first, then this one, and only accepts
+connected-account events under it. Without it, v1 organisers who close the tab
+mid-onboarding stay "not ready to accept payments". `pnpm stripe:listen` sends
+both kinds under one secret, so local dev does not need it.
 
 ### Refunds and disputes made in Stripe
 
