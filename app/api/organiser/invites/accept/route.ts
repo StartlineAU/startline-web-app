@@ -9,10 +9,14 @@ import { hashInviteToken, inviteIsFor, inviteState } from "@/lib/organiser-invit
 const acceptSchema = z.object({ token: z.string().min(1).max(200) });
 
 class InviteRaceError extends Error {}
+class AlreadyClaimedError extends Error {}
 
 // POST /api/organiser/invites/accept
-// Body: { token }. Makes the signed-in account a MANAGER of the inviting
-// organisation, if the invitation was sent to that account's address. The
+// Body: { token }. Makes the signed-in account a member of the inviting
+// organisation with the invitation's role, if it was sent to that account's
+// address. A MANAGER invitation comes from an Owner. An OWNER invitation is an
+// admin's invitation to claim an organisation nobody owns yet
+// (lib/organiser-claim.ts), and is refused once it has an Owner. The
 // session's email is the account's verified address (lib/user-session.ts), so
 // holding the link is not enough to join as someone else.
 export async function POST(req: NextRequest) {
@@ -32,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const invite = await prisma.organiserInvite.findUnique({
     where: { tokenHash: hashInviteToken(parsed.data.token) },
-    select: { id: true, organiserId: true, email: true, acceptedAt: true, expiresAt: true },
+    select: { id: true, organiserId: true, email: true, role: true, acceptedAt: true, expiresAt: true },
   });
   if (!invite) return NextResponse.json({ error: "This invitation link is not valid." }, { status: 404 });
 
@@ -69,8 +73,23 @@ export async function POST(req: NextRequest) {
         data: { acceptedAt: new Date() },
       });
       if (claimed.count !== 1) throw new InviteRaceError();
+
+      if (invite.role === "OWNER") {
+        // Clearing the flag is the claim itself: only one acceptance can flip
+        // it, and none can once the organisation has been handed over.
+        const handedOver = await tx.organiser.updateMany({
+          where: { id: invite.organiserId, pendingClaim: true, members: { none: { role: "OWNER" } } },
+          data: { pendingClaim: false },
+        });
+        if (handedOver.count !== 1) throw new AlreadyClaimedError();
+        // Other links to claim it stop working.
+        await tx.organiserInvite.deleteMany({
+          where: { organiserId: invite.organiserId, role: "OWNER", acceptedAt: null, id: { not: invite.id } },
+        });
+      }
+
       await tx.organiserMember.create({
-        data: { organiserId: invite.organiserId, userId: session.sub, role: "MANAGER" },
+        data: { organiserId: invite.organiserId, userId: session.sub, role: invite.role },
       });
     });
 
@@ -78,6 +97,9 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (err instanceof InviteRaceError) {
       return NextResponse.json({ error: "This invitation has already been accepted." }, { status: 410 });
+    }
+    if (err instanceof AlreadyClaimedError) {
+      return NextResponse.json({ error: "This organisation has already been claimed." }, { status: 409 });
     }
     console.error("Accept invitation error:", err);
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });

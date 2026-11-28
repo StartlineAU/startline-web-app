@@ -48,6 +48,9 @@ model Organiser {
   email         String          @unique
   verified      Boolean         @default(false)
   status        OrganiserStatus @default(APPROVED)
+  // True while the profile was made by an admin and nobody has claimed it as
+  // Owner yet (lib/organiser-claim.ts). It gets no organiser emails until then.
+  pendingClaim  Boolean         @default(false)
 
   // Profile — filled during onboarding, editable afterwards
   orgName       String?
@@ -135,7 +138,8 @@ model OrganiserMember {
   @@map("organiser_members")
 }
 
-// An Owner's invitation for someone to join as a MANAGER. Nobody becomes a
+// An invitation to join an organisation: an Owner's, to join as a MANAGER, or
+// an admin's, to claim an unowned organisation as OWNER. Nobody becomes a
 // member without accepting: only the signed-in account whose verified email is
 // the invited address can accept it (app/api/organiser/invites/accept). The
 // token is stored hashed; the link in the email carries the token itself.
@@ -145,7 +149,11 @@ model OrganiserInvite {
   organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
   email       String
   tokenHash   String    @unique
+  // MANAGER for an Owner's invitation. OWNER only for an admin's invitation to
+  // claim an organisation nobody owns yet (pendingClaim).
+  role        OrganiserRole @default(MANAGER)
   // The User who sent it. Not a relation: it stays readable if they leave.
+  // Null for an admin's claim invitation; the audit log records which admin.
   invitedById String?
   createdAt   DateTime  @default(now())
   expiresAt   DateTime

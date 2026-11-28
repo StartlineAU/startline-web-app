@@ -16,6 +16,7 @@ import { RefundOverrideEmail } from "@/emails/refund-override";
 import { EventCancelledEmail } from "@/emails/event-cancelled";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
+import { OrganiserClaimEmail } from "@/emails/organiser-claim";
 import { PaymentAdjustmentEmail } from "@/emails/payment-adjustment";
 import { SUPPORT_EMAIL } from "@/lib/contact";
 import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
@@ -646,4 +647,16 @@ export async function buildOrganiserInviteEmail(data: OrganiserInviteEmailData):
 export async function sendOrganiserInviteEmail(to: string, data: OrganiserInviteEmailData): Promise<void> {
   if (!getResend()) return;
   await sendOne(to, await buildOrganiserInviteEmail(data));
+}
+
+// ── Organiser claim invitation ───────────────────────────────────────────────
+// An admin set the organisation up; this invites the organiser to own it.
+export async function buildOrganiserClaimEmail(data: OrganiserInviteEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(OrganiserClaimEmail(data));
+  return { subject: `Claim ${data.organisationName} on Startline`, ...rendered };
+}
+
+export async function sendOrganiserClaimEmail(to: string, data: OrganiserInviteEmailData): Promise<void> {
+  if (!getResend()) return;
+  await sendOne(to, await buildOrganiserClaimEmail(data));
 }

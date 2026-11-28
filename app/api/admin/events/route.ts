@@ -9,6 +9,7 @@ import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import type { Prisma } from "@prisma/client";
 import { syncEventSchedules } from "@/lib/event-scheduler";
+import { notifyOrganiserFollowers } from "@/lib/notify-organiser-followers";
 import { baselineChanges, recordEventChange } from "@/lib/event-change-log";
 import { z } from "zod";
 import { sanitizeHtml } from "@/lib/sanitize-html";
@@ -239,6 +240,20 @@ export async function POST(req: NextRequest) {
       return created;
       }),
     );
+
+    // Published at creation, so followers hear now; the review route only
+    // tells them about events that went through the queue. Awaited: Amplify
+    // freezes the container once the response is sent.
+    if (event.status === "APPROVED") {
+      await notifyOrganiserFollowers({
+        organiserId,
+        eventId: event.id,
+        eventTitle: event.title,
+        organiserName: organiser.orgName,
+        eventDate: event.eventDate || null,
+        city: event.city || null,
+      }).catch((err) => console.error("Follower notify failed:", err));
+    }
 
     await syncEventSchedules(event).catch((err) =>
       console.error("Event lifecycle schedule sync failed:", err),

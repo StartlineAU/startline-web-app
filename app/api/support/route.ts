@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
           id: true, title: true, eventDate: true, startsAtUtc: true, organiserId: true, status: true,
           organiser: {
             select: {
-              email: true, contactEmail: true, notifyManagers: true,
+              email: true, contactEmail: true, notifyManagers: true, pendingClaim: true,
               members: { select: { role: true, user: { select: { email: true } } } },
             },
           },

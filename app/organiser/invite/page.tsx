@@ -9,6 +9,8 @@ import { useAuthContext } from "@/context/AuthContext";
 type InviteView = {
   organisationName: string;
   email: string;
+  // OWNER: Startline set the organisation up and is handing it over.
+  role: "OWNER" | "MANAGER";
   state: "pending" | "accepted" | "expired";
   signedIn: boolean;
   signedInAsInvitee: boolean;
@@ -80,23 +82,37 @@ function InviteContent() {
       <div className="bg-dark border border-dark-lighter rounded-[14px] p-6 space-y-4">
         <div className="flex items-center gap-3">
           <MailCheck className="w-5 h-5 text-primary" />
-          <h1 className="font-headline text-[15px] font-bold uppercase tracking-widest text-light">Organiser invitation</h1>
+          <h1 className="font-headline text-[15px] font-bold uppercase tracking-widest text-light">
+            {invite?.role === "OWNER" ? "Claim your organisation" : "Organiser invitation"}
+          </h1>
         </div>
 
         {!invite && !error && <p className="text-[14px] text-muted">Loading…</p>}
 
         {invite && (
           <>
-            <p className="text-[14px] text-light leading-relaxed">
-              <span className="font-bold">{invite.organisationName}</span> has invited{" "}
-              <span className="font-bold">{invite.email}</span> to manage their events on Startline.
-            </p>
+            {invite.role === "OWNER" ? (
+              <p className="text-[14px] text-light leading-relaxed">
+                Startline has set up <span className="font-bold">{invite.organisationName}</span> and invited{" "}
+                <span className="font-bold">{invite.email}</span> to take it over as Owner. You can then edit its
+                events, see entries and set up payouts.
+              </p>
+            ) : (
+              <p className="text-[14px] text-light leading-relaxed">
+                <span className="font-bold">{invite.organisationName}</span> has invited{" "}
+                <span className="font-bold">{invite.email}</span> to manage their events on Startline.
+              </p>
+            )}
 
             {invite.state === "accepted" && (
               <p className="text-[14px] text-muted">This invitation has already been accepted.</p>
             )}
             {invite.state === "expired" && (
-              <p className="text-[14px] text-muted">This invitation has expired. Ask the organisation to send a new one.</p>
+              <p className="text-[14px] text-muted">
+                {invite.role === "OWNER"
+                  ? "This invitation has expired. Contact Startline for a new one."
+                  : "This invitation has expired. Ask the organisation to send a new one."}
+              </p>
             )}
 
             {invite.state === "pending" && !invite.signedIn && (
@@ -114,7 +130,9 @@ function InviteContent() {
 
             {invite.state === "pending" && invite.signedInAsInvitee && (
               <button type="button" className={btnPrimary} onClick={accept} disabled={busy}>
-                {busy ? "Accepting…" : "Accept invitation"}
+                {busy
+                  ? "Accepting…"
+                  : invite.role === "OWNER" ? "Claim organisation" : "Accept invitation"}
               </button>
             )}
           </>
