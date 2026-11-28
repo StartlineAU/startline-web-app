@@ -82,7 +82,7 @@ describe("registration confirmation email", () => {
     expect(text).toContain("Sat, 21 Nov 2026");
   });
 
-  it("links to the event itself, and to a calendar when there is a start time", async () => {
+  it("opens the ticket in Activity, and links to a calendar when there is a start time", async () => {
     const calendarUrl = googleCalendarUrl({
       title: data.eventName,
       startsAtUtc: new Date("2026-11-20T20:00:00Z"),
@@ -90,7 +90,8 @@ describe("registration confirmation email", () => {
     });
     const html = await render(RegistrationConfirmationEmail({ ...data, calendarUrl }));
 
-    expect(html).toContain("/events/evt-42");
+    expect(html).toContain("/activity?eventId=evt-42");
+    expect(html).not.toContain("/events/evt-42");
     expect(html).toContain("Add to calendar");
     expect(html).toContain("calendar.google.com");
 
@@ -173,6 +174,7 @@ describe.each(allEmails)("%s email", (_name, build) => {
     expect(html).not.toMatch(/<img[^>]+\.svg/);
     expect(html).not.toContain("linear-gradient");
     expect(html).not.toContain("<script");
+    expect(html).not.toContain("strava.com");
     expect(text.length).toBeGreaterThan(0);
     expect(text).not.toContain("<td");
   });
