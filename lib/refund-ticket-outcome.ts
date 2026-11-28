@@ -1,0 +1,288 @@
+import type { RefundDecisionReason, RefundType } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { RefundError, issueEntryRefund, refundEntrySelect } from "@/lib/issue-entry-refund";
+import { entryPaidCents } from "@/lib/stripe-refunds";
+import { refundTeammates } from "@/lib/team-refund";
+import { REFUND_REASON_LABEL } from "@/lib/refund-decision-reasons";
+import { sendRefundDecisionEmail, type RefundDecisionEmailData } from "@/lib/email";
+
+/**
+ * What a refund ticket's decision does to the entry and the money (#492).
+ *
+ * A ticket raised from the athlete's own entry carries `registrationId` and the
+ * change-of-mind quote taken when they asked. Approving it issues the refund
+ * straight away:
+ *
+ * - POLICY returns the quote: a share of the ticket price, booking fee kept.
+ * - FULL returns everything the entry paid, booking fee included. Startline
+ *   keeps its application fee on the refund, so all of it comes out of the
+ *   organiser's connected account (REFUND_APPLICATION_FEE in
+ *   lib/stripe-refunds.ts). Only a cancelled event returns the fee.
+ *
+ * Declining puts the entry back to CONFIRMED, so the athlete keeps their place.
+ * A ticket with no registration predates this and is still matched and
+ * refunded by hand from /admin/registrations.
+ */
+
+export const ticketOutcomeSelect = {
+  id: true,
+  status: true,
+  email: true,
+  name: true,
+  eventName: true,
+  registrationId: true,
+  policyRefundPercent: true,
+  policyRefundCents: true,
+  organiserReason: true,
+  organiserNote: true,
+  refundType: true,
+  refundCents: true,
+  registration: {
+    select: {
+      ...refundEntrySelect,
+      teamId: true,
+      event: { select: { id: true, title: true, organiser: { select: { orgName: true } } } },
+    },
+  },
+} as const;
+
+type OutcomeTicket = {
+  id: string;
+  status: string;
+  email: string;
+  name: string;
+  eventName: string | null;
+  registrationId: string | null;
+  policyRefundPercent: number | null;
+  policyRefundCents: number | null;
+  organiserReason: RefundDecisionReason | null;
+  organiserNote: string | null;
+  refundType: RefundType | null;
+  refundCents: number | null;
+  registration: {
+    id: string;
+    status: string;
+    amountCents: number;
+    platformFeeCents: number;
+    feeStructure: string;
+    refundAmountCents: number | null;
+    refundPercent: number | null;
+    stripePaymentIntentId: string | null;
+    cancelRefundStatus: string | null;
+    athleteName: string;
+    userId: string | null;
+    eventId: string;
+    teamId: string | null;
+    event: { id: string; title: string; organiser: { orgName: string | null } };
+  } | null;
+};
+
+export const REFUNDABLE_ENTRY_STATUSES = ["CONFIRMED", "REFUND_REQUESTED"] as const;
+
+/** Cents an approval of this type returns for this entry. */
+export function ticketRefundCents(
+  ticket: Pick<OutcomeTicket, "policyRefundCents">,
+  entry: { amountCents: number; platformFeeCents: number; feeStructure: string },
+  type: RefundType,
+): number {
+  if (type === "FULL") return entryPaidCents(entry);
+  return Math.max(0, Math.min(ticket.policyRefundCents ?? 0, entryPaidCents(entry)));
+}
+
+/**
+ * Why an approval of this type cannot go ahead, or null when it can. A policy
+ * that owes nothing is refused rather than refunding zero: the organiser picks
+ * goodwill to refund anyway, or declines.
+ */
+export function approvalBlocker(
+  ticket: Pick<OutcomeTicket, "registrationId" | "policyRefundCents">,
+  type: RefundType,
+): string | null {
+  if (!ticket.registrationId) return null;
+  if (type === "POLICY" && (ticket.policyRefundCents ?? 0) <= 0) {
+    return "The refund policy owes nothing on this entry. Choose goodwill to refund it anyway, or decline.";
+  }
+  return null;
+}
+
+export async function loadOutcomeTicket(id: string): Promise<OutcomeTicket | null> {
+  return prisma.supportTicket.findUnique({ where: { id }, select: ticketOutcomeSelect });
+}
+
+export type IssueResult =
+  | { ok: true; refundCents: number }
+  | { ok: false; error: string };
+
+/**
+ * Issue the refund for an APPROVED ticket and mark it REFUNDED. Safe to retry:
+ * each Stripe refund carries the entry's idempotency key, and an entry already
+ * refunded some other way just closes the ticket.
+ *
+ * A failure leaves the ticket APPROVED with `refundError` set, so an admin can
+ * see it and retry. The athlete is emailed once: "refunded" on success, or
+ * "approved, being processed" on the first failure (`firstAttempt`).
+ */
+export async function issueTicketRefund(
+  ticketId: string,
+  { firstAttempt }: { firstAttempt: boolean },
+): Promise<IssueResult> {
+  const ticket = await loadOutcomeTicket(ticketId);
+  if (!ticket || ticket.status !== "APPROVED" || !ticket.registration || !ticket.refundType) {
+    return { ok: false, error: "This request has no approved entry to refund." };
+  }
+  const entry = ticket.registration;
+  const type = ticket.refundType;
+
+  const cents = ticketRefundCents(ticket, entry, type);
+  try {
+    let total: number;
+    if (entry.status === "REFUNDED") {
+      // Refunded already: by an earlier attempt that stopped part-way through a
+      // team, or by an admin from the registration. Count what actually went
+      // back and carry on with any teammates.
+      total = entry.refundAmountCents ?? 0;
+    } else {
+      if (cents <= 0) {
+        throw new RefundError("There is nothing to refund on this entry.", 409, "NOTHING_TO_REFUND");
+      }
+      // The amount issueEntryRefund sends to Stripe is the one on the entry.
+      const prepared = await prisma.registration.updateMany({
+        where: { id: entry.id, status: { in: [...REFUNDABLE_ENTRY_STATUSES] } },
+        data: {
+          refundAmountCents: cents,
+          refundPercent: type === "FULL" ? 100 : ticket.policyRefundPercent,
+          refundOutsidePolicy: type === "FULL" && (ticket.policyRefundCents ?? 0) < cents,
+        },
+      });
+      if (prepared.count !== 1) {
+        throw new RefundError("This entry changed a moment ago. Refresh and try again.", 409, "STALE");
+      }
+      const result = await issueEntryRefund({ ...entry, refundAmountCents: cents });
+      total = result.refundCents;
+    }
+
+    const failures: string[] = [];
+    if (entry.teamId) {
+      const team = await refundTeammates(
+        entry.teamId,
+        entry.id,
+        type === "FULL" ? { kind: "full" } : { kind: "percent", percent: ticket.policyRefundPercent },
+      );
+      for (const f of team.failed) failures.push(`${f.athleteName}: ${f.error}`);
+      // Everything the team got back, including members refunded by an
+      // earlier attempt, not only the ones refunded just now.
+      const refunded = await prisma.registration.aggregate({
+        where: { teamId: entry.teamId, status: "REFUNDED" },
+        _sum: { refundAmountCents: true },
+      });
+      total = refunded._sum.refundAmountCents ?? total;
+    }
+    if (failures.length > 0) {
+      // This entry is refunded; some teammates are not. Retrying picks them up.
+      throw new RefundError(
+        `Refunded this entry, but not ${failures.join("; ")}. Retry to finish the team.`,
+        502,
+        "TEAM_PARTIAL",
+      );
+    }
+
+    await markTicketRefunded(ticket.id, total);
+    await notifyAthlete(ticket, "refunded", total, type);
+    return { ok: true, refundCents: total };
+  } catch (err) {
+    const message =
+      err instanceof RefundError ? err.message : "Stripe did not accept the refund. Try again shortly.";
+    if (!(err instanceof RefundError)) console.error("Refund ticket issue failed:", ticket.id, err);
+    await prisma.supportTicket
+      .update({ where: { id: ticket.id }, data: { refundError: message } })
+      .catch(() => {});
+    if (firstAttempt) await notifyAthlete(ticket, "approved", cents, type);
+    return { ok: false, error: message };
+  }
+}
+
+async function markTicketRefunded(ticketId: string, cents: number) {
+  await prisma.supportTicket.updateMany({
+    where: { id: ticketId, status: "APPROVED" },
+    data: { status: "REFUNDED", refundCents: cents, refundIssuedAt: new Date(), refundError: null },
+  });
+}
+
+/**
+ * A declined request gives the athlete their entry back as it was. Only an
+ * entry still waiting on this request is touched.
+ */
+export async function restoreDeclinedEntry(ticketId: string): Promise<void> {
+  const ticket = await loadOutcomeTicket(ticketId);
+  if (!ticket) return;
+  if (ticket.registration) {
+    await prisma.registration.updateMany({
+      where: { id: ticket.registration.id, status: "REFUND_REQUESTED" },
+      data: {
+        status: "CONFIRMED",
+        refundRequestedAt: null,
+        refundPercent: null,
+        refundAmountCents: null,
+        refundOutsidePolicy: false,
+      },
+    });
+  }
+  await notifyAthlete(ticket, "declined", null, null);
+}
+
+/** Approved with no entry linked: Startline still issues it by hand. */
+export async function notifyApprovedWithoutEntry(ticketId: string): Promise<void> {
+  const ticket = await loadOutcomeTicket(ticketId);
+  if (ticket) await notifyAthlete(ticket, "approved", null, ticket.refundType);
+}
+
+/**
+ * Email the athlete, and tell them in-app when they have an account. Best
+ * effort: the decision is what matters, so a failed message never fails it.
+ * A completed refund's in-app notice comes from issueEntryRefund.
+ */
+async function notifyAthlete(
+  ticket: OutcomeTicket,
+  outcome: "refunded" | "approved" | "declined",
+  cents: number | null,
+  type: RefundType | null,
+) {
+  const eventTitle = ticket.registration?.event.title ?? ticket.eventName ?? "your event";
+  const organiserName = ticket.registration?.event.organiser.orgName ?? "The organiser";
+  const data: RefundDecisionEmailData = {
+    outcome,
+    athleteName: ticket.registration?.athleteName ?? ticket.name,
+    eventTitle,
+    organiserName,
+    amountCents: cents,
+    full: type === "FULL",
+    reasonLabel: ticket.organiserReason ? REFUND_REASON_LABEL[ticket.organiserReason] : null,
+    note: outcome === "declined" ? ticket.organiserNote : null,
+    ticketId: ticket.id,
+  };
+  try {
+    await sendRefundDecisionEmail(ticket.email, data);
+  } catch (err) {
+    console.error("Refund decision email failed:", ticket.id, err);
+  }
+
+  const userId = ticket.registration?.userId;
+  if (!userId || outcome === "refunded") return;
+  try {
+    await prisma.userNotification.create({
+      data: {
+        userId,
+        type: outcome === "declined" ? "REFUND_DECLINED" : "REFUND_APPROVED",
+        title: outcome === "declined" ? "Refund declined" : "Refund approved",
+        body:
+          outcome === "declined"
+            ? `${organiserName} declined your refund request for ${eventTitle}. Your entry still stands.` +
+              (ticket.organiserNote ? ` Note: ${ticket.organiserNote}` : "")
+            : `${organiserName} approved your refund for ${eventTitle}. Startline is issuing it now.`,
+        eventId: ticket.registration?.event.id ?? null,
+      },
+    });
+  } catch {
+    // Swallowed on purpose — see above.
+  }
+}

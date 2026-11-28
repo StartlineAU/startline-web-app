@@ -240,3 +240,27 @@ export function parseLegacyPolicy(
     notes: notes.replace(/^[.,\s]+|[.,\s]+$/g, "").replace(/\s*\.\s*\./g, ".").trim(),
   };
 }
+
+/**
+ * The change-of-mind refund owed on one entry when the athlete asks (#492).
+ *
+ * The policy is the one the entry was sold under when it has been frozen
+ * (`soldRefundTiers`), else the event's current one. The percentage applies to
+ * the ticket price only: the booking fee is not refunded under the policy.
+ */
+export function changeOfMindQuote(
+  entry: {
+    amountCents: number;
+    soldRefundTiers: unknown;
+    eventRefundTiers: unknown;
+    eventDate: string;
+  },
+  today: string = new Date().toISOString().slice(0, 10),
+): { percent: number; cents: number } {
+  const tiers = parseTiers(
+    entry.soldRefundTiers != null ? entry.soldRefundTiers : entry.eventRefundTiers,
+  );
+  const days = daysUntil(entry.eventDate, today);
+  const percent = refundPercentFor(tiers, days);
+  return { percent, cents: Math.round((entry.amountCents * percent) / 100) };
+}

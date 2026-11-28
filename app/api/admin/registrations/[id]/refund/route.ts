@@ -4,6 +4,7 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { writeAuditLog } from "@/lib/audit";
 import { idParams } from "@/lib/schemas";
 import { RefundError, issueEntryRefund, refundEntrySelect } from "@/lib/issue-entry-refund";
+import { refundTeammates } from "@/lib/team-refund";
 import { refundWithinCutoff } from "@/lib/refund-policy";
 import { TEAM_HELD_STATUSES } from "@/lib/team-tickets";
 
@@ -76,7 +77,7 @@ export async function POST(
     // A team is refunded as one: every other member still holding a place is
     // refunded too, at the same share of what they paid as this entry got.
     const team = registration.teamId
-      ? await refundTeammates(registration.teamId, registration.id, registration.refundPercent)
+      ? await refundTeammates(registration.teamId, registration.id, { kind: "percent", percent: registration.refundPercent })
       : { refunded: [], failed: [] };
     for (const mate of team.refunded) {
       await writeAuditLog({
@@ -114,60 +115,4 @@ export async function POST(
     console.error("Admin refund error:", err);
     return NextResponse.json({ error: "Refund failed." }, { status: 503 });
   }
-}
-
-/**
- * Refund every other member of a team whose place is still held. A member with
- * no frozen refund quote takes the same percentage as the team's refund (this
- * entry's, or an earlier member's when resuming); with no percentage on record
- * they get back what they paid.
- *
- * Each member is its own Stripe refund with its own idempotency key, and one
- * failing does not stop the rest, so a retry only has the failures left to do.
- */
-async function refundTeammates(
-  teamId: string,
-  excludeId: string,
-  percent: number | null,
-): Promise<{
-  refunded: { id: string; athleteName: string; refundCents: number }[];
-  failed: { id: string; athleteName: string; error: string }[];
-}> {
-  const teamPercent = percent ?? (
-    await prisma.registration.findFirst({
-      where: { teamId, status: "REFUNDED", refundPercent: { not: null } },
-      select: { refundPercent: true },
-    })
-  )?.refundPercent ?? null;
-
-  const mates = await prisma.registration.findMany({
-    where: { teamId, id: { not: excludeId }, status: { in: TEAM_HELD_STATUSES } },
-    select: refundEntrySelect,
-  });
-  const refunded: { id: string; athleteName: string; refundCents: number }[] = [];
-  const failed: { id: string; athleteName: string; error: string }[] = [];
-  for (const mate of mates) {
-    try {
-      let entry = mate;
-      if (mate.refundAmountCents == null && teamPercent != null) {
-        // The same share of the ticket price; the booking fee is not refunded.
-        const refundAmountCents = Math.round((mate.amountCents * teamPercent) / 100);
-        entry = await prisma.registration.update({
-          where: { id: mate.id },
-          data: { refundAmountCents, refundPercent: teamPercent },
-          select: refundEntrySelect,
-        });
-      }
-      const result = await issueEntryRefund(entry);
-      refunded.push({ id: mate.id, athleteName: mate.athleteName, refundCents: result.refundCents });
-    } catch (err) {
-      console.error("Team refund failed for", mate.id, err);
-      failed.push({
-        id: mate.id,
-        athleteName: mate.athleteName,
-        error: err instanceof RefundError ? err.message : "Stripe did not accept the refund.",
-      });
-    }
-  }
-  return { refunded, failed };
 }

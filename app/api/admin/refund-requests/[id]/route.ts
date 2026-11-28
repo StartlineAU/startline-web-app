@@ -10,10 +10,22 @@ import {
   organiserNotificationRecipients,
 } from "@/lib/organiser-notification-recipients";
 import { sendRefundOverrideEmails } from "@/lib/email";
+import {
+  approvalBlocker,
+  issueTicketRefund,
+  notifyApprovedWithoutEntry,
+  restoreDeclinedEntry,
+} from "@/lib/refund-ticket-outcome";
 
 const bodySchema = z.object({
-  action: z.enum(["approve", "decline", "refunded"]),
+  // `issue` retries the Stripe refund on an approved ticket whose refund failed.
+  action: z.enum(["approve", "decline", "refunded", "issue"]),
   note: z.string().max(2000).optional(),
+  /**
+   * How much an approval returns: the policy quote (default) or everything the
+   * entry paid. Only read on approve.
+   */
+  refundType: z.enum(["POLICY", "FULL"]).optional(),
   /** Decide over the organiser's head. Needs a note; audited; the organiser is told. */
   override: z.boolean().optional(),
 });
@@ -21,7 +33,9 @@ const bodySchema = z.object({
 // PATCH — Startline acting on a refund ticket. The organiser's decision stands
 // (#570): `refunded` records that Startline issued the money for an approved
 // request; approve/decline is allowed only once the organiser's window has
-// passed, or as an explicit override (lib/refund-ticket-rules.ts).
+// passed, or as an explicit override (lib/refund-ticket-rules.ts). On a ticket
+// raised from an entry, approving issues the refund and declining gives the
+// athlete their entry back (lib/refund-ticket-outcome.ts, #492).
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -43,13 +57,46 @@ export async function PATCH(
     select: {
       id: true, status: true, organiserDecision: true, createdAt: true,
       eventName: true, name: true, organiserId: true, eventId: true,
+      registrationId: true, policyRefundCents: true,
     },
   });
   if (!ticket) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  const verdict = evaluateAdminAction(ticket, parsed.data, new Date());
+  if (parsed.data.action === "issue") {
+    if (ticket.status !== "APPROVED" || !ticket.registrationId) {
+      return NextResponse.json(
+        { error: "Only an approved request linked to an entry can be issued from here." },
+        { status: 409 },
+      );
+    }
+    const issued = await issueTicketRefund(id, { firstAttempt: false });
+    await writeAuditLog({
+      adminId: session.sub,
+      action: "REFUND_TICKET_ISSUE_RETRY",
+      targetType: "support_ticket",
+      targetId: id,
+      meta: issued.ok ? { refundCents: issued.refundCents } : { error: issued.error },
+    });
+    return issued.ok
+      ? NextResponse.json({ id, status: "REFUNDED", refundCents: issued.refundCents })
+      : NextResponse.json({ error: issued.error }, { status: 502 });
+  }
+  const action = parsed.data.action;
+
+  const verdict = evaluateAdminAction(ticket, { ...parsed.data, action }, new Date());
   if (!verdict.ok) {
     return NextResponse.json({ error: verdict.error }, { status: verdict.httpStatus });
+  }
+
+  const refundType = verdict.status === "APPROVED" ? (parsed.data.refundType ?? "POLICY") : null;
+  if (refundType) {
+    const blocker = approvalBlocker(ticket, refundType);
+    if (blocker) {
+      return NextResponse.json(
+        { error: blocker.replace("Choose goodwill to refund it anyway", "Approve it as a full refund instead") },
+        { status: 409 },
+      );
+    }
   }
 
   // Conditional on the status read above, so an organiser decision that lands
@@ -63,6 +110,8 @@ export async function PATCH(
           adminDecidedById: session.sub,
           adminDecidedAt: new Date(),
           adminNote: verdict.note,
+          // A decision replaces the refund type; an override to decline clears it.
+          refundType,
         }
       : { status: verdict.status },
   });
@@ -97,6 +146,19 @@ export async function PATCH(
       decision: verdict.status === "APPROVED" ? "approved" : "declined",
       note: verdict.note ?? "",
     }).catch((err) => console.error("Refund override notify failed:", err));
+  }
+
+  if (verdict.kind && verdict.status === "DECLINED") {
+    await restoreDeclinedEntry(id);
+  } else if (verdict.kind && verdict.status === "APPROVED") {
+    if (!ticket.registrationId) {
+      await notifyApprovedWithoutEntry(id);
+    } else {
+      const issued = await issueTicketRefund(id, { firstAttempt: true });
+      return issued.ok
+        ? NextResponse.json({ id, status: "REFUNDED", refundCents: issued.refundCents })
+        : NextResponse.json({ id, status: verdict.status, issued: false, refundError: issued.error });
+    }
   }
 
   return NextResponse.json({ id, status: verdict.status });

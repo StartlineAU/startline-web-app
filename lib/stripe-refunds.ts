@@ -122,7 +122,9 @@ export interface EntryRefundInput {
  * collected it. Same rule as the confirmation email in
  * `app/api/stripe/webhook/route.ts`.
  */
-export function entryPaidCents(input: EntryRefundInput): number {
+export function entryPaidCents(
+  input: Pick<EntryRefundInput, "amountCents" | "platformFeeCents" | "feeStructure">,
+): number {
   return input.feeStructure === "athlete"
     ? input.amountCents + input.platformFeeCents
     : input.amountCents;
