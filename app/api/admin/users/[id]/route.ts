@@ -148,7 +148,7 @@ export async function PUT(
   try {
     await prisma.user.update({ where: { id }, data });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: "EDIT_USER",
       targetType: "user",

@@ -1096,6 +1096,24 @@ model WaitlistSubscriber {
   @@map("waitlist_subscribers")
 }
 
+// A paid checkout's participant details, held here between the PaymentIntent
+// being created and the webhook writing the entries, so they stay in our own
+// database. The PaymentIntent carries only `id`.
+// Deleted once the webhook has a final outcome; the lifecycle sweep deletes
+// abandoned ones after expiresAt.
+model PendingOrder {
+  id        String   @id @default(uuid())
+  eventId   String
+  /// The metadata fields that used to go to Stripe: participantN, teams,
+  /// userName, userEmail, userId. All strings.
+  fields    Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("pending_orders")
+}
+
 model RateLimit {
   key     String   @id
   count   Int      @default(1)

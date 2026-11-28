@@ -15,10 +15,6 @@ import { recordSecurityEvent } from "@/lib/security-event";
 import { botCheckAppliesTo } from "@/lib/bot-check-hosts";
 import { NextRequest, NextResponse } from "next/server";
 
-export function turnstileConfigured(): boolean {
-  return Boolean(process.env.TURNSTILE_SECRET_KEY);
-}
-
 // Where the check is enforced: see lib/bot-check-hosts.ts.
 function botCheckApplicable(req?: NextRequest): boolean {
   if (!req) return true;
@@ -46,6 +42,8 @@ export async function verifyTurnstileToken(
         response: token,
         ...(req ? { remoteip: getClientIp(req) } : {}),
       }),
+      // A hung siteverify would hold the request open; time out and fail closed.
+      signal: AbortSignal.timeout(5_000),
     });
     const data = (await res.json()) as VerifyResult;
     return data.success === true;

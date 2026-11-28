@@ -19,7 +19,6 @@ import {
   AdminSetUserMFAPreferenceCommand,
   ListUsersInGroupCommand,
   UsernameExistsException,
-  UserNotFoundException,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { getEventCoords } from "../lib/australia-coords";
 import { slugify } from "../lib/slugify";
@@ -391,7 +390,6 @@ async function main() {
   }
 
   let subsByEmail: Record<string, string> = {};
-  let adminSubs: string[] = [];
   // CI (e2e) runs against a real DB but uses the __e2e_bypass cookie, whose
   // identities are keyed on the mock `dev-bypass-*` subs. Force mock subs in
   // CI so the bypass users exist locally; only contact Cognito otherwise.
@@ -399,7 +397,6 @@ async function main() {
     try {
       const result = await fetchCognitoSubs();
       subsByEmail = result.subsByEmail;
-      adminSubs = result.adminSubs;
     } catch (e) {
       console.warn("  Fetching Cognito subs skipped:", (e as Error).message?.split("\n")[0]);
     }
@@ -420,9 +417,6 @@ async function main() {
       subsByEmail[user.email] = CORE_MOCK_SUBS[user.email]
         ?? `dev-bypass-${user.email.split("@")[0].replace(/[^a-z0-9_-]/gi, "-")}`;
     }
-    adminSubs = SEED_USERS.filter((u) => u.isAdmin)
-      .map((u) => subsByEmail[u.email])
-      .filter(Boolean) as string[];
   }
   console.log(`  Cognito users found: ${Object.keys(subsByEmail).length}`);
 
@@ -701,7 +695,7 @@ async function main() {
     },
   });
 
-  const event3 = await prisma.event.upsert({
+  await prisma.event.upsert({
     where: { id: "seed-event-003" }, update: {},
     create: {
       id: "seed-event-003", slug: await uniqueSlug("Team Throwdown Summer Series"), organiserId: org.id, status: "DRAFT", photos: DISCIPLINE_PHOTOS.functional_fitness,

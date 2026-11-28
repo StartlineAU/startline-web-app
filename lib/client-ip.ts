@@ -1,21 +1,21 @@
 import { NextRequest } from "next/server";
+import { hasEdgeProof } from "@/lib/edge-proof";
 
 /**
  * Best-effort client IP for rate limiting and Turnstile.
  *
- * X-Forwarded-For is a chain, and each proxy appends the peer it saw. The
- * right-most hop is therefore the one added by the nearest proxy; the left-most
- * values are whatever the caller sent and can be spoofed. CloudFront — the
- * proxy Amplify runs behind — appends the viewer address, so this is also the
- * only hop that remains trustworthy when the Amplify origin is called directly.
+ * When the request carries the Cloudflare edge secret (lib/edge-proof.ts), it
+ * came through Cloudflare and CF-Connecting-IP is the athlete's address. That
+ * is the only case the header is used.
  *
- * Cloudflare sets CF-Connecting-IP, but a direct request to the origin can set
- * that header too. Trust it only when TRUST_CF_CONNECTING_IP is explicitly on,
- * which is safe only once the origin cannot be reached except through
- * Cloudflare.
+ * Otherwise X-Forwarded-For is used. It is a chain, and each proxy appends the
+ * peer it saw, so the right-most hop is the one added by the nearest proxy;
+ * the left-most values come from the caller. Behind
+ * Cloudflare that hop is a Cloudflare edge, shared by everyone in a region,
+ * which is why production needs the edge secret.
  */
 export function getClientIp(req: NextRequest): string {
-  if (process.env.TRUST_CF_CONNECTING_IP === "true") {
+  if (hasEdgeProof(req.headers)) {
     const cloudflareIp = req.headers.get("cf-connecting-ip")?.trim();
     if (cloudflareIp) return cloudflareIp;
   }

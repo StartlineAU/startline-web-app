@@ -38,7 +38,7 @@ import { useApiResource } from "@/hooks/useApiResource";
 import ExportMenu from "@/components/organiser/race-management/ExportMenu";
 import RemoveAthleteDialog, { type RemovalOutcome } from "@/components/organiser/race-management/RemoveAthleteDialog";
 import { InfoTip } from "@/components/event/event-form/info-tip";
-import type { PageData, Registration, StartWave } from "@/components/organiser/race-management/types";
+import type { PageData, Registration } from "@/components/organiser/race-management/types";
 
 const STATUS_STYLE: Record<Registration["status"], string> = {
   CONFIRMED:        "bg-primary/10 text-primary border-primary/30",

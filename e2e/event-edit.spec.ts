@@ -16,7 +16,6 @@ const prisma = new PrismaClient({
 const EVENT_ID = "e2e-event-edit-refunds";
 const EARLY_ID = "e2e-event-edit-early-entrant";
 const HARPER_ID = "e2e-event-edit-harper";
-const LATE_ID = "e2e-event-edit-late-entrant";
 
 function isoDate(daysFromToday: number): string {
   const date = new Date();

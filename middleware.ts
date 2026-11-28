@@ -10,6 +10,7 @@ import {
 import { isLegalPath, publicSiteMode, servesWhileWaitlisted } from "@/lib/site-mode";
 import { accessTokenIsForClient } from "@/lib/native-api-auth";
 import { crossSiteWriteBlocked } from "@/lib/request-origin";
+import { edgeProofMissing } from "@/lib/edge-proof";
 
 const region   = process.env.NEXT_PUBLIC_AWS_REGION          ?? "";
 const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID ?? "";
@@ -150,6 +151,12 @@ async function routeSingleHost(req: NextRequest, pathname: string): Promise<Next
 }
 
 async function handleRequest(req: NextRequest) {
+  // Once EDGE_SHARED_SECRET is set, the app is served only through
+  // Cloudflare. See lib/edge-proof.ts.
+  if (edgeProofMissing(req.nextUrl.pathname, req.headers)) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
   // Before anything else, the dev bypass included: see lib/request-origin.ts.
   if (crossSiteWriteBlocked({
     method: req.method,

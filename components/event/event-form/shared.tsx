@@ -196,25 +196,7 @@ export const INITIAL: FormState = {
   contactShow: NO_CONTACT_OVERRIDE,
 };
 
-/* ── Shared field primitive ─────────────────────────────────── */
-export function Field({ label, hint, required, children }: {
-  label: string; hint?: string; required?: boolean; children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6">
-      <div className="flex items-baseline justify-between mb-2">
-        <label className="font-headline text-[11px] font-bold uppercase tracking-widest text-light">
-          {label}{required && <span className="text-primary font-black text-[15px] leading-none ml-1">*</span>}
-        </label>
-        {hint && <span className="font-headline text-[10px] uppercase tracking-widest text-light">{hint}</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 export const inputCls    = "w-full bg-dark-light border border-dark-lighter rounded-md px-4 py-3 font-headline text-[15px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none transition-colors";
-export const textareaCls = "w-full bg-dark-light border border-dark-lighter rounded-md px-4 py-3 font-headline text-[14px] text-light placeholder:text-placeholder focus:border-primary focus:outline-none resize-none transition-colors";
 
 /* ═══════════════════════════════════════════════════════════════
    TIME PICKER
@@ -300,12 +282,6 @@ export const DISCIPLINES: { v: Discipline; l: string; d: string }[] = [
 export const DISCIPLINE_CATS: Partial<Record<Discipline, string[]>> = {
   running:  ["5K", "10K", "Half Marathon", "Marathon", "Ultra"],
 };
-
-export const FORMATS: { v: Format; l: string; d: string }[] = [
-  { v: "individual", l: "Individual",   d: "Solo athletes"     },
-  { v: "team",       l: "Team / Pairs", d: "Doubles or relay"  },
-  { v: "both",       l: "Both",         d: "Individual & team" },
-];
 
 export const INTENSITY_LEVELS: { v: Intensity; l: string; d: string }[] = [
   { v: "low",      l: "Low",      d: "Beginner / fun runs"      },

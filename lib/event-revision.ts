@@ -5,7 +5,6 @@ import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { withUniqueSlug } from "@/lib/slugs";
 import { checkTeamTierChange } from "@/lib/team-entries";
 import {
-  baselineChanges,
   describeChangeValue,
   diffEventFields,
   ensureBaseline,

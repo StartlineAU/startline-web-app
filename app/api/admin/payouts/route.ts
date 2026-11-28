@@ -7,6 +7,7 @@ import {
   runPayoutForEvent,
 } from "@/lib/payout";
 import { z } from "zod";
+import { reportCaught } from "@/lib/error-reporting";
 
 const payoutSchema = z.object({ eventId: z.string().min(1).max(255) });
 
@@ -22,6 +23,7 @@ export async function GET() {
     return NextResponse.json({ events, attention });
   } catch (err) {
     console.error("Admin payout list error:", err);
+    reportCaught(err, "payout:admin-list");
     return NextResponse.json({ error: "Service unavailable." }, { status: 503 });
   }
 }
@@ -53,6 +55,7 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error("Admin payout error:", err);
+    reportCaught(err, "payout:admin-trigger");
     return NextResponse.json({ error: "Payout failed." }, { status: 503 });
   }
 }
