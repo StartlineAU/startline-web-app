@@ -194,6 +194,10 @@ test.describe("editing a published event", () => {
   });
 
   test("a paid entry has no refund button and opens the refund form for its event", async ({ page, context }) => {
+    // On CI's dev server this is often the first visit to /activity, the
+    // refund-request route and /refunds, and each compiles on demand. That
+    // alone has run past the default 45s.
+    test.slow();
     await organiserLogin(page);
     const res = await page.request.patch(`/api/organiser/events/${EVENT_ID}`, {
       data: { venue: "Princes Park" },
@@ -220,7 +224,7 @@ test.describe("editing a published event", () => {
 
     // The link opens the refund form with this entry already chosen.
     await ticket.getByRole("link", { name: "Request a refund" }).click();
-    await expect(page).toHaveURL(/\/refunds/);
+    await expect(page).toHaveURL(/\/refunds/, { timeout: 30_000 });
     await expect(page.getByRole("combobox", { name: "Entry" })).toContainText("E2E Edit Refunds 10K");
   });
 

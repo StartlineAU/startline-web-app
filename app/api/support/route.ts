@@ -56,7 +56,7 @@ async function loadRefundableEntry(
       athleteName: true, detailsPending: true,
       amountCents: true, platformFeeCents: true, feeStructure: true, soldRefundTiers: true,
       stripePaymentIntentId: true,
-      event: { select: { refundTiers: true } },
+      event: { select: { refundTiers: true, status: true } },
     },
   });
   if (!entry) return null;
@@ -107,6 +107,15 @@ export async function POST(request: NextRequest) {
           )
         : NextResponse.json({ error: "Sign in to request a refund." }, { status: 401 });
     }
+    // Nothing to decide: a cancelled event refunds everyone in full on its own.
+    // Checked before the entry's status, which the cancellation has already
+    // moved to REFUNDED when its refund went through.
+    if (entry.event.status === "CANCELLED") {
+      return NextResponse.json(
+        { error: "This event was cancelled. Everything you paid, booking fee included, is being refunded to your original payment method automatically." },
+        { status: 409 },
+      );
+    }
     if (entry.status === "REFUND_REQUESTED") {
       return NextResponse.json(
         { error: "You have already asked for a refund on this entry. The organiser is deciding." },
@@ -138,7 +147,7 @@ export async function POST(request: NextRequest) {
     ? await prisma.event.findUnique({
         where: { id: eventId },
         select: {
-          id: true, title: true, eventDate: true, startsAtUtc: true, organiserId: true, status: true,
+          id: true, title: true, eventDate: true, startsAtUtc: true, organiserId: true,
           organiser: {
             select: {
               email: true, contactEmail: true, notifyManagers: true, pendingClaim: true, orgName: true,
@@ -148,14 +157,6 @@ export async function POST(request: NextRequest) {
         },
       })
     : null;
-
-  if (requestType === "refund" && event?.status === "CANCELLED") {
-    // Nothing to decide: a cancelled event refunds everyone in full on its own.
-    return NextResponse.json(
-      { error: "This event was cancelled. Everything you paid, booking fee included, is being refunded to your original payment method automatically." },
-      { status: 409 },
-    );
-  }
 
   // No 24-hour block here. Inside the cutoff the change-of-mind quote is zero
   // (changeOfMindQuote), but the athlete can still ask: a changed or undelivered
