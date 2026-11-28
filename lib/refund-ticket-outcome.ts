@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { RefundError, issueEntryRefund, refundEntrySelect } from "@/lib/issue-entry-refund";
 import { entryPaidCents } from "@/lib/stripe-refunds";
 import { refundTeammates } from "@/lib/team-refund";
-import { REFUND_REASON_LABEL } from "@/lib/refund-decision-reasons";
+import { REFUND_REASON_LABEL, UNMATCHED_STRIPE_REFUND_MESSAGE } from "@/lib/refund-decision-reasons";
 import { sendRefundDecisionEmail, type RefundDecisionEmailData } from "@/lib/email";
 
 /**
@@ -163,11 +163,7 @@ export async function issueTicketRefund(
           _sum: { unallocatedCents: true },
         });
         if ((unmatched._sum.unallocatedCents ?? 0) > 0) {
-          throw new RefundError(
-            "A refund on this payment was made in Stripe and not matched to an entry. Startline checks it before refunding again.",
-            409,
-            "UNMATCHED_STRIPE_REFUND",
-          );
+          throw new RefundError(UNMATCHED_STRIPE_REFUND_MESSAGE, 409, "UNMATCHED_STRIPE_REFUND");
         }
       }
       // The amount issueEntryRefund sends to Stripe is the one on the entry.
@@ -236,6 +232,63 @@ export async function issueTicketRefund(
     if (firstAttempt) await notifyAthlete(ticket, "approved", cents, type);
     return { ok: false, error: message };
   }
+}
+
+/**
+ * An admin confirms that an unmatched Stripe dashboard refund on this entry's
+ * payment was this request's money, so nothing more is sent. The entry is
+ * marked REFUNDED with up to the approved amount, and that much comes off the
+ * adjustment's unmatched total: the entry leaving the payout now accounts for
+ * it, and leaving it unmatched as well would take it off the payout twice.
+ * Then the ticket is finished as usual, teammates included.
+ *
+ * Returns null when there is no unmatched refund on the payment to match.
+ */
+export async function settleWithStripeRefund(ticketId: string): Promise<IssueResult | null> {
+  const ticket = await loadOutcomeTicket(ticketId);
+  const entry = ticket?.registration;
+  if (!ticket || ticket.status !== "APPROVED" || !entry || !ticket.refundType || !entry.stripePaymentIntentId) {
+    return null;
+  }
+  if (entry.status !== "REFUNDED") {
+    const paymentIntentId = entry.stripePaymentIntentId;
+    const wanted = ticketRefundCents(ticket, entry, ticket.refundType);
+    const matched = await prisma.$transaction(async (tx) => {
+      const adjustments = await tx.paymentAdjustment.findMany({
+        where: { stripePaymentIntentId: paymentIntentId, kind: "REFUND", unallocatedCents: { gt: 0 } },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, unallocatedCents: true },
+      });
+      const available = adjustments.reduce((sum, a) => sum + a.unallocatedCents, 0);
+      const cents = Math.min(wanted, available);
+      if (cents <= 0) return null;
+      const moved = await tx.registration.updateMany({
+        where: { id: entry.id, status: { in: [...REFUNDABLE_ENTRY_STATUSES] } },
+        data: {
+          status: "REFUNDED",
+          refundAmountCents: cents,
+          refundPercent: ticket.refundType === "POLICY" ? ticket.policyRefundPercent : 100,
+          refundOutsidePolicy: ticket.refundType !== "POLICY" && (ticket.policyRefundCents ?? 0) < cents,
+        },
+      });
+      if (moved.count !== 1) return null;
+      let left = cents;
+      for (const a of adjustments) {
+        if (left <= 0) break;
+        const take = Math.min(left, a.unallocatedCents);
+        await tx.paymentAdjustment.update({
+          where: { id: a.id },
+          data: { unallocatedCents: a.unallocatedCents - take },
+        });
+        left -= take;
+      }
+      return cents;
+    });
+    if (matched == null) return null;
+  }
+  // The entry is REFUNDED now, so this closes the ticket on what went back
+  // and refunds any teammates still holding places.
+  return issueTicketRefund(ticketId, { firstAttempt: false });
 }
 
 async function markTicketRefunded(ticketId: string, cents: number) {

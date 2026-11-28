@@ -83,3 +83,11 @@ export function refundNoteRequired(reason: RefundDecisionReason): boolean {
 }
 
 export const REFUND_NOTE_MAX = 2000;
+
+/**
+ * Why an approved refund stopped: a Stripe dashboard refund on the payment
+ * matched no entry (lib/refund-ticket-outcome.ts). The admin queue offers to
+ * match it to the request when it sees this exact message.
+ */
+export const UNMATCHED_STRIPE_REFUND_MESSAGE =
+  "A refund on this payment was made in Stripe and not matched to an entry. Startline checks it before refunding again.";
