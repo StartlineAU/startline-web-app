@@ -92,6 +92,25 @@ async function seedEntry() {
   });
 }
 
+test("the confirmation email's link asks a signed-out visitor to sign in, then opens the ticket", async ({ page }) => {
+  await setModes("SHARED", "SHARED");
+  await seedEntry();
+
+  // Same address the email button now uses, before the bypass identity is set.
+  await page.goto(`/activity?eventId=${EVENT_ID}`);
+  const gate = page.getByTestId("activity-signin-gate");
+  await expect(gate).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("ticket-dialog")).toBeHidden();
+
+  await signInAs(page, "athlete");
+  await page.reload();
+
+  const dialog = page.getByTestId("ticket-dialog");
+  await expect(dialog).toBeVisible({ timeout: 15000 });
+  await expect(dialog).toContainText("Noosa Triathlon");
+  await expect(dialog.getByTestId("ticket-entry")).toHaveCount(1);
+});
+
 test("a registered card in Activity opens the athlete's ticket over the page", async ({ page }) => {
   await setModes("SHARED", "SHARED");
   await seedEntry();
