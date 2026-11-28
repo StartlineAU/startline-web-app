@@ -31,6 +31,8 @@ import {
   definedPayload, pendingRevision, publishedEditNeedsReview, queueEventRevision,
 } from "@/lib/event-revision";
 import { withTicketFormat } from "@/lib/team-tickets";
+import { parseTiers } from "@/lib/refund-policy";
+import { freezeEventRefundTiers } from "@/lib/organisation-refund-policy";
 
 export async function GET(
   _req: NextRequest,
@@ -187,6 +189,39 @@ export async function PATCH(
     });
     const lifecycleStatus = effectiveEventStatus({ status: nextStatus, ...times });
 
+    // The refund policy. Following the organisation takes its policy and keeps
+    // the event on it. An event of its own keeps whatever was sent. A payload
+    // that does not say leaves a following event on the organisation's policy:
+    // it used to overwrite it here, and the next organisation save overwrote
+    // that edit in turn.
+    let refundTiers: unknown = undefined;
+    let refundPolicy: string | null | undefined = undefined;
+    let refundFollowsOrg: boolean | undefined = undefined;
+    if (data.refundFollowsOrg === true) {
+      const org = await prisma.organiser.findUnique({
+        where: { id: session.sub },
+        select: { refundTiers: true, refundPolicy: true },
+      });
+      refundFollowsOrg = true;
+      // An organisation that never saved a policy has none to give: the event
+      // keeps what it shows (the default it was created with) until one is saved.
+      if (org?.refundTiers != null) {
+        refundTiers = parseTiers(org.refundTiers);
+        refundPolicy = org.refundPolicy ?? null;
+      }
+    } else if (data.refundFollowsOrg === false) {
+      refundFollowsOrg = false;
+      refundTiers = data.refundTiers ?? undefined;
+      refundPolicy = data.refundPolicy ?? undefined;
+    } else if (!existing.refundFollowsOrg) {
+      refundTiers = data.refundTiers ?? undefined;
+      refundPolicy = data.refundPolicy ?? undefined;
+    }
+    // Entries already sold keep the policy they were sold under (terms 3.4).
+    const refundTiersChanged =
+      refundTiers !== undefined &&
+      JSON.stringify(parseTiers(refundTiers)) !== JSON.stringify(parseTiers(existing.refundTiers));
+
     // Fields the payload leaves out are not written. That used to be true of
     // every field except cap and the map pin, which a partial save wiped.
     const coords = data.city && data.state ? getEventCoords(data.city, data.state) : null;
@@ -213,8 +248,9 @@ export async function PATCH(
       inclusions:        data.inclusions        ?? undefined,
       extras:            data.extras            ?? undefined,
       activations:       data.activations       ?? undefined,
-      refundTiers:       data.refundTiers       ?? undefined,
-      refundPolicy:      data.refundPolicy      ?? undefined,
+      refundTiers:       refundTiers as Prisma.InputJsonValue | undefined,
+      refundPolicy,
+      refundFollowsOrg,
       registrationType:  data.registrationType  ?? undefined,
       feeStructure:      data.feeStructure      ?? undefined,
       registrationUrl:   data.registrationUrl   ?? undefined,
@@ -243,6 +279,8 @@ export async function PATCH(
     // An unverified organiser's edit of a published event does not change the
     // listing. It waits for an admin. Athletes keep seeing the last approved offer.
     if (publishedEditNeedsReview(session.verified, currentStatus) && changes.length > 0) {
+      // Frozen now: what was sold before this edit was sold under the old policy.
+      if (refundTiersChanged) await prisma.$transaction((tx) => freezeEventRefundTiers(tx, id));
       const revision = await queueEventRevision({
         eventId: id,
         payload: definedPayload(fields as Record<string, unknown>),
@@ -270,6 +308,7 @@ export async function PATCH(
     // rolled-back attempt leaves nothing behind.
     const runUpdate = (slug: string | undefined) =>
       prisma.$transaction(async (tx) => {
+        if (refundTiersChanged) await freezeEventRefundTiers(tx, id);
         const updated = await tx.event.update({
           where: { id },
           data: { slug, ...times, ...fields, status: lifecycleStatus },

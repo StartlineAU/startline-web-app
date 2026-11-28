@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { describeTiersWithDates, parseTiers } from "@/lib/refund-policy";
 import type { Prisma, RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { entryClaimUrl, entryRefundUrl, sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
@@ -57,6 +58,8 @@ export interface ConfirmEvent {
   state: string;
   /** For the "Add to calendar" link; the email leaves it out when absent. */
   startsAtUtc?: Date | string | null;
+  /** The refund policy the entry is sold under, shown in the email when selected. */
+  refundTiers?: unknown;
   endsAtUtc?: Date | string | null;
 }
 
@@ -704,6 +707,10 @@ export async function sendEntryConfirmation(
       calendarUrl,
       claimUrl,
       refundUrl,
+      // The policy as dates, so the athlete has it in writing as sold.
+      refundPolicyLines: refundUrl && event.refundTiers !== undefined
+        ? describeTiersWithDates(parseTiers(event.refundTiers), event.eventDate)
+        : undefined,
       ...(entry.team ? { team: `${entry.team.name} (team of ${entry.team.size})` } : {}),
       registrationFee:  formatCents(entry.priceCents),
       serviceFee:       formatCents(feeCents),

@@ -62,6 +62,9 @@ export const eventPayloadSchema = z
       .nullable()
       .optional(),
     refundPolicy: z.string().max(10000).nullable().optional(),
+    // False keeps refundTiers/refundPolicy as this event's own. True (or left
+    // out) uses the organisation's policy.
+    refundFollowsOrg: z.boolean().optional(),
     registrationType: z.enum(["startline", "external"]).optional(),
     feeStructure: z.enum(["athlete", "organiser"]).optional(),
     registrationUrl: externalUrl(2000).nullable().optional(),

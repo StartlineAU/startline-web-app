@@ -4,6 +4,7 @@ import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { withUniqueSlug } from "@/lib/slugs";
 import { checkTeamTierChange } from "@/lib/team-entries";
+import { freezeEventRefundTiers } from "@/lib/organisation-refund-policy";
 import {
   describeChangeValue,
   diffEventFields,
@@ -223,6 +224,9 @@ export async function applyPendingRevision(input: {
       throw new RevisionError("This edit has already been reviewed.", 409, "NO_PENDING_REVISION");
     }
 
+    // Entries sold while the edit waited for review bought under the policy
+    // then live, so it is frozen onto them before the new one applies.
+    if (payload.refundTiers !== undefined) await freezeEventRefundTiers(tx, existing.id);
     const updated = await tx.event.update({
       where: { id: existing.id },
       data: {

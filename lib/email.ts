@@ -131,6 +131,8 @@ export interface RegistrationEmailData {
   claimUrl?: string | null;
   /** The entry's "Request a refund" link, for a paid entry when one could be signed. */
   refundUrl?: string | null;
+  /** The change-of-mind policy the entry was sold under, as dated lines. */
+  refundPolicyLines?: string[];
 }
 
 export async function buildRegistrationConfirmationEmail(data: RegistrationEmailData): Promise<BuiltEmail> {

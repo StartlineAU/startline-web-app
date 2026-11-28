@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import type { EventDetailData } from "@/lib/event-detail";
 import { isFreeEvent, todayIso } from "@/lib/event-types";
 import { getEventPhase } from "@/lib/event-status";
-import { describeTiers, parseTiers, REFUND_PROCESS_COPY } from "@/lib/refund-policy";
+import { describeTiersWithDates, parseTiers, REFUND_PROCESS_COPY } from "@/lib/refund-policy";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { STATE_LABELS } from "@/types";
 import {
@@ -525,7 +525,7 @@ export default function EventDetailView({
             {slot(slots, "refund", () => !freeEvent && (
               <SidebarCard title="Refund & Transfer Policy">
                 <ul className="space-y-1">
-                  {describeTiers(parseTiers(event.refundTiers)).map((line, i) => (
+                  {describeTiersWithDates(parseTiers(event.refundTiers), event.date ?? "").map((line, i) => (
                     <li key={i} className="text-sm font-medium text-muted leading-relaxed">{line}</li>
                   ))}
                 </ul>

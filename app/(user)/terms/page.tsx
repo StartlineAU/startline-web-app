@@ -318,8 +318,9 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="5.6" title="Refunds you owe">
           <p>
-            You set your organisation’s refund policy in Settings, under Refunds, and it applies to all of your
-            paid events. Each entry keeps the policy it was sold under, even if you change it later,
+            You set your organisation’s refund policy in Settings, under Refunds, and it applies to your
+            paid events unless you set a different policy on an event’s listing. Each entry keeps the
+            policy it was sold under, even if you change it later,
             and you must honour it. You decide on refund requests made on the Refunds page, within 3
             business days. If you do not, Startline may decide instead. Startline may also override
             your decision where that is needed, for example to meet the Australian Consumer Law; it

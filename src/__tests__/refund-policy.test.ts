@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  describeTiersWithDates,
   DEFAULT_REFUND_TIERS,
   REFUND_PRESETS,
   daysUntil,
@@ -124,7 +125,7 @@ describe("describeTiers", () => {
   });
 
   it("says so plainly when there are no refunds", () => {
-    expect(describeTiers([])).toEqual(["No refunds at any time."]);
+    expect(describeTiers([])).toEqual(["No change-of-mind refunds."]);
   });
 
   it("omits the tail line when the last tier runs to race day", () => {
@@ -255,5 +256,29 @@ describe("policyToday", () => {
     // 8am AEDT on 2 December is still 1 December in UTC.
     expect(policyToday(new Date("2026-12-01T21:00:00Z"))).toBe("2026-12-02");
     expect(policyToday(new Date("2026-06-01T10:00:00Z"))).toBe("2026-06-01");
+  });
+});
+
+describe("describeTiersWithDates", () => {
+  it("states each window as dates counted back from the event", () => {
+    expect(describeTiersWithDates([{ daysBefore: 30, percent: 100 }, { daysBefore: 14, percent: 50 }], "2027-03-31")).toEqual([
+      "Until 1 Mar 2027: full refund.",
+      "2 Mar 2027 to 17 Mar 2027: 50% back.",
+      "From 18 Mar 2027: no refund.",
+    ]);
+  });
+
+  it("runs an always-refundable policy to the 24-hour cutoff", () => {
+    expect(describeTiersWithDates([{ daysBefore: 0, percent: 100 }], "2027-03-31")).toEqual([
+      "Until 24 hours before the start: full refund.",
+    ]);
+  });
+
+  it("never says no refunds outright, and falls back without a date", () => {
+    expect(describeTiersWithDates([], "2027-03-31")).toEqual(["No change-of-mind refunds."]);
+    expect(describeTiersWithDates([{ daysBefore: 30, percent: 100 }], "")).toEqual([
+      "30+ days before: full refund.",
+      "Under 30 days before: no refund.",
+    ]);
   });
 });

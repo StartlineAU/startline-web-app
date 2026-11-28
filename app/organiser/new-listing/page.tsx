@@ -9,6 +9,7 @@ import { hasAbn } from "@/lib/abn";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
 import { organiserCanEditEvent } from "@/lib/event-edit-policy";
 import { organiserContactSelect, visibilityFromColumns } from "@/lib/organiser-contact";
+import { parseTiers } from "@/lib/refund-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,7 @@ export default async function NewListingPage({
   // whether to show an advisory notice, and this page already has the session.
   const organiser = await prisma.organiser.findUnique({
     where:  { id: session.sub },
-    select: { abn: true, ...organiserContactSelect },
+    select: { abn: true, refundTiers: true, refundPolicy: true, ...organiserContactSelect },
   });
 
   return (
@@ -73,6 +74,9 @@ export default async function NewListingPage({
         details: { name: organiser.contactName, email: organiser.contactEmail, phone: organiser.phone },
         visibility: visibilityFromColumns(organiser),
       } : undefined}
+      organisationRefund={organiser?.refundTiers != null
+        ? { tiers: parseTiers(organiser.refundTiers), notes: organiser.refundPolicy ?? "" }
+        : null}
     />
   );
 }

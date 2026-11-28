@@ -27,7 +27,7 @@ import { isFreeEvent } from "@/lib/event-types";
 import { locationFieldErrors } from "@/lib/event-location";
 import { ticketFeeBreakdown } from "@/lib/platform-fee";
 import { normalisePrizeAmount } from "@/lib/prize-pool";
-import { describeTiers } from "@/lib/refund-policy";
+import { ACL_REFUND_NOTE, REFUND_PRESETS, describeTiers, matchRefundPreset } from "@/lib/refund-policy";
 import { UPLOAD_LIMITS, TYPE_MIMES, MAX_GALLERY_PHOTOS } from "@/lib/upload-limits";
 import { CENTRED, useDragPosition } from "@/hooks/useDragPosition";
 import {
@@ -43,7 +43,7 @@ import {
 import {
   DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
   waveTeamSize, eventCap,
-  type AusState, type Discipline, type FormState, type RegionId, type Wave,
+  type AusState, type Discipline, type FormState, type OrganisationRefund, type RegionId, type Wave,
 } from "./shared";
 
 /* Every control takes the whole form and a patch function, like the steps did. */
@@ -1322,13 +1322,32 @@ export function InformationEditor({ form, update }: Props) {
   );
 }
 
-/** The refund card. The policy belongs to the organisation, so it only shows here. */
-export function RefundCard({ form, missing }: { form: FormState; missing?: string }) {
+/**
+ * The refund card. A listing uses the organisation's policy (Settings, under
+ * Refunds) unless the organiser sets one for this event alone. Entries already
+ * sold keep the policy they were sold under, whatever is chosen here.
+ * `organisation` is undefined in the admin editor, where the card only shows.
+ */
+export function RefundCard({ form, update, missing, organisation }: {
+  form: FormState;
+  update?: Props["update"];
+  missing?: string;
+  organisation?: OrganisationRefund;
+}) {
+  const editable = !!update && organisation !== undefined;
+  const following = form.refundFollowsOrg;
+  const active = matchRefundPreset(form.refundTiers);
+  const useOrganisation = () => update?.({
+    refundFollowsOrg: true,
+    ...(organisation ? { refundTiers: organisation.tiers, refundPolicy: organisation.notes } : {}),
+  });
+
   return (
     <Region id="refund" missing={missing}>
       <SidebarCard title="Refund & Transfer Policy" info={
         <InfoTip label="Refund policy">
-          Set once for your organisation in Settings, under Refunds. Every event you list uses it.
+          Your organisation&apos;s policy from Settings, under Refunds, unless you set one for this
+          event. Athletes keep the policy they bought under if you change it later.
         </InfoTip>
       }>
         {isFreeEvent(form.waves) ? (
@@ -1336,14 +1355,55 @@ export function RefundCard({ form, missing }: { form: FormState; missing?: strin
             Not shown: every ticket is free, so there is nothing to refund.
           </p>
         ) : (
-          <>
+          <div data-testid="refund-card">
+            {editable && (
+              <p className="font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark mb-2">
+                {following
+                  ? organisation ? "Your organisation's policy" : "Startline's default until your organisation sets one"
+                  : "This event's own policy"}
+              </p>
+            )}
+            {editable && !following && (
+              <div className="grid gap-2 mb-3" role="radiogroup" aria-label="Refund policy for this event">
+                {REFUND_PRESETS.map((preset) => {
+                  const selected = active?.id === preset.id;
+                  return (
+                    <button key={preset.id} type="button" role="radio" aria-checked={selected}
+                      onClick={() => update?.({ refundTiers: preset.tiers })}
+                      className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                        selected ? "border-primary bg-primary/10" : "border-dark-lighter hover:border-primary/40"
+                      }`}>
+                      <span className={`font-headline text-[11px] font-bold uppercase tracking-widest ${selected ? "text-primary" : "text-light"}`}>
+                        {preset.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <ul className="space-y-1">
               {describeTiers(form.refundTiers).map((line, i) => (
                 <li key={i} className="text-sm font-medium text-muted leading-relaxed">{line}</li>
               ))}
             </ul>
-            {form.refundPolicy.trim() && <p className="text-sm font-medium text-muted leading-relaxed mt-2">{form.refundPolicy}</p>}
-          </>
+            {editable && !following ? (
+              <textarea value={form.refundPolicy} rows={2} aria-label="Refund notes for this event"
+                onChange={(e) => update?.({ refundPolicy: e.target.value })}
+                placeholder="Transfers, deferrals, or other notes athletes should see."
+                className={`${ghostInput} w-full mt-2 text-sm`} />
+            ) : (
+              form.refundPolicy.trim() && <p className="text-sm font-medium text-muted leading-relaxed mt-2">{form.refundPolicy}</p>
+            )}
+            {editable && !following && (
+              <p className="text-[12px] text-muted-dark leading-relaxed mt-2">{ACL_REFUND_NOTE}</p>
+            )}
+            {editable && (
+              <button type="button" onClick={following ? () => update?.({ refundFollowsOrg: false }) : useOrganisation}
+                className="mt-3 font-headline text-[10px] font-bold uppercase tracking-widest text-primary hover:text-light transition-colors">
+                {following ? "Set a policy for this event" : "Use my organisation's policy"}
+              </button>
+            )}
+          </div>
         )}
         {missing && <MissingHint message={missing} />}
       </SidebarCard>
