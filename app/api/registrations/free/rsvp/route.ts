@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: outcome.error, reason: outcome.reason }, { status: 409 });
     }
 
-    await announceRegistrations(event, event.organiser.id, entries);
+    await announceRegistrations(event, event.organiser.id, entries, [], outcome.registrationIds);
 
     return NextResponse.json({
       registrationIds: outcome.registrationIds,

@@ -13,36 +13,45 @@ import { getLifecyclePhase, type EventPhase } from "@/lib/event-status";
  * The entries a person raced in (#592), for every profile view.
  *
  * Not `userId`: that is the buyer, so it would list an event once for every
- * ticket they paid for. Instead:
- *
- * - entries recorded as theirs (`athleteUserId`), and
- * - entries someone else bought under this account's verified email: a friend
- *   entering them. Matched here at read time, as Activity does, because a
- *   guest's address is never linked to an account at checkout. The person's
- *   own purchases are left out of this branch, so a child entered on a
- *   parent's address does not become the parent's race. `userId: null` is
- *   spelled out because SQL `NOT` would drop those rows.
+ * ticket they paid for. Only entries recorded as theirs (`athleteUserId`) are
+ * listed. That is set at checkout for the buyer's own ticket, and otherwise
+ * only when the athlete adds an entry themselves (lib/claim-entries.ts), so
+ * nobody can put a race on someone else's public profile by typing their
+ * email into a registration form.
  */
-export function profileHistoryWhere(user: { id: string; email: string }): Prisma.RegistrationWhereInput {
-  return {
-    status: "CONFIRMED",
-    OR: [{ athleteUserId: user.id }, unclaimedByEmailWhere(user)],
-  };
+export function profileHistoryWhere(user: { id: string }): Prisma.RegistrationWhereInput {
+  return { status: "CONFIRMED", athleteUserId: user.id };
 }
 
 /**
  * Entries someone else bought under this account's email that no account has
- * claimed yet. The profile reads them, and claimEntriesByEmail
- * (lib/claim-entries.ts) pins them to the account, so the race stays put if
- * the account's email changes later.
+ * added yet. Activity offers each one with "Add to my profile"; nothing is
+ * added without that. The person's own purchases are left out, so a child
+ * entered on a parent's address is not offered to the parent as their race.
+ * `userId: null` is spelled out because SQL `NOT` would drop those rows.
  */
-export function unclaimedByEmailWhere(user: { id: string; email: string }): Prisma.RegistrationWhereInput {
+export function suggestedByEmailWhere(user: { id: string; email: string }): Prisma.RegistrationWhereInput {
   return {
+    status: "CONFIRMED",
     athleteUserId: null,
     detailsPending: false,
     athleteEmail: { equals: user.email, mode: "insensitive" },
     OR: [{ userId: null }, { userId: { not: user.id } }],
   };
+}
+
+/** The same rule as suggestedByEmailWhere, for a row already in hand. */
+export function isSuggestedByEmail(
+  row: { status: string; athleteUserId: string | null; detailsPending: boolean; athleteEmail: string; userId: string | null },
+  user: { id: string; email: string },
+): boolean {
+  return (
+    row.status === "CONFIRMED" &&
+    row.athleteUserId === null &&
+    !row.detailsPending &&
+    row.athleteEmail.trim().toLowerCase() === user.email.trim().toLowerCase() &&
+    row.userId !== user.id
+  );
 }
 
 /** Event columns a history row needs, lifecycle included. */

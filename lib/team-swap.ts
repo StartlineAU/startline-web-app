@@ -127,6 +127,8 @@ export function provisionReplacement(incoming: RegistrationFormData): Promise<Re
 }
 
 export interface AppliedSwap {
+  /** The place, now the incoming member's. */
+  registrationId: string;
   /** Who held the place before. */
   previous: Holder;
   email: string;
@@ -208,6 +210,7 @@ export async function applySwap(
     },
   });
   return {
+    registrationId: entry.id,
     previous: entry,
     email,
     athleteName: after.athleteName,

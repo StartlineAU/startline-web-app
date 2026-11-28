@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
-import { parseParticipantsFromMetadata, parseTeamNamesFromMetadata } from "@/lib/stripe-webhook";
+import { parseParticipantsFromMetadata, parseTeamNamesFromMetadata, SELF_FLAGS_METADATA_KEY } from "@/lib/stripe-webhook";
 import { groupOrderTeams } from "@/lib/team-tickets";
 import { allocateStripeFeeCents, calculateTotalWithFee } from "@/lib/platform-fee";
 import {
   announceRegistrations,
   ensureParticipantUsers,
+  legacySelfIndex,
   insertConfirmedRegistrations,
   type PricedEntry,
 } from "@/lib/registration-confirm";
@@ -222,6 +223,14 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   // Prisma Users up front so the confirmations below can link them.
   const buyerUserId = meta.userId || "";
   const userIdByEmail = buyerUserId ? {} : await ensureParticipantUsers(entries);
+
+  // Paid for after #592 deployed but set up before it: there is no "Me" flag,
+  // so pick the buyer's own ticket the way the backfill did (#598).
+  if (buyerUserId && !meta[SELF_FLAGS_METADATA_KEY] && !entries.some((e) => e.participant.me === 1)) {
+    const buyer = await prisma.user.findUnique({ where: { id: buyerUserId }, select: { email: true, name: true } });
+    const own = buyer ? legacySelfIndex(entries.map((e) => e.participant), buyer) : null;
+    if (own !== null) entries[own] = { ...entries[own], participant: { ...entries[own].participant, me: 1 } };
+  }
 
   const outcome = await insertConfirmedRegistrations({
     event,

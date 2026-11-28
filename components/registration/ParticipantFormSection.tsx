@@ -42,11 +42,12 @@ interface ParticipantFormSectionProps {
 
 /**
  * Shown under the email of anyone the buyer enters other than themselves. The
- * address is what puts the race and its results on that person's profile
- * (#592), so a different one than they sign in with never reaches them.
+ * address is how the entry reaches that person's account (#592): Activity
+ * offers it to them to add to their profile (#598). A different address only
+ * reaches them through the link in its confirmation email.
  */
 export const GUEST_EMAIL_HINT =
-  "Use the email they sign in to Startline with, so this race and their results show on their profile.";
+  "Use the email they sign in to Startline with, so they can add this race and their results to their profile.";
 
 export default function ParticipantFormSection({
   index,

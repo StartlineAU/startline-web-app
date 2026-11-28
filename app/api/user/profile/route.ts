@@ -8,7 +8,6 @@ import {
   PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, profileHistoryWhere, withRacePhase,
 } from "@/lib/profile-history";
 import { GENDER_OPTIONS } from "@/lib/registration-form";
-import { claimEntriesByEmail } from "@/lib/claim-entries";
 import { isAtLeastYearsOld, MIN_AGE } from "@/lib/age";
 import { z } from "zod";
 import { assetUrl } from "@/lib/asset-url";
@@ -103,7 +102,6 @@ export async function GET() {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  await claimEntriesByEmail(user);
   const registrations = await prisma.registration.findMany({
     where: profileHistoryWhere(user),
     orderBy: { event: { eventDate: "asc" } },

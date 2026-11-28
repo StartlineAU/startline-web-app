@@ -9,7 +9,6 @@ import prisma from "@/lib/prisma";
 import { getServerSession, getUserSession } from "@/lib/amplify-server";
 import { canChangeEmail } from "@/lib/sign-in-methods";
 import { sendAccountSecurityNotice } from "@/lib/email";
-import { claimEntriesByEmail } from "@/lib/claim-entries";
 import { getSessionSignInMethods } from "@/lib/session-sign-in-methods";
 import { cognito, describeCognitoError, getAccessToken } from "@/lib/cognito-user";
 import { z } from "zod";
@@ -98,9 +97,6 @@ export async function POST(req: NextRequest) {
     if (!email) return NextResponse.json({ error: "Could not read your new email address." }, { status: 500 });
 
     const previous = session.email;
-    // Races someone else entered under the old address are found by that
-    // address. Pin them to the account first, or they leave its profile (#592).
-    await claimEntriesByEmail({ id: session.sub, email: previous });
     await prisma.user.update({ where: { id: session.sub }, data: { email } });
     // The old address is the one the owner still reads if this was not them.
     await sendAccountSecurityNotice(previous, `Your sign-in email was changed to ${email}.`);

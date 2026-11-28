@@ -12,16 +12,12 @@ import {
 } from "@/lib/refund-policy";
 import { checkInWindow } from "@/lib/check-in-window";
 import { entryPaidCents } from "@/lib/stripe-refunds";
-import { claimEntriesByEmail } from "@/lib/claim-entries";
+import { isSuggestedByEmail } from "@/lib/profile-history";
 
 /** GET — confirmed registrations for the signed-in athlete (wave + bib for Activity). */
 export async function GET() {
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
-
-  // Entries others bought under this verified address stay with the account
-  // if the address changes later (#592).
-  await claimEntriesByEmail({ id: session.sub, email: session.email });
 
   const registrations = await prisma.registration.findMany({
     where: {
@@ -40,6 +36,9 @@ export async function GET() {
       eventId: true,
       status: true,
       athleteName: true,
+      athleteEmail: true,
+      userId: true,
+      athleteUserId: true,
       startWaveLabel: true,
       bibNumber: true,
       team: { select: { name: true, bibNumber: true, size: true } },
@@ -111,6 +110,10 @@ export async function GET() {
         teamSize: r.team?.size ?? null,
         // A team place bought "details later": Activity asks for its member.
         detailsPending: r.detailsPending,
+        // Race history is opt-in (#598): an entry someone else bought under
+        // this address is offered, never added for them.
+        onProfile: r.status === "CONFIRMED" && r.athleteUserId === session.sub,
+        canAddToProfile: isSuggestedByEmail(r, { id: session.sub, email: session.email }),
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
         checkInOpensAt: window.opensAt?.toISOString() ?? null,

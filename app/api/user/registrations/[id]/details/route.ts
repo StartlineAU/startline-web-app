@@ -177,6 +177,7 @@ export async function POST(
   }
 
   await sendEntryConfirmation(registration.event, {
+    registrationId: registration.id,
     email: details.athleteEmail,
     waveLabel: registration.waveLabel,
     priceCents: registration.amountCents,

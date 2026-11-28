@@ -49,14 +49,17 @@ the console, and was still undefined at runtime (#363).
 
 So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
-`TURNSTILE_SECRET_KEY`, `ABR_GUID`,
+`TURNSTILE_SECRET_KEY`, `ABR_GUID`, `ENTRY_CLAIM_SECRET`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
 `startline-infra/startline-web-app/modules/environment/main.tf`; add a new one there.
 
 Terraform owns only the *generated* half of the app secret (Cognito ids, Neon
 URL, bucket, CDN, site URL, `GUEST_EMAIL_VERIFICATION_SECRET`,
-`TURNSTILE_SECRET_KEY`) plus the whole branch variable map. The third-party
+`TURNSTILE_SECRET_KEY`, `ENTRY_CLAIM_SECRET`) plus the whole branch variable map.
+`ENTRY_CLAIM_SECRET` signs the "Add to my profile" link in entry confirmation
+emails (`lib/entry-claim-token.ts`). Without it the emails go out with no link;
+rotating it voids every link already sent. The third-party
 credentials are owned by the app secret itself: Terraform reads the secret and
 merges the generated keys over the top, so `startline/automation` is no longer
 their source. A prod apply fails its precondition rather than silently clearing

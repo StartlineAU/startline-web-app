@@ -53,6 +53,13 @@ export const STRIPE_METADATA_MAX_VALUE_CHARS = 500;
  * checkout request cleanly; discovering it from Stripe would mean an athlete
  * watching a card form die for no stated reason.
  */
+/**
+ * PaymentIntent metadata written by a checkout that sends the buyer's "Me"
+ * ticket carries this key, even when the buyer marked none. An intent without
+ * it was created before #592 deployed and paid after.
+ */
+export const SELF_FLAGS_METADATA_KEY = "selfFlags";
+
 // Keys added to the PaymentIntent after checkout creates it: termsAcceptedAt,
 // written by /api/checkout/accept-terms.
 const METADATA_KEYS_ADDED_LATER = 1;
