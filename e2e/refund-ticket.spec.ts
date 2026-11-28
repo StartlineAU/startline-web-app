@@ -349,11 +349,15 @@ test("goodwill refunds the whole ticket price and keeps the booking fee", async 
 
   // The fake payment intent cannot be refunded in Stripe, so the approval
   // stands with the error for Startline to retry, unless Stripe is mocked out.
-  await expect.poll(async () => (await prisma.supportTicket.findUnique({ where: { id: ticket.id } }))?.status)
-    .toMatch(/APPROVED|REFUNDED/);
+  // The route writes APPROVED before it calls Stripe and records the error
+  // after, so wait for the outcome rather than the first status change.
+  await expect.poll(async () => {
+    const t = await prisma.supportTicket.findUnique({ where: { id: ticket.id } });
+    if (t?.status === "REFUNDED") return "settled";
+    return t?.status === "APPROVED" && t.refundError ? "settled" : t?.status;
+  }).toBe("settled");
   const decided = await prisma.supportTicket.findUnique({ where: { id: ticket.id } });
   expect(decided).toMatchObject({ organiserReason: "GOODWILL", refundType: "TICKET" });
-  if (decided?.status === "APPROVED") expect(decided.refundError).toBeTruthy();
 });
 
 test("a buyer can request a refund for a place they paid for on a group ticket", async ({ page }) => {
