@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { REFUND_REASON_LABEL } from "@/lib/refund-decision-reasons";
+import { REFUND_REASON_LABEL, UNMATCHED_STRIPE_REFUND_MESSAGE } from "@/lib/refund-decision-reasons";
 import type { RefundDecisionReason } from "@prisma/client";
 
 type Status = "OPEN" | "APPROVED" | "DECLINED" | "REFUNDED";
@@ -37,7 +37,7 @@ interface Ticket {
   refundError: string | null;
 }
 
-type Action = "approve" | "decline" | "refunded" | "issue";
+type Action = "approve" | "decline" | "refunded" | "issue" | "match_stripe";
 type RefundType = "POLICY" | "TICKET" | "FULL";
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
@@ -190,6 +190,12 @@ export default function AdminRefundsPage() {
                     <button type="button" disabled={busy === t.id} onClick={() => send(t.id, { action: "issue" })}
                       className={`${btn} bg-primary text-dark`}>
                       Retry refund
+                    </button>
+                  )}
+                  {t.status === "APPROVED" && t.registrationId && t.refundError === UNMATCHED_STRIPE_REFUND_MESSAGE && (
+                    <button type="button" disabled={busy === t.id} onClick={() => send(t.id, { action: "match_stripe" })}
+                      className={`${btn} border border-primary/40 text-primary`}>
+                      It was this refund
                     </button>
                   )}
                   {t.status === "APPROVED" && !t.registrationId && (

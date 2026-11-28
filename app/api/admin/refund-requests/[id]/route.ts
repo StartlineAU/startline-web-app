@@ -15,11 +15,14 @@ import {
   issueTicketRefund,
   notifyApprovedWithoutEntry,
   restoreDeclinedEntry,
+  settleWithStripeRefund,
 } from "@/lib/refund-ticket-outcome";
 
 const bodySchema = z.object({
   // `issue` retries the Stripe refund on an approved ticket whose refund failed.
-  action: z.enum(["approve", "decline", "refunded", "issue"]),
+  // `match_stripe` records that an unmatched Stripe dashboard refund on the
+  // payment was this request's money, so nothing more is sent.
+  action: z.enum(["approve", "decline", "refunded", "issue", "match_stripe"]),
   note: z.string().max(2000).optional(),
   /**
    * How much an approval returns: the policy quote (default) or everything the
@@ -82,6 +85,28 @@ export async function PATCH(
       ? NextResponse.json({ id, status: "REFUNDED", refundCents: issued.refundCents })
       : NextResponse.json({ error: issued.error }, { status: 502 });
   }
+  if (parsed.data.action === "match_stripe") {
+    const settled = ticket.status === "APPROVED" && ticket.registrationId
+      ? await settleWithStripeRefund(id)
+      : null;
+    if (!settled) {
+      return NextResponse.json(
+        { error: "There is no unmatched Stripe refund on this payment to match to this request." },
+        { status: 409 },
+      );
+    }
+    await writeAuditLog({
+      adminId: session.sub,
+      action: "REFUND_TICKET_MATCH_STRIPE",
+      targetType: "support_ticket",
+      targetId: id,
+      meta: settled.ok ? { refundCents: settled.refundCents } : { error: settled.error },
+    });
+    return settled.ok
+      ? NextResponse.json({ id, status: "REFUNDED", refundCents: settled.refundCents })
+      : NextResponse.json({ error: settled.error }, { status: 502 });
+  }
+
   const action = parsed.data.action;
 
   // A ticket linked to an entry is refunded by approving it, and closes itself

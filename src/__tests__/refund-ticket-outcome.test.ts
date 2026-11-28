@@ -6,21 +6,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   supportTicket: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
   registration: { updateMany: vi.fn(), aggregate: vi.fn() },
-  paymentAdjustment: { aggregate: vi.fn(async () => ({ _sum: { unallocatedCents: null as number | null } })) },
+  paymentAdjustment: {
+    aggregate: vi.fn(async () => ({ _sum: { unallocatedCents: null as number | null } })),
+    findMany: vi.fn(),
+    update: vi.fn(),
+  },
   userNotification: { create: vi.fn() },
   issueEntryRefund: vi.fn(),
   refundTeammates: vi.fn(),
   sendRefundDecisionEmail: vi.fn(),
 }));
 
-vi.mock("@/lib/prisma", () => ({
-  default: {
+vi.mock("@/lib/prisma", () => {
+  const client: Record<string, unknown> = {
     supportTicket: mocks.supportTicket,
     registration: mocks.registration,
     paymentAdjustment: mocks.paymentAdjustment,
     userNotification: mocks.userNotification,
-  },
-}));
+  };
+  client.$transaction = (fn: (tx: unknown) => unknown) => fn(client);
+  return { default: client };
+});
 vi.mock("@/lib/issue-entry-refund", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/issue-entry-refund")>()),
   issueEntryRefund: mocks.issueEntryRefund,
@@ -33,6 +39,7 @@ import {
   approvalBlocker,
   issueTicketRefund,
   restoreDeclinedEntry,
+  settleWithStripeRefund,
   ticketRefundCents,
 } from "@/lib/refund-ticket-outcome";
 
@@ -327,5 +334,40 @@ describe("restoreDeclinedEntry", () => {
     await restoreDeclinedEntry("ticket-1");
     expect(mocks.registration.updateMany).not.toHaveBeenCalled();
     expect(mocks.sendRefundDecisionEmail).toHaveBeenCalled();
+  });
+});
+
+describe("settleWithStripeRefund", () => {
+  it("matches an unmatched dashboard refund to the entry, takes it off the unmatched total and closes the ticket", async () => {
+    const approved = ticket({ refundError: "stopped" });
+    mocks.supportTicket.findUnique
+      .mockResolvedValueOnce(approved)
+      // issueTicketRefund reloads: the entry is REFUNDED by then.
+      .mockResolvedValueOnce(ticket({ registration: entry({ status: "REFUNDED", refundAmountCents: 2500 }) }));
+    mocks.paymentAdjustment.findMany.mockResolvedValue([
+      { id: "adj-1", unallocatedCents: 1000 },
+      { id: "adj-2", unallocatedCents: 4000 },
+    ]);
+
+    const result = await settleWithStripeRefund("ticket-1");
+
+    expect(result).toEqual({ ok: true, refundCents: 2500 });
+    expect(mocks.registration.updateMany.mock.calls[0][0].data).toMatchObject({ status: "REFUNDED", refundAmountCents: 2500 });
+    // Oldest first, and only as much as this entry's refund.
+    expect(mocks.paymentAdjustment.update.mock.calls.map((c) => c[0])).toEqual([
+      { where: { id: "adj-1" }, data: { unallocatedCents: 0 } },
+      { where: { id: "adj-2" }, data: { unallocatedCents: 2500 } },
+    ]);
+    // Nothing more is sent to Stripe.
+    expect(mocks.issueEntryRefund).not.toHaveBeenCalled();
+    expect(mocks.supportTicket.updateMany.mock.calls[0][0].data).toMatchObject({ status: "REFUNDED", refundCents: 2500 });
+  });
+
+  it("does nothing when the payment has no unmatched refund", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(ticket());
+    mocks.paymentAdjustment.findMany.mockResolvedValue([]);
+    expect(await settleWithStripeRefund("ticket-1")).toBeNull();
+    expect(mocks.registration.updateMany).not.toHaveBeenCalled();
+    expect(mocks.supportTicket.updateMany).not.toHaveBeenCalled();
   });
 });
