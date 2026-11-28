@@ -3,6 +3,7 @@ import { renderEmail, type RenderedEmail } from "@/emails/render";
 import { RegistrationConfirmationEmail } from "@/emails/registration-confirmation";
 import { EventApprovedEmail } from "@/emails/event-approved";
 import { EventRejectedEmail } from "@/emails/event-rejected";
+import { EventFinishedEmail } from "@/emails/event-finished";
 import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
 import { ReviewReportedEmail } from "@/emails/review-reported";
 import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
@@ -144,6 +145,34 @@ export async function buildEventApprovedEmail(eventTitle: string, { siteUrl = SI
 export async function sendEventApprovedEmail(email: string | string[], eventTitle: string) {
   if (!getResend()) return;
   await sendOne(email, await buildEventApprovedEmail(eventTitle));
+}
+
+// ── Event finished (organisers, #561) ─────────────────────────────────────────
+export interface EventFinishedEmailData {
+  eventId: string;
+  eventTitle: string;
+  entries: number;
+  checkedIn: number;
+  withResults: number;
+}
+
+export async function buildEventFinishedEmail(
+  { eventId, ...data }: EventFinishedEmailData,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventFinishedEmail({
+      ...data,
+      // A finished event's dashboard opens on results.
+      dashboardUrl: organiserUrl(`/organiser/events/${encodeURIComponent(eventId)}/dashboard`, siteUrl),
+    }),
+  );
+  return { subject: `"${data.eventTitle}" has finished`, ...rendered };
+}
+
+export async function sendEventFinishedEmail(email: string | string[], data: EventFinishedEmailData) {
+  if (!getResend()) return;
+  await sendOne(email, await buildEventFinishedEmail(data));
 }
 
 export async function buildEventRejectedEmail(

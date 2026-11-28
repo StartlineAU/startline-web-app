@@ -43,6 +43,7 @@ const settingsPatchSchema = z.object({
   notifyEventApproved:   z.boolean().optional(),
   notifyEventRejected:   z.boolean().optional(),
   notifyNewRegistration: z.boolean().optional(),
+  notifyEventFinished:   z.boolean().optional(),
   logoUrl:        assetUrl().nullable().optional(),
   logoPosition:   z.string().max(100).nullable().optional(),
   coverImageUrl:  assetUrl().nullable().optional(),
@@ -71,7 +72,7 @@ export async function GET() {
         legalName: true, dob: true,
         stripeAccountId: true, stripeOnboardingComplete: true,
         notifyManagers: true,
-        notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
+        notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true, notifyEventFinished: true,
         refundTiers: true, refundPolicy: true,
         _count: { select: { follows: true } },
       },
@@ -165,7 +166,7 @@ export async function PUT(req: NextRequest) {
 
 // PATCH /api/organiser/profile
 // Body: any of the notification switches (notifyManagers, notifyEventApproved,
-// notifyEventRejected, notifyNewRegistration) and the images (logoUrl,
+// notifyEventRejected, notifyNewRegistration, notifyEventFinished) and the images (logoUrl,
 // logoPosition, coverImageUrl, coverPosition). The notification switches are
 // owner only: they decide what the whole organisation is told, so a manager
 // cannot change them. The images follow PUT, which a manager may also use.
@@ -179,8 +180,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
-  const { notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration, refundTiers, refundPolicy } = parsed.data;
-  const changesNotifications = [notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration]
+  const { notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration, notifyEventFinished, refundTiers, refundPolicy } = parsed.data;
+  const changesNotifications = [notifyManagers, notifyEventApproved, notifyEventRejected, notifyNewRegistration, notifyEventFinished]
     .some(v => v !== undefined);
   const changesRefundPolicy = refundTiers !== undefined || refundPolicy !== undefined;
   if ((changesNotifications || changesRefundPolicy) && session.role !== "OWNER") {
