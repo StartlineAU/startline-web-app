@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { validateUsername } from "@/lib/username-validation";
 import { writeAuditLog } from "@/lib/audit";
+import { claimEntriesByEmail } from "@/lib/claim-entries";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
 import { assetUrl } from "@/lib/asset-url";
@@ -146,6 +147,8 @@ export async function PUT(
   if ("state" in body) { data.state = body.state?.trim() || null; changed.push("state"); }
 
   try {
+    // Races entered under the old address follow the account, not the address (#592).
+    if (data.email) await claimEntriesByEmail({ id, email: existing.email });
     await prisma.user.update({ where: { id }, data });
 
     writeAuditLog({

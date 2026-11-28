@@ -62,6 +62,12 @@ export interface CompactParticipant {
    * fields are blank apart from `em`, which is the buyer's.
    */
   pnd?: 1;
+  /**
+   * The signed-in buyer's own ticket ("Me" at checkout). At most one per order,
+   * and only with a buyer account. Every entry carries the buyer's account, so
+   * without this a profile cannot tell their race from the guests' (#592).
+   */
+  me?: 1;
 }
 
 /**

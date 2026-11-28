@@ -395,6 +395,7 @@ export async function insertConfirmedRegistrations(opts: {
 
     // "Team member N" for each place left for later.
     const memberNumbers = pendingMemberNumbers(teams, (i) => entries[i]?.participant.pnd === 1);
+    const athleteUserIds = athleteUserIdsFor(entries, buyerUserId, userIdByEmail);
 
     await tx.registration.createMany({
       data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, stripeFeeCents, team }, index) => {
@@ -427,6 +428,7 @@ export async function insertConfirmedRegistrations(opts: {
           eventId: event.id,
           organiserId,
           userId: buyerUserId || userIdByEmail[email] || null,
+          athleteUserId: athleteUserIds[index],
           athleteName: athleteNameFromParticipant(participant),
           athleteEmail: participant.em,
           firstName: expanded.firstName,
@@ -452,6 +454,42 @@ export async function insertConfirmedRegistrations(opts: {
     });
 
     return { ok: true as const, registrationIds };
+  });
+}
+
+/**
+ * The account racing in each entry, aligned with `entries` (#592). Every
+ * entry's userId is the buyer's, so this is what a profile's race history
+ * reads.
+ *
+ * - A signed-in buyer's own ticket (`me`) is theirs.
+ * - A guest checkout's accounts were created here for that address, so the
+ *   first named entry on each address is that account's. Later ones on the
+ *   same address (a parent's children) are not.
+ * - Everyone else is null: a guest's address is not verified, so it is never
+ *   linked to an account here. Their account finds the entry by its verified
+ *   email instead, the way Activity does.
+ */
+export function athleteUserIdsFor(
+  entries: Pick<PricedEntry, "participant">[],
+  buyerUserId: string,
+  userIdByEmail: Record<string, string>,
+): (string | null)[] {
+  if (buyerUserId) {
+    let claimed = false;
+    return entries.map(({ participant }) => {
+      if (claimed || participant.me !== 1 || participant.pnd) return null;
+      claimed = true;
+      return buyerUserId;
+    });
+  }
+  const seen = new Set<string>();
+  return entries.map(({ participant }) => {
+    if (participant.pnd) return null;
+    const email = normalizeEmail(participant.em);
+    if (!email || seen.has(email)) return null;
+    seen.add(email);
+    return userIdByEmail[email] ?? null;
   });
 }
 

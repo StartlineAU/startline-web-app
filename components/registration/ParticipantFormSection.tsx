@@ -34,9 +34,19 @@ interface ParticipantFormSectionProps {
   frameless?: boolean;
   /** Rendered between the title and the first field, e.g. who the ticket is for. */
   intro?: React.ReactNode;
+  /** Guidance under the email field, e.g. GUEST_EMAIL_HINT on someone else's ticket. */
+  emailHint?: React.ReactNode;
   onRemove?: () => void;
   onChange: (field: keyof RegistrationFormData, value: string | boolean) => void;
 }
+
+/**
+ * Shown under the email of anyone the buyer enters other than themselves. The
+ * address is what puts the race and its results on that person's profile
+ * (#592), so a different one than they sign in with never reaches them.
+ */
+export const GUEST_EMAIL_HINT =
+  "Use the email they sign in to Startline with, so this race and their results show on their profile.";
 
 export default function ParticipantFormSection({
   index,
@@ -47,6 +57,7 @@ export default function ParticipantFormSection({
   hideEmergencyContact,
   frameless,
   intro,
+  emailHint,
   onRemove,
   onChange,
 }: ParticipantFormSectionProps) {
@@ -99,10 +110,19 @@ export default function ParticipantFormSection({
             />
           </RegisterField>
           <div className="sm:col-span-2">
-            <RegisterField label="Email address" required error={errors.email} fieldKey={fieldKey("email")} htmlFor={id("email")}>
+            <RegisterField
+              label="Email address"
+              required
+              error={errors.email}
+              fieldKey={fieldKey("email")}
+              htmlFor={id("email")}
+              hint={emailHint}
+              hintId={id("emailHint")}
+            >
               <input
                 id={id("email")}
                 type="email"
+                aria-describedby={emailHint && !errors.email ? id("emailHint") : undefined}
                 value={participant.email}
                 onChange={(e) => onChange("email", e.target.value)}
                 placeholder="e.g. jordan@example.com"

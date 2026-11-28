@@ -185,6 +185,9 @@ export async function getServerSession(): Promise<ServerSession | null> {
         // Rows these identities point at are created and removed by the specs
         // that use them, so tests never mutate the shared seed users.
         "profile":  { sub: "dev-bypass-profile-test", email: "profile.test@startline.test", groups: [] },
+        // A team member someone else names later (#592). profile-race-history
+        // changes this row's email, which a shared seed user must never have.
+        "teammate": { sub: "dev-bypass-teammate-test", email: "teammate.test@startline.test", groups: [] },
         "noabn":    { sub: "dev-bypass-noabn-test",   email: "noabn.organiser@startline.test", groups: [] },
         // Owns an organisation that security.spec.ts suspends. Its own rows, so
         // suspending it never disturbs a spec running in the other worker.

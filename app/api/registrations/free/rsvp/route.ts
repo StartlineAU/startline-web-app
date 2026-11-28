@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
     const participant = rsvpParticipantFromSession(session);
 
     const entries: PricedEntry[] = [{
-      participant: { ...compactParticipant(participant), wav: wave.label },
+      participant: { ...compactParticipant(participant), wav: wave.label, me: 1 },
       waveLabel: wave.label,
       priceCents: 0,
       platformFeeCents: 0,

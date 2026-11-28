@@ -12,11 +12,16 @@ import {
 } from "@/lib/refund-policy";
 import { checkInWindow } from "@/lib/check-in-window";
 import { entryPaidCents } from "@/lib/stripe-refunds";
+import { claimEntriesByEmail } from "@/lib/claim-entries";
 
 /** GET — confirmed registrations for the signed-in athlete (wave + bib for Activity). */
 export async function GET() {
   const session = await getUserSession();
   if (!session) return NextResponse.json({ error: "Unauthorised." }, { status: 401 });
+
+  // Entries others bought under this verified address stay with the account
+  // if the address changes later (#592).
+  await claimEntriesByEmail({ id: session.sub, email: session.email });
 
   const registrations = await prisma.registration.findMany({
     where: {

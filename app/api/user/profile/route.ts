@@ -4,8 +4,11 @@ import { getUserSession } from "@/lib/amplify-server";
 import { validateUsername } from "@/lib/username-validation";
 import { containsProfanity } from "@/lib/profanity";
 import { getOrganiserRatings } from "@/lib/reviews";
-import { PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, withRacePhase } from "@/lib/profile-history";
+import {
+  PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, profileHistoryWhere, withRacePhase,
+} from "@/lib/profile-history";
 import { GENDER_OPTIONS } from "@/lib/registration-form";
+import { claimEntriesByEmail } from "@/lib/claim-entries";
 import { isAtLeastYearsOld, MIN_AGE } from "@/lib/age";
 import { z } from "zod";
 import { assetUrl } from "@/lib/asset-url";
@@ -84,8 +87,9 @@ export async function GET() {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
+  await claimEntriesByEmail(user);
   const registrations = await prisma.registration.findMany({
-    where: { userId: session.sub, status: "CONFIRMED" },
+    where: profileHistoryWhere(user),
     orderBy: { event: { eventDate: "asc" } },
     select: {
       id: true,

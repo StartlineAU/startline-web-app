@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { getLifecyclePhase, type EventPhase } from "@/lib/event-status";
 
 /**
@@ -7,6 +8,42 @@ import { getLifecyclePhase, type EventPhase } from "@/lib/event-status";
  * athlete has raced comes from the event's lifecycle, so an entry for an event
  * that has not happened yet is upcoming, not "Completed".
  */
+
+/**
+ * The entries a person raced in (#592), for every profile view.
+ *
+ * Not `userId`: that is the buyer, so it would list an event once for every
+ * ticket they paid for. Instead:
+ *
+ * - entries recorded as theirs (`athleteUserId`), and
+ * - entries someone else bought under this account's verified email: a friend
+ *   entering them. Matched here at read time, as Activity does, because a
+ *   guest's address is never linked to an account at checkout. The person's
+ *   own purchases are left out of this branch, so a child entered on a
+ *   parent's address does not become the parent's race. `userId: null` is
+ *   spelled out because SQL `NOT` would drop those rows.
+ */
+export function profileHistoryWhere(user: { id: string; email: string }): Prisma.RegistrationWhereInput {
+  return {
+    status: "CONFIRMED",
+    OR: [{ athleteUserId: user.id }, unclaimedByEmailWhere(user)],
+  };
+}
+
+/**
+ * Entries someone else bought under this account's email that no account has
+ * claimed yet. The profile reads them, and claimEntriesByEmail
+ * (lib/claim-entries.ts) pins them to the account, so the race stays put if
+ * the account's email changes later.
+ */
+export function unclaimedByEmailWhere(user: { id: string; email: string }): Prisma.RegistrationWhereInput {
+  return {
+    athleteUserId: null,
+    detailsPending: false,
+    athleteEmail: { equals: user.email, mode: "insensitive" },
+    OR: [{ userId: null }, { userId: { not: user.id } }],
+  };
+}
 
 /** Event columns a history row needs, lifecycle included. */
 export const PROFILE_HISTORY_EVENT_SELECT = {
