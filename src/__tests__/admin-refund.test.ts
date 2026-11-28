@@ -27,7 +27,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/stripe", () => ({
   getStripe: () => ({
     paymentIntents: { retrieve: mocks.retrievePaymentIntent },
-    refunds: { create: mocks.createRefund },
+    refunds: { create: mocks.createRefund, list: async () => ({ data: [] }) },
   }),
 }));
 
@@ -94,7 +94,7 @@ describe("admin refund route", () => {
       reverse_transfer: true,
       refund_application_fee: false,
     });
-    expect(options).toEqual({ idempotencyKey: "entry-refund-reg-1" });
+    expect(options).toEqual({ idempotencyKey: "entry-refund-reg-1-10540" });
   });
 
   // Checkout omits transfer_data when STRIPE_DEV_DIRECT_CHARGE is set or the
@@ -197,6 +197,19 @@ describe("admin refund route", () => {
   });
 });
 
+describe("admin refund route: 24-hour cutoff", () => {
+  it("lets an admin refund inside 24 hours: the cutoff only limits the change-of-mind quote", async () => {
+    const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    mocks.registration.findUnique.mockResolvedValue({
+      ...confirmedRegistration,
+      event: { ...confirmedRegistration.event, startsAtUtc: soon },
+    });
+    const res = await refund();
+    expect(res.status).toBe(200);
+    expect(mocks.createRefund).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("admin refund route: team entries (#541)", () => {
   const teamEntry = { ...confirmedRegistration, teamId: "team-1" };
   const mate = (id: string, athleteName: string) => ({
@@ -215,7 +228,9 @@ describe("admin refund route: team entries (#541)", () => {
     expect((await res.json()).teamRefunded).toEqual(["reg-2"]);
 
     expect(mocks.createRefund).toHaveBeenCalledTimes(2);
-    expect(mocks.createRefund.mock.calls[1][1]).toEqual({ idempotencyKey: "entry-refund-reg-2" });
+    expect(mocks.createRefund.mock.calls[1][1]).toEqual({
+      idempotencyKey: `entry-refund-reg-2-${mocks.createRefund.mock.calls[1][0].amount}`,
+    });
     const logged = mocks.writeAuditLog.mock.calls.map(([entry]) => entry.targetId);
     expect(logged).toEqual(["reg-1", "reg-2"]);
   });
@@ -251,7 +266,24 @@ describe("admin refund route: team entries (#541)", () => {
 
     // Only the teammate is refunded: the entry itself was refunded last time.
     expect(mocks.createRefund).toHaveBeenCalledTimes(1);
-    expect(mocks.createRefund.mock.calls[0][1]).toEqual({ idempotencyKey: "entry-refund-reg-2" });
+    expect(mocks.createRefund.mock.calls[0][1]).toEqual({
+      idempotencyKey: `entry-refund-reg-2-${mocks.createRefund.mock.calls[0][0].amount}`,
+    });
+  });
+
+  it("finishes a part-done team refund inside 24 hours of the start (#609)", async () => {
+    const soon = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    mocks.registration.findUnique.mockResolvedValue({
+      ...teamEntry,
+      status: "REFUNDED",
+      event: { ...teamEntry.event, startsAtUtc: soon },
+    });
+    mocks.registration.count.mockResolvedValue(1);
+    mocks.registration.findMany.mockResolvedValue([mate("reg-2", "Sam Lee")]);
+
+    const res = await refund();
+    expect(res.status).toBe(200);
+    expect(mocks.createRefund).toHaveBeenCalledTimes(1);
   });
 
   it("still refuses a refunded entry with no teammates left to refund", async () => {

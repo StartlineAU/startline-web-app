@@ -149,13 +149,16 @@ const SECTIONS: LegalSection[] = [
             (3.5).
           </p>
           <p>
-            You ask for a refund on the Refunds page. The organiser decides on each request, usually
+            You ask for a refund on the Refunds page, for an entry that is yours or that you paid
+            for. On a group purchase the refund goes back to the card that paid, whoever asks.
+            The organiser decides on each request, usually
             within 3 business days. If the organiser does not respond in that time, Startline may
             decide instead, and Startline may also change an organiser’s decision where that is
             needed, for example to meet the Australian Consumer Law. Startline issues approved
             refunds back to your original payment method, which usually takes 5 to 10 business
-            days. Refunds under the policy cannot be requested within 24 hours of the event’s start.
-            A request the policy does not cover is up to the organiser.
+            days. The policy gives no refund within 24 hours of the event’s start, but you can still
+            ask: your rights under the Australian Consumer Law apply at any time. A request the
+            policy does not cover is up to the organiser.
           </p>
         </Clause>
         <Clause n="3.5" title="Cancelled or changed events">

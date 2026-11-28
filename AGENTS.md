@@ -311,9 +311,18 @@ is on. The same flag decides whether a MANAGER sees the in-app feed. Only an
 OWNER can change it (`PATCH /api/organiser/profile`).
 
 Each kind of notification also has its own switch on the organisation
-(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`), owner
-only as well. Off means no feed entry and no email: anything that sends one must
+(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`,
+`notifyEventFinished`), owner only as well. Off means no feed entry and no email: anything that sends one must
 check `wantsNotification` from `lib/organiser-notification-preferences.ts`.
+
+The "event finished" notice (`lib/notify-event-finished.ts`) is sent by the
+lifecycle worker, not by the bulk archive itself: each sweep claims archived
+events whose `Event.finishedNotifiedAt` is still null, so it goes out once.
+Events archived before it existed were backfilled as already told.
+
+A finished race opens the athlete's summary at `/races/[registrationId]`
+(`lib/race-summary.ts`). It is visible exactly where the race is listed on a
+profile: to its owner always, to anyone while that profile is public.
 
 The seed creates these users in Cognito, and sets one shared password for them,
 only in a pool listed in `SEED_COGNITO_WRITE_POOLS` (your own development pool,
@@ -531,17 +540,20 @@ athlete already paid against. The section always shows `ACL_REFUND_NOTE`: the
 Australian Consumer Law rows apply whatever the preset says. The event wizard
 does not collect a policy.
 
-Change-of-mind refunds stop 24 hours before the start (`refundWithinCutoff`).
-A full entitlement from a material change, and a free cancellation, are not
-change-of-mind refunds.
+Change-of-mind refunds owe nothing inside 24 hours of the start
+(`refundWithinCutoff`, applied by `changeOfMindQuote` when the athlete asks).
+The athlete can still ask: a material change or an event not delivered is owed
+at any time, and the organiser may choose goodwill. Nothing blocks issuing a
+refund inside 24 hours.
 
-**Paid refunds are a support ticket.** Activity has no refund button for a paid
-entry; it links to `/refunds?event=<id>`, which opens a `SupportTicket` and emails
-`admin@startlineau.com`. `/support` redirects there for links in old emails.
-A refund request needs a signed-in athlete with a confirmed entry of their own
-for the event (`lib/own-entry.ts`): on a group or team purchase the buyer holds
-every entry, but only their own place is theirs to ask about. One open request
-per athlete and event.
+**Paid refunds are a support ticket about one entry.** Activity has no refund
+button for a paid entry; it links to `/refunds?registration=<id>`, which opens a
+`SupportTicket` linked to that entry (`registrationId`), takes the policy quote
+and moves the entry to `REFUND_REQUESTED`. `/support` redirects there for links
+in old emails, keeping `registration` and `event`. Either the athlete whose
+place it is or the buyer who paid for it can ask (`canRequestRefund` in
+`lib/own-entry.ts`); the refund goes back to the paying card either way. A
+request that names no entry is refused. One open request per entry.
 
 A paid entry's confirmation email also carries a "Request a refund" link
 (`/refunds?event=…&t=…`), for an athlete entered under an address they don't

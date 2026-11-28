@@ -15,14 +15,21 @@ const labelCls = "font-headline font-bold text-[10.5px] uppercase tracking-[0.15
 
 /** The slice of `/api/user/registrations` this form reads. */
 type Entry = {
+  id: string;
   eventId: string;
   status: string;
+  athleteName: string;
   paidCents: number;
-  /** Not a place bought for someone else on a group purchase. */
-  ownEntry: boolean;
+  ticketCents: number;
+  /** What the change-of-mind policy returns today (lib/refund-policy.ts). */
+  refundAmountCents: number;
+  /** The athlete whose place it is, or the buyer who paid for it. */
+  canRefund: boolean;
   eventCancelled: boolean;
   event: { title: string; eventDate: string; city: string | null; state: string | null };
 };
+
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 function formatEventDate(isoDate: string) {
   const d = new Date(`${isoDate.slice(0, 10)}T00:00:00Z`);
@@ -36,10 +43,10 @@ function formatEventDate(isoDate: string) {
  * flight should not be raised twice.
  */
 function ineligibleReason(entries: Entry[]): string | null {
-  if (!entries.some((e) => e.ownEntry)) {
-    return "You can only request a refund for your own entry. Anyone you entered on a group ticket asks for theirs from their own account.";
+  if (!entries.some((e) => e.canRefund)) {
+    return "You can only request a refund for your own entry, or one you paid for.";
   }
-  entries = entries.filter((e) => e.ownEntry);
+  entries = entries.filter((e) => e.canRefund);
   if (entries.some((e) => e.eventCancelled)) {
     return "This event was cancelled, so everything you paid is being refunded automatically.";
   }
@@ -55,25 +62,31 @@ function ineligibleReason(entries: Entry[]): string | null {
 /** An entry the page verified from a confirmation email's refund link. */
 export interface LinkedEntry {
   token: string;
+  registrationId: string;
   athleteName: string;
   athleteEmail: string;
   event: Entry["event"] & { id: string };
 }
 
-function optionFor(eventId: string, event: Entry["event"]): SelectOption {
+/** One option per entry: a buyer can hold several places at one event. */
+function optionFor(registrationId: string, athleteName: string, event: Entry["event"]): SelectOption {
   const place = [event.city, event.state].filter(Boolean).join(", ");
   return {
-    value: eventId,
+    value: registrationId,
     label: event.title,
-    hint: [formatEventDate(event.eventDate), place].filter(Boolean).join(" · "),
+    hint: [athleteName, formatEventDate(event.eventDate), place].filter(Boolean).join(" · "),
   };
 }
 
 export default function RefundForm({
+  initialRegistrationId,
   initialEventId,
   linkedEntry,
   linkExpired,
 }: {
+  /** Activity's "Request a refund" link names the entry. */
+  initialRegistrationId: string | null;
+  /** Older links name only the event. */
   initialEventId: string | null;
   /**
    * The entry a confirmation email's link stands for. It counts as the
@@ -86,6 +99,7 @@ export default function RefundForm({
   const { status, user } = useAuthContext();
   // Captured once: opening the sign-in modal strips the query string, and the
   // event the athlete came for should still be chosen after they sign in.
+  const [wantedRegistrationId] = useState(initialRegistrationId);
   const [wantedEventId] = useState(initialEventId);
   const [linked] = useState(linkedEntry);
 
@@ -96,7 +110,7 @@ export default function RefundForm({
   const name = nameInput ?? linked?.athleteName ?? "";
   const [emailInput, setEmail] = useState<string | null>(null);
   const email = emailInput ?? user?.email ?? linked?.athleteEmail ?? "";
-  const [pickedEventId, setEventId] = useState<string | null>(null);
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -116,32 +130,46 @@ export default function RefundForm({
     return () => { cancelled = true; };
   }, [status]);
 
-  // Only the athlete's own places, one option per event. A group purchase
-  // lists everyone the buyer entered, but each person asks for their own refund.
+  // Every paid place the visitor may ask about: their own, and any they bought
+  // for someone else on a group purchase (the refund goes to the buyer's card).
+  const refundable = useMemo(
+    () => (entries ?? []).filter(
+      (r) => r.canRefund && r.status === "CONFIRMED" && r.paidCents > 0 && !r.eventCancelled,
+    ),
+    [entries],
+  );
   const options = useMemo<SelectOption[]>(() => {
-    const seen = new Set<string>();
     const out: SelectOption[] = [];
-    if (linked) {
-      seen.add(linked.event.id);
-      out.push(optionFor(linked.event.id, linked.event));
-    }
-    for (const r of entries ?? []) {
-      if (!r.ownEntry || r.status !== "CONFIRMED" || r.paidCents === 0 || r.eventCancelled || seen.has(r.eventId)) continue;
-      seen.add(r.eventId);
-      out.push(optionFor(r.eventId, r.event));
+    if (linked) out.push(optionFor(linked.registrationId, linked.athleteName, linked.event));
+    for (const r of refundable) {
+      if (r.id === linked?.registrationId) continue;
+      out.push(optionFor(r.id, r.athleteName, r.event));
     }
     return out;
-  }, [entries, linked]);
+  }, [refundable, linked]);
 
-  // Prefilled from Activity, if that event can be refunded, until the athlete picks another.
-  const eventId =
-    pickedEventId ?? (wantedEventId && options.some((o) => o.value === wantedEventId) ? wantedEventId : "");
+  // Prefilled from Activity or an email, until the athlete picks another. An
+  // event-only link picks the event's entry when there is just one.
+  const preselected = useMemo(() => {
+    if (wantedRegistrationId && options.some((o) => o.value === wantedRegistrationId)) return wantedRegistrationId;
+    if (linked) return linked.registrationId;
+    if (wantedEventId) {
+      const forEvent = refundable.filter((r) => r.eventId === wantedEventId);
+      if (forEvent.length === 1) return forEvent[0].id;
+    }
+    return "";
+  }, [wantedRegistrationId, wantedEventId, options, linked, refundable]);
+  const registrationId = pickedId ?? preselected;
+  const picked = refundable.find((r) => r.id === registrationId) ?? null;
+  const viaLink = !!linked && registrationId === linked.registrationId;
 
   const wantedNotice = useMemo(() => {
-    if (!wantedEventId || !entries || options.some((o) => o.value === wantedEventId)) return null;
-    const forEvent = entries.filter((e) => e.eventId === wantedEventId);
-    return forEvent.length ? ineligibleReason(forEvent) : null;
-  }, [wantedEventId, entries, options]);
+    if (!entries || preselected) return null;
+    const forWanted = entries.filter((e) =>
+      wantedRegistrationId ? e.id === wantedRegistrationId : wantedEventId ? e.eventId === wantedEventId : false,
+    );
+    return forWanted.length ? ineligibleReason(forWanted) : null;
+  }, [entries, preselected, wantedRegistrationId, wantedEventId]);
 
   const expiredNotice = linkExpired
     ? "That refund link no longer matches its entry, usually because the entry's details changed."
@@ -185,7 +213,7 @@ export default function RefundForm({
       <div className="rounded-xl border border-primary/30 bg-primary/10 p-6">
         <h2 className="font-headline text-[20px] font-black uppercase tracking-wide text-light">Request sent</h2>
         <p className="text-[14px] text-muted-light mt-2 leading-relaxed">
-          Your reference is <span className="text-light">{ticketId.slice(0, 8)}</span>. Expect a response at {linked && eventId === linked.event.id ? linked.athleteEmail : email} within 3 business days.
+          Your reference is <span className="text-light">{ticketId.slice(0, 8)}</span>. Expect a response at {viaLink && linked ? linked.athleteEmail : email} within 3 business days.
         </p>
       </div>
     );
@@ -211,8 +239,8 @@ export default function RefundForm({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!eventId) {
-      setError("Choose the event you want refunded.");
+    if (!registrationId) {
+      setError("Choose the entry you want refunded.");
       return;
     }
     setSubmitting(true);
@@ -225,9 +253,9 @@ export default function RefundForm({
           name: name.trim(),
           email: email.trim(),
           requestType: "refund",
-          eventId,
+          registrationId,
           // The email link proves the entry is theirs when their account cannot.
-          refundToken: linked && eventId === linked.event.id ? linked.token : undefined,
+          refundToken: viaLink && linked ? linked.token : undefined,
           reason: reason.trim(),
           turnstileToken: turnstileToken ?? undefined,
         }),
@@ -248,19 +276,25 @@ export default function RefundForm({
   return (
     <form onSubmit={submit} className="grid gap-4">
       <div className="grid gap-1.5">
-        <span className={labelCls}>Event</span>
+        <span className={labelCls}>Entry</span>
         <SelectMenu
-          id="refund-event"
+          id="refund-entry"
           size="sm"
-          ariaLabel="Event"
-          placeholder="Choose an event you entered"
-          value={eventId}
-          onChange={(v) => { setEventId(v); setError(""); }}
+          ariaLabel="Entry"
+          placeholder="Choose an entry"
+          value={registrationId}
+          onChange={(v) => { setPickedId(v); setError(""); }}
           options={options}
-          invalid={!!error && !eventId}
+          invalid={!!error && !registrationId}
         />
         {(wantedNotice ?? expiredNotice) && (
           <p className="text-[12.5px] text-muted-dark">{wantedNotice ?? expiredNotice}</p>
+        )}
+        {picked && (
+          <p data-testid="refund-quote" className="text-[12.5px] text-muted-light">
+            Under the refund policy today you would get {money(picked.refundAmountCents)} of the{" "}
+            {money(picked.ticketCents)} ticket price. You paid {money(picked.paidCents)} in all.
+          </p>
         )}
       </div>
       <label className="grid gap-1.5">
@@ -270,7 +304,7 @@ export default function RefundForm({
       <label className="grid gap-1.5">
         <span className={labelCls}>Email</span>
         {/* A request from an email link is recorded against the entry's own address. */}
-        {linked && eventId === linked.event.id ? (
+        {viaLink && linked ? (
           <input type="email" value={linked.athleteEmail} readOnly aria-readonly="true" className={`${inputCls} text-muted`} />
         ) : (
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
@@ -285,7 +319,7 @@ export default function RefundForm({
       )}
       {error && <p className="text-[13px] text-red-300">{error}</p>}
       <p className="text-[12px] text-muted-dark leading-relaxed">
-        Refunds are not available within 24 hours of the event start. Australian Consumer Law rights still apply if the event is cancelled or significantly changed.
+        The refund policy gives nothing back within 24 hours of the event start, and never refunds the booking fee. Australian Consumer Law rights still apply at any time if the event is cancelled or significantly changed.
       </p>
       <button type="submit" disabled={submitting} className="inline-flex items-center justify-center gap-2 h-12 rounded-xl bg-machined text-dark font-headline text-[13px] font-black uppercase tracking-[0.12em] shadow-machined disabled:opacity-50">
         <Send className="w-4 h-4" />

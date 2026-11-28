@@ -50,3 +50,15 @@ describe("countsAgainstCapacity", () => {
     expect(CAPACITY_COUNTING_STATUSES).toEqual(["CONFIRMED"]);
   });
 });
+
+describe("HOLDS_PLACE_WHERE (#492)", () => {
+  it("counts confirmed entries and paid entries whose refund is undecided or not yet issued", async () => {
+    const { HOLDS_PLACE_WHERE } = await import("@/lib/registration-status");
+    expect(HOLDS_PLACE_WHERE).toEqual({
+      OR: [
+        { status: { in: ["CONFIRMED"] } },
+        { status: "REFUND_REQUESTED", supportTickets: { some: { status: { in: ["OPEN", "APPROVED"] } } } },
+      ],
+    });
+  });
+});

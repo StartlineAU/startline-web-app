@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { idParams } from "@/lib/schemas";
 import { ACTIVE_ORGANISER_WHERE, registrationOpenAt } from "@/lib/event-lifecycle";
 import { confirmedUnitsByWave, teamSizeOf } from "@/lib/team-tickets";
+import { HOLDS_PLACE_WHERE } from "@/lib/registration-status";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,8 @@ export async function GET(
     return NextResponse.json({ error: "Not available." }, { status: 404 });
   }
 
-  const confirmedWhere = { eventId: id, status: "CONFIRMED" as const };
+  // Pending refund requests still hold their place (lib/registration-status.ts).
+  const confirmedWhere = { eventId: id, ...HOLDS_PLACE_WHERE };
   const [confirmed, grouped] = await Promise.all([
     prisma.registration.count({ where: confirmedWhere }),
     prisma.registration.groupBy({

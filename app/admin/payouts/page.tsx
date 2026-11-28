@@ -25,6 +25,7 @@ interface PayoutEvent {
   deductedCents: number;
   /** A card dispute is open, so the payout is held. */
   onHold: boolean;
+  holdReason: "dispute" | "refunds" | null;
 }
 
 interface PayoutAttention {
@@ -278,7 +279,7 @@ export default function AdminPayoutsPage() {
                   {event.onHold && (
                     <p className="inline-flex items-center gap-1.5 font-headline text-[11px] uppercase tracking-widest text-red-300 mt-0.5">
                       <AlertTriangle className="w-3.5 h-3.5" />
-                      On hold: card dispute open
+                      {event.holdReason === "refunds" ? "On hold: refund requests undecided" : "On hold: card dispute open"}
                     </p>
                   )}
                 </div>

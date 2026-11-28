@@ -3,6 +3,7 @@ import { renderEmail, type RenderedEmail } from "@/emails/render";
 import { RegistrationConfirmationEmail } from "@/emails/registration-confirmation";
 import { EventApprovedEmail } from "@/emails/event-approved";
 import { EventRejectedEmail } from "@/emails/event-rejected";
+import { EventFinishedEmail } from "@/emails/event-finished";
 import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
 import { ReviewReportedEmail } from "@/emails/review-reported";
 import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
@@ -13,6 +14,7 @@ import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review"
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
 import { RefundOverrideEmail } from "@/emails/refund-override";
+import { RefundDecisionEmail, type RefundDecisionOutcome } from "@/emails/refund-decision";
 import { EventCancelledEmail } from "@/emails/event-cancelled";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
@@ -158,6 +160,34 @@ export async function buildEventApprovedEmail(eventTitle: string, { siteUrl = SI
 export async function sendEventApprovedEmail(email: string | string[], eventTitle: string) {
   if (!getResend()) return;
   await sendOne(email, await buildEventApprovedEmail(eventTitle));
+}
+
+// ── Event finished (organisers, #561) ─────────────────────────────────────────
+export interface EventFinishedEmailData {
+  eventId: string;
+  eventTitle: string;
+  entries: number;
+  checkedIn: number;
+  withResults: number;
+}
+
+export async function buildEventFinishedEmail(
+  { eventId, ...data }: EventFinishedEmailData,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventFinishedEmail({
+      ...data,
+      // A finished event's dashboard opens on results.
+      dashboardUrl: organiserUrl(`/organiser/events/${encodeURIComponent(eventId)}/dashboard`, siteUrl),
+    }),
+  );
+  return { subject: `"${data.eventTitle}" has finished`, ...rendered };
+}
+
+export async function sendEventFinishedEmail(email: string | string[], data: EventFinishedEmailData) {
+  if (!getResend()) return;
+  await sendOne(email, await buildEventFinishedEmail(data));
 }
 
 export async function buildEventRejectedEmail(
@@ -566,6 +596,62 @@ export async function buildRefundRequestEmail(data: RefundRequestEmailData): Pro
 export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
   if (!getResend()) return;
   await sendOne(to, await buildRefundRequestEmail(data));
+}
+
+// ── Refund request outcome (athlete) ──────────────────────────────────────────
+// Where the athlete's own refund request has got to (#492). Always sent: the
+// athlete asked, so they hear back whatever the organisation's settings.
+export interface RefundDecisionEmailData {
+  outcome: RefundDecisionOutcome;
+  athleteName?: string | null;
+  eventTitle: string;
+  organiserName: string;
+  /** The refund issued, or the policy quote on a request. Null to leave it out. */
+  amountCents: number | null;
+  full: boolean;
+  reasonLabel?: string | null;
+  note?: string | null;
+  respondBy?: string | null;
+  /** Who decided: the organiser (default) or Startline. */
+  decidedBy?: "organiser" | "startline";
+  ticketId: string;
+}
+
+const REFUND_DECISION_SUBJECT: Record<RefundDecisionOutcome, (title: string) => string> = {
+  requested: (t) => `Refund request received: ${t}`,
+  refunded: (t) => `Your refund is on its way: ${t}`,
+  approved: (t) => `Refund approved: ${t}`,
+  declined: (t) => `Refund request declined: ${t}`,
+};
+
+export async function buildRefundDecisionEmail(
+  data: RefundDecisionEmailData,
+  { siteUrl = SITE }: { siteUrl?: string } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    RefundDecisionEmail({
+      outcome: data.outcome,
+      greeting: firstNameGreeting(data.athleteName),
+      eventTitle: data.eventTitle,
+      organiserName: data.organiserName,
+      amount: data.amountCents != null ? `$${(data.amountCents / 100).toFixed(2)}` : null,
+      full: data.full,
+      reasonLabel: data.reasonLabel ?? null,
+      note: data.note ?? null,
+      respondBy: data.respondBy ?? null,
+      decidedBy: data.decidedBy ?? "organiser",
+      ticketRef: data.ticketId.slice(0, 8),
+      activityUrl: `${siteUrl}/activity`,
+      // "Need help from Startline?" is a question, not a new refund request.
+      supportUrl: `${siteUrl}/contact`,
+    }),
+  );
+  return { subject: REFUND_DECISION_SUBJECT[data.outcome](data.eventTitle), ...rendered };
+}
+
+export async function sendRefundDecisionEmail(to: string, data: RefundDecisionEmailData) {
+  if (!to || !getResend()) return;
+  await sendOne(to, await buildRefundDecisionEmail(data));
 }
 
 // ── Refund override (organiser) ───────────────────────────────────────────────

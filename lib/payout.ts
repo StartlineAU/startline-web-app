@@ -79,8 +79,9 @@ export type PayoutEligibleEvent = {
   netCents: number;
   /** Taken off for refunds and disputes that happened in Stripe (#550). */
   deductedCents: number;
-  /** A card dispute is still open, so the payout cannot run yet. */
+  /** A card dispute is open or a refund request is undecided, so the payout cannot run yet. */
   onHold: boolean;
+  holdReason: "dispute" | "refunds" | null;
 };
 
 /** The part of a PaymentAdjustment (lib/payment-adjustments.ts) a payout reads. */
@@ -154,6 +155,28 @@ export function eventPayoutCents(
 ): number {
   const confirmed = registrations.filter((r) => (r.status ?? "CONFIRMED") === "CONFIRMED");
   return Math.max(0, registrationsPayoutCents(confirmed) - adjustmentDeductionCents(adjustments));
+}
+
+/**
+ * Refund requests on an event that could still move money: not yet decided, or
+ * approved and not yet issued. An entry waiting on one holds its place but is
+ * not CONFIRMED, so paying out now would either leave it out for good (declined
+ * later) or pay out money that is about to go back (approved later). The payout
+ * waits instead, like it does for an open dispute.
+ */
+const PENDING_REFUND_TICKETS = {
+  requestType: "refund",
+  status: { in: ["OPEN" as const, "APPROVED" as const] },
+};
+
+async function pendingRefundsByEvent(eventIds: string[]): Promise<Map<string, number>> {
+  if (eventIds.length === 0) return new Map();
+  const rows = await prisma.supportTicket.groupBy({
+    by: ["eventId"],
+    where: { ...PENDING_REFUND_TICKETS, eventId: { in: eventIds } },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((r) => [r.eventId as string, r._count._all]));
 }
 
 /** Entries the payout reads: the confirmed ones. */
@@ -234,6 +257,7 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
     },
   });
 
+  const pendingRefunds = await pendingRefundsByEvent(events.map((e) => e.id));
   const eligible: PayoutEligibleEvent[] = [];
   for (const event of events) {
     const status = event.payoutOperation?.status;
@@ -253,7 +277,14 @@ export async function getPayoutEligibleEvents(): Promise<PayoutEligibleEvent[]> 
       organiser: event.organiser,
       netCents,
       deductedCents: adjustmentDeductionCents(adjustments),
-      onHold: hasOpenDispute(adjustments),
+      ...(() => {
+        const holdReason = hasOpenDispute(adjustments)
+          ? ("dispute" as const)
+          : (pendingRefunds.get(event.id) ?? 0) > 0
+            ? ("refunds" as const)
+            : null;
+        return { onHold: holdReason != null, holdReason };
+      })(),
     });
   }
   return eligible;
@@ -349,6 +380,15 @@ export async function runPayoutForEvent(eventId: string): Promise<PayoutResult> 
       "A card dispute on this event is still open. The payout is held until Stripe closes it.",
       409,
       "DISPUTE_OPEN",
+    );
+  }
+
+  const pending = (await pendingRefundsByEvent([event.id])).get(event.id) ?? 0;
+  if (pending > 0) {
+    throw new PayoutError(
+      `${pending} refund request${pending === 1 ? " is" : "s are"} still waiting on this event. The payout is held until ${pending === 1 ? "it is" : "they are"} decided and issued.`,
+      409,
+      "REFUNDS_PENDING",
     );
   }
 

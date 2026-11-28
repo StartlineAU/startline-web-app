@@ -31,3 +31,15 @@ export function ownEntryWhere(account: { sub: string; email: string }): Prisma.R
     ],
   };
 }
+
+/**
+ * Who may ask for a refund on an entry: the athlete whose place it is, or the
+ * account that paid for it. On a group purchase the buyer can act for the
+ * places they bought, because the money goes back to their card whoever asks.
+ */
+export function canRequestRefund(
+  entry: { userId: string | null; athleteUserId: string | null; athleteEmail: string; detailsPending: boolean },
+  account: { sub: string; email: string },
+): boolean {
+  return entry.userId === account.sub || isOwnEntry(entry, account);
+}

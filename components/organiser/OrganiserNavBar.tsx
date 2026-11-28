@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Building2, Bell,
   Check, TriangleAlert, Menu, X, ChevronDown, ChevronRight,
-  UserRound, RefreshCw, Ban, Undo2,
+  UserRound, RefreshCw, Ban, Undo2, Flag,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
@@ -30,7 +30,7 @@ const ORGANISER_NAV: NavItem[] = [
 
 interface Notification {
   id: string;
-  type: "EVENT_APPROVED" | "EVENT_REJECTED" | "NEW_REGISTRATION" | "REFUND_TICKET_OVERRIDE" | "EVENT_CANCELLED";
+  type: "EVENT_APPROVED" | "EVENT_REJECTED" | "NEW_REGISTRATION" | "REFUND_TICKET_OVERRIDE" | "EVENT_CANCELLED" | "EVENT_FINISHED";
   title: string;
   body: string;
   eventId: string | null;
@@ -60,6 +60,7 @@ const NOTIF_STYLE: Record<Notification["type"], { Icon: LucideIcon; tone: string
   NEW_REGISTRATION: { Icon: UserRound,     tone: "bg-white/[0.06] text-white/70" },
   REFUND_TICKET_OVERRIDE: { Icon: Undo2,   tone: "bg-amber-400/10 text-amber-300" },
   EVENT_CANCELLED:  { Icon: Ban,           tone: "bg-red-400/10 text-red-300"    },
+  EVENT_FINISHED:   { Icon: Flag,          tone: "bg-primary/10 text-primary"    },
 };
 
 /** A type this build does not know yet (a newer server) still renders. */

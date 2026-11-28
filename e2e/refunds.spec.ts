@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // Refunds have their own page (it was Support). Only a signed-in athlete can
-// pick an event, because the list is their own entries.
+// pick an entry, because the list is the places they raced or paid for.
 
 test("the old Support address lands on Refunds and keeps the event", async ({ page }) => {
   await page.goto("/support?event=seed-event-017");
@@ -9,10 +9,15 @@ test("the old Support address lands on Refunds and keeps the event", async ({ pa
   await expect(page.getByRole("heading", { name: "Request a refund" })).toBeVisible();
 });
 
-test("a signed-out visitor is asked to sign in before choosing an event", async ({ page }) => {
+test("the old Support address keeps the entry an Activity link named", async ({ page }) => {
+  await page.goto("/support?registration=e2e-some-entry");
+  await expect(page).toHaveURL(/\/refunds\?registration=e2e-some-entry$/);
+});
+
+test("a signed-out visitor is asked to sign in before choosing an entry", async ({ page }) => {
   await page.goto("/refunds");
   await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Event" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Entry" })).toHaveCount(0);
 });
 
 test("the footer links to Refunds", async ({ page }) => {

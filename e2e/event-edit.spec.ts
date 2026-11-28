@@ -211,7 +211,7 @@ test.describe("editing a published event", () => {
       .getByTestId("event-card")
       .click();
     const ticket = page.getByTestId("ticket-dialog");
-    await expect(ticket.getByRole("link", { name: "Request a refund" })).toHaveAttribute("href", `/refunds?event=${EVENT_ID}`);
+    await expect(ticket.getByRole("link", { name: "Request a refund" })).toHaveAttribute("href", `/refunds?registration=${HARPER_ID}`);
     await expect(ticket.getByRole("button", { name: /Withdraw/ })).toHaveCount(0);
 
     // The old route refuses a paid entry.
@@ -219,10 +219,10 @@ test.describe("editing a published event", () => {
     expect(refused.status()).toBe(409);
     expect((await prisma.registration.findUnique({ where: { id: HARPER_ID } }))?.status).toBe("CONFIRMED");
 
-    // The link opens the refund form with this event already chosen.
+    // The link opens the refund form with this entry already chosen.
     await ticket.getByRole("link", { name: "Request a refund" }).click();
     await expect(page).toHaveURL(/\/refunds/);
-    await expect(page.getByRole("combobox", { name: "Event" })).toContainText("E2E Edit Refunds 10K");
+    await expect(page.getByRole("combobox", { name: "Entry" })).toContainText("E2E Edit Refunds 10K");
   });
 
   test("an event that is underway stays locked", async ({ page }) => {

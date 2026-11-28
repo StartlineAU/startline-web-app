@@ -521,6 +521,7 @@ export default function ActivityPage() {
               onProfile: r.onProfile === true,
               canAddToProfile: r.canAddToProfile === true,
               ownEntry: r.ownEntry === true,
+              canRefund: r.canRefund === true,
             };
             (meta[r.eventId] ??= []).push(entry);
             regIds.push(r.eventId);

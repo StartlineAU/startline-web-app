@@ -34,6 +34,8 @@ export type RegMeta = {
    * a group or team purchase. Only their own entry can be refunded.
    */
   ownEntry?: boolean;
+  /** The athlete or the buyer of this place, so they can ask for its refund. */
+  canRefund?: boolean;
   /**
    * Someone else entered the athlete under their email. Race history is
    * opt-in (#598), so Activity offers it rather than adding it for them.
@@ -93,9 +95,13 @@ export function withdrawnCopy(meta: RegMeta): { heading: string; detail: string 
   if (freeEntry) {
     return { heading: "You withdrew from this event.", detail: "Your spot has been released.", refundIssued };
   }
+  // A paid entry waiting on a refund request (#492). The place is still held:
+  // a declined request puts the entry back as it was.
   return {
-    heading: "You withdrew.",
-    detail: "Your refund request is awaiting the organiser’s decision.",
+    heading: "Refund requested.",
+    detail: meta.refundAmountCents > 0
+      ? `The organiser is deciding. Under the refund policy you would get back $${(meta.refundAmountCents / 100).toFixed(2)}. We'll email you either way.`
+      : "The organiser is deciding. We'll email you either way.",
     refundIssued,
   };
 }

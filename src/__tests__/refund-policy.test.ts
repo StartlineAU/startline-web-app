@@ -246,3 +246,14 @@ describe("DEFAULT_REFUND_TIERS", () => {
     expect(refundPercentFor(DEFAULT_REFUND_TIERS, 5)).toBe(0);
   });
 });
+
+describe("policyToday", () => {
+  it("counts the date in Sydney, not UTC", async () => {
+    const { policyToday } = await import("@/lib/refund-policy");
+    // 8am AEST on 2 June is still 1 June in UTC.
+    expect(policyToday(new Date("2026-06-01T22:00:00Z"))).toBe("2026-06-02");
+    // 8am AEDT on 2 December is still 1 December in UTC.
+    expect(policyToday(new Date("2026-12-01T21:00:00Z"))).toBe("2026-12-02");
+    expect(policyToday(new Date("2026-06-01T10:00:00Z"))).toBe("2026-06-01");
+  });
+});
