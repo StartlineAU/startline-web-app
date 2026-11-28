@@ -271,14 +271,21 @@ describe("organiser invitation", () => {
 
 describe("event cancelled", () => {
   it("tells a paid entrant what is coming back", async () => {
-    const email = await buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: null, refundCents: 5495, reason: null });
+    const email = await buildEventCancelledEmail({ eventId: "evt-1", eventTitle: "Harbour 10K", eventDate: null, refundCents: 5495, reason: null });
     expect(email.text).toContain("$54.95");
     expect(email.text).toMatch(/refund/i);
   });
 
   it("does not mention a refund to a free entrant", async () => {
-    const email = await buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: null, refundCents: 0, reason: null });
+    const email = await buildEventCancelledEmail({ eventId: "evt-1", eventTitle: "Harbour 10K", eventDate: null, refundCents: 0, reason: null });
     expect(email.text).toContain("your entry has been cancelled");
     expect(email.text).not.toMatch(/refund/i);
+  });
+
+  it("links to the cancelled event, not the Activity page (#596)", async () => {
+    const email = await buildEventCancelledEmail({ eventId: "evt 1", eventTitle: "Harbour 10K", eventDate: null, refundCents: 5495, reason: null });
+    expect(email.html).toContain("/events/evt%201");
+    expect(email.html).not.toContain("/activity");
+    expect(email.text).toMatch(/view cancelled event/i);
   });
 });
