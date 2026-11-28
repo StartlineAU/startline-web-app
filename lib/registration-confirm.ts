@@ -7,6 +7,7 @@ import { googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
 import { lockEventEntries } from "@/lib/event-entry-lock";
+import { HOLDS_PLACE_WHERE } from "@/lib/registration-status";
 import {
   createEmptyParticipant,
   expandCompactParticipant,
@@ -356,12 +357,12 @@ export async function insertConfirmedRegistrations(opts: {
     const needsCapCheck = event.cap != null;
     const needsWaveCheck = hasCappedWave(waves, usedLabels);
     const confirmedTotal = needsCapCheck
-      ? await tx.registration.count({ where: { eventId: event.id, status: "CONFIRMED" } })
+      ? await tx.registration.count({ where: { eventId: event.id, ...HOLDS_PLACE_WHERE } })
       : 0;
     const confirmedRows = needsWaveCheck
       ? await tx.registration.groupBy({
           by: ["waveLabel", "teamId"],
-          where: { eventId: event.id, status: "CONFIRMED" },
+          where: { eventId: event.id, ...HOLDS_PLACE_WHERE },
           _count: { _all: true },
         })
       : [];

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { teammatesOf } from "@/lib/team-entries";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
-import { CAPACITY_COUNTING_STATUSES } from "@/lib/registration-status";
+import { HOLDS_PLACE_WHERE } from "@/lib/registration-status";
 import { idParams } from "@/lib/schemas";
 import { z } from "zod";
 import { RACE_FEATURES_SELECT, organiserSeesWaves } from "@/lib/race-features";
@@ -89,7 +89,7 @@ export async function POST(
   let overCapacity = false;
   if (destWaveId !== null) {
     assigned = await prisma.registration.count({
-      where: { eventId: id, startWaveId: destWaveId, status: { in: CAPACITY_COUNTING_STATUSES } },
+      where: { eventId: id, startWaveId: destWaveId, ...HOLDS_PLACE_WHERE },
     });
     overCapacity = destCapacity != null && assigned > destCapacity;
   }

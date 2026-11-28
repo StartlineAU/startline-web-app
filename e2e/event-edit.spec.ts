@@ -210,7 +210,7 @@ test.describe("editing a published event", () => {
       .getByTestId("event-card")
       .click();
     const ticket = page.getByTestId("ticket-dialog");
-    await expect(ticket.getByRole("link", { name: "Request a refund" })).toHaveAttribute("href", "/support");
+    await expect(ticket.getByRole("link", { name: "Request a refund" })).toHaveAttribute("href", `/support?registration=${HARPER_ID}`);
     await expect(ticket.getByRole("button", { name: /Withdraw/ })).toHaveCount(0);
 
     // The old route refuses a paid entry.

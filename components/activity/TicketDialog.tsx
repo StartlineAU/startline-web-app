@@ -324,7 +324,7 @@ function EntryRow({
             </button>
           ) : (
             <Link
-              href="/support"
+              href={`/support?registration=${meta.id}`}
               className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-light transition-colors"
             >
               Request a refund

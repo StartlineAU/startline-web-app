@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { CAPACITY_COUNTING_STATUSES } from "@/lib/registration-status";
+import { HOLDS_PLACE_WHERE } from "@/lib/registration-status";
 import type { WaveDef } from "@/lib/wave-assignment";
 
 export interface StartWaveWithCount extends WaveDef {
@@ -56,7 +56,7 @@ export async function wavesWithCounts(eventId: string): Promise<StartWaveWithCou
     prisma.startWave.findMany({ where: { eventId }, orderBy: { sortOrder: "asc" } }),
     prisma.registration.groupBy({
       by: ["startWaveId"],
-      where: { eventId, status: { in: CAPACITY_COUNTING_STATUSES } },
+      where: { eventId, ...HOLDS_PLACE_WHERE },
       _count: { _all: true },
     }),
   ]);

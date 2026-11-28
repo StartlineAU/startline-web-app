@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   notificationCreate: vi.fn(),
   retrievePaymentIntent: vi.fn(),
   createRefund: vi.fn(),
+  listRefunds: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -16,7 +17,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/stripe", () => ({
   getStripe: () => ({
     paymentIntents: { retrieve: mocks.retrievePaymentIntent },
-    refunds: { create: mocks.createRefund },
+    refunds: { create: mocks.createRefund, list: mocks.listRefunds },
   }),
 }));
 
@@ -48,11 +49,36 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   mocks.createRefund.mockResolvedValue({ id: "re_1" });
+  mocks.listRefunds.mockResolvedValue({ data: [] });
   mocks.notificationCreate.mockResolvedValue({});
   mocks.registrationUpdate.mockResolvedValue({ count: 1 });
 });
 
 describe("issueEntryRefund — the reviewed policy refund", () => {
+  it("reuses a refund an earlier attempt already made, at the amount Stripe holds", async () => {
+    mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: charge(true) });
+    // A $50 refund reached Stripe, then the process died before recording it.
+    // The entry has since been re-approved as a full refund.
+    mocks.listRefunds.mockResolvedValue({
+      data: [
+        { id: "re_other", amount: 999, status: "succeeded", metadata: { registrationId: "reg-9", reason: "entry_refund" } },
+        { id: "re_failed", amount: 5000, status: "failed", metadata: { registrationId: "reg-1", reason: "entry_refund" } },
+        { id: "re_early", amount: 5000, status: "succeeded", metadata: { registrationId: "reg-1", reason: "entry_refund" } },
+      ],
+    });
+
+    const result = await issueEntryRefund(entry);
+
+    expect(mocks.listRefunds).toHaveBeenCalledWith({ payment_intent: "pi_1", limit: 100 });
+    expect(mocks.createRefund).not.toHaveBeenCalled();
+    expect(result).toEqual({ method: "stripe", refundId: "re_early", refundCents: 5000 });
+    expect(mocks.registrationUpdate.mock.calls[0][0].data).toMatchObject({
+      status: "REFUNDED",
+      stripeRefundId: "re_early",
+      refundAmountCents: 5000,
+    });
+  });
+
   it("refunds the frozen amount, reverses the transfer and keeps the booking fee", async () => {
     mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: charge(true) });
 
@@ -62,7 +88,7 @@ describe("issueEntryRefund — the reviewed policy refund", () => {
       charge: "ch_1", amount: 10540, reverse_transfer: true, refund_application_fee: false,
       metadata: { registrationId: "reg-1", reason: "entry_refund" },
     });
-    expect(mocks.createRefund.mock.calls[0][1]).toEqual({ idempotencyKey: "entry-refund-reg-1" });
+    expect(mocks.createRefund.mock.calls[0][1]).toEqual({ idempotencyKey: "entry-refund-reg-1-10540" });
     expect(mocks.registrationUpdate.mock.calls[0][0].data).toMatchObject({
       status: "REFUNDED", stripeRefundId: "re_1", refundAmountCents: 10540,
     });

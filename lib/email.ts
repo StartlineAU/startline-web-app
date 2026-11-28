@@ -14,6 +14,7 @@ import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review"
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
 import { RefundOverrideEmail } from "@/emails/refund-override";
+import { RefundDecisionEmail, type RefundDecisionOutcome } from "@/emails/refund-decision";
 import { EventCancelledEmail } from "@/emails/event-cancelled";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
@@ -600,6 +601,61 @@ export async function buildRefundRequestEmail(data: RefundRequestEmailData): Pro
 export async function sendRefundRequestEmail(to: string, data: RefundRequestEmailData) {
   if (!getResend()) return;
   await sendOne(to, await buildRefundRequestEmail(data));
+}
+
+// ── Refund request outcome (athlete) ──────────────────────────────────────────
+// Where the athlete's own refund request has got to (#492). Always sent: the
+// athlete asked, so they hear back whatever the organisation's settings.
+export interface RefundDecisionEmailData {
+  outcome: RefundDecisionOutcome;
+  athleteName?: string | null;
+  eventTitle: string;
+  organiserName: string;
+  /** The refund issued, or the policy quote on a request. Null to leave it out. */
+  amountCents: number | null;
+  full: boolean;
+  reasonLabel?: string | null;
+  note?: string | null;
+  respondBy?: string | null;
+  /** Who decided: the organiser (default) or Startline. */
+  decidedBy?: "organiser" | "startline";
+  ticketId: string;
+}
+
+const REFUND_DECISION_SUBJECT: Record<RefundDecisionOutcome, (title: string) => string> = {
+  requested: (t) => `Refund request received: ${t}`,
+  refunded: (t) => `Your refund is on its way: ${t}`,
+  approved: (t) => `Refund approved: ${t}`,
+  declined: (t) => `Refund request declined: ${t}`,
+};
+
+export async function buildRefundDecisionEmail(
+  data: RefundDecisionEmailData,
+  { siteUrl = SITE }: { siteUrl?: string } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    RefundDecisionEmail({
+      outcome: data.outcome,
+      greeting: firstNameGreeting(data.athleteName),
+      eventTitle: data.eventTitle,
+      organiserName: data.organiserName,
+      amount: data.amountCents != null ? `$${(data.amountCents / 100).toFixed(2)}` : null,
+      full: data.full,
+      reasonLabel: data.reasonLabel ?? null,
+      note: data.note ?? null,
+      respondBy: data.respondBy ?? null,
+      decidedBy: data.decidedBy ?? "organiser",
+      ticketRef: data.ticketId.slice(0, 8),
+      activityUrl: `${siteUrl}/activity`,
+      supportUrl: `${siteUrl}/support`,
+    }),
+  );
+  return { subject: REFUND_DECISION_SUBJECT[data.outcome](data.eventTitle), ...rendered };
+}
+
+export async function sendRefundDecisionEmail(to: string, data: RefundDecisionEmailData) {
+  if (!to || !getResend()) return;
+  await sendOne(to, await buildRefundDecisionEmail(data));
 }
 
 // ── Refund override (organiser) ───────────────────────────────────────────────

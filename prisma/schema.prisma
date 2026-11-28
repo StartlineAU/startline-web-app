@@ -670,6 +670,7 @@ model Registration {
   // Refunds are decided by the organiser from a support ticket and issued by Startline.
   stripeRefundId String?
   removals       RegistrationRemoval[]
+  supportTickets SupportTicket[]
   // Full refund owed because the event was cancelled. PENDING until Stripe
   // confirms, FAILED (with the reason) until a retry succeeds, DONE once the
   // athlete has everything back. The lifecycle worker retries anything not DONE.
@@ -917,6 +918,11 @@ enum UserNotificationType {
   REMOVED_FROM_EVENT
   // The event was cancelled; everything the athlete paid is being refunded.
   EVENT_CANCELLED
+  // The athlete's refund request was received, approved (refund still being
+  // issued) or declined (#492). A completed refund is REFUND_PROCESSED.
+  REFUND_REQUESTED
+  REFUND_APPROVED
+  REFUND_DECLINED
 }
 
 // ─── Event change log ─────────────────────────────────────────────────────────
@@ -997,6 +1003,11 @@ model EventRevision {
 // only when the organiser has not responded in time, or as a recorded override
 // (lib/refund-ticket-rules.ts). The two decisions are stored apart so an
 // override never erases what the organiser said.
+//
+// A refund ticket raised from the athlete's own entry carries registrationId
+// and the change-of-mind quote taken when they asked (#492). Approving it
+// issues the refund straight away (lib/refund-ticket-outcome.ts). A ticket
+// with no registration is matched to an entry by hand, as before.
 model SupportTicket {
   id          String   @id @default(uuid())
   name        String
@@ -1011,10 +1022,29 @@ model SupportTicket {
   // The effective state: the organiser's decision unless an admin decided.
   status      SupportTicketStatus @default(OPEN)
 
-  organiserDecision    SupportTicketStatus?
-  organiserDecidedById String?
-  organiserDecidedAt   DateTime?
-  organiserNote        String?
+  registrationId String?
+  registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  // The organisation's change-of-mind policy, applied when the athlete asked.
+  policyRefundPercent Int?
+  policyRefundCents   Int?
+
+  // Why the organiser decided as they did. The reason sets the refund type.
+  organiserReason RefundDecisionReason?
+  // POLICY returns the quote above, TICKET the whole ticket price, FULL
+  // everything the entry paid, booking fee included.
+  refundType      RefundType?
+  // Set once the money has gone back. refundError holds why it last failed.
+  refundCents     Int?
+  refundIssuedAt  DateTime?
+  refundError     String?
+
+  organiserDecision       SupportTicketStatus?
+  // The organisation that decided (an Organiser id), and the person in it who
+  // did, so an owner's decision can be told from a manager's (#610).
+  organiserDecidedById    String?
+  organiserDecidedByEmail String?
+  organiserDecidedAt      DateTime?
+  organiserNote           String?
 
   // "NO_RESPONSE" (the organiser let the window pass) or "OVERRIDE".
   adminDecisionKind String?
@@ -1027,7 +1057,28 @@ model SupportTicket {
   @@index([createdAt])
   @@index([organiserId, status])
   @@index([eventId, status])
+  @@index([registrationId])
   @@map("support_tickets")
+}
+
+// Mirrors lib/refund-decision-reasons.ts, which holds the labels and which
+// reasons approve, decline, and need a note.
+enum RefundDecisionReason {
+  WITHIN_POLICY
+  EVENT_CHANGED
+  NOT_DELIVERED
+  GOODWILL
+  OUTSIDE_POLICY
+  OTHER
+}
+
+// POLICY: the change-of-mind quote. TICKET: the whole ticket price, booking fee
+// kept (goodwill). FULL: everything paid, booking fee included (the Australian
+// Consumer Law cases).
+enum RefundType {
+  POLICY
+  FULL
+  TICKET
 }
 
 enum SupportTicketStatus {

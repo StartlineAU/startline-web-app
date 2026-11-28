@@ -6,8 +6,9 @@
  * organiser form, the athlete's checkout and refund dialog, the organiser's
  * refunds tab and the admin console all agree on the numbers and the wording.
  *
- * The percentage applies to the FULL amount the athlete paid — ticket price plus
- * the Startline fee — so "full refund" means what an athlete expects it to mean.
+ * The percentage applies to the ticket price only. The Startline booking fee is
+ * not refunded under the policy (terms 3.4); it comes back only when the event
+ * is cancelled or the organiser refunds under the Australian Consumer Law.
  */
 
 export type RefundTier = {
@@ -39,7 +40,12 @@ export const REFUND_PROCESS_COPY =
 export const ACL_REFUND_NOTE =
   "You must follow the Australian Consumer Law. If you cancel an event, do not supply it, or change it so it is no longer what the athlete paid for, they are still entitled to a refund of everything they paid. Your own policy cannot take that away, including inside 24 hours of the start.";
 
-/** Change-of-mind refunds are refused once the event starts in under a day. */
+/**
+ * Change-of-mind refunds owe nothing once the event starts in under a day. The
+ * athlete can still ask: the organiser may refund under the Australian Consumer
+ * Law (event changed, not delivered) or as goodwill, which this cutoff never
+ * limits.
+ */
 export const REFUND_CUTOFF_HOURS = 24;
 
 export function refundWithinCutoff(startsAtUtc: Date | null | undefined, now = new Date()): boolean {
@@ -239,4 +245,48 @@ export function parseLegacyPolicy(
     tiers: normaliseTiers(tiers),
     notes: notes.replace(/^[.,\s]+|[.,\s]+$/g, "").replace(/\s*\.\s*\./g, ".").trim(),
   };
+}
+
+const POLICY_DATE = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "Australia/Sydney",
+});
+
+/**
+ * Today's date (YYYY-MM-DD) as a refund policy counts it. Event dates are local
+ * Australian dates, so a UTC date would count an extra day until the event for
+ * most of each Sydney morning and quote the wrong tier.
+ */
+export function policyToday(now: Date = new Date()): string {
+  return POLICY_DATE.format(now);
+}
+
+/**
+ * The change-of-mind refund owed on one entry when the athlete asks (#492).
+ *
+ * The policy is the one the entry was sold under when it has been frozen
+ * (`soldRefundTiers`), else the event's current one. The percentage applies to
+ * the ticket price only: the booking fee is not refunded under the policy.
+ */
+export function changeOfMindQuote(
+  entry: {
+    amountCents: number;
+    soldRefundTiers: unknown;
+    eventRefundTiers: unknown;
+    eventDate: string;
+    /** When set, a request inside REFUND_CUTOFF_HOURS of the start owes nothing. */
+    startsAtUtc?: Date | null;
+  },
+  now: Date = new Date(),
+): { percent: number; cents: number } {
+  if (refundWithinCutoff(entry.startsAtUtc, now)) return { percent: 0, cents: 0 };
+  const today = policyToday(now);
+  const tiers = parseTiers(
+    entry.soldRefundTiers != null ? entry.soldRefundTiers : entry.eventRefundTiers,
+  );
+  const days = daysUntil(entry.eventDate, today);
+  const percent = refundPercentFor(tiers, days);
+  return { percent, cents: Math.round((entry.amountCents * percent) / 100) };
 }
