@@ -24,6 +24,27 @@ function getWebhookSecret(): string {
   return secret;
 }
 
+/**
+ * Verifies a delivery from either of the two endpoints that share this URL.
+ *
+ * Stripe sends a connected account's events (a v1 organiser's account.updated)
+ * only to a Connect-scope endpoint, never to the platform's own endpoint, and
+ * each endpoint signs with its own secret. STRIPE_CONNECT_WEBHOOK_SECRET is
+ * that second endpoint's secret (#607). Without it only platform events verify.
+ */
+function constructWebhookEvent(stripe: Stripe, body: string, signature: string): Stripe.Event {
+  try {
+    return stripe.webhooks.constructEvent(body, signature, getWebhookSecret());
+  } catch (err) {
+    const connectSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+    if (!connectSecret) throw err;
+    const event = stripe.webhooks.constructEvent(body, signature, connectSecret);
+    // A Connect endpoint only ever delivers connected accounts' events.
+    if (!event.account) throw new Error("Connect endpoint delivered a platform event.");
+    return event;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
@@ -33,21 +54,31 @@ export async function POST(req: NextRequest) {
     let event: Stripe.Event;
 
     try {
-      event = stripe.webhooks.constructEvent(body, signature, getWebhookSecret());
+      event = constructWebhookEvent(stripe, body, signature);
     } catch {
       return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
     }
 
-    // Events from a connected account describe that account's own payments,
-    // not a checkout on the platform. This endpoint only handles the platform's.
+    // A v1 organiser's account.updated is a Connect event, so Stripe always
+    // sets event.account on it. It has to run before the guard below, or a
+    // v1 organiser who closes the tab mid-onboarding is never marked ready
+    // (#607). Only trust it for the account that sent it.
+    if (event.type === "account.updated") {
+      const account = event.data.object as Stripe.Account;
+      if (!event.account || account.id === event.account) {
+        await handleAccountUpdated(account);
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // Any other event from a connected account describes that account's own
+    // payments, not a checkout on the platform. This endpoint only handles the
+    // platform's.
     if (event.account) return NextResponse.json({ received: true });
 
     switch (event.type) {
       case "payment_intent.succeeded":
         await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
-        break;
-      case "account.updated":
-        await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
       // Refunds and disputes made in Stripe rather than through Startline (#550).
       case "charge.refunded":
