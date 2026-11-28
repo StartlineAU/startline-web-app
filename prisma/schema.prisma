@@ -93,6 +93,7 @@ model Organiser {
   notifyEventApproved   Boolean @default(true)
   notifyEventRejected   Boolean @default(true)
   notifyNewRegistration Boolean @default(true)
+  notifyEventFinished   Boolean @default(true)
 
   // Change-of-mind refund policy for every event this organisation runs.
   // Null means listings still use the policy stored on each event. The ACL
@@ -289,6 +290,10 @@ model Event {
   cancelledById      String? // Organiser or Admin id, see cancelledByRole
   cancelledByRole    String? // "organiser" | "admin"
   cancellationReason String?
+
+  // When the organisation was told the event had finished (#561). Set by the
+  // lifecycle worker as it claims the event, so the notice goes out once.
+  finishedNotifiedAt DateTime?
 
   isPinned      Boolean        @default(false)
   reviews       Review[]
@@ -566,6 +571,8 @@ enum NotificationType {
   REFUND_TICKET_OVERRIDE
   // The event was cancelled and every entry refunded. No switch: always sent.
   EVENT_CANCELLED
+  // The event has finished: how it went, and a prompt to post results (#561).
+  EVENT_FINISHED
 }
 
 // ─── Organiser announcements (per-event) ─────────────────────────────────────

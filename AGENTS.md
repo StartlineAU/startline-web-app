@@ -311,9 +311,18 @@ is on. The same flag decides whether a MANAGER sees the in-app feed. Only an
 OWNER can change it (`PATCH /api/organiser/profile`).
 
 Each kind of notification also has its own switch on the organisation
-(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`), owner
-only as well. Off means no feed entry and no email: anything that sends one must
+(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`,
+`notifyEventFinished`), owner only as well. Off means no feed entry and no email: anything that sends one must
 check `wantsNotification` from `lib/organiser-notification-preferences.ts`.
+
+The "event finished" notice (`lib/notify-event-finished.ts`) is sent by the
+lifecycle worker, not by the bulk archive itself: each sweep claims archived
+events whose `Event.finishedNotifiedAt` is still null, so it goes out once.
+Events archived before it existed were backfilled as already told.
+
+A finished race opens the athlete's summary at `/races/[registrationId]`
+(`lib/race-summary.ts`). It is visible exactly where the race is listed on a
+profile: to its owner always, to anyone while that profile is public.
 
 The seed creates these users in Cognito, and sets one shared password for them,
 only in a pool listed in `SEED_COGNITO_WRITE_POOLS` (your own development pool,

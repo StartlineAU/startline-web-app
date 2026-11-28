@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { organiserLogin, ensureDatabaseUrl } from "./helpers";
+import { organiserLogin, ensureDatabaseUrl, openOrganiserSettings } from "./helpers";
 
 // Event completion (#561): a finished event stays manageable for results,
 // reads "Completed" to organisers rather than "Archived".
@@ -62,6 +62,7 @@ async function createFinishedEvent(page: Parameters<typeof organiserLogin>[0], t
 
 test.afterEach(async () => {
   if (createdIds.length === 0) return;
+  await prisma.notification.deleteMany({ where: { eventId: { in: createdIds } } });
   await prisma.registration.deleteMany({ where: { eventId: { in: createdIds } } });
   await prisma.event.deleteMany({ where: { id: { in: createdIds } } });
   createdIds.length = 0;
@@ -154,5 +155,113 @@ test.describe("athlete race history", () => {
     const card = page.getByRole("link", { name: new RegExp(title) });
     await expect(card).toContainText("Upcoming");
     await expect(card).not.toContainText("Completed");
+  });
+});
+
+// The athlete's own summary of a race they finished (#561): /races/[id].
+test.describe("athlete race summary", () => {
+  async function harperEntry(
+    page: Parameters<typeof organiserLogin>[0],
+    title: string,
+    status: "ARCHIVED" | "APPROVED",
+    result: { resultTime?: string; resultPlacement?: string } = {},
+  ) {
+    await organiserLogin(page);
+    const id = await createDraft(page, title);
+    const event = await prisma.event.update({ where: { id }, data: { status } });
+    const harper = await prisma.user.findUniqueOrThrow({ where: { email: "harper.jones@startline.test" } });
+    const registration = await prisma.registration.create({
+      data: {
+        eventId: id,
+        organiserId: event.organiserId,
+        userId: harper.id,
+        athleteUserId: harper.id,
+        athleteName: "Harper Jones",
+        athleteEmail: harper.email,
+        waveLabel: "General",
+        amountCents: 0,
+        platformFeeCents: 0,
+        feeStructure: "athlete",
+        status: "CONFIRMED",
+        ...result,
+      },
+    });
+    await page.context().clearCookies();
+    await page.context().addCookies([
+      { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
+    ]);
+    return { id, registrationId: registration.id, harper };
+  }
+
+  test("a finished race on the profile opens its summary with the result", async ({ page }) => {
+    test.slow();
+    const title = `E2E Raced ${Date.now()}`;
+    const { registrationId } = await harperEntry(page, title, "ARCHIVED", {
+      resultTime: "00:41:07",
+      resultPlacement: "7th",
+    });
+
+    await page.goto("/profile");
+    await page.getByRole("link", { name: new RegExp(title) }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/races/${registrationId}$`), { timeout: 45_000 });
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.getByText("Race summary", { exact: true })).toBeVisible();
+    const result = page.getByTestId("race-summary-result");
+    await expect(result).toContainText("00:41:07");
+    await expect(result).toContainText("7th");
+    await expect(page.getByRole("link", { name: "Your profile" })).toBeVisible();
+  });
+
+  test("says when results are not posted yet", async ({ page }) => {
+    const { registrationId } = await harperEntry(page, `E2E Raced No Result ${Date.now()}`, "ARCHIVED");
+    await page.goto(`/races/${registrationId}`);
+    await expect(page.getByTestId("race-summary-result")).toContainText("hasn't posted results yet");
+  });
+
+  test("a race still to come goes to the event page instead", async ({ page }) => {
+    const { id, registrationId } = await harperEntry(page, `E2E Not Raced ${Date.now()}`, "APPROVED");
+    await page.goto(`/races/${registrationId}`);
+    await expect(page).toHaveURL(new RegExp(`/events/(${id}|[a-z0-9-]+)$`), { timeout: 45_000 });
+    expect(page.url()).not.toContain("/races/");
+  });
+
+  // Privacy is covered by unit tests (race-summary.test.ts). Flipping a seeded
+  // profile private here would race other spec files that read it.
+  test("an entry that is nobody's race is not found", async ({ page }) => {
+    // A ticket the buyer bought for someone with no account.
+    await organiserLogin(page);
+    const { registrationId } = await createFinishedEvent(page, `E2E Nobody's Race ${Date.now()}`);
+    const res = await page.goto(`/races/${registrationId}`);
+    expect(res?.status()).toBe(404);
+  });
+});
+
+test.describe("event finished notice", () => {
+  test("has its own switch in organisation notifications", async ({ page }) => {
+    await organiserLogin(page);
+    await page.goto("/organiser/profile");
+    const settings = await openOrganiserSettings(page);
+    await settings.getByRole("button", { name: "Notifications", exact: true }).click();
+    await expect(settings.getByRole("switch", { name: "Event finished" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  // The worker is the only thing that announces a finished event, and it
+  // needs the shared secret. CI without it skips this.
+  test("the lifecycle worker announces a finished event once", async ({ page }) => {
+    const secret = process.env.EVENT_LIFECYCLE_SECRET;
+    test.skip(!secret, "EVENT_LIFECYCLE_SECRET is not set");
+    await organiserLogin(page);
+    const { id } = await createFinishedEvent(page, `E2E Finished Notice ${Date.now()}`);
+
+    const call = () => page.request.post(`/api/internal/events/lifecycle?eventId=${id}`, {
+      headers: { "x-event-lifecycle-secret": secret! },
+    });
+    expect((await call()).ok()).toBe(true);
+    expect((await call()).ok()).toBe(true);
+
+    const notices = await prisma.notification.findMany({ where: { eventId: id, type: "EVENT_FINISHED" } });
+    expect(notices).toHaveLength(1);
+    expect(notices[0].body).toContain("1 athlete entered.");
   });
 });

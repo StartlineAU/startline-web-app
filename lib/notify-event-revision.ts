@@ -48,6 +48,7 @@ async function organiserRecipients(eventId: string) {
           notifyEventApproved: true,
           notifyEventRejected: true,
           notifyNewRegistration: true,
+          notifyEventFinished: true,
           members: { select: { role: true, user: { select: { email: true } } } },
         },
       },
