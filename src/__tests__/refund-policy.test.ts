@@ -268,9 +268,9 @@ describe("describeTiersWithDates", () => {
     ]);
   });
 
-  it("runs an always-refundable policy to the day before", () => {
+  it("runs an always-refundable policy to the 24-hour cutoff", () => {
     expect(describeTiersWithDates([{ daysBefore: 0, percent: 100 }], "2027-03-31")).toEqual([
-      "Until the day before the event: full refund.",
+      "Until 24 hours before the start: full refund.",
     ]);
   });
 

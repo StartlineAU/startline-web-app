@@ -169,8 +169,8 @@ export function describeTiersWithDates(tiers: RefundTier[], eventDate: string): 
   const lines: string[] = [];
   sorted.forEach((tier, i) => {
     const amount = amountOf(tier.percent);
-    // A 0-day window runs to the start; the 24-hour cutoff is stated separately.
-    const until = tier.daysBefore === 0 ? "the day before the event" : dateBefore(eventDate, tier.daysBefore);
+    // A 0-day window runs until the change-of-mind cutoff, 24 hours before the start.
+    const until = tier.daysBefore === 0 ? "24 hours before the start" : dateBefore(eventDate, tier.daysBefore);
     if (i === 0) {
       lines.push(`Until ${until}: ${amount}.`);
     } else {

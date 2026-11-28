@@ -203,8 +203,12 @@ export async function PATCH(
         select: { refundTiers: true, refundPolicy: true },
       });
       refundFollowsOrg = true;
-      refundTiers = parseTiers(org?.refundTiers);
-      refundPolicy = org?.refundPolicy ?? null;
+      // An organisation that never saved a policy has none to give: the event
+      // keeps what it shows (the default it was created with) until one is saved.
+      if (org?.refundTiers != null) {
+        refundTiers = parseTiers(org.refundTiers);
+        refundPolicy = org.refundPolicy ?? null;
+      }
     } else if (data.refundFollowsOrg === false) {
       refundFollowsOrg = false;
       refundTiers = data.refundTiers ?? undefined;

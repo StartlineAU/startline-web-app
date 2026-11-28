@@ -160,4 +160,14 @@ describe("PATCH /api/organiser/events/[id] — refund policy", () => {
     expect(updateData()).toMatchObject({ refundFollowsOrg: true, refundTiers: ORG_TIERS, refundPolicy: "Org notes" });
     expect(mocks.executeRaw).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the event's tiers when the organisation has never saved a policy", async () => {
+    mocks.eventFindUnique.mockResolvedValue({ ...baseEvent, refundFollowsOrg: false, refundTiers: OWN_TIERS });
+    mocks.organiserFindUnique.mockResolvedValue({ refundTiers: null, refundPolicy: null });
+    const res = await patch({ title: "Changed", refundFollowsOrg: true });
+    expect(res.status).toBe(200);
+    expect(updateData().refundFollowsOrg).toBe(true);
+    expect(updateData().refundTiers).toBeUndefined();
+    expect(mocks.executeRaw).not.toHaveBeenCalled();
+  });
 });
