@@ -5,7 +5,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import ParticipantFormSection from "@/components/registration/ParticipantFormSection";
+import ParticipantFormSection, { GUEST_EMAIL_HINT } from "@/components/registration/ParticipantFormSection";
 import {
   createEmptyParticipant,
   getRegistrationFormErrors,
@@ -101,6 +101,7 @@ export default function TeamMemberDetailsDialog({
           frameless
           index={0}
           participant={person}
+          emailHint={GUEST_EMAIL_HINT}
           errors={errors}
           onChange={(field, value) => {
             setPerson((prev) => ({ ...prev, [field]: value }));

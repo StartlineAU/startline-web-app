@@ -583,8 +583,16 @@ model Registration {
   event       Event     @relation(fields: [eventId], references: [id], onDelete: Restrict)
   organiserId String
   organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Restrict)
+  // The account that bought and manages this entry. Every entry in an order
+  // carries the buyer's account, so this is not who is racing.
   userId      String?
   user        User?     @relation(fields: [userId], references: [id])
+  // The account of the person racing, when the entry is known to be theirs:
+  // the buyer's own ticket ("Me" at checkout), or the account a guest checkout
+  // created for that address. Drives race history on profiles (#592). Null for
+  // a guest the buyer entered; their account still finds it by verified email.
+  athleteUserId String?
+  athleteUser   User?   @relation("RegistrationAthlete", fields: [athleteUserId], references: [id], onDelete: SetNull)
 
   athleteName           String
   athleteEmail          String
@@ -674,6 +682,7 @@ model Registration {
   @@unique([eventId, bibNumber])
   @@index([eventId])
   @@index([organiserId])
+  @@index([athleteUserId])
   @@index([startWaveId])
   @@index([teamId])
   @@index([stripePaymentIntentId])
@@ -833,6 +842,8 @@ model User {
   memberships       OrganiserMember[]
   createdOrganisers Organiser[]       @relation("OrganiserCreatedBy")
   registrations     Registration[]
+  // Entries this person races in, whoever bought them (#592).
+  athleteEntries    Registration[]    @relation("RegistrationAthlete")
   follows           OrganiserFollow[]
   savedEvents       SavedEvent[]
   reviews           Review[]
