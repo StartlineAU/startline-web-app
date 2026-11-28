@@ -84,6 +84,33 @@ test.describe("user profile: heading without a handle", () => {
     await page.goto("/profile");
     await expect(page.getByRole("heading", { level: 1, name: "profile.test", exact: true })).toBeVisible();
   });
+
+  // The page heading showed the new handle while the navbar kept the old name
+  // beside it, until a reload (#591). Both now show the username first.
+  test("a new username shows in the page heading and the navbar at once", async ({ page }) => {
+    test.slow();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await prisma.user.update({ where: { email: EMAIL }, data: { name: "Profile Test Athlete", username: null } });
+    const handle = `profile-test-${Date.now().toString(36)}`;
+    try {
+      await page.goto("/profile");
+      const trigger = page.getByTestId("user-menu");
+      await expect(trigger).toContainText("Profile Test Athlete", { timeout: 30000 });
+
+      await page.getByRole("button", { name: /edit profile/i }).click();
+      const username = page.getByPlaceholder("e.g. john-doe");
+      await username.fill(handle);
+      const settings = page.getByRole("dialog", { name: "Settings" });
+      await expect(settings.locator("svg.text-green-500")).toBeVisible({ timeout: 15000 });
+      await settings.getByRole("button", { name: "Save", exact: true }).click();
+      await expect(settings.getByText("Saved")).toBeVisible();
+
+      await expect(page.getByRole("heading", { level: 1, name: handle, exact: true })).toBeVisible({ timeout: 15000 });
+      await expect(trigger).toContainText(handle, { timeout: 15000 });
+    } finally {
+      await prisma.user.update({ where: { email: EMAIL }, data: { name: null, username: null } });
+    }
+  });
 });
 
 test.describe("user profile: race history", () => {
@@ -98,9 +125,19 @@ test.describe("user profile: race history", () => {
 
     const username = page.getByPlaceholder("e.g. john-doe");
     await username.fill("");
-    await username.pressSequentially("Hugo Shrowder");
+    // Mid-word, the space has just become a trailing hyphen. That is the
+    // field's own doing, so it must not be reported as a mistake (#591).
+    await username.pressSequentially("Hugo ");
+    await expect(username).toHaveValue("hugo-");
+    await expect(page.getByText(/(start|end) with a (hyphen|letter)/i)).toHaveCount(0);
+    await username.pressSequentially("Shrowder");
     await expect(username).toHaveValue("hugo-shrowder");
     await expect(page.getByText(/no spaces or symbols/i)).toHaveCount(0);
+
+    // A stray trailing space is dropped once the field loses focus.
+    await username.pressSequentially(" ");
+    await username.blur();
+    await expect(username).toHaveValue("hugo-shrowder");
   });
 
   test("shows KStats and chronological race history from completed registrations", async ({ page }) => {

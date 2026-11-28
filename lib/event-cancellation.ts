@@ -406,6 +406,7 @@ async function notifyCancellation(input: {
     [...byEmail.values()].map(({ to, cents }) => ({
       to,
       data: {
+        eventId: input.eventId,
         eventTitle: input.eventTitle,
         eventDate: input.eventDate,
         refundCents: cents,

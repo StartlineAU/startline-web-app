@@ -11,6 +11,26 @@ const RESERVED = new Set([
 
 const VALID_PATTERN = /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/;
 
+/**
+ * What a username field holds while someone is typing it. A username is one
+ * word, so a typed space becomes the hyphen it would have to be anyway
+ * (issue #347). The trailing hyphen that leaves mid-word is kept so the next
+ * word can follow it.
+ */
+export function usernameAsTyped(raw: string): string {
+  return raw.toLowerCase().replace(/-?\s+/g, "-");
+}
+
+/**
+ * The username a draft will be checked and saved as. Edge hyphens come off
+ * here rather than being reported: the field put them there itself when a
+ * space was typed, so warning about them blamed the user for our own
+ * conversion (issue #591).
+ */
+export function usernameForSave(draft: string): string {
+  return draft.trim().toLowerCase().replace(/^-+|-+$/g, "");
+}
+
 export type UsernameValidation =
   | { valid: true }
   | { valid: false; reason: string };

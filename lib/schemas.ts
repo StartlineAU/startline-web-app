@@ -1,6 +1,7 @@
 import { teamSizeOf, MIN_TEAM_SIZE, MAX_TEAM_SIZE } from "@/lib/team-tickets";
 import { z } from "zod";
 import { assetUrl, documentUrl, externalUrl } from "@/lib/asset-url";
+import { MAX_GALLERY_PHOTOS } from "@/lib/upload-limits";
 
 // Path params — untrusted input, whitelisted before it reaches Prisma.
 export const idParams = z.object({ id: z.string().min(1).max(255) });
@@ -66,6 +67,13 @@ export const eventPayloadSchema = z
     registrationUrl: externalUrl(2000).nullable().optional(),
     accessibilityInfo: z.string().max(10000).nullable().optional(),
     coverImageUrl: assetUrl(2000).nullable().optional(),
+    // CSS object-position for the cover, as the reposition control writes it
+    // ("37.5% 62.0%"). Pinned to that shape because it lands in a style attribute.
+    coverPosition: z
+      .string()
+      .regex(/^(?:100|\d{1,2})(?:\.\d+)?% (?:100|\d{1,2})(?:\.\d+)?%$/, "Invalid cover position.")
+      .nullable()
+      .optional(),
     informationPdfs: z
       .array(
         z.object({
@@ -76,7 +84,7 @@ export const eventPayloadSchema = z
       )
       .max(20)
       .optional(),
-    photos: z.array(assetUrl(3000)).max(50).optional(),
+    photos: z.array(assetUrl(3000)).max(MAX_GALLERY_PHOTOS, `An event can have up to ${MAX_GALLERY_PHOTOS} gallery photos.`).optional(),
     // Which organiser contact details this event shows. Null follows the
     // organisation's setting (lib/organiser-contact.ts).
     showContactName: z.boolean().nullable().optional(),

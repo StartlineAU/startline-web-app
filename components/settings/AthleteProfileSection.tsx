@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AlertCircle, Check, Upload, X } from "lucide-react";
 import { uploadFile } from "@/lib/upload-client";
 import { TYPE_MIMES } from "@/lib/upload-limits";
+import { usernameAsTyped, usernameForSave } from "@/lib/username-validation";
 import { useSettings } from "@/context/SettingsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -68,13 +69,12 @@ export default function AthleteProfileSection() {
   }, []);
 
   const usernameValidation = useMemo(() => {
-    const val = form.username.trim().toLowerCase();
+    // Checked as it will be saved, so the hyphen a typed space leaves at the
+    // end is not reported as a mistake (issue #591).
+    const val = usernameForSave(form.username);
     if (!val || val === currentUsername) return { status: "idle" as const, error: "" };
     if (val.length < 3) return { status: "invalid" as const, error: "Username must be at least 3 characters." };
     if (val.length > 30) return { status: "invalid" as const, error: "Username must be 30 characters or less." };
-    if (/^-|-$/.test(val)) {
-      return { status: "invalid" as const, error: "Username cannot start or end with a hyphen." };
-    }
     if (!/^[a-z0-9-]+$/.test(val)) {
       return { status: "invalid" as const, error: "No spaces or symbols. Use letters, numbers and hyphens." };
     }
@@ -94,7 +94,7 @@ export default function AthleteProfileSection() {
     checkTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/user/profile/check-username?username=${encodeURIComponent(form.username.trim().toLowerCase())}`
+          `/api/user/profile/check-username?username=${encodeURIComponent(usernameForSave(form.username))}`
         );
         const data = await res.json();
         if (data.available) {
@@ -138,7 +138,7 @@ export default function AthleteProfileSection() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: form.username || null,
+          username: usernameForSave(form.username) || null,
           bio: form.bio,
           isPublic: form.isPublic,
           profilePicUrl: form.profilePicUrl || null,
@@ -149,7 +149,7 @@ export default function AthleteProfileSection() {
         setError(data.error || "Could not save profile.");
         return;
       }
-      const savedUsername: string = data.username ?? form.username;
+      const savedUsername: string = data.username ?? usernameForSave(form.username);
       // The profile page lives at /profile/<username>, so a new handle is a new URL.
       const onOwnProfile = currentUsername !== "" && pathname === `/profile/${currentUsername}`;
       if (onOwnProfile && savedUsername && savedUsername !== currentUsername) {
@@ -269,9 +269,9 @@ export default function AthleteProfileSection() {
                         : ""
                   }`}
                   value={form.username}
-                  // A username is one word, so a typed space becomes the hyphen
-                  // it would have to be anyway (issue #347).
-                  onChange={(e) => patch({ username: e.target.value.toLowerCase().replace(/-?\s+/g, "-") })}
+                  onChange={(e) => patch({ username: usernameAsTyped(e.target.value) })}
+                  // Show what will be saved once they move on.
+                  onBlur={() => patch({ username: usernameForSave(form.username) })}
                   placeholder="e.g. john-doe"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2">

@@ -83,7 +83,10 @@ export default function NavBar() {
       .then(data => {
         if (cancelled || !data) return;
         startTransition(() => {
-          setProfileName(data.name || null);
+          // Same order as the profile page header (ProfileServerView), so a
+          // new username shows here too rather than the name it replaced
+          // (issue #591).
+          setProfileName(data.username || data.name?.trim() || null);
           setProfilePic(data.profilePicUrl || null);
         });
       })

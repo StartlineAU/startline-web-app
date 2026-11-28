@@ -6,13 +6,13 @@ const MB = 1024 * 1024;
 describe("uploadSizeError", () => {
   it("accepts a file exactly at the cap", () => {
     expect(uploadSizeError("document", 15 * MB)).toBeNull();
-    expect(uploadSizeError("cover", 10 * MB)).toBeNull();
+    expect(uploadSizeError("cover", 25 * MB)).toBeNull();
     expect(uploadSizeError("video", 200 * MB)).toBeNull(); // not a type: no cap applies, the type check refuses it
   });
 
   it("rejects a file one byte over the cap with the type's message", () => {
     expect(uploadSizeError("document", 15 * MB + 1)).toBe("PDF must be 15 MB or smaller.");
-    expect(uploadSizeError("cover", 10 * MB + 1)).toBe("Image must be 10 MB or smaller.");
+    expect(uploadSizeError("cover", 25 * MB + 1)).toBe("Image must be 25 MB or smaller.");
     expect(uploadSizeError("document", 15 * MB + 1)).toBe("PDF must be 15 MB or smaller.");
   });
 

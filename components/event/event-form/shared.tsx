@@ -172,6 +172,8 @@ export interface FormState {
   registrationUrl: string;
   coverImage: File | null;
   coverImageUrl: string;
+  /** CSS object-position of the cover in the banner and on cards (#586). */
+  coverPosition: string;
   informationPdfs: InfoPdf[];
   photos: File[];
   photoUrls: string[];
@@ -188,7 +190,7 @@ export const INITIAL: FormState = {
   prizeMoney: false, prizeMoneyAmount: "", prizeMoneyDetails: "",
   refundTiers: DEFAULT_REFUND_TIERS, refundPolicy: "",
   registrationType: "startline", feeStructure: "athlete", registrationUrl: "",
-  coverImage: null, coverImageUrl: "",
+  coverImage: null, coverImageUrl: "", coverPosition: "50% 50%",
   informationPdfs: [],
   photos: [], photoUrls: [],
   contactShow: NO_CONTACT_OVERRIDE,

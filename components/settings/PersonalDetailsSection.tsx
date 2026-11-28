@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { GENDER_OPTIONS, maxDateOfBirthForMinAge } from "@/lib/registration-form";
 import { useSettings } from "@/context/SettingsContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +27,7 @@ const DESCRIPTION =
   "Not shown on your public profile. Used only to prefill your own event registrations. Organisers receive these details when you register.";
 
 export default function PersonalDetailsSection() {
+  const router = useRouter();
   const { notifyProfileSaved } = useSettings();
 
   const [form, setForm] = useState<DetailsDraft>(EMPTY);
@@ -81,6 +83,9 @@ export default function PersonalDetailsSection() {
         setError(data.error || "Could not save your details.");
         return;
       }
+      // Server-rendered pages show the name too (the profile header falls
+      // back to it), so re-render them as the profile section does.
+      router.refresh();
       notifyProfileSaved();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);

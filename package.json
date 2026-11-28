@@ -63,7 +63,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-map-gl": "^8.1.1",
-    "read-excel-file": "9.3.13",
+    "read-excel-file": "9.3.20",
     "recharts": "^3.10.1",
     "resend": "^6.9.4",
     "sanitize-html": "^2.18.1",

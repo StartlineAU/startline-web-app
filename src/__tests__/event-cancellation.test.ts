@@ -306,7 +306,7 @@ describe("cancelEvent", () => {
     await cancelEvent({ eventId: "evt-1", actor: { role: "organiser", id: "org-1" }, reason: null });
 
     expect(mocks.sendEventCancelledEmails).toHaveBeenCalledWith([
-      { to: "Buyer@x.test", data: expect.objectContaining({ refundCents: 21080, eventTitle: "Harbour 10K" }) },
+      { to: "Buyer@x.test", data: expect.objectContaining({ eventId: "evt-1", refundCents: 21080, eventTitle: "Harbour 10K" }) },
     ]);
     expect(mocks.userNotification.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ userId: "user-buyer", type: "EVENT_CANCELLED" })],

@@ -7,13 +7,22 @@
 // was a free file host.
 export type UploadType = "logo" | "cover" | "photo" | "avatar" | "document";
 
+// Images are 25 MB: a full-resolution photographer's JPEG runs 12-20 MB, and
+// 10 MB refused the event photos we commissioned ourselves (issue #594).
+// Uploads go straight to S3, so this is not bounded by the Lambda payload, and
+// visitors are served resized copies through next/image, not the original.
+// Volume is held by MAX_GALLERY_PHOTOS instead.
 export const UPLOAD_LIMITS: Record<UploadType, { bytes: number; label: string }> = {
-  logo:     { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
-  cover:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
-  photo:    { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
-  avatar:   { bytes: 10 * 1024 * 1024,  label: "Image must be 10 MB or smaller."  },
+  logo:     { bytes: 25 * 1024 * 1024,  label: "Image must be 25 MB or smaller."  },
+  cover:    { bytes: 25 * 1024 * 1024,  label: "Image must be 25 MB or smaller."  },
+  photo:    { bytes: 25 * 1024 * 1024,  label: "Image must be 25 MB or smaller."  },
+  avatar:   { bytes: 25 * 1024 * 1024,  label: "Image must be 25 MB or smaller."  },
   document: { bytes: 15 * 1024 * 1024,  label: "PDF must be 15 MB or smaller."    },
 };
+
+// Photos per event gallery. The form stops at this many and the event schema
+// refuses more, so the cap holds for API callers too.
+export const MAX_GALLERY_PHOTOS = 8;
 
 // Returns the rejection message for an oversized file, or null when the size
 // is within the cap (or the type is unknown; the route's own type allowlist

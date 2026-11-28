@@ -46,6 +46,7 @@ export default function EventCard({ event, className, cardClassName, onOpen, hid
           alt={event.title}
           fill
           className="pointer-events-none object-cover brightness-[0.55] group-hover:brightness-[0.65] group-hover:scale-105 transition-all duration-700"
+          style={event.coverPosition ? { objectPosition: event.coverPosition } : undefined}
           sizes="(max-width: 640px) 100vw, 33vw"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-dark/60 via-transparent to-transparent" />

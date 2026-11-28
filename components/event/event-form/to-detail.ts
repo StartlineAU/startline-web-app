@@ -56,6 +56,7 @@ export function formToDetailData(form: FormState, media: FormMedia): EventDetail
       refundPolicy: form.refundPolicy.trim() || undefined,
       refundTiers: form.refundTiers,
       image: media.cover ?? "",
+      coverPosition: form.coverPosition,
       registrationUrl: form.registrationType === "external" ? form.registrationUrl.trim() || null : null,
       registrationType: form.registrationType,
       feeStructure: form.feeStructure,
