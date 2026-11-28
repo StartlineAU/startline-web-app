@@ -17,10 +17,6 @@ export function formatShortDate(dateString: string): string {
   return format(parseISO(dateString), "d MMM");
 }
 
-export function formatMediumDate(dateString: string): string {
-  return format(parseISO(dateString), "d MMM yyyy");
-}
-
 export function formatLongDate(dateString: string): string {
   return format(parseISO(dateString), "d MMMM yyyy");
 }

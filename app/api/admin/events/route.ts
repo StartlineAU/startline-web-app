@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getAdminSession } from "@/lib/amplify-server";
 import { getEventCoords } from "@/lib/australia-coords";
 import { writeAuditLog } from "@/lib/audit";
-import { adminEventPayloadSchema, eventPayloadSchema } from "@/lib/schemas";
+import { adminEventPayloadSchema } from "@/lib/schemas";
 import { withUniqueSlug } from "@/lib/slugs";
 import { eventTimeData } from "@/lib/event-time";
 import { effectiveEventStatus } from "@/lib/event-lifecycle";
@@ -18,7 +18,6 @@ import { tidyLocationText } from "@/lib/event-location";
 import { checkEventLocation } from "@/lib/event-location-verify";
 
 const VALID_STATUSES = ["DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "REJECTED", "ARCHIVED", "CANCELLED"] as const;
-type EventStatus = (typeof VALID_STATUSES)[number];
 
 const eventListQuery = z.object({
   status: z.enum(VALID_STATUSES).catch("PENDING"),

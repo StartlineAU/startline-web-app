@@ -4,7 +4,6 @@ import { getAdminSession } from "@/lib/amplify-server";
 import { z } from "zod";
 
 const VALID_STATUSES = ["CONFIRMED", "REFUND_REQUESTED", "CANCELLED", "REFUNDED", "REMOVED"] as const;
-type RegStatus = (typeof VALID_STATUSES)[number];
 
 const registrationsQuery = z.object({
   status: z.enum(VALID_STATUSES).optional().catch(undefined),

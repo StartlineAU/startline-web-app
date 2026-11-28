@@ -1,12 +1,5 @@
 import type { UserEvent } from "@/types";
 
-export interface EventStatus {
-  label: string;
-  style: string;
-}
-
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
 export type EventPhase = "upcoming" | "in_progress" | "ended";
 
 export interface LifecycleFields {
@@ -29,24 +22,4 @@ export function getLifecyclePhase(event: LifecycleFields, now = Date.now()): Eve
 
 export function getEventPhase(event: UserEvent, now = Date.now()): EventPhase {
   return getLifecyclePhase(event, now);
-}
-
-export function getEventStatus(event: UserEvent): EventStatus {
-  if (event.status === "CANCELLED") {
-    return { label: "Cancelled", style: "border border-red-400/40 text-red-300" };
-  }
-  const phase = getEventPhase(event);
-  if (phase === "in_progress") {
-    return { label: "In progress", style: "bg-amber-300 text-dark" };
-  }
-  if (phase === "ended") {
-    return { label: "Registration Closed", style: "border border-dark-lighter text-muted" };
-  }
-
-  const daysUntil = Math.ceil(
-    (new Date(event.date).getTime() - Date.now()) / MS_PER_DAY
-  );
-  if (daysUntil < 0)   return { label: "Registration Closed", style: "border border-dark-lighter text-muted" };
-  if (daysUntil <= 14) return { label: "Selling Fast",        style: "bg-primary text-dark" };
-  return                      { label: "Confirmed",           style: "border border-primary text-primary" };
 }
