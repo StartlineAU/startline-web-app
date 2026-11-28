@@ -33,6 +33,8 @@ export async function GET() {
       organiserResponseDue: organiserResponseDue(t),
       // What a full refund would return: everything the entry paid (#492).
       fullRefundCents: registration ? entryPaidCents(registration) : null,
+      // What goodwill returns: the whole ticket price, booking fee kept.
+      ticketRefundCents: registration ? Math.min(registration.amountCents, entryPaidCents(registration)) : null,
       entryAthleteName: registration?.athleteName ?? null,
     })),
   });

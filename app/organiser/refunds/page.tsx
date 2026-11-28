@@ -35,6 +35,7 @@ interface Ticket {
   policyRefundPercent: number | null;
   policyRefundCents: number | null;
   fullRefundCents: number | null;
+  ticketRefundCents: number | null;
   refundType: "POLICY" | "TICKET" | "FULL" | null;
   refundCents: number | null;
   refundError: string | null;
@@ -56,6 +57,9 @@ function amountFor(t: Ticket, reason: Reason): string | null {
   if (!t.registrationId) return null;
   if (reason === "WITHIN_POLICY") {
     return t.policyRefundCents != null ? money(t.policyRefundCents) : null;
+  }
+  if (reason === "GOODWILL") {
+    return t.ticketRefundCents != null ? money(t.ticketRefundCents) : null;
   }
   return t.fullRefundCents != null ? money(t.fullRefundCents) : null;
 }

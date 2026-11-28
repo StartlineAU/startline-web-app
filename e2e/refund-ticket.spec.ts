@@ -6,7 +6,8 @@ import { adminLogin, ensureDatabaseUrl } from "./helpers";
 // A refund is a support ticket. The organiser decides and Startline issues the
 // refund (#570); Startline decides only after the organiser's window has
 // passed, or as an override with a note. Nothing is refunded from the ticket
-// itself, and a change-of-mind request is refused inside 24 hours of the start.
+// itself. Inside 24 hours of the start the change-of-mind policy owes nothing,
+// but the athlete can still ask.
 //
 // A request raised from the athlete's own entry (#492) is linked to it and
 // takes the policy quote. The organiser's reason sets the refund type, approving
@@ -245,7 +246,9 @@ test("the admin refunds page shows the organiser's decision and gates the overri
   await expect(card.getByRole("button", { name: "Confirm override" })).toBeDisabled();
 });
 
-test("refuses a change-of-mind request inside 24 hours of the start", async ({ page }) => {
+test("accepts a request inside 24 hours of the start: only the change-of-mind quote stops", async ({ page }) => {
+  // The Australian Consumer Law cases are owed at any time, so the athlete can
+  // still ask on race day. The policy owes nothing that close to the start.
   const today = new Date().toISOString().slice(0, 10);
   const res = await page.request.post("/api/support", {
     data: {
@@ -254,13 +257,11 @@ test("refuses a change-of-mind request inside 24 hours of the start", async ({ p
       requestType: "refund",
       eventName: "Race day",
       eventDate: today,
-      reason: "Change of mind.",
+      reason: "The course was moved to another town.",
     },
   });
-
-  expect(res.status()).toBe(409);
-  expect((await res.json()).error).toMatch(/24 hours/);
-  expect(await prisma.supportTicket.count({ where: { eventId: EVENT_ID } })).toBe(0);
+  expect(res.status()).toBe(200);
+  await prisma.supportTicket.delete({ where: { id: (await res.json()).id } });
 });
 
 test("a request from the athlete's own entry takes the policy quote, and a decline gives the entry back", async ({ page }) => {
@@ -311,7 +312,7 @@ test("a request from the athlete's own entry takes the policy quote, and a decli
   });
 });
 
-test("goodwill approves a full refund of everything paid", async ({ page }) => {
+test("goodwill refunds the whole ticket price and keeps the booking fee", async ({ page }) => {
   const entry = await seedPaidEntry();
   await prisma.registration.update({ where: { id: entry.id }, data: { status: "REFUND_REQUESTED" } });
   const ticket = await seedTicket();
@@ -324,9 +325,9 @@ test("goodwill approves a full refund of everything paid", async ({ page }) => {
   await page.goto("/organiser/refunds");
   const card = page.getByTestId("refund-ticket").filter({ hasText: "Clash with another race" });
   await card.getByLabel("Reason for your decision").selectOption("GOODWILL");
-  await expect(card).toContainText("The athlete gets $123.00");
+  await expect(card).toContainText("The athlete gets $120.00");
   // Goodwill says why before it can be sent.
-  const approve = card.getByRole("button", { name: "Approve and refund $123.00" });
+  const approve = card.getByRole("button", { name: "Approve and refund $120.00" });
   await expect(approve).toBeDisabled();
   await card.getByLabel("Note").fill("Injured, with a medical certificate.");
   await approve.click();
@@ -336,6 +337,6 @@ test("goodwill approves a full refund of everything paid", async ({ page }) => {
   await expect.poll(async () => (await prisma.supportTicket.findUnique({ where: { id: ticket.id } }))?.status)
     .toMatch(/APPROVED|REFUNDED/);
   const decided = await prisma.supportTicket.findUnique({ where: { id: ticket.id } });
-  expect(decided).toMatchObject({ organiserReason: "GOODWILL", refundType: "FULL" });
+  expect(decided).toMatchObject({ organiserReason: "GOODWILL", refundType: "TICKET" });
   if (decided?.status === "APPROVED") expect(decided.refundError).toBeTruthy();
 });
