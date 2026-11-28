@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   userUpsert: vi.fn(),
   notificationCreate: vi.fn(),
   paymentIntentCreate: vi.fn(),
+  pendingOrderCreate: vi.fn(),
   registrationFindUnique: vi.fn(),
   userNotificationCreate: vi.fn(),
   executeRaw: vi.fn(async (_sql: TemplateStringsArray, ..._values: unknown[]) => 0),
@@ -36,6 +37,7 @@ const prismaMock = vi.hoisted(() => {
     organiserBlock: { findFirst: async () => null },
     organiser: { findUnique: async () => ({ notifyNewRegistration: true }) },
     notification: { create: mocks.notificationCreate },
+    pendingOrder: { create: mocks.pendingOrderCreate },
     $transaction: (fn: (tx: unknown) => unknown) => fn(client),
     // The per-event advisory lock the confirm transaction takes first.
     $executeRaw: mocks.executeRaw,
@@ -124,6 +126,7 @@ beforeEach(() => {
   mocks.userUpsert.mockResolvedValue({ id: "user-1" });
   mocks.notificationCreate.mockResolvedValue({});
   mocks.paymentIntentCreate.mockResolvedValue({ id: "pi_1", client_secret: "cs_1" });
+  mocks.pendingOrderCreate.mockResolvedValue({ id: "order-1" });
   mocks.registrationFindUnique.mockResolvedValue({ userId: "user-1" });
   mocks.userNotificationCreate.mockResolvedValue({});
 });
@@ -138,9 +141,16 @@ describe("team checkout (#541)", () => {
     // $50 per person, plus the athlete-paid fee (3.95% + $1.45) per person.
     const perPerson = 5000 + Math.round(5000 * 0.0395) + 145;
     expect(args.amount).toBe(perPerson * 2);
-    expect(JSON.parse(args.metadata.teams)).toEqual(["Fast Feet"]);
-    expect(JSON.parse(args.metadata.participant0).tm).toBe(0);
-    expect(JSON.parse(args.metadata.participant1).tm).toBe(0);
+    // The team and its members are held server-side; Stripe sees the order id.
+    const fields = mocks.pendingOrderCreate.mock.calls[0][0].data.fields;
+    expect(JSON.parse(fields.teams)).toEqual(["Fast Feet"]);
+    expect(JSON.parse(fields.participant0).tm).toBe(0);
+    expect(JSON.parse(fields.participant1).tm).toBe(0);
+    expect(args.metadata.orderId).toBe("order-1");
+    expect(args.metadata.participant0).toBeUndefined();
+    expect(args.metadata.teams).toBeUndefined();
+    expect(args.metadata.userEmail).toBeUndefined();
+    expect(args.metadata.userName).toBeUndefined();
   });
 
   it("refuses a team with the wrong number of members", async () => {
@@ -312,7 +322,7 @@ describe("team members added later (#541)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("marks a later teammate in the PaymentIntent metadata without their details", async () => {
+  it("marks a later teammate in the pending order without their details", async () => {
     mocks.eventFindUnique.mockResolvedValue(teamEvent());
     const res = await post(checkout, "/api/checkout", pairOrder({
       participants: [
@@ -321,8 +331,8 @@ describe("team members added later (#541)", () => {
       ],
     }));
     expect(res.status).toBe(200);
-    const metadata = mocks.paymentIntentCreate.mock.calls[0][0].metadata;
-    const second = JSON.parse(metadata.participant1);
+    const fields = mocks.pendingOrderCreate.mock.calls[0][0].data.fields;
+    const second = JSON.parse(fields.participant1);
     expect(second).toMatchObject({ pnd: 1, tm: 0, em: "member1@example.com", fn: "" });
   });
 });

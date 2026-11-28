@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       select: { id: true, orgName: true, email: true },
     });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: "CREATE_ORGANISER",
       targetType: "organiser",
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
         organisationName: organiser.orgName,
         email,
       }));
-      writeAuditLog({
+      await writeAuditLog({
         adminId: session.sub,
         action: "SEND_CLAIM_INVITE",
         targetType: "organiser",

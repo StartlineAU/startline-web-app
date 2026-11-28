@@ -61,7 +61,17 @@ export default function TicketDialog({
 }) {
   const load = useCallback(async (signal: AbortSignal) => {
     const res = await fetch(`/api/user/tickets/${encodeURIComponent(eventId ?? "")}`, { signal });
-    if (!res.ok) throw new Error("Could not load your ticket. Try again in a moment.");
+    if (!res.ok) {
+      // The confirmation email now lands here, so a link opened as the wrong
+      // account must say why rather than look like a broken page.
+      if (res.status === 404) {
+        throw new Error(
+          "This entry isn't on this Startline account. It may have been withdrawn, or it belongs to a different account.",
+        );
+      }
+      if (res.status === 401) throw new Error("Your session has expired. Sign in again to open this ticket.");
+      throw new Error("Could not load your ticket. Try again in a moment.");
+    }
     return (await res.json()) as TicketJson;
   }, [eventId]);
 

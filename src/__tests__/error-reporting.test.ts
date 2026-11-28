@@ -5,8 +5,10 @@ vi.mock("@/lib/rate-limit", () => ({ rateLimit: vi.fn(async () => null) }));
 
 import { rateLimit } from "@/lib/rate-limit";
 import {
+  CLIENT_ERROR_MARKER,
   ERROR_MARKER,
   formatErrorLine,
+  reportCaught,
   stripQuery,
   toErrorReport,
 } from "@/lib/error-reporting";
@@ -26,7 +28,8 @@ function post(body: string) {
 function loggedReports(spy: ReturnType<typeof vi.spyOn>) {
   return spy.mock.calls
     .map((args: unknown[]) => String(args[0]))
-    .filter((line: string) => line.startsWith(`${ERROR_MARKER} `))
+    .filter((line: string) =>
+      line.startsWith(`${ERROR_MARKER} `) || line.startsWith(`${CLIENT_ERROR_MARKER} `))
     .map((line: string) => JSON.parse(line.slice(line.indexOf("{"))));
 }
 
@@ -55,6 +58,25 @@ describe("error reporting", () => {
     expect(report.message.length).toBeLessThanOrEqual(1_001);
     expect(report.digest).toBe("abc123");
     expect(report.path).toBe("/events");
+  });
+
+  it("marks browser reports so the paging filter does not match them", () => {
+    const previous = process.env.ENV;
+    process.env.ENV = "prod";
+    try {
+      const line = formatErrorLine({ source: "client", message: "x is undefined" });
+      expect(line.startsWith(`${CLIENT_ERROR_MARKER} env=prod {`)).toBe(true);
+      expect(line).not.toContain(`${ERROR_MARKER} env=prod`);
+    } finally {
+      if (previous === undefined) delete process.env.ENV;
+      else process.env.ENV = previous;
+    }
+  });
+
+  it("reports caught server errors with where they happened", () => {
+    reportCaught(new Error("card declined upstream"), "checkout");
+    const [report] = loggedReports(errorSpy);
+    expect(report).toMatchObject({ source: "server", kind: "checkout", message: "card declined upstream" });
   });
 
   it("writes one marked JSON line the log filter can match", () => {

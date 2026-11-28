@@ -25,11 +25,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // An email with no account answers like a native account: the email is
+    // its own username. Every email gets the same shape of reply, and Cognito
+    // handles the password check the same way for both.
     const user = await findCognitoUserByEmail(email);
-    if (!user) {
-      return NextResponse.json({ exists: false }, { status: 404 });
-    }
-    return NextResponse.json({ username: user.username });
+    return NextResponse.json({ username: user?.username ?? email });
   } catch (err) {
     console.error("Could not resolve a sign-in username:", err);
     return NextResponse.json({ error: "Failed to look up account." }, { status: 503 });

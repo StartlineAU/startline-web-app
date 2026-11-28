@@ -13,6 +13,13 @@
 
 export const ERROR_MARKER = "STARTLINE_ERROR";
 
+/**
+ * Browser reports carry their own marker. The server alarm filters on
+ * `STARTLINE_ERROR env=…`, which this does not match, so browser noise stays
+ * out of it and client errors can be counted on a filter of their own.
+ */
+export const CLIENT_ERROR_MARKER = "STARTLINE_CLIENT_ERROR";
+
 export type ErrorSource = "server" | "client";
 
 export interface ErrorReport {
@@ -71,9 +78,20 @@ export function toErrorReport(
  */
 export function formatErrorLine(report: ErrorReport): string {
   const env = (process.env.ENV ?? process.env.NODE_ENV ?? "unknown").replace(/\s+/g, "-");
-  return `${ERROR_MARKER} env=${env} ${JSON.stringify({ ...report, env })}`;
+  const marker = report.source === "client" ? CLIENT_ERROR_MARKER : ERROR_MARKER;
+  return `${marker} env=${env} ${JSON.stringify({ ...report, env })}`;
 }
 
 export function reportError(report: ErrorReport): void {
   console.error(formatErrorLine(report));
+}
+
+/**
+ * Report an error a server path caught and turned into a response or a retry.
+ * onRequestError never sees these, so without this they reach only a plain
+ * console line the alarm does not count. `where` names the path, for example
+ * "checkout" or "email:registration-confirmation".
+ */
+export function reportCaught(error: unknown, where: string): void {
+  reportError(toErrorReport(error, { source: "server", kind: where }));
 }

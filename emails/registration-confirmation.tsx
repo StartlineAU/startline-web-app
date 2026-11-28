@@ -92,7 +92,7 @@ export function RegistrationConfirmationEmail({
       />
 
       <CtaButton
-        href={`${SITE_URL}/events/${encodeURIComponent(eventId)}`}
+        href={`${SITE_URL}/activity?eventId=${encodeURIComponent(eventId)}`}
         label="View event details"
         secondary={calendarUrl ? { href: calendarUrl, label: 'Add to calendar' } : undefined}
       />

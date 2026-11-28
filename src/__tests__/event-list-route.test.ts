@@ -13,6 +13,10 @@ import { GET } from "@/app/api/events/route";
 const mockedAll = getAllEvents as ReturnType<typeof vi.fn>;
 const mockedByIds = getPublicEventsByIds as ReturnType<typeof vi.fn>;
 
+// Always in the future: a fixed year turned every fixture into a past event,
+// and so out of the listing, the day it went by.
+const FUTURE_YEAR = new Date().getUTCFullYear() + 2;
+
 function event(n: number, overrides: Partial<PublicEvent> = {}): PublicEvent {
   return {
     id: `event-${n}`,
@@ -20,7 +24,7 @@ function event(n: number, overrides: Partial<PublicEvent> = {}): PublicEvent {
     title: `Event ${n}`,
     discipline: "running",
     description: "A test event",
-    eventDate: `2027-01-${String((n % 28) + 1).padStart(2, "0")}`,
+    eventDate: `${FUTURE_YEAR}-01-${String((n % 28) + 1).padStart(2, "0")}`,
     endDate: null,
     startTime: "07:00",
     endTime: "12:00",

@@ -48,7 +48,7 @@ export async function POST(
       email,
     });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: "SEND_CLAIM_INVITE",
       targetType: "organiser",

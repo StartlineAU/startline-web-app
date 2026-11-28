@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { goToHomepage } from "./helpers";
 
 test.describe("MFA sign-in flow", () => {
   test("admin login page renders form elements", async ({ page }) => {

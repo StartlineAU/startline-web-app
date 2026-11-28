@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, Users, UserPlus, UserX, Ban, Medal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserEvent } from "@/types";
@@ -20,6 +21,7 @@ import {
   DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import SignInModal from "@/components/SignInModal";
 import TeamMemberDetailsDialog, { type PendingTeamPlace } from "@/components/activity/TeamMemberDetailsDialog";
 
 type FollowingOrganiser = {
@@ -376,9 +378,15 @@ function EmptyState({ tab }: { tab: "registered" | "saved" | "following" }) {
   );
 }
 
-export default function ActivityPage() {
+function ActivityContent() {
+  const searchParams = useSearchParams();
+  const linkedEventId = searchParams.get("eventId");
   const { status } = useAuthContext();
   const [activeTab, setActiveTab] = useState<"registered" | "saved" | "following">("registered");
+  // A confirmation email links straight to the entry it is about. Dismissing
+  // that ticket by id means a refresh or a different card cannot reopen it.
+  const [dismissedEventId, setDismissedEventId] = useState<string | null>(null);
+  const [signInOpen, setSignInOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [registeredIds, setRegisteredIds] = useState(() => getRegisteredEventIds());
   const [following, setFollowing] = useState<FollowingOrganiser[]>([]);
@@ -395,6 +403,18 @@ export default function ActivityPage() {
   const [refundError, setRefundError] = useState("");
   const [ticketTarget, setTicketTarget] = useState<{ eventId: string; title: string } | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<PendingTeamPlace | null>(null);
+
+  /** Close whichever ticket is open, and don't re-open the email's link. */
+  const closeTicket = () => {
+    if (linkedEventId) setDismissedEventId(linkedEventId);
+    setTicketTarget(null);
+  };
+
+  /** An explicit card click wins over the linked ticket, and retires that link. */
+  const openTicket = (eventId: string, title: string) => {
+    if (linkedEventId) setDismissedEventId(linkedEventId);
+    setTicketTarget({ eventId, title });
+  };
 
   const confirmRefund = async () => {
     if (!refundTarget) return;
@@ -479,6 +499,18 @@ export default function ActivityPage() {
   // A signed-out visitor has only the local list, so there is nothing to wait for.
   const accountPending = status === "loading" || (status === "authenticated" && !accountLoaded);
   const listsLoading = accountPending || eventsLoading || eventsStale;
+
+  // The address in a confirmation email names the event, so the athlete lands
+  // on their own ticket once the account's entries have loaded. An explicit
+  // card click still wins, and closing the ticket retires the link for this id.
+  const linkedEvent = linkedEventId
+    ? events.find((event) => String(event.id) === linkedEventId)
+    : undefined;
+  const linkedTicket =
+    linkedEventId && linkedEventId !== dismissedEventId && status === "authenticated" && accountLoaded
+      ? { eventId: linkedEventId, title: linkedEvent?.title ?? "" }
+      : null;
+  const activeTicket = ticketTarget ?? linkedTicket;
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -591,6 +623,45 @@ export default function ActivityPage() {
     following: "Following",
   };
 
+  // The email's link is about a private entry, so a signed-out visitor is
+  // asked to sign in before the ticket opens. Social sign-in returns to this
+  // same address, so the id survives the round trip.
+  if (linkedEventId && status === "unauthenticated") {
+    return (
+      <main className="min-h-screen bg-dark-darker">
+        <div className="max-w-[1440px] mx-auto px-6 pt-20 pb-16">
+          <div className="mb-8">
+            <h1 className="font-headline text-5xl sm:text-[52px] font-black tracking-tighter text-light leading-none">
+              Your activity<br /><span className="text-primary">calendar.</span>
+            </h1>
+          </div>
+          <div
+            className="max-w-xl rounded-2xl border border-dark-lighter bg-dark p-7 sm:p-9 text-center"
+            data-testid="activity-signin-gate"
+          >
+            <p className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary">
+              Your ticket
+            </p>
+            <h2 className="mt-2 font-headline text-2xl font-black tracking-tighter text-light">
+              Sign in to open this entry.
+            </h2>
+            <p className="mt-3 text-[13px] text-muted leading-relaxed">
+              The event details, wave and bib belong to the Startline account that registered for it.
+            </p>
+            <button
+              type="button"
+              onClick={() => setSignInOpen(true)}
+              className="mt-6 inline-flex items-center justify-center h-11 px-5 rounded-xl bg-machined text-dark font-headline text-[12px] font-black uppercase tracking-[0.12em] shadow-machined hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none transition-all duration-150"
+            >
+              Sign in or create account
+            </button>
+          </div>
+        </div>
+        <SignInModal isOpen={signInOpen} onClose={() => setSignInOpen(false)} />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-dark-darker">
       <div className="max-w-[1440px] mx-auto px-6 pt-20 pb-16">
@@ -663,7 +734,7 @@ export default function ActivityPage() {
                     key={event.id}
                     event={event}
                     metas={confirmedMetas(String(event.id))}
-                    onOpenTicket={() => setTicketTarget({ eventId: String(event.id), title: event.title })}
+                    onOpenTicket={() => openTicket(String(event.id), event.title)}
                     onAddDetails={(meta) =>
                       setDetailsTarget({
                         id: meta.id,
@@ -707,7 +778,7 @@ export default function ActivityPage() {
                       key={event.id}
                       event={event}
                       metas={withdrawnMetas(String(event.id))}
-                      onOpenTicket={() => setTicketTarget({ eventId: String(event.id), title: event.title })}
+                      onOpenTicket={() => openTicket(String(event.id), event.title)}
                     />
                   ))}
                 </div>
@@ -729,21 +800,21 @@ export default function ActivityPage() {
       </div>
 
       <TicketDialog
-        eventId={ticketTarget?.eventId ?? null}
-        eventTitle={ticketTarget?.title ?? ""}
-        metas={ticketTarget ? metasFor(ticketTarget.eventId) : []}
+        eventId={activeTicket?.eventId ?? null}
+        eventTitle={activeTicket?.title ?? ""}
+        metas={activeTicket ? metasFor(activeTicket.eventId) : []}
         now={now}
-        onClose={() => setTicketTarget(null)}
+        onClose={closeTicket}
         onWithdraw={(meta) => {
           // One dialog at a time: the confirmation replaces the ticket.
-          const title = ticketTarget?.title ?? "";
-          setTicketTarget(null);
+          const title = activeTicket?.title ?? "";
+          closeTicket();
           setRefundError("");
           setRefundTarget({ meta, title });
         }}
         onAddDetails={(meta) => {
-          const title = ticketTarget?.title ?? "";
-          setTicketTarget(null);
+          const title = activeTicket?.title ?? "";
+          closeTicket();
           setDetailsTarget({
             id: meta.id,
             athleteName: meta.athleteName,
@@ -804,5 +875,28 @@ export default function ActivityPage() {
         </DialogContent>
       </Dialog>
     </main>
+  );
+}
+
+function ActivityLoading() {
+  return (
+    <main className="min-h-screen bg-dark-darker">
+      <div className="max-w-[1440px] mx-auto px-6 pt-20 pb-16">
+        <div className="mb-8">
+          <h1 className="font-headline text-5xl sm:text-[52px] font-black tracking-tighter text-light leading-none">
+            Your activity<br /><span className="text-primary">calendar.</span>
+          </h1>
+        </div>
+        <ActivitySkeleton />
+      </div>
+    </main>
+  );
+}
+
+export default function ActivityPage() {
+  return (
+    <Suspense fallback={<ActivityLoading />}>
+      <ActivityContent />
+    </Suspense>
   );
 }

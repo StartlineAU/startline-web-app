@@ -205,9 +205,6 @@ export default function OrganiserNavBar() {
   // dropdown, one per organisation, so the portal never told you which one you
   // held on the organiser you were actually looking at.
   const roleLabel   = role === "OWNER" ? "Owner" : role === "MANAGER" ? "Manager" : null;
-  const activePage  = ORGANISER_NAV.find(({ href }) =>
-    pathname === href || (pathname?.startsWith(href + "/") ?? false)
-  );
   // The Startline home page. A bare "/" is wrong in production: the organiser
   // host rewrites it to the organiser landing page, not the athlete site.
   const homeHref    = customerHref("/", usePortalHost());

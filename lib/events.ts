@@ -2,7 +2,7 @@ import type { EventStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { ACTIVE_ORGANISER_WHERE, publicDiscoveryWhere } from "@/lib/event-lifecycle";
 import { getOrganiserRatings } from "@/lib/reviews";
-import { lowestPrice, normaliseInformationPdfs, type PublicEvent, type PublicWave } from "./event-types";
+import { lowestPrice, normaliseInformationPdfs, type PublicEvent } from "./event-types";
 
 export async function getAllEvents() {
   try {
