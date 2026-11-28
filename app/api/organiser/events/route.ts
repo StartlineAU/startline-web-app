@@ -194,8 +194,14 @@ export async function POST(req: NextRequest) {
         inclusions:       body.inclusions        ?? null,
         extras:           body.extras            ?? null,
         activations:      body.activations       ?? null,
-        refundTiers:      orgRefund.refundTiers ?? body.refundTiers ?? [],
-        refundPolicy:     orgRefund.refundPolicy ?? body.refundPolicy ?? null,
+        // The organisation's policy unless the organiser set one for this event.
+        refundFollowsOrg: body.refundFollowsOrg !== false,
+        refundTiers:      body.refundFollowsOrg === false
+          ? (body.refundTiers ?? [])
+          : (orgRefund.refundTiers ?? body.refundTiers ?? []),
+        refundPolicy:     body.refundFollowsOrg === false
+          ? (body.refundPolicy ?? null)
+          : (orgRefund.refundPolicy ?? body.refundPolicy ?? null),
         registrationType,
         feeStructure:     body.feeStructure      ?? "athlete",
         registrationUrl:  body.registrationUrl   ?? null,

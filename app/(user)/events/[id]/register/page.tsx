@@ -16,7 +16,7 @@ import SaveDetailsPrompt, { type ProfileUpdate } from "@/components/registration
 import { botCheckAppliesTo } from "@/lib/bot-check-hosts";
 import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
-import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
+import { daysUntil, describeTiersWithDates, parseTiers, policyToday, refundAmountCents } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
 import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamNameError, teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
 import { getLifecyclePhase } from "@/lib/event-status";
@@ -494,8 +494,9 @@ function RegisterContent() {
       }));
 
   const refundTiers = parseTiers(event?.refundTiers);
-  const refundLines = freeEvent ? [] : describeTiers(refundTiers);
-  const daysToEvent = event ? daysUntil(event.eventDate, new Date().toISOString().slice(0, 10)) : 0;
+  const refundLines = freeEvent ? [] : describeTiersWithDates(refundTiers, event?.eventDate ?? "");
+  // Counted the way the refund form counts it: the Sydney date.
+  const daysToEvent = event ? daysUntil(event.eventDate, policyToday()) : 0;
   // A change-of-mind refund is a share of the ticket price. The booking fee is
   // never part of it (terms 3.4); only a cancelled event returns the fee.
   const refundIfCancelledNow = refundAmountCents(refundTiers, Math.round(subtotal * 100), daysToEvent) / 100;

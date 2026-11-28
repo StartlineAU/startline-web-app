@@ -167,6 +167,8 @@ export interface FormState {
   prizeMoneyDetails: string;
   refundTiers: RefundTier[];
   refundPolicy: string;
+  /** True: the listing uses the organisation's refund policy. False: its own. */
+  refundFollowsOrg: boolean;
   registrationType: "startline" | "external";
   feeStructure: "athlete" | "organiser";
   registrationUrl: string;
@@ -188,7 +190,7 @@ export const INITIAL: FormState = {
   venue: "", address: "", city: "", state: "", latitude: null, longitude: null,
   waves: [EMPTY_WAVE],
   prizeMoney: false, prizeMoneyAmount: "", prizeMoneyDetails: "",
-  refundTiers: DEFAULT_REFUND_TIERS, refundPolicy: "",
+  refundTiers: DEFAULT_REFUND_TIERS, refundPolicy: "", refundFollowsOrg: true,
   registrationType: "startline", feeStructure: "athlete", registrationUrl: "",
   coverImage: null, coverImageUrl: "", coverPosition: "50% 50%",
   informationPdfs: [],
@@ -291,3 +293,6 @@ export const INTENSITY_LEVELS: { v: Intensity; l: string; d: string }[] = [
 ];
 
 export const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ").replace(/&[^;\s]+;/g, " ").replace(/\s+/g, " ").trim();
+
+/** The organisation's saved refund policy, for the listing's refund card. Null until one is saved. */
+export type OrganisationRefund = { tiers: RefundTier[]; notes: string } | null;

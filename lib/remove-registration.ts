@@ -88,7 +88,7 @@ const removalSelect = {
     select: {
       id: true, title: true, feeStructure: true, waves: true, cap: true, minAge: true,
       eventDate: true, startTime: true, venue: true, city: true, state: true,
-      startsAtUtc: true, endsAtUtc: true,
+      startsAtUtc: true, endsAtUtc: true, refundTiers: true,
       organiser: { select: { orgName: true } },
     },
   },

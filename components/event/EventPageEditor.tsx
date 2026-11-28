@@ -16,7 +16,7 @@ import { usePortalHost } from "@/lib/use-portal-host";
 import { safeReturnPath } from "@/lib/safe-return-path";
 import {
   DISCIPLINE_CATS, EMPTY_WAVE, INITIAL, eventCap, requirementChecks, waveQty, waveTeamSize,
-  type Discipline, type FormState, type RegionId, type Wave,
+  type Discipline, type FormState, type OrganisationRefund, type RegionId, type Wave,
 } from "./event-form/shared";
 import { popIn, revealWords, spotlight, staggerIn } from "./event-form/motion";
 import { formToDetailData } from "./event-form/to-detail";
@@ -86,6 +86,8 @@ interface EventPageEditorProps {
   headingLabel?: string;       // breadcrumb label, default "Create new listing"
   organiserHasAbn?: boolean;   // false shows a non-blocking "profile incomplete" notice
   organiserContact?: OrganiserContactDefaults; // the contact region's preview; absent in admin
+  /** The organisation's saved refund policy (null: none yet). Absent in admin, where the card only shows. */
+  organisationRefund?: OrganisationRefund;
 }
 
 /**
@@ -109,10 +111,15 @@ export default function EventPageEditor({
   headingLabel = "Create new listing",
   organiserHasAbn = true,
   organiserContact,
+  organisationRefund,
 }: EventPageEditorProps) {
   const router = useRouter();
   const termsHref = customerHref("/terms#organisers", usePortalHost());
-  const [form,            setForm]            = useState<FormState>(INITIAL);
+  // A new listing starts on the organisation's policy, not Startline's default:
+  // the card used to show 30/14 days while the event was saved with the
+  // organisation's tiers.
+  const [form,            setForm]            = useState<FormState>(() =>
+    organisationRefund ? { ...INITIAL, refundTiers: organisationRefund.tiers, refundPolicy: organisationRefund.notes } : INITIAL);
   const [showConfirm,     setShowConfirm]     = useState(false);
   // A short note after Publish with fields still empty. Cleared on a timer.
   const [toast,           setToast]           = useState<string | null>(null);
@@ -276,6 +283,7 @@ export default function EventPageEditor({
           prizeMoneyDetails: parsePrizePool(e.extras)?.details ?? "",
           refundTiers:       parseTiers(e.refundTiers),
           refundPolicy:      e.refundPolicy   ?? "",
+          refundFollowsOrg:  e.refundFollowsOrg !== false,
           registrationType:  e.registrationType === "external" ? "external" : "startline",
           feeStructure:      e.feeStructure   === "organiser"  ? "organiser" : "athlete",
           registrationUrl:   e.registrationUrl   ?? "",
@@ -475,6 +483,7 @@ export default function EventPageEditor({
         extras:            form.prizeMoney ? encodePrizePool(form.prizeMoneyAmount, form.prizeMoneyDetails) : (originalFields.current.extras ?? null),
         refundTiers:       isFreeEvent(form.waves) ? [] : form.refundTiers,
         refundPolicy:      form.refundPolicy,
+        refundFollowsOrg:  form.refundFollowsOrg,
         registrationType:  form.registrationType,
         feeStructure:      form.feeStructure,
         registrationUrl:   form.registrationType === "external" ? form.registrationUrl : null,
@@ -743,7 +752,7 @@ export default function EventPageEditor({
                 nextLabel={id => { const n = nextRowAfter(id); return n ? DETAIL_LABELS[n] ?? null : null; }} />
             ),
             information:   <InformationEditor form={form} update={update} />,
-            refund:        <RefundCard form={form} missing={missingFor("refund")} />,
+            refund:        <RefundCard form={form} update={update} missing={missingFor("refund")} organisation={organisationRefund} />,
           }}
         />
 

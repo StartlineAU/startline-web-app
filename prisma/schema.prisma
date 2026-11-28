@@ -245,6 +245,9 @@ model Event {
   // preset labels, which nothing downstream could reason about.
   refundTiers       Json?
   refundPolicy      String?
+  // True: the listing uses the organisation's policy and follows it when it
+  // changes. False: the organiser set a policy for this event alone.
+  refundFollowsOrg  Boolean @default(true)
   registrationType  String  @default("startline")
   feeStructure      String  @default("athlete")
 

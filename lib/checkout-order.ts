@@ -259,7 +259,7 @@ export async function resolveCheckoutOrder(
     select: {
       id: true, title: true, status: true, feeStructure: true, registrationType: true,
       waves: true, cap: true, eventDate: true, startTime: true,
-      startsAtUtc: true, endsAtUtc: true,
+      startsAtUtc: true, endsAtUtc: true, refundTiers: true,
       venue: true, city: true, state: true,
       organiser: { select: { id: true, stripeAccountId: true, stripeOnboardingComplete: true } },
     },

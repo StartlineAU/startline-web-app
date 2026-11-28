@@ -3,9 +3,11 @@ import prisma from "@/lib/prisma";
 import type { RefundTier } from "@/lib/refund-policy";
 
 /**
- * Save the organisation's change-of-mind policy and apply it to every listing.
- * Entries that have not yet had a policy frozen keep the tiers the event
- * showed before this save, so a later change does not rewrite what they paid against.
+ * Save the organisation's change-of-mind policy and apply it to every listing
+ * that follows it (`Event.refundFollowsOrg`). A listing with its own policy is
+ * left alone. Entries that have not yet had a policy frozen keep the tiers the
+ * event showed before this save, so a later change does not rewrite what they
+ * paid against.
  */
 export async function saveOrganisationRefundPolicy(
   organiserId: string,
@@ -32,11 +34,31 @@ export async function saveOrganisationRefundPolicy(
       },
     });
     await tx.event.updateMany({
-      where: { organiserId },
+      where: { organiserId, refundFollowsOrg: true },
       data: {
         refundTiers: refundTiers as unknown as Prisma.InputJsonValue,
         refundPolicy,
       },
     });
   });
+}
+
+/**
+ * Freeze an event's current tiers onto every entry that has none yet, before
+ * the event's own policy changes. Each entry keeps the policy it was sold under
+ * (terms 3.4, 5.6), which is why an event's policy may be made stricter at any
+ * time: only athletes who enter after the change, and see it first, get it.
+ */
+export async function freezeEventRefundTiers(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+): Promise<void> {
+  await tx.$executeRaw`
+    UPDATE registrations AS r
+    SET "soldRefundTiers" = COALESCE(NULLIF(e."refundTiers", 'null'::jsonb), '[]'::jsonb)
+    FROM events AS e
+    WHERE r."eventId" = e.id
+      AND e.id = ${eventId}
+      AND r."soldRefundTiers" IS NULL
+  `;
 }

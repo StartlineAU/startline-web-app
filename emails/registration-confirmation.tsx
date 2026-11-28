@@ -38,6 +38,8 @@ export interface RegistrationConfirmationEmailProps {
    * address, so it works whichever account the athlete signs in with.
    */
   refundUrl?: string | null
+  /** The change-of-mind refund policy as sold, as dated lines. */
+  refundPolicyLines?: string[]
 }
 
 export function RegistrationConfirmationEmail({
@@ -57,6 +59,7 @@ export function RegistrationConfirmationEmail({
   calendarUrl,
   claimUrl,
   refundUrl,
+  refundPolicyLines,
 }: RegistrationConfirmationEmailProps) {
   const details: DetailItem[] = [
     { label: 'Date', value: eventDate },
@@ -111,6 +114,12 @@ export function RegistrationConfirmationEmail({
             </>
           }
         />
+      )}
+
+      {refundPolicyLines && refundPolicyLines.length > 0 && (
+        <Prose spaced muted>
+          {`Refund policy: ${refundPolicyLines.join(' ')} The booking fee is not refunded unless the event is cancelled.`}
+        </Prose>
       )}
 
       {refundUrl && (

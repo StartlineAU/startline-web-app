@@ -116,7 +116,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     select: {
       id: true, title: true, status: true, feeStructure: true, registrationType: true,
       waves: true, cap: true, eventDate: true, startTime: true,
-      startsAtUtc: true, endsAtUtc: true,
+      startsAtUtc: true, endsAtUtc: true, refundTiers: true,
       venue: true, city: true, state: true,
       organiserId: true,
       organiser: { select: { status: true } },

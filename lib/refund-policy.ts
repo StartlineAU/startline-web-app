@@ -111,7 +111,9 @@ export function describeTiers(tiers: RefundTier[]): string[] {
   const lines: string[] = [];
 
   if (sorted.length === 0) {
-    lines.push("No refunds at any time.");
+    // Never "no refunds": the Australian Consumer Law refunds a cancelled,
+    // undelivered or materially changed event whatever this policy says.
+    lines.push("No change-of-mind refunds.");
   } else {
     sorted.forEach((tier, i) => {
       const next = sorted[i + 1];
@@ -137,6 +139,52 @@ export function describeTiers(tiers: RefundTier[]): string[] {
   return lines;
 }
 
+const DATE_LABEL = new Intl.DateTimeFormat("en-AU", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** The event date less `days`, as "12 Mar 2027". */
+function dateBefore(eventDate: string, days: number): string | null {
+  const start = Date.parse(`${eventDate.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(start)) return null;
+  return DATE_LABEL.format(new Date(start - days * 86_400_000));
+}
+
+/**
+ * The policy as real dates for one event, so an athlete reads "Full refund
+ * until 12 Mar 2027" rather than counting days back from race day. Falls back
+ * to describeTiers when the event has no usable date. A request on the last
+ * date of a window still gets that window's refund.
+ */
+export function describeTiersWithDates(tiers: RefundTier[], eventDate: string): string[] {
+  const sorted = normaliseTiers(tiers);
+  if (sorted.length === 0) return describeTiers(sorted);
+  if (dateBefore(eventDate, 0) == null) return describeTiers(sorted);
+
+  const amountOf = (percent: number) =>
+    percent === 100 ? "full refund" : percent === 0 ? "no refund" : `${percent}% back`;
+  const lines: string[] = [];
+  sorted.forEach((tier, i) => {
+    const amount = amountOf(tier.percent);
+    // A 0-day window runs to the start; the 24-hour cutoff is stated separately.
+    const until = tier.daysBefore === 0 ? "the day before the event" : dateBefore(eventDate, tier.daysBefore);
+    if (i === 0) {
+      lines.push(`Until ${until}: ${amount}.`);
+    } else {
+      const from = dateBefore(eventDate, sorted[i - 1].daysBefore - 1);
+      lines.push(`${from} to ${until}: ${amount}.`);
+    }
+  });
+  const last = sorted[sorted.length - 1];
+  if (last.daysBefore > 0) {
+    lines.push(`From ${dateBefore(eventDate, last.daysBefore - 1)}: no refund.`);
+  }
+  return lines;
+}
+
 /**
  * The refund policies an organiser can choose from, each one complete on its own.
  *
@@ -156,7 +204,7 @@ export const REFUND_PRESETS: RefundPreset[] = [
   { id: "tiered",       label: "Tiered refund",          tiers: DEFAULT_REFUND_TIERS },
   { id: "full-30",      label: "Full refund to 30 days", tiers: [{ daysBefore: 30, percent: 100 }] },
   { id: "full-anytime", label: "Always refundable",      tiers: [{ daysBefore: 0, percent: 100 }] },
-  { id: "none",         label: "No refunds",             tiers: [] },
+  { id: "none",         label: "No change-of-mind refunds", tiers: [] },
 ];
 
 const tierKey = (tiers: RefundTier[]) =>

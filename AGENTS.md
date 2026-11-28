@@ -545,14 +545,23 @@ updates or deletes a row, and the rows outlive the event (`eventId` is set to
 null and `eventTitle` is kept). Organisers and admins see the log in the Change
 history panel on the event page (`/api/{organiser,admin}/events/[id]/changes`).
 
-**Refund policy is set per organisation, not per event.** Settings → Refunds
-(`OrganisationRefundsSection`, owner only) holds `Organiser.refundTiers` and
-`refundPolicy`. Saving copies them to every event that organisation runs, after
-freezing the tiers an existing entry was sold under into
-`Registration.soldRefundTiers`, so a later policy change cannot rewrite what an
-athlete already paid against. The section always shows `ACL_REFUND_NOTE`: the
-Australian Consumer Law rows apply whatever the preset says. The event wizard
-does not collect a policy.
+**Refund policy: an organisation default, with a per-event override (#580).**
+Settings → Refunds (`OrganisationRefundsSection`, owner only) holds
+`Organiser.refundTiers` and `refundPolicy`. Saving copies them to every event
+with `Event.refundFollowsOrg` true. The listing editor's refund card shows the
+organisation's policy and can set one for that event alone
+(`refundFollowsOrg: false`, a preset plus notes); "Use my organisation's
+policy" switches it back. Whenever an event's tiers change, by either route,
+the tiers each existing entry was sold under are frozen first into
+`Registration.soldRefundTiers` (`freezeEventRefundTiers`,
+`saveOrganisationRefundPolicy`), so a change, stricter or not, only reaches
+athletes who enter after it. That is why a stricter policy is allowed after
+sales start. A PATCH that leaves `refundFollowsOrg` out does not change a
+following event's tiers. Athletes see the policy as dates
+(`describeTiersWithDates`) on the event page, at checkout and in the
+confirmation email. The `none` preset is "No change-of-mind refunds", never
+"No refunds": the Australian Consumer Law rows (`ACL_REFUND_NOTE`) apply
+whatever the preset says.
 
 Change-of-mind refunds owe nothing inside 24 hours of the start
 (`refundWithinCutoff`, applied by `changeOfMindQuote` when the athlete asks).
