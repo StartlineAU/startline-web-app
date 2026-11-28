@@ -90,10 +90,10 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="2.3" title="Your public profile">
           <p>
-            Your username, bio, profile photo and race history, including results organisers record
-            for you, are shown on your public profile. You can make your profile private in
-            Settings. Your full name, contact details, date of birth and other entry details are
-            never shown on your profile.
+            Your username, bio, profile photo, the events you have entered and the results organisers
+            record for you are shown on your public profile. You can make your profile private in
+            Settings. Your contact details, date of birth and other entry details are never shown
+            on your profile. Reviews you write are public and show your name (see 6.2).
           </p>
         </Clause>
         <Clause n="2.4" title="Closing your account">
@@ -139,23 +139,33 @@ const SECTIONS: LegalSection[] = [
             paid the organiser for that entry.
           </p>
         </Clause>
-        <Clause n="3.4" title="Refunds under an event’s refund policy">
+        <Clause n="3.4" title="Refunds under the organiser’s refund policy">
           <p>
-            Every paid event shows its refund policy before you pay. The policy says what
-            percentage you get back depending on how many days before the event you cancel. That
-            percentage applies to the ticket price. The Startline booking fee is not refunded when
-            you cancel, only when the organiser cancels the event (3.5). You
-            can ask for a refund from your entry in your account. Startline processes approved
+            Every paid event shows its organiser’s refund policy before you pay. The policy says
+            what percentage you get back depending on how many days before the event you cancel, and
+            the policy shown when you bought your entry is the one that applies to it, even if the
+            organiser changes it later. That percentage applies to the ticket price. The Startline
+            booking fee is not refunded when you cancel, only when the organiser cancels the event
+            (3.5).
+          </p>
+          <p>
+            You ask for a refund through Support. The organiser decides on each request, usually
+            within 3 business days. If the organiser does not respond in that time, Startline may
+            decide instead, and Startline may also change an organiser’s decision where that is
+            needed, for example to meet the Australian Consumer Law. Startline issues approved
             refunds back to your original payment method, which usually takes 5 to 10 business
-            days. A request outside the policy is up to the organiser.
+            days. Refunds under the policy cannot be requested within 24 hours of the event’s start.
+            A request the policy does not cover is up to the organiser.
           </p>
         </Clause>
         <Clause n="3.5" title="Cancelled or changed events">
           <p>
-            If an organiser cancels an event, you are entitled to a full refund of everything you
-            paid, including the Startline booking fee. If an organiser postpones an event or changes
-            its date, location or distance in a significant way, you can choose to keep your entry
-            or take a full refund.
+            If an event is cancelled, everything you paid is refunded automatically, including the
+            Startline booking fee, less anything already refunded to you. Free entries are released.
+            If an organiser changes an event’s date, time, location or type after you have entered,
+            we will email you about it. If the change means the event is no longer what you paid
+            for, or it is postponed, you can choose to keep your entry or ask through Support for a
+            full refund.
           </p>
         </Clause>
         <Clause n="3.6" title="Your rights under Australian Consumer Law">
@@ -186,7 +196,9 @@ const SECTIONS: LegalSection[] = [
             information, must be accurate. Organisers rely on them to run the event safely. If you
             enter other people, you confirm that you have their permission and that you have told
             them how their details will be used, as described in our{" "}
-            <TextLink href="/privacy">Privacy Policy</TextLink>.
+            <TextLink href="/privacy">Privacy Policy</TextLink>. If an email address you give for
+            someone else has no Startline account, we create one for it so that person can see their
+            entry when they sign in.
           </p>
         </Clause>
         <Clause n="4.2" title="Your health and safety">
@@ -205,14 +217,15 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="4.4" title="Bibs, start waves, check-in and results">
           <p>
-            The organiser assigns bib numbers and start waves and records results. Results the
-            organiser records may appear on the event page and on your profile.
+            If the organiser uses bib numbers and start waves, it assigns them. The organiser decides
+            when check-in opens and records results. Results the organiser records may appear on
+            the event page and on your profile.
           </p>
         </Clause>
         <Clause n="4.5" title="Transfers">
           <p>
             An entry is for the person named on it. It cannot be transferred or resold unless the
-            organiser allows it.
+            organiser allows it, for example by swapping one member of a team for someone else.
           </p>
         </Clause>
         <Clause n="4.6" title="Entering a child">
@@ -220,6 +233,14 @@ const SECTIONS: LegalSection[] = [
             A parent or guardian can enter a child under 18. By doing so, you accept the organiser’s
             rules and any waiver on the child’s behalf, and you are responsible for the child’s
             supervision as the event requires.
+          </p>
+        </Clause>
+        <Clause n="4.7" title="Team entries">
+          <p>
+            A team ticket’s price is per person, so a team pays the price times the team size. The
+            person who buys it names the team and enters every member, and 4.1 applies to each of
+            them. Each member has their own entry, but the team shares a bib number, start wave,
+            check-in and results. A refund for a team entry is made for the whole team.
           </p>
         </Clause>
       </>
@@ -238,8 +259,10 @@ const SECTIONS: LegalSection[] = [
         <Clause n="5.1" title="Your organisation">
           <p>
             Give accurate details about your organisation and keep them up to date. Events from
-            organisations Startline has not yet verified are reviewed before they are published. We
-            may approve, reject or unpublish any event, and we will tell you why.
+            organisations Startline has not yet verified are reviewed before they are published, and
+            so are their edits to a published event. We may approve, reject or unpublish any event,
+            and we will tell you why. Your contact name and email address are shown on your event
+            pages unless you turn them off in Settings, and your phone number only if you turn it on.
           </p>
         </Clause>
         <Clause n="5.2" title="Your listings">
@@ -253,6 +276,11 @@ const SECTIONS: LegalSection[] = [
             <li>run the event safely and lawfully, with suitable first aid, risk management and staffing;</li>
             <li>keep the listing up to date and tell entrants promptly about any significant change.</li>
           </Bullets>
+          <p>
+            Startline keeps a history of every change to an event once it has been submitted. If
+            you change the date, time, location or type of an event that has entrants, we email
+            them what changed.
+          </p>
         </Clause>
         <Clause n="5.3" title="Insurance">
           <p>
@@ -274,7 +302,7 @@ const SECTIONS: LegalSection[] = [
             ({STRIPE_FEE_DESCRIPTION} per payment, on the full amount the athlete paid) and covers
             any higher rate Stripe charges for international or other cards. Once your event has
             finished, the ticket amounts from confirmed entries, less these fees and any refunds,
-            are paid out to your nominated bank account.
+            are paid out to your nominated bank account. A cancelled event is not paid out.
           </p>
         </Clause>
         <Clause n="5.5" title="Tax reporting">
@@ -287,14 +315,29 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="5.6" title="Refunds you owe">
           <p>
-            Every paid event must have a refund policy, and you must honour it. If you cancel an
-            event, you must refund every entrant in full, including the Startline booking fee, and
-            if you postpone it or change it significantly you must offer a full refund (3.5).
-            Startline processes these refunds from the event’s takings. If a refund or a payment
-            dispute arises after you have been paid out, we may recover the amount from your future
-            payouts or ask you to repay it. If you do not repay an amount within 14 days of our
-            request, we may suspend your organisation, unpublish its events or remove it from the
-            platform (see section 8). You still owe the amount after removal.
+            You set your organisation’s refund policy in Settings, under Refunds, and it applies to all of your
+            paid events. Each entry keeps the policy it was sold under, even if you change it later,
+            and you must honour it. You decide on refund requests made through Support, within 3
+            business days. If you do not, Startline may decide instead. Startline may also override
+            your decision where that is needed, for example to meet the Australian Consumer Law; it
+            will record why and tell you. Your policy cannot remove an entrant’s rights under the
+            Australian Consumer Law, including inside 24 hours of the start.
+          </p>
+          <p>
+            Startline issues every refund from the event’s takings. When an entry is refunded under
+            your policy or at your discretion, Startline keeps its booking fee and the entrant does
+            not get it back, so the whole refund comes from your share of the sale. Once an event
+            has entries it can be cancelled but not deleted, by an owner or by Startline. Cancelling
+            refunds every paid entrant everything they paid; Startline returns its booking fee on
+            those refunds.
+            If you postpone an event or change it significantly, you must offer a full refund
+            (3.5).
+          </p>
+          <p>
+            If a refund or a payment dispute arises after you have been paid out, we may recover the
+            amount from your future payouts or ask you to repay it. If you do not repay an amount
+            within 14 days of our request, we may suspend your organisation, unpublish its events or
+            remove it from the platform (see section 8). You still owe the amount after removal.
           </p>
         </Clause>
         <Clause n="5.7" title="Entrants’ personal information">
@@ -343,8 +386,9 @@ const SECTIONS: LegalSection[] = [
         </Clause>
         <Clause n="6.2" title="Reviews">
           <p>
-            Reviews must be honest and based on your own experience of the event. We may remove a
-            review that breaks these terms.
+            Reviews must be honest and based on your own experience of the event. A review shows
+            your name, or your username if your account has no name. We may remove a review that
+            breaks these terms.
           </p>
         </Clause>
         <Clause n="6.3" title="What you must not do">
@@ -531,8 +575,9 @@ export default function TermsPage() {
             organiser runs the event; we run the platform and process payments.
           </p>
           <p>
-            Each paid event shows its refund policy before you pay. A cancelled event is refunded in
-            full, booking fee included.
+            Each paid event shows its refund policy before you pay. You ask for refunds through
+            Support, the organiser decides, and Startline issues them. A cancelled event is refunded
+            in full, booking fee included.
           </p>
           <p>
             This summary is here to help. The numbered terms below are what apply.

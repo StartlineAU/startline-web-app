@@ -17,8 +17,8 @@ export const LEGAL_CONTACT_EMAIL = "admin@startlineau.com";
 export const LEGAL_JURISDICTION = "Victoria";
 
 export const TERMS_LAST_UPDATED = "22 November 2026";
-export const PRIVACY_LAST_UPDATED = "17 October 2026";
-export const COOKIES_LAST_UPDATED = "17 October 2026";
+export const PRIVACY_LAST_UPDATED = "22 November 2026";
+export const COOKIES_LAST_UPDATED = "22 November 2026";
 
 /** The Stripe processing fee estimate organisers absorb, read from the rate checkout uses. */
 export const STRIPE_FEE_DESCRIPTION = `${(STRIPE_FEE_PERCENT * 100).toFixed(2).replace(/\.?0+$/, "")}% plus A$${(STRIPE_FEE_FIXED_CENTS / 100).toFixed(2)}`;
