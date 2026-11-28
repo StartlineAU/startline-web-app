@@ -13,6 +13,7 @@ import {
 } from "@/lib/event-cancellation";
 import { purgeExpiredPendingOrders } from "@/lib/pending-order";
 import { reportCaught } from "@/lib/error-reporting";
+import { notifyEventFinished, notifyFinishedEvents } from "@/lib/notify-event-finished";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ async function run(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get("eventId")?.trim() || null;
   const sweep = req.nextUrl.searchParams.get("sweep") === "1" || !eventId;
 
-  if (eventId) await refreshEventLifecycle(eventId, now);
+  const refreshed = eventId ? await refreshEventLifecycle(eventId, now) : null;
 
   const transitions = sweep
     ? await transitionDueEvents(now)
@@ -88,6 +89,20 @@ async function run(req: NextRequest) {
     }
   }
 
+  // Tell each organisation its event has finished (#561). Runs after the
+  // transitions above so an event archived on this tick is announced on it.
+  let finishedNotices = 0;
+  try {
+    if (sweep) {
+      finishedNotices = await notifyFinishedEvents(now);
+    } else if (eventId && refreshed === "ARCHIVED") {
+      finishedNotices = (await notifyEventFinished(eventId, now)) ? 1 : 0;
+    }
+  } catch (err) {
+    console.error("Event finished notices failed:", err);
+    reportCaught(err, "lifecycle:finished-notices");
+  }
+
   // Housekeeping that rides on the sweep. Best-effort: a failure here must not
   // hide the lifecycle result, so it is reported and the sweep carries on.
   let purgedOrders = 0;
@@ -118,6 +133,7 @@ async function run(req: NextRequest) {
     started: transitions.started,
     scheduleFailures: failures.length,
     cancellationRefunds,
+    finishedNotices,
     purgedOrders,
     purgedRateLimits,
   }, { status: failures.length === 0 ? 200 : 500 });

@@ -74,10 +74,13 @@ function RaceHistoryCard({ reg }: { reg: HistoryRegistration }) {
   const [day, month] = formatShortDate(reg.event.eventDate).split(" ");
   const location = formatEventArea(reg.event.city, STATE_LABELS[reg.event.state as AustralianState]);
   const hasResult = Boolean(reg.resultPlacement || reg.resultTime);
+  // A finished race opens the athlete's own summary; the event page is a
+  // closed registration form by then (#561).
+  const href = reg.phase === "ended" ? `/races/${reg.id}` : `/events/${reg.event.id}`;
 
   return (
     <Link
-      href={`/events/${reg.event.id}`}
+      href={href}
       className={cn(
         "group relative grid grid-cols-1 md:grid-cols-[140px_minmax(0,1fr)] xl:grid-cols-[160px_minmax(0,1fr)_340px]",
         "bg-dark border border-dark-lighter rounded-2xl overflow-hidden",

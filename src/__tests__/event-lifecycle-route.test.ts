@@ -11,6 +11,13 @@ const mocks = vi.hoisted(() => ({
   processCancellationRefunds: vi.fn(),
   pendingOrderDeleteMany: vi.fn(),
   rateLimitDeleteMany: vi.fn(),
+  notifyFinishedEvents: vi.fn(),
+  notifyEventFinished: vi.fn(),
+}));
+
+vi.mock("@/lib/notify-event-finished", () => ({
+  notifyFinishedEvents: mocks.notifyFinishedEvents,
+  notifyEventFinished: mocks.notifyEventFinished,
 }));
 
 vi.mock("@/lib/event-cancellation", () => ({
@@ -63,6 +70,8 @@ beforeEach(() => {
   mocks.processCancellationRefunds.mockResolvedValue({ refunded: 0, failed: 0, released: 0, refundedCents: 0 });
   mocks.pendingOrderDeleteMany.mockResolvedValue({ count: 0 });
   mocks.rateLimitDeleteMany.mockResolvedValue({ count: 0 });
+  mocks.notifyFinishedEvents.mockResolvedValue(0);
+  mocks.notifyEventFinished.mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -90,6 +99,35 @@ describe("POST /api/internal/events/lifecycle", () => {
 
     expect(mocks.processCancellationRefunds).toHaveBeenCalledWith("evt-cancelled");
     expect(body.cancellationRefunds).toEqual({ events: 1, refunded: 2, failed: 1 });
+  });
+
+  it("tells organisations about finished events on a sweep (#561)", async () => {
+    mocks.notifyFinishedEvents.mockResolvedValue(2);
+    const body = await (await request()).json();
+    expect(mocks.notifyFinishedEvents).toHaveBeenCalled();
+    expect(body.finishedNotices).toBe(2);
+  });
+
+  it("announces a targeted event only once it has finished", async () => {
+    mocks.findUnique.mockResolvedValue({
+      status: "APPROVED",
+      startsAtUtc: new Date("2026-10-30T00:00:00.000Z"),
+      endsAtUtc: new Date("2026-10-30T02:00:00.000Z"),
+    });
+    mocks.notifyEventFinished.mockResolvedValue(true);
+    const body = await (await request("eventId=evt-1")).json();
+    expect(mocks.notifyEventFinished).toHaveBeenCalledWith("evt-1", expect.any(Date));
+    expect(mocks.notifyFinishedEvents).not.toHaveBeenCalled();
+    expect(body.finishedNotices).toBe(1);
+  });
+
+  it("keeps the sweep's answer when the finished notices fail", async () => {
+    mocks.notifyFinishedEvents.mockRejectedValue(new Error("db"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await request();
+    expect(res.status).toBe(200);
+    expect((await res.json()).finishedNotices).toBe(0);
+    error.mockRestore();
   });
 
   it("does not retry cancellation refunds on a targeted call", async () => {
