@@ -59,7 +59,8 @@ export async function lookupAbn(abn: string): Promise<AbnResult | null> {
   url.searchParams.set("abn", clean);
   url.searchParams.set("guid", guid);
 
-  const res = await fetch(url, { next: { revalidate: 86400 } }); // cache 24h
+  // cache 24h; a slow ABR answers "no match" rather than holding the request
+  const res = await fetch(url, { next: { revalidate: 86400 }, signal: AbortSignal.timeout(5_000) });
   if (!res.ok) return null;
 
   const data = parseBody(await res.text());

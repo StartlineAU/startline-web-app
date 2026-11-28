@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { ACCOUNT_EVENT_TYPES, isOnboardingComplete, retrieveConnectStatus } from "@/lib/stripe-connect";
+import { reportCaught } from "@/lib/error-reporting";
 
 /**
  * Event destination for Accounts v2 (issue #379).
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     // Non-2xx so Stripe retries the delivery.
     console.error("Stripe account events error:", { type: notification.type, accountId, err });
+    reportCaught(err, "stripe:account-events");
     return NextResponse.json({ error: "Account event handler failed." }, { status: 500 });
   }
 }

@@ -3,6 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { getStripe } from "@/lib/stripe";
 import { rateLimit } from "@/lib/rate-limit";
+import { reportCaught } from "@/lib/error-reporting";
+import { pendingOrderIsLive } from "@/lib/pending-order";
 
 // POST /api/checkout/accept-terms
 //
@@ -47,6 +49,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This payment can no longer be changed." }, { status: 409 });
     }
 
+    // The participant details behind this payment expire. Paying after that
+    // would only be refunded, so stop here and have them start again.
+    if (!(await pendingOrderIsLive(paymentIntent.metadata))) {
+      return NextResponse.json(
+        { error: "This checkout has expired. Go back and start your registration again.", expired: true },
+        { status: 409 },
+      );
+    }
+
     if (!paymentIntent.metadata.termsAcceptedAt) {
       await stripe.paymentIntents.update(paymentIntentId, {
         metadata: { termsAcceptedAt: new Date().toISOString() },
@@ -55,6 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Accept terms error:", err);
+    reportCaught(err, "checkout:accept-terms");
     return NextResponse.json({ error: "Could not record your acceptance. Please try again." }, { status: 503 });
   }
 }

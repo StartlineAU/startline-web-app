@@ -299,7 +299,7 @@ export async function DELETE(
       console.error("Event schedule cleanup failed:", err),
     );
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: "DELETE_EVENT",
       targetType: "event",

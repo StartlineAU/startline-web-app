@@ -11,6 +11,8 @@ import {
   eventsOwingCancellationRefunds,
   processCancellationRefunds,
 } from "@/lib/event-cancellation";
+import { purgeExpiredPendingOrders } from "@/lib/pending-order";
+import { reportCaught } from "@/lib/error-reporting";
 import { notifyEventFinished, notifyFinishedEvents } from "@/lib/notify-event-finished";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +84,7 @@ async function run(req: NextRequest) {
         cancellationRefunds.failed += result.failed;
       } catch (err) {
         console.error(`Cancellation refund retry failed for ${owingEventId}:`, err);
+        reportCaught(err, "lifecycle:cancellation-refunds");
       }
     }
   }
@@ -97,17 +100,43 @@ async function run(req: NextRequest) {
     }
   } catch (err) {
     console.error("Event finished notices failed:", err);
+    reportCaught(err, "lifecycle:finished-notices");
+  }
+
+  // Housekeeping that rides on the sweep. Best-effort: a failure here must not
+  // hide the lifecycle result, so it is reported and the sweep carries on.
+  let purgedOrders = 0;
+  let purgedRateLimits = 0;
+  if (sweep) {
+    try {
+      purgedOrders = await purgeExpiredPendingOrders(now);
+      // Fixed-window counters whose window ended a day ago are dead rows that
+      // also hold client IPs and emails.
+      ({ count: purgedRateLimits } = await prisma.rateLimit.deleteMany({
+        where: { resetAt: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+      }));
+    } catch (err) {
+      reportCaught(err, "lifecycle:housekeeping");
+    }
+  }
+
+  // A failed schedule sync is a failed run. Answering 200 hid it from the
+  // scheduler's retry and from the Lambda error alarm.
+  if (failures.length > 0) {
+    reportCaught(new Error(`Schedule sync failed for ${failures.length} event(s): ${failures.slice(0, 20).join(", ")}`), "lifecycle:schedule-sync");
   }
 
   return NextResponse.json({
-    ok: true,
+    ok: failures.length === 0,
     checked: events.length,
     archived: transitions.archived,
     started: transitions.started,
     scheduleFailures: failures.length,
     cancellationRefunds,
     finishedNotices,
-  });
+    purgedOrders,
+    purgedRateLimits,
+  }, { status: failures.length === 0 ? 200 : 500 });
 }
 
 export async function GET(req: NextRequest) {

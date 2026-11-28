@@ -13,6 +13,7 @@ import {
   insertConfirmedRegistrations,
   type PricedEntry,
 } from "@/lib/registration-confirm";
+import { reportCaught } from "@/lib/error-reporting";
 
 /**
  * POST — register for an event that costs nothing.
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("Free registration error:", err);
+    reportCaught(err, "registrations:free");
     return NextResponse.json({ error: "Failed to complete registration." }, { status: 503 });
   }
 }

@@ -126,6 +126,7 @@ export async function exchangeLinkCode({
   if (!host || !linkClientId) return null;
 
   const response = await fetch(`https://${host}/oauth2/token`, {
+    signal: AbortSignal.timeout(10_000),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({

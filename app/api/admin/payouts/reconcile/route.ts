@@ -6,6 +6,7 @@ import { PAYOUT_LEASE_MS } from "@/lib/payout";
 import prisma from "@/lib/prisma";
 import { getStripe } from "@/lib/stripe";
 import { z } from "zod";
+import { reportCaught } from "@/lib/error-reporting";
 
 const reconcileSchema = z.discriminatedUnion("resolution", [
   z.object({
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
   const { eventId, resolution } = parsed.data;
   const operation = await findOperation(eventId).catch((err) => {
     console.error("Payout reconciliation lookup failed:", err);
+    reportCaught(err, "payout:reconcile-lookup");
     return undefined;
   });
 
@@ -120,6 +122,7 @@ async function linkPayout(
     );
   } catch (err) {
     console.error("Could not retrieve the Stripe payout for reconciliation:", err);
+    reportCaught(err, "payout:reconcile-retrieve");
     return NextResponse.json(
       { error: "Could not read that payout from Stripe. Check the ID and account." },
       { status: 502 },
@@ -174,6 +177,7 @@ async function linkPayout(
     ]);
   } catch (err) {
     console.error("Could not record the reconciled payout:", err);
+    reportCaught(err, "payout:reconcile-record");
     return NextResponse.json(
       { error: "Could not record the reconciled payout. Nothing was changed." },
       { status: 503 },
@@ -243,6 +247,7 @@ async function confirmNoPayout(
     ]);
   } catch (err) {
     console.error("Could not clear the unresolved payout:", err);
+    reportCaught(err, "payout:reconcile-clear");
     return NextResponse.json(
       { error: "Could not update the payout record. Nothing was changed." },
       { status: 503 },

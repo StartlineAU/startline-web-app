@@ -42,6 +42,8 @@ export async function verifyTurnstileToken(
         response: token,
         ...(req ? { remoteip: getClientIp(req) } : {}),
       }),
+      // A hung siteverify would hold the request open; time out and fail closed.
+      signal: AbortSignal.timeout(5_000),
     });
     const data = (await res.json()) as VerifyResult;
     return data.success === true;

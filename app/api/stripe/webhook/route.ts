@@ -17,6 +17,8 @@ import { refundRefusedPayment } from "@/lib/refund-refused-payment";
 import { lockEventEntries } from "@/lib/event-entry-lock";
 import { syncChargeRefunds, syncDispute } from "@/lib/payment-adjustments";
 import { isBlockedByOrganiser } from "@/lib/organiser-blocks";
+import { reportCaught } from "@/lib/error-reporting";
+import { deletePendingOrder, orderMetadata } from "@/lib/pending-order";
 
 function getWebhookSecret(): string {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -43,9 +45,15 @@ export async function POST(req: NextRequest) {
     if (event.account) return NextResponse.json({ received: true });
 
     switch (event.type) {
-      case "payment_intent.succeeded":
-        await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
+      case "payment_intent.succeeded": {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        await handlePaymentIntentSucceeded(paymentIntent);
+        // Every return from the handler is a final outcome: entries written,
+        // payment refused and refunded, or not ours. A throw leaves the order
+        // for Stripe's retry.
+        await deletePendingOrder(paymentIntent.metadata?.orderId);
         break;
+      }
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
@@ -64,15 +72,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (err) {
     console.error("Stripe webhook error:", err);
+    reportCaught(err, "stripe:webhook");
     return NextResponse.json({ error: "Webhook handler failed." }, { status: 500 });
   }
 }
 
 
 async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
-  const meta = paymentIntent.metadata;
-  const eventId = meta.eventId;
-  const organiserId = meta.organiserId;
+  const eventId = paymentIntent.metadata.eventId;
+  const organiserId = paymentIntent.metadata.organiserId;
 
   // Every checkout PaymentIntent carries both. One without them was not made by
   // checkout, so it is not ours to confirm or to refund.
@@ -92,6 +100,13 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
+  // Participant details are held in pending_orders, not on Stripe. An order
+  // that is gone (swept after expiry) leaves no participants, so the payment
+  // is refused and refunded below.
+  const { meta, missing } = await orderMetadata(paymentIntent.metadata);
+  if (missing) {
+    reportCaught(new Error(`Pending order ${paymentIntent.metadata.orderId} not found for ${paymentIntent.id}`), "stripe:webhook-order-missing");
+  }
   const participants = parseParticipantsFromMetadata(meta);
 
   // Re-derive everything from the DB. Pricing and identity never come from

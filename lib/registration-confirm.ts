@@ -25,6 +25,7 @@ import {
 } from "@/lib/team-tickets";
 import { findTakenTeamNames } from "@/lib/team-entries";
 import { BLOCKED_ENTRY_MESSAGE, findOrganiserBlock } from "@/lib/organiser-blocks";
+import { reportCaught } from "@/lib/error-reporting";
 
 /** One ticket, priced from the database rather than from the client. */
 export interface PricedEntry {
@@ -187,6 +188,7 @@ export async function ensureParticipantUsers(
       userIdByEmail[email] = user.id;
     } catch (err) {
       console.error("Guest account creation failed:", err);
+      reportCaught(err, "registration:guest-account");
     }
   }
   return userIdByEmail;
@@ -455,6 +457,13 @@ export async function insertConfirmedRegistrations(opts: {
     });
 
     return { ok: true as const, registrationIds };
+  }, {
+    // Confirms for one event queue on the advisory lock. Prisma's defaults
+    // (2 s to start, 5 s to finish) failed free confirmations when a popular
+    // event opened and a queue formed. The work under the lock is a handful
+    // of reads and one insert, so the limits only need to cover the wait.
+    maxWait: 10_000,
+    timeout: 15_000,
   });
 }
 
@@ -569,12 +578,15 @@ export async function announceRegistrations(
     }).catch((err: unknown) => console.error("Failed to create notification:", err));
   }
 
-  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }, index) => {
+  // Awaited, not fire-and-forget: on Lambda the container can freeze as soon
+  // as the response is sent, and an unawaited send may never go out. They run
+  // in parallel, and sendEntryConfirmation never throws.
+  await Promise.all(entries.map(({ participant, waveLabel, priceCents, platformFeeCents, team }, index) => {
     const entryTeam = team != null ? teamByIndex.get(team) : undefined;
     // A place left for later has nobody to confirm to yet: its member gets
     // this email when their details are added.
-    if (!participant.em || participant.pnd) return;
-    void sendEntryConfirmation(event, {
+    if (!participant.em || participant.pnd) return Promise.resolve();
+    return sendEntryConfirmation(event, {
       registrationId: registrationIds[index],
       email: participant.em,
       waveLabel,
@@ -582,7 +594,7 @@ export async function announceRegistrations(
       platformFeeCents,
       team: entryTeam ? { name: entryTeam.name, size: entryTeam.size } : null,
     });
-  });
+  }));
 
   if (pendingCount > 0) await askBuyerForTeamDetails(event, entries, teams, registrationIds);
 }
@@ -620,6 +632,7 @@ async function askBuyerForTeamDetails(
     });
   } catch (err) {
     console.error("Failed to send team details email:", err);
+    reportCaught(err, "email:team-details-needed");
   }
 
   try {
@@ -663,18 +676,18 @@ export async function sendEntryConfirmation(
     team?: { name: string; size: number } | null;
   },
 ): Promise<void> {
-  const token = signEntryClaim({ registrationId: entry.registrationId, athleteEmail: entry.email });
-  const claimUrl = token ? entryClaimUrl(token) : null;
-  const athletePaysFee = event.feeStructure === "athlete";
-  const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
-  const location = formatEventPlace(event);
-  const calendarUrl = googleCalendarUrl({
-    title: event.title,
-    startsAtUtc: event.startsAtUtc,
-    endsAtUtc: event.endsAtUtc,
-    location,
-  });
   try {
+    const token = signEntryClaim({ registrationId: entry.registrationId, athleteEmail: entry.email });
+    const claimUrl = token ? entryClaimUrl(token) : null;
+    const athletePaysFee = event.feeStructure === "athlete";
+    const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
+    const location = formatEventPlace(event);
+    const calendarUrl = googleCalendarUrl({
+      title: event.title,
+      startsAtUtc: event.startsAtUtc,
+      endsAtUtc: event.endsAtUtc,
+      location,
+    });
     await sendRegistrationConfirmationEmail(entry.email, {
       eventId:          event.id,
       eventName:        event.title,
@@ -692,5 +705,6 @@ export async function sendEntryConfirmation(
     });
   } catch (err) {
     console.error("Failed to send registration confirmation email:", err);
+    reportCaught(err, "email:registration-confirmation");
   }
 }

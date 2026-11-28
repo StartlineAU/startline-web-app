@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
       console.error("Event lifecycle schedule sync failed:", err),
     );
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: "CREATE_EVENT",
       targetType: "event",

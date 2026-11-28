@@ -31,7 +31,7 @@ export async function PATCH(
       select: { id: true, verified: true },
     });
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: updated.verified ? "VERIFY_ORGANISER" : "UNVERIFY_ORGANISER",
       targetType: "organiser",
