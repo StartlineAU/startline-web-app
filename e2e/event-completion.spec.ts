@@ -206,7 +206,7 @@ test.describe("athlete race summary", () => {
 
     await expect(page).toHaveURL(new RegExp(`/races/${registrationId}$`), { timeout: 45_000 });
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
-    await expect(page.getByText("Race summary")).toBeVisible();
+    await expect(page.getByText("Race summary", { exact: true })).toBeVisible();
     const result = page.getByTestId("race-summary-result");
     await expect(result).toContainText("00:41:07");
     await expect(result).toContainText("7th");
@@ -230,6 +230,7 @@ test.describe("athlete race summary", () => {
   // profile private here would race other spec files that read it.
   test("an entry that is nobody's race is not found", async ({ page }) => {
     // A ticket the buyer bought for someone with no account.
+    await organiserLogin(page);
     const { registrationId } = await createFinishedEvent(page, `E2E Nobody's Race ${Date.now()}`);
     const res = await page.goto(`/races/${registrationId}`);
     expect(res?.status()).toBe(404);
@@ -250,6 +251,7 @@ test.describe("event finished notice", () => {
   test("the lifecycle worker announces a finished event once", async ({ page }) => {
     const secret = process.env.EVENT_LIFECYCLE_SECRET;
     test.skip(!secret, "EVENT_LIFECYCLE_SECRET is not set");
+    await organiserLogin(page);
     const { id } = await createFinishedEvent(page, `E2E Finished Notice ${Date.now()}`);
 
     const call = () => page.request.post(`/api/internal/events/lifecycle?eventId=${id}`, {
