@@ -241,6 +241,22 @@ export function parseLegacyPolicy(
   };
 }
 
+const POLICY_DATE = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "Australia/Sydney",
+});
+
+/**
+ * Today's date (YYYY-MM-DD) as a refund policy counts it. Event dates are local
+ * Australian dates, so a UTC date would count an extra day until the event for
+ * most of each Sydney morning and quote the wrong tier.
+ */
+export function policyToday(now: Date = new Date()): string {
+  return POLICY_DATE.format(now);
+}
+
 /**
  * The change-of-mind refund owed on one entry when the athlete asks (#492).
  *
@@ -255,7 +271,7 @@ export function changeOfMindQuote(
     eventRefundTiers: unknown;
     eventDate: string;
   },
-  today: string = new Date().toISOString().slice(0, 10),
+  today: string = policyToday(),
 ): { percent: number; cents: number } {
   const tiers = parseTiers(
     entry.soldRefundTiers != null ? entry.soldRefundTiers : entry.eventRefundTiers,

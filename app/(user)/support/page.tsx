@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import SupportForm, { type RefundableEntry } from "@/components/support/SupportForm";
 import { getUserSession } from "@/lib/amplify-server";
 import prisma from "@/lib/prisma";
-import { changeOfMindQuote, describeTiers, parseTiers } from "@/lib/refund-policy";
+import { changeOfMindQuote, describeTiers, parseTiers, policyToday } from "@/lib/refund-policy";
 import { entryPaidCents } from "@/lib/stripe-refunds";
 
 export const metadata: Metadata = {
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
  * ticket to the entry, so the organiser decides on a known amount.
  */
 async function refundableEntries(session: { sub: string; email: string }): Promise<RefundableEntry[]> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = policyToday();
   const rows = await prisma.registration.findMany({
     where: {
       OR: [{ userId: session.sub }, { athleteEmail: { equals: session.email, mode: "insensitive" } }],
@@ -60,6 +60,17 @@ export default async function SupportPage({
   const { registration } = await searchParams;
   const session = await getUserSession().catch(() => null);
   const entries = session ? await refundableEntries(session).catch(() => []) : [];
+  // The entry Activity linked to, only when a refund can still be asked for on
+  // it. Anything else is reported rather than swapped for a different entry.
+  const linked = registration ? entries.find((e) => e.id === registration) : undefined;
+  const initialEntryId = linked && !linked.requested ? linked.id : undefined;
+  const linkedEntryProblem: "requested" | "unavailable" | undefined = !registration
+    ? undefined
+    : linked?.requested
+      ? "requested"
+      : linked
+        ? undefined
+        : "unavailable";
 
   return (
     <main className="min-h-screen bg-dark-darker pt-24 pb-16">
@@ -74,7 +85,8 @@ export default async function SupportPage({
           defaultName={session?.name ?? ""}
           defaultEmail={session?.email ?? ""}
           entries={entries}
-          initialEntryId={entries.some((e) => e.id === registration) ? registration : undefined}
+          initialEntryId={initialEntryId}
+          linkedEntryProblem={linkedEntryProblem}
         />
       </div>
     </main>

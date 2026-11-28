@@ -60,6 +60,14 @@ function amountFor(t: Ticket, reason: Reason): string | null {
   return t.fullRefundCents != null ? money(t.fullRefundCents) : null;
 }
 
+/** The organisation's refund requests, or null when the request failed. */
+function fetchTickets(): Promise<Ticket[] | null> {
+  return fetch("/api/organiser/refund-requests")
+    .then((res) => (res.ok ? res.json() : { tickets: [] }))
+    .then((data: { tickets?: Ticket[] }) => data.tickets ?? [])
+    .catch(() => null);
+}
+
 export default function OrganiserRefundsPage() {
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -69,20 +77,17 @@ export default function OrganiserRefundsPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
-    return fetch("/api/organiser/refund-requests")
-      .then((res) => (res.ok ? res.json() : { tickets: [] }))
-      .then((data) => setTickets(data.tickets ?? []))
-      .catch(() => {});
+    return fetchTickets().then((list) => {
+      if (list) setTickets(list);
+    });
   }, []);
 
   useEffect(() => {
     let live = true;
-    fetch("/api/organiser/refund-requests")
-      .then((res) => (res.ok ? res.json() : { tickets: [] }))
-      .then((data) => {
-        if (live) setTickets(data.tickets ?? []);
-      })
-      .catch(() => {});
+    // A reply that lands after unmount (or the dev double-run) is ignored.
+    fetchTickets().then((list) => {
+      if (live && list) setTickets(list);
+    });
     return () => {
       live = false;
     };

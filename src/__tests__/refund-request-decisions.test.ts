@@ -280,13 +280,32 @@ describe("admin PATCH", () => {
   });
 
   it("marks an approved ticket refunded without touching the decision fields", async () => {
-    mocks.supportTicket.findUnique.mockResolvedValue(ticket({ status: "APPROVED", organiserDecision: "APPROVED" }));
+    mocks.supportTicket.findUnique.mockResolvedValue(
+      ticket({ status: "APPROVED", organiserDecision: "APPROVED", registrationId: null }),
+    );
     const res = await call(adminPatch, { action: "refunded" });
     expect(res.status).toBe(200);
     expect(mocks.supportTicket.updateMany).toHaveBeenCalledWith({
       where: { id: ID, status: "APPROVED" },
       data: { status: "REFUNDED" },
     });
+  });
+
+  it("will not mark a ticket linked to an entry refunded by hand", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(ticket({ status: "APPROVED", organiserDecision: "APPROVED" }));
+    const res = await call(adminPatch, { action: "refunded" });
+    expect(res.status).toBe(409);
+    expect(mocks.supportTicket.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("will not decline an approved refund once part of it has gone back", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(
+      ticket({ status: "APPROVED", organiserDecision: "APPROVED", registration: { status: "REFUNDED" } }),
+    );
+    const res = await call(adminPatch, { action: "decline", override: true, note: "Changed our mind." });
+    expect(res.status).toBe(409);
+    expect(mocks.supportTicket.updateMany).not.toHaveBeenCalled();
+    expect(mocks.restoreDeclinedEntry).not.toHaveBeenCalled();
   });
 
   it("reports a decision that landed in between", async () => {

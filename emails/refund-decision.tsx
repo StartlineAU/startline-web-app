@@ -25,8 +25,13 @@ export interface RefundDecisionEmailProps {
   full: boolean
   /** The organiser's reason, already labelled. */
   reasonLabel?: string | null
-  /** The organiser's note to the athlete. */
+  /** The note to the athlete from whoever decided. */
   note?: string | null
+  /**
+   * Who made the decision. Startline decides when the organiser let the window
+   * pass or was overridden; the email must not put that on the organiser.
+   */
+  decidedBy?: 'organiser' | 'startline'
   /** When the organiser should decide by, already formatted. */
   respondBy?: string | null
   ticketRef: string
@@ -51,10 +56,12 @@ export function RefundDecisionEmail({
   reasonLabel,
   note,
   respondBy,
+  decidedBy = 'organiser',
   ticketRef,
   activityUrl,
   supportUrl,
 }: RefundDecisionEmailProps) {
+  const decider = decidedBy === 'startline' ? 'Startline' : organiserName
   const copy = COPY[outcome]
   const items: DetailItem[] = [{ label: 'Reference', value: ticketRef }]
   if (amount) {
@@ -64,15 +71,21 @@ export function RefundDecisionEmail({
     })
   }
   if (reasonLabel) items.push({ label: 'Reason', value: reasonLabel })
-  if (note) items.push({ label: 'Note from the organiser', value: note, wide: true })
+  if (note) {
+    items.push({
+      label: decidedBy === 'startline' ? 'Note from Startline' : 'Note from the organiser',
+      value: note,
+      wide: true,
+    })
+  }
 
   let body: string
   if (outcome === 'requested') {
     body = `${organiserName} decides on your request${respondBy ? `, usually by ${respondBy}` : ''}, and Startline issues the refund. Your place is held until then. If they decline, your entry stays as it is.`
   } else if (outcome === 'declined') {
-    body = `${organiserName} has declined your refund request for ${eventTitle}. Your entry still stands and your place is held.`
+    body = `${decider} has declined your refund request for ${eventTitle}. Your entry still stands and your place is held.`
   } else {
-    body = `${organiserName} has approved your refund request for ${eventTitle}. Your entry has been cancelled and your place released.`
+    body = `${decider} has approved your refund request for ${eventTitle}. Your entry has been cancelled and your place released.`
   }
 
   return (

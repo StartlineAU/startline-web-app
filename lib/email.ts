@@ -568,6 +568,8 @@ export interface RefundDecisionEmailData {
   reasonLabel?: string | null;
   note?: string | null;
   respondBy?: string | null;
+  /** Who decided: the organiser (default) or Startline. */
+  decidedBy?: "organiser" | "startline";
   ticketId: string;
 }
 
@@ -593,6 +595,7 @@ export async function buildRefundDecisionEmail(
       reasonLabel: data.reasonLabel ?? null,
       note: data.note ?? null,
       respondBy: data.respondBy ?? null,
+      decidedBy: data.decidedBy ?? "organiser",
       ticketRef: data.ticketId.slice(0, 8),
       activityUrl: `${siteUrl}/activity`,
       supportUrl: `${siteUrl}/support`,

@@ -165,19 +165,25 @@ export async function issueEntryRefund(
   }
   // The amount is explicit: an amountless refund returns the whole charge, which
   // on a group booking is every participant's entry.
-  const refundCents = entryRefundAmountCents(entry);
+  let refundCents = entryRefundAmountCents(entry);
 
-  const refund = await refundEntryCharge({
+  // An earlier attempt may have reached Stripe and died before this row was
+  // written. Reuse that refund rather than sending a second one: the amount can
+  // have changed since (a policy approval overridden to a full one), and a
+  // second refund would pay the athlete twice.
+  const existing = await findEntryRefund(entry.stripePaymentIntentId, entry.id);
+  const refund = existing ?? (await refundEntryCharge({
     paymentIntentId: entry.stripePaymentIntentId,
     amountCents: refundCents,
-    // Retrying a failed request must not refund the athlete twice. Stripe
-    // expires an idempotency key after 24 hours, so a refund that failed
-    // for a transient reason can still be retried tomorrow.
-    idempotencyKey: `entry-refund-${entry.id}`,
+    // Retrying a failed request must not refund the athlete twice. The amount
+    // is in the key: Stripe rejects a reused key sent with different
+    // parameters, which would block a retry at the new amount for 24 hours.
+    idempotencyKey: `entry-refund-${entry.id}-${refundCents}`,
     // Marks the refund as Startline's own, so the charge.refunded webhook does
     // not also record it as a dashboard refund before this row is written.
     metadata: { registrationId: entry.id, reason: "entry_refund" },
-  });
+  }));
+  if (existing) refundCents = existing.amount;
 
   // The refund is idempotent per entry, so a concurrent second attempt gets the
   // same refund back. Only one of them moves the row; the other finds it
@@ -198,6 +204,22 @@ export async function issueEntryRefund(
   if (notify) await notifyAthlete(entry, refundCents);
 
   return { method: "stripe", refundId: refund.id, refundCents };
+}
+
+/** A live Startline refund already made for this entry, if any. */
+async function findEntryRefund(
+  paymentIntentId: string,
+  registrationId: string,
+): Promise<{ id: string; amount: number } | null> {
+  const refunds = await getStripe().refunds.list({ payment_intent: paymentIntentId, limit: 100 });
+  const match = refunds.data.find(
+    (r) =>
+      r.metadata?.registrationId === registrationId &&
+      r.metadata?.reason === "entry_refund" &&
+      r.status !== "failed" &&
+      r.status !== "canceled",
+  );
+  return match ? { id: match.id, amount: match.amount } : null;
 }
 
 // Tell the athlete their refund went through. Best-effort: the status change is

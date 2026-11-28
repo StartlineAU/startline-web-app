@@ -187,16 +187,35 @@ describe("issueTicketRefund", () => {
     expect(mocks.supportTicket.updateMany.mock.calls[0][0].data).toMatchObject({ status: "REFUNDED", refundCents: 4000 });
   });
 
-  it("refunds the team at the same terms, and totals what the whole team got back", async () => {
+  it("refunds the team at the same terms, and counts teammates bought on the athlete's payment", async () => {
     mocks.supportTicket.findUnique.mockResolvedValue(
       ticket({ refundType: "FULL", registration: entry({ teamId: "team-1" }) }),
     );
     mocks.refundTeammates.mockResolvedValue({ refunded: [{ id: "reg-2", athleteName: "Sam", refundCents: 5300 }], failed: [] });
-    mocks.registration.aggregate.mockResolvedValue({ _sum: { refundAmountCents: 10600 } });
+    // Sam's place was on Harper's payment, so it went back to Harper's card.
+    mocks.registration.aggregate.mockResolvedValue({ _sum: { refundAmountCents: 5300 } });
 
     const result = await issueTicketRefund("ticket-1", { firstAttempt: true });
     expect(mocks.refundTeammates).toHaveBeenCalledWith("team-1", "reg-1", { kind: "full" });
+    expect(mocks.registration.aggregate.mock.calls[0][0].where).toMatchObject({
+      teamId: "team-1",
+      id: { not: "reg-1" },
+      status: "REFUNDED",
+      stripePaymentIntentId: "pi_1",
+    });
     expect(result).toEqual({ ok: true, refundCents: 10600 });
+  });
+
+  it("does not count a teammate who paid for their own place", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(
+      ticket({ refundType: "FULL", registration: entry({ teamId: "team-1" }) }),
+    );
+    mocks.refundTeammates.mockResolvedValue({ refunded: [{ id: "reg-2", athleteName: "Sam", refundCents: 5300 }], failed: [] });
+    mocks.registration.aggregate.mockResolvedValue({ _sum: { refundAmountCents: null } });
+
+    const result = await issueTicketRefund("ticket-1", { firstAttempt: true });
+    expect(result).toEqual({ ok: true, refundCents: 5300 });
+    expect(mocks.sendRefundDecisionEmail.mock.calls[0][1]).toMatchObject({ outcome: "refunded", amountCents: 5300 });
   });
 
   it("leaves the ticket open to retry when a teammate fails", async () => {
@@ -219,6 +238,31 @@ describe("issueTicketRefund", () => {
 });
 
 describe("restoreDeclinedEntry", () => {
+  it("names Startline and its note, not the organiser's, when an admin declined", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(
+      ticket({
+        status: "DECLINED",
+        organiserReason: "GOODWILL",
+        organiserNote: "One-off favour.",
+        adminDecisionKind: "OVERRIDE",
+        adminNote: "Outside the policy window.",
+        refundType: null,
+      }),
+    );
+    await restoreDeclinedEntry("ticket-1");
+
+    expect(mocks.sendRefundDecisionEmail.mock.calls[0][1]).toMatchObject({
+      outcome: "declined",
+      decidedBy: "startline",
+      reasonLabel: null,
+      note: "Outside the policy window.",
+    });
+    const body = mocks.userNotification.create.mock.calls[0][0].data.body as string;
+    expect(body).toContain("Startline declined");
+    expect(body).toContain("Outside the policy window.");
+    expect(body).not.toContain("favour");
+  });
+
   it("puts the entry back to CONFIRMED and tells the athlete why", async () => {
     mocks.supportTicket.findUnique.mockResolvedValue(
       ticket({ status: "DECLINED", organiserReason: "OUTSIDE_POLICY", organiserNote: "Inside 14 days.", refundType: null }),

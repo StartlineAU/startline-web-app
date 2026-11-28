@@ -33,18 +33,27 @@ export default function SupportForm({
   defaultEmail = "",
   entries = [],
   initialEntryId,
+  linkedEntryProblem,
 }: {
   signedIn?: boolean;
   defaultName?: string;
   defaultEmail?: string;
   entries?: RefundableEntry[];
   initialEntryId?: string;
+  /**
+   * The page was opened for one entry (`?registration=`) that cannot take a
+   * refund request here. Nothing is preselected then: picking a different
+   * entry for the athlete would refund the wrong one.
+   */
+  linkedEntryProblem?: "requested" | "unavailable";
 }) {
   const [name, setName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
   const [requestType, setRequestType] = useState<"refund" | "other">("refund");
   // "" means the athlete is describing the event by hand instead.
-  const [entryId, setEntryId] = useState(initialEntryId ?? (entries.find((e) => !e.requested)?.id ?? ""));
+  const [entryId, setEntryId] = useState(
+    initialEntryId ?? (linkedEntryProblem ? "" : (entries.find((e) => !e.requested)?.id ?? "")),
+  );
   const [eventName, setEventName] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [reason, setReason] = useState("");
@@ -124,6 +133,14 @@ export default function SupportForm({
           <option value="other">Something else</option>
         </select>
       </label>
+
+      {requestType === "refund" && linkedEntryProblem && (
+        <p role="status" data-testid="linked-entry-problem" className="text-[12px] text-amber-300">
+          {linkedEntryProblem === "requested"
+            ? "You have already asked for a refund on that entry. The organiser is deciding, and we will email you."
+            : "That entry cannot be refunded online. Describe it below and Startline will match it by hand."}
+        </p>
+      )}
 
       {requestType === "refund" && entries.length > 0 && (
         <label className="grid gap-1.5">

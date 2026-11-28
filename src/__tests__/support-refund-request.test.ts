@@ -74,6 +74,7 @@ const ownEntry = (over: Record<string, unknown> = {}) => ({
   feeStructure: "athlete",
   // Sold under: half back two weeks out.
   soldRefundTiers: [{ daysBefore: 14, percent: 50 }],
+  stripePaymentIntentId: "pi_1",
   event: { refundTiers: [{ daysBefore: 30, percent: 100 }] },
   ...over,
 });
@@ -99,6 +100,14 @@ beforeEach(() => {
 });
 
 describe("POST /api/support with an entry", () => {
+  it("refuses an entry that was paid, but not through Stripe", async () => {
+    mocks.registration.findUnique.mockResolvedValue(ownEntry({ stripePaymentIntentId: null }));
+    const res = await post(body());
+    expect(res.status).toBe(409);
+    expect(mocks.tx.registration.updateMany).not.toHaveBeenCalled();
+    expect(mocks.tx.supportTicket.create).not.toHaveBeenCalled();
+  });
+
   it("links the ticket to the entry, takes the quote from the policy it was sold under, and holds the entry", async () => {
     const res = await post(body());
     expect(res.status).toBe(200);

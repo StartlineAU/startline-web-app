@@ -42,6 +42,7 @@ async function loadOwnEntry(id: string, session: { sub: string; email: string } 
     select: {
       id: true, eventId: true, status: true, userId: true, athleteEmail: true, athleteName: true,
       amountCents: true, platformFeeCents: true, feeStructure: true, soldRefundTiers: true,
+      stripePaymentIntentId: true,
       event: { select: { refundTiers: true } },
     },
   });
@@ -89,6 +90,14 @@ export async function POST(request: NextRequest) {
     if (entryPaidCents(entry) <= 0) {
       return NextResponse.json(
         { error: "This entry was free. Withdraw from it on your Activity page instead." },
+        { status: 409 },
+      );
+    }
+    // Paid, but not through Stripe: approving would release the place and
+    // report a $0 refund. Those are matched and refunded by hand.
+    if (!entry.stripePaymentIntentId) {
+      return NextResponse.json(
+        { error: "This entry was not paid online, so it cannot be refunded here. Choose \"Another entry, not listed here\" and describe it." },
         { status: 409 },
       );
     }

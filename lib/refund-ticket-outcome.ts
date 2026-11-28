@@ -35,6 +35,8 @@ export const ticketOutcomeSelect = {
   policyRefundCents: true,
   organiserReason: true,
   organiserNote: true,
+  adminDecisionKind: true,
+  adminNote: true,
   refundType: true,
   refundCents: true,
   registration: {
@@ -57,6 +59,8 @@ type OutcomeTicket = {
   policyRefundCents: number | null;
   organiserReason: RefundDecisionReason | null;
   organiserNote: string | null;
+  adminDecisionKind: string | null;
+  adminNote: string | null;
   refundType: RefundType | null;
   refundCents: number | null;
   registration: {
@@ -92,15 +96,18 @@ export function ticketRefundCents(
 /**
  * Why an approval of this type cannot go ahead, or null when it can. A policy
  * that owes nothing is refused rather than refunding zero: the organiser picks
- * goodwill to refund anyway, or declines.
+ * goodwill to refund anyway, and an admin approves it as a full refund.
  */
 export function approvalBlocker(
   ticket: Pick<OutcomeTicket, "registrationId" | "policyRefundCents">,
   type: RefundType,
+  audience: "organiser" | "admin" = "organiser",
 ): string | null {
   if (!ticket.registrationId) return null;
   if (type === "POLICY" && (ticket.policyRefundCents ?? 0) <= 0) {
-    return "The refund policy owes nothing on this entry. Choose goodwill to refund it anyway, or decline.";
+    const instead =
+      audience === "admin" ? "Approve it as a full refund instead" : "Choose goodwill to refund it anyway";
+    return `The refund policy owes nothing on this entry. ${instead}, or decline.`;
   }
   return null;
 }
@@ -169,13 +176,21 @@ export async function issueTicketRefund(
         type === "FULL" ? { kind: "full" } : { kind: "percent", percent: ticket.policyRefundPercent },
       );
       for (const f of team.failed) failures.push(`${f.athleteName}: ${f.error}`);
-      // Everything the team got back, including members refunded by an
-      // earlier attempt, not only the ones refunded just now.
-      const refunded = await prisma.registration.aggregate({
-        where: { teamId: entry.teamId, status: "REFUNDED" },
-        _sum: { refundAmountCents: true },
-      });
-      total = refunded._sum.refundAmountCents ?? total;
+      // What went back to this athlete's card: their own entry, plus any
+      // teammates bought on the same payment. A teammate who paid for their
+      // own place was refunded to their own card and is not counted here.
+      if (entry.stripePaymentIntentId) {
+        const samePayment = await prisma.registration.aggregate({
+          where: {
+            teamId: entry.teamId,
+            id: { not: entry.id },
+            status: "REFUNDED",
+            stripePaymentIntentId: entry.stripePaymentIntentId,
+          },
+          _sum: { refundAmountCents: true },
+        });
+        total += samePayment._sum.refundAmountCents ?? 0;
+      }
     }
     if (failures.length > 0) {
       // This entry is refunded; some teammates are not. Retrying picks them up.
@@ -249,6 +264,13 @@ async function notifyAthlete(
 ) {
   const eventTitle = ticket.registration?.event.title ?? ticket.eventName ?? "your event";
   const organiserName = ticket.registration?.event.organiser.orgName ?? "The organiser";
+  // An admin decision (no response, or an override) is Startline's, with its
+  // own note. The organiser's earlier reason and note no longer apply.
+  const byStartline = ticket.adminDecisionKind != null;
+  const decider = byStartline ? "Startline" : organiserName;
+  const reasonLabel =
+    !byStartline && ticket.organiserReason ? REFUND_REASON_LABEL[ticket.organiserReason] : null;
+  const note = outcome === "declined" ? (byStartline ? ticket.adminNote : ticket.organiserNote) : null;
   const data: RefundDecisionEmailData = {
     outcome,
     athleteName: ticket.registration?.athleteName ?? ticket.name,
@@ -256,8 +278,9 @@ async function notifyAthlete(
     organiserName,
     amountCents: cents,
     full: type === "FULL",
-    reasonLabel: ticket.organiserReason ? REFUND_REASON_LABEL[ticket.organiserReason] : null,
-    note: outcome === "declined" ? ticket.organiserNote : null,
+    reasonLabel,
+    note,
+    decidedBy: byStartline ? "startline" : "organiser",
     ticketId: ticket.id,
   };
   try {
@@ -276,9 +299,9 @@ async function notifyAthlete(
         title: outcome === "declined" ? "Refund declined" : "Refund approved",
         body:
           outcome === "declined"
-            ? `${organiserName} declined your refund request for ${eventTitle}. Your entry still stands.` +
-              (ticket.organiserNote ? ` Note: ${ticket.organiserNote}` : "")
-            : `${organiserName} approved your refund for ${eventTitle}. Startline is issuing it now.`,
+            ? `${decider} declined your refund request for ${eventTitle}. Your entry still stands.` +
+              (note ? ` Note: ${note}` : "")
+            : `${decider} approved your refund for ${eventTitle}. Startline is issuing it now.`,
         eventId: ticket.registration?.event.id ?? null,
       },
     });

@@ -58,6 +58,7 @@ export async function PATCH(
       id: true, status: true, organiserDecision: true, createdAt: true,
       eventName: true, name: true, organiserId: true, eventId: true,
       registrationId: true, policyRefundCents: true,
+      registration: { select: { status: true } },
     },
   });
   if (!ticket) return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -83,6 +84,25 @@ export async function PATCH(
   }
   const action = parsed.data.action;
 
+  // A ticket linked to an entry is refunded by approving it, and closes itself
+  // once Stripe has the money. Marking it refunded by hand would close it with
+  // nothing sent and leave the entry waiting forever. Retry the refund instead.
+  if (action === "refunded" && ticket.registrationId) {
+    return NextResponse.json(
+      { error: "This request is refunded automatically. Use Retry refund if it failed." },
+      { status: 409 },
+    );
+  }
+
+  // Once any of an approved refund has gone back, it cannot be declined: the
+  // athlete would be told their entry stands when it does not. Finish it.
+  if (action === "decline" && ticket.status === "APPROVED" && ticket.registration?.status === "REFUNDED") {
+    return NextResponse.json(
+      { error: "Part of this refund has already been issued, so it cannot be declined. Retry the refund to finish it." },
+      { status: 409 },
+    );
+  }
+
   const verdict = evaluateAdminAction(ticket, { ...parsed.data, action }, new Date());
   if (!verdict.ok) {
     return NextResponse.json({ error: verdict.error }, { status: verdict.httpStatus });
@@ -90,13 +110,8 @@ export async function PATCH(
 
   const refundType = verdict.status === "APPROVED" ? (parsed.data.refundType ?? "POLICY") : null;
   if (refundType) {
-    const blocker = approvalBlocker(ticket, refundType);
-    if (blocker) {
-      return NextResponse.json(
-        { error: blocker.replace("Choose goodwill to refund it anyway", "Approve it as a full refund instead") },
-        { status: 409 },
-      );
-    }
+    const blocker = approvalBlocker(ticket, refundType, "admin");
+    if (blocker) return NextResponse.json({ error: blocker }, { status: 409 });
   }
 
   // Conditional on the status read above, so an organiser decision that lands
