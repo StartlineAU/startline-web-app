@@ -15,7 +15,7 @@ describe("refund decision reasons (#492)", () => {
     expect(refundTypeFor("WITHIN_POLICY")).toBe("POLICY");
     expect(refundTypeFor("EVENT_CHANGED")).toBe("FULL");
     expect(refundTypeFor("NOT_DELIVERED")).toBe("FULL");
-    expect(refundTypeFor("GOODWILL")).toBe("FULL");
+    expect(refundTypeFor("GOODWILL")).toBe("TICKET");
   });
 
   it("keeps approve and decline reasons apart", () => {
@@ -45,15 +45,27 @@ describe("changeOfMindQuote", () => {
   };
 
   it("uses the policy the entry was sold under, on the ticket price only", () => {
-    expect(changeOfMindQuote(entry, "2026-12-01")).toEqual({ percent: 50, cents: 2500 });
+    expect(changeOfMindQuote(entry, new Date("2026-12-01T02:00:00Z"))).toEqual({ percent: 50, cents: 2500 });
   });
 
   it("owes nothing once the window has closed", () => {
-    expect(changeOfMindQuote(entry, "2026-12-25")).toEqual({ percent: 0, cents: 0 });
+    expect(changeOfMindQuote(entry, new Date("2026-12-25T02:00:00Z"))).toEqual({ percent: 0, cents: 0 });
+  });
+
+  it("owes nothing inside 24 hours of the start, whatever the policy says", () => {
+    const startsAtUtc = new Date("2026-12-31T21:00:00Z");
+    const lastDay = new Date("2026-12-31T01:00:00Z");
+    expect(
+      changeOfMindQuote({ ...entry, soldRefundTiers: null, startsAtUtc }, lastDay),
+    ).toEqual({ percent: 0, cents: 0 });
+    // The day before, outside the cutoff, the always-refundable policy still pays.
+    expect(
+      changeOfMindQuote({ ...entry, soldRefundTiers: null, startsAtUtc }, new Date("2026-12-29T21:00:00Z")),
+    ).toEqual({ percent: 100, cents: 5000 });
   });
 
   it("falls back to the event's policy when none was frozen", () => {
-    expect(changeOfMindQuote({ ...entry, soldRefundTiers: null }, "2026-12-25")).toEqual({ percent: 100, cents: 5000 });
+    expect(changeOfMindQuote({ ...entry, soldRefundTiers: null }, new Date("2026-12-25T02:00:00Z"))).toEqual({ percent: 100, cents: 5000 });
   });
 });
 

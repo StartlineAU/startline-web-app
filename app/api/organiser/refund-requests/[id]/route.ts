@@ -89,7 +89,10 @@ export async function PATCH(
     data: {
       status,
       organiserDecision: status,
+      // session.sub is the organisation. actorEmail is the owner or manager
+      // who clicked (#610).
       organiserDecidedById: auth.session.sub,
+      organiserDecidedByEmail: auth.actorEmail ?? null,
       organiserDecidedAt: new Date(),
       organiserNote: note,
       organiserReason: reason,

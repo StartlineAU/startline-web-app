@@ -5,7 +5,6 @@ import { writeAuditLog } from "@/lib/audit";
 import { idParams } from "@/lib/schemas";
 import { RefundError, issueEntryRefund, refundEntrySelect } from "@/lib/issue-entry-refund";
 import { refundTeammates } from "@/lib/team-refund";
-import { refundWithinCutoff } from "@/lib/refund-policy";
 import { TEAM_HELD_STATUSES } from "@/lib/team-tickets";
 
 export async function POST(
@@ -33,15 +32,11 @@ export async function POST(
       return NextResponse.json({ error: "Registration not found." }, { status: 404 });
     }
 
-    // Change-of-mind refunds stop 24 hours before the start. A free entry has
-    // nothing to refund, and a cancellation is not a refund.
-    const paid = registration.amountCents + registration.platformFeeCents > 0;
-    if (paid && refundWithinCutoff(registration.event.startsAtUtc)) {
-      return NextResponse.json(
-        { error: "Refunds are not available within 24 hours of the event start." },
-        { status: 409 },
-      );
-    }
+    // No 24-hour cutoff here. The cutoff limits what the change-of-mind policy
+    // owes, and is applied when the athlete asks (changeOfMindQuote). An admin
+    // refund is Startline's own decision: it may be an Australian Consumer Law
+    // refund, which is owed inside 24 hours too, or the retry of a team refund
+    // that stopped part-way (#609).
 
     // A team entry already refunded, with teammates still holding places, is
     // a team refund that stopped part-way. Asking again finishes it rather

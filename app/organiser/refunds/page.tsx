@@ -35,7 +35,7 @@ interface Ticket {
   policyRefundPercent: number | null;
   policyRefundCents: number | null;
   fullRefundCents: number | null;
-  refundType: "POLICY" | "FULL" | null;
+  refundType: "POLICY" | "TICKET" | "FULL" | null;
   refundCents: number | null;
   refundError: string | null;
 }
@@ -242,7 +242,7 @@ export default function OrganiserRefundsPage() {
                 {!t.organiserReason && t.organiserNote && <p className="text-[12px] text-muted mt-2">Your note: {t.organiserNote}</p>}
                 {t.status === "REFUNDED" && t.refundCents != null && (
                   <p className="text-[12px] text-primary mt-2">
-                    Refunded {money(t.refundCents)}{t.refundType === "FULL" ? ", booking fee included" : ""}.
+                    Refunded {money(t.refundCents)}{t.refundType === "FULL" ? ", booking fee included" : t.refundType === "TICKET" ? ", the whole ticket price" : ""}.
                   </p>
                 )}
                 {t.status === "APPROVED" && t.registrationId && (

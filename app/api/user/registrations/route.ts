@@ -4,11 +4,11 @@ import { entryBib } from "@/lib/team-entries";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import {
+  changeOfMindQuote,
   daysUntil,
   describeTiers,
   parseTiers,
-  refundAmountCents,
-  refundPercentFor,
+  policyToday,
 } from "@/lib/refund-policy";
 import { checkInWindow } from "@/lib/check-in-window";
 import { entryPaidCents } from "@/lib/stripe-refunds";
@@ -37,6 +37,7 @@ export async function GET() {
       status: true,
       athleteName: true,
       athleteEmail: true,
+      soldRefundTiers: true,
       userId: true,
       athleteUserId: true,
       startWaveLabel: true,
@@ -76,14 +77,28 @@ export async function GET() {
     take: 50,
   });
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Counted the way the refund form counts it (Sydney date, the policy the
+  // entry was sold under, the 24-hour cutoff), so Activity never quotes a
+  // different number from the one the request records.
+  const now = new Date();
+  const today = policyToday(now);
 
   return NextResponse.json({
     registrations: registrations.map((r) => {
       // What this entry's payer handed over; the fee only when they paid it.
       const paidCents = entryPaidCents(r);
-      const tiers = parseTiers(r.event.refundTiers);
+      const tiers = parseTiers(r.soldRefundTiers ?? r.event.refundTiers);
       const days = daysUntil(r.event.eventDate, today);
+      const quote = changeOfMindQuote(
+        {
+          amountCents: r.amountCents,
+          soldRefundTiers: r.soldRefundTiers,
+          eventRefundTiers: r.event.refundTiers,
+          eventDate: r.event.eventDate,
+          startsAtUtc: r.event.startsAtUtc,
+        },
+        now,
+      );
       const window = checkInWindow({
         eventDate: r.event.eventDate,
         endDate: r.event.endDate,
@@ -126,9 +141,9 @@ export async function GET() {
         refundAmountCents: r.event.status === "CANCELLED"
           ? paidCents
           // Change of mind returns a share of the ticket price, never the booking fee.
-          : r.refundAmountCents ?? refundAmountCents(tiers, r.amountCents, days),
+          : r.refundAmountCents ?? quote.cents,
         eventCancelled: r.event.status === "CANCELLED",
-        refundPercent: r.refundPercent ?? refundPercentFor(tiers, days),
+        refundPercent: r.refundPercent ?? quote.percent,
         outsidePolicy: r.refundOutsidePolicy,
         ticketCents: r.amountCents,
         feeCents: paidCents - r.amountCents,

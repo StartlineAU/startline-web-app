@@ -14,10 +14,11 @@ import { sendRefundDecisionEmail, type RefundDecisionEmailData } from "@/lib/ema
  * straight away:
  *
  * - POLICY returns the quote: a share of the ticket price, booking fee kept.
- * - FULL returns everything the entry paid, booking fee included. Startline
- *   keeps its application fee on the refund, so all of it comes out of the
- *   organiser's connected account (REFUND_APPLICATION_FEE in
- *   lib/stripe-refunds.ts). Only a cancelled event returns the fee.
+ * - TICKET (goodwill) returns the whole ticket price, booking fee kept.
+ * - FULL (the Australian Consumer Law cases) returns everything the entry paid,
+ *   booking fee included. Startline keeps its application fee on the refund
+ *   (REFUND_APPLICATION_FEE in lib/stripe-refunds.ts), so the fee comes out of
+ *   the organiser's share. Only a cancelled event returns the application fee.
  *
  * Declining puts the entry back to CONFIRMED, so the athlete keeps their place.
  * A ticket with no registration predates this and is still matched and
@@ -90,6 +91,7 @@ export function ticketRefundCents(
   type: RefundType,
 ): number {
   if (type === "FULL") return entryPaidCents(entry);
+  if (type === "TICKET") return Math.min(entry.amountCents, entryPaidCents(entry));
   return Math.max(0, Math.min(ticket.policyRefundCents ?? 0, entryPaidCents(entry)));
 }
 
@@ -152,13 +154,29 @@ export async function issueTicketRefund(
       if (cents <= 0) {
         throw new RefundError("There is nothing to refund on this entry.", 409, "NOTHING_TO_REFUND");
       }
+      // A refund made in the Stripe dashboard on this payment that matched no
+      // entry (lib/payment-adjustments.ts) may already be this athlete's money.
+      // Issuing another would pay them twice, so an admin matches it first.
+      if (entry.stripePaymentIntentId) {
+        const unmatched = await prisma.paymentAdjustment.aggregate({
+          where: { stripePaymentIntentId: entry.stripePaymentIntentId, kind: "REFUND", unallocatedCents: { gt: 0 } },
+          _sum: { unallocatedCents: true },
+        });
+        if ((unmatched._sum.unallocatedCents ?? 0) > 0) {
+          throw new RefundError(
+            "A refund on this payment was made in Stripe and not matched to an entry. Startline checks it before refunding again.",
+            409,
+            "UNMATCHED_STRIPE_REFUND",
+          );
+        }
+      }
       // The amount issueEntryRefund sends to Stripe is the one on the entry.
       const prepared = await prisma.registration.updateMany({
         where: { id: entry.id, status: { in: [...REFUNDABLE_ENTRY_STATUSES] } },
         data: {
           refundAmountCents: cents,
-          refundPercent: type === "FULL" ? 100 : ticket.policyRefundPercent,
-          refundOutsidePolicy: type === "FULL" && (ticket.policyRefundCents ?? 0) < cents,
+          refundPercent: type === "POLICY" ? ticket.policyRefundPercent : 100,
+          refundOutsidePolicy: type !== "POLICY" && (ticket.policyRefundCents ?? 0) < cents,
         },
       });
       if (prepared.count !== 1) {
@@ -173,7 +191,11 @@ export async function issueTicketRefund(
       const team = await refundTeammates(
         entry.teamId,
         entry.id,
-        type === "FULL" ? { kind: "full" } : { kind: "percent", percent: ticket.policyRefundPercent },
+        type === "FULL"
+          ? { kind: "full" }
+          : type === "TICKET"
+            ? { kind: "ticket" }
+            : { kind: "percent", percent: ticket.policyRefundPercent },
       );
       for (const f of team.failed) failures.push(`${f.athleteName}: ${f.error}`);
       // What went back to this athlete's card: their own entry, plus any

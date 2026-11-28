@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/amplify-server";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTurnstile } from "@/lib/turnstile";
-import { changeOfMindQuote, refundWithinCutoff } from "@/lib/refund-policy";
+import { changeOfMindQuote } from "@/lib/refund-policy";
 import { entryPaidCents } from "@/lib/stripe-refunds";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
 import { listAdminReviewRecipients } from "@/lib/admin-notification-recipients";
@@ -128,18 +128,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (requestType === "refund") {
-    let startsAt: Date | null = event?.startsAtUtc ?? null;
-    if (!startsAt && eventDate && /^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
-      startsAt = new Date(`${eventDate}T00:00:00Z`);
-    }
-    if (refundWithinCutoff(startsAt)) {
-      return NextResponse.json(
-        { error: "Refund requests are not available within 24 hours of the event start." },
-        { status: 409 },
-      );
-    }
-  }
+  // No 24-hour block here. Inside the cutoff the change-of-mind quote is zero
+  // (changeOfMindQuote), but the athlete can still ask: a changed or undelivered
+  // event is owed a refund under the Australian Consumer Law whenever it is
+  // raised, and the organiser can still choose goodwill.
 
   const eventTitle = event?.title ?? eventName ?? "";
   const ticketData = {
@@ -162,6 +154,7 @@ export async function POST(request: NextRequest) {
       soldRefundTiers: entry.soldRefundTiers,
       eventRefundTiers: entry.event.refundTiers,
       eventDate: event.eventDate,
+      startsAtUtc: event.startsAtUtc,
     });
     quote = q;
     // The entry is held for the request, and drops out of the payout until it

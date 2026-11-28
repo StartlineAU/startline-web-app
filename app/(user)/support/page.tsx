@@ -29,7 +29,7 @@ async function refundableEntries(session: { sub: string; email: string }): Promi
     select: {
       id: true, status: true, athleteName: true, amountCents: true, platformFeeCents: true,
       feeStructure: true, soldRefundTiers: true, refundAmountCents: true,
-      event: { select: { title: true, eventDate: true, refundTiers: true } },
+      event: { select: { title: true, eventDate: true, startsAtUtc: true, refundTiers: true } },
     },
   });
   return rows.map((r) => {
@@ -38,6 +38,7 @@ async function refundableEntries(session: { sub: string; email: string }): Promi
       soldRefundTiers: r.soldRefundTiers,
       eventRefundTiers: r.event.refundTiers,
       eventDate: r.event.eventDate,
+      startsAtUtc: r.event.startsAtUtc,
     });
     return {
       id: r.id,

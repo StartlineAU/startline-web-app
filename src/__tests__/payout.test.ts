@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     payoutOperation,
     payoutAttempt,
     event: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    supportTicket: { groupBy: vi.fn(async () => [] as unknown[]) },
     transaction: vi.fn(),
     createPayout: vi.fn(),
   };
@@ -36,6 +37,7 @@ vi.mock("@/lib/prisma", () => ({
     payoutOperation: mocks.payoutOperation,
     payoutAttempt: mocks.payoutAttempt,
     event: mocks.event,
+    supportTicket: mocks.supportTicket,
     $transaction: mocks.transaction,
   },
 }));
@@ -290,6 +292,14 @@ describe("refunds and disputes from Stripe (#550)", () => {
   it("refuses to pay out while a dispute is open", async () => {
     mocks.event.findUnique.mockResolvedValue(event({ paymentAdjustments: [dispute("OPEN")] }));
     await expect(runPayoutForEvent("event-1")).rejects.toMatchObject({ status: 409, code: "DISPUTE_OPEN" });
+    expect(mocks.createPayout).not.toHaveBeenCalled();
+    expect(mocks.payoutOperation.create).not.toHaveBeenCalled();
+  });
+
+  it("holds the payout while a refund request on the event is undecided or unissued", async () => {
+    mocks.event.findUnique.mockResolvedValue(event());
+    mocks.supportTicket.groupBy.mockResolvedValueOnce([{ eventId: "event-1", _count: { _all: 2 } }]);
+    await expect(runPayoutForEvent("event-1")).rejects.toMatchObject({ status: 409, code: "REFUNDS_PENDING" });
     expect(mocks.createPayout).not.toHaveBeenCalled();
     expect(mocks.payoutOperation.create).not.toHaveBeenCalled();
   });

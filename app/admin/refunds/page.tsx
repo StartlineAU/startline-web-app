@@ -38,7 +38,7 @@ interface Ticket {
 }
 
 type Action = "approve" | "decline" | "refunded" | "issue";
-type RefundType = "POLICY" | "FULL";
+type RefundType = "POLICY" | "TICKET" | "FULL";
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 const DATE = new Intl.DateTimeFormat("en-AU", { weekday: "short", day: "numeric", month: "short" });
@@ -171,7 +171,7 @@ export default function AdminRefundsPage() {
                   )}
                   {t.status === "REFUNDED" && t.refundCents != null && (
                     <p className="text-primary">
-                      Refunded {money(t.refundCents)}{t.refundType === "FULL" ? " in full" : " under the policy"}.
+                      Refunded {money(t.refundCents)}{t.refundType === "FULL" ? " in full" : t.refundType === "TICKET" ? ", the whole ticket price" : " under the policy"}.
                     </p>
                   )}
                   {t.status === "APPROVED" && t.refundError && (

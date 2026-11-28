@@ -10,13 +10,14 @@
  *   the athlete asked. The booking fee stays with Startline.
  * - EVENT_CHANGED and NOT_DELIVERED are the Australian Consumer Law cases: the
  *   athlete is owed everything they paid, booking fee included.
- * - GOODWILL is the organiser choosing to go further than their policy, and
- *   returns everything as well.
+ * - GOODWILL is the organiser choosing to go further than their policy. It
+ *   returns the whole ticket price, and the booking fee stays with Startline,
+ *   as it does for any refund that is not owed (terms 3.4, 5.6).
  *
- * A full refund comes out of the organiser's connected account in full,
- * booking fee included, because Startline keeps its application fee on a
- * refund (REFUND_APPLICATION_FEE in lib/stripe-refunds.ts). Only a cancelled
- * event returns the fee.
+ * Startline keeps its application fee on every one of these refunds
+ * (REFUND_APPLICATION_FEE in lib/stripe-refunds.ts), so the booking fee an ACL
+ * refund returns comes out of the organiser's share. Only a cancelled event
+ * hands the application fee back.
  */
 
 import type { RefundDecisionReason, RefundType } from "@prisma/client";
@@ -53,7 +54,7 @@ export const REFUND_REASON_HINT: Record<RefundDecisionReason, string> = {
   NOT_DELIVERED:
     "Refunds everything paid, booking fee included, from your account.",
   GOODWILL:
-    "Refunds everything paid, booking fee included, from your account.",
+    "Refunds the whole ticket price from your account. The booking fee is not refunded.",
   OUTSIDE_POLICY: "No refund. Tell the athlete why in the note.",
   OTHER: "No refund. Tell the athlete why in the note.",
 };
@@ -68,7 +69,9 @@ export function isDeclineReason(reason: RefundDecisionReason): reason is Decline
 
 /** How much an approval returns. */
 export function refundTypeFor(reason: ApproveReason): RefundType {
-  return reason === "WITHIN_POLICY" ? "POLICY" : "FULL";
+  if (reason === "WITHIN_POLICY") return "POLICY";
+  if (reason === "GOODWILL") return "TICKET";
+  return "FULL";
 }
 
 /**

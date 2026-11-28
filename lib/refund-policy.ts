@@ -6,8 +6,9 @@
  * organiser form, the athlete's checkout and refund dialog, the organiser's
  * refunds tab and the admin console all agree on the numbers and the wording.
  *
- * The percentage applies to the FULL amount the athlete paid — ticket price plus
- * the Startline fee — so "full refund" means what an athlete expects it to mean.
+ * The percentage applies to the ticket price only. The Startline booking fee is
+ * not refunded under the policy (terms 3.4); it comes back only when the event
+ * is cancelled or the organiser refunds under the Australian Consumer Law.
  */
 
 export type RefundTier = {
@@ -39,7 +40,12 @@ export const REFUND_PROCESS_COPY =
 export const ACL_REFUND_NOTE =
   "You must follow the Australian Consumer Law. If you cancel an event, do not supply it, or change it so it is no longer what the athlete paid for, they are still entitled to a refund of everything they paid. Your own policy cannot take that away, including inside 24 hours of the start.";
 
-/** Change-of-mind refunds are refused once the event starts in under a day. */
+/**
+ * Change-of-mind refunds owe nothing once the event starts in under a day. The
+ * athlete can still ask: the organiser may refund under the Australian Consumer
+ * Law (event changed, not delivered) or as goodwill, which this cutoff never
+ * limits.
+ */
 export const REFUND_CUTOFF_HOURS = 24;
 
 export function refundWithinCutoff(startsAtUtc: Date | null | undefined, now = new Date()): boolean {
@@ -270,9 +276,13 @@ export function changeOfMindQuote(
     soldRefundTiers: unknown;
     eventRefundTiers: unknown;
     eventDate: string;
+    /** When set, a request inside REFUND_CUTOFF_HOURS of the start owes nothing. */
+    startsAtUtc?: Date | null;
   },
-  today: string = policyToday(),
+  now: Date = new Date(),
 ): { percent: number; cents: number } {
+  if (refundWithinCutoff(entry.startsAtUtc, now)) return { percent: 0, cents: 0 };
+  const today = policyToday(now);
   const tiers = parseTiers(
     entry.soldRefundTiers != null ? entry.soldRefundTiers : entry.eventRefundTiers,
   );

@@ -74,7 +74,7 @@ const call = (handler: Handler, body: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getAdminSession.mockResolvedValue({ sub: "admin-1" });
-  mocks.requireOrganiser.mockResolvedValue({ session: { sub: "org-1", role: "OWNER" } });
+  mocks.requireOrganiser.mockResolvedValue({ session: { sub: "org-1", role: "OWNER" }, actorEmail: "tom@apex.test" });
   mocks.supportTicket.updateMany.mockResolvedValue({ count: 1 });
   mocks.organiser.findUnique.mockResolvedValue({
     id: "org-1",
@@ -105,6 +105,7 @@ describe("organiser PATCH", () => {
         status: "APPROVED",
         organiserDecision: "APPROVED",
         organiserDecidedById: "org-1",
+        organiserDecidedByEmail: "tom@apex.test",
         organiserNote: "fine",
         organiserReason: "WITHIN_POLICY",
         refundType: "POLICY",
@@ -120,7 +121,7 @@ describe("organiser PATCH", () => {
     expect(mocks.supportTicket.updateMany.mock.calls[0][0].data).toMatchObject({ refundType: "FULL" });
   });
 
-  it("needs a note on goodwill, then refunds in full", async () => {
+  it("needs a note on goodwill, then refunds the ticket price, booking fee kept", async () => {
     mocks.supportTicket.findUnique.mockResolvedValue(ticket());
     const bare = await call(organiserPatch, { action: "approve", reason: "GOODWILL" });
     expect(bare.status).toBe(400);
@@ -130,7 +131,7 @@ describe("organiser PATCH", () => {
     expect(res.status).toBe(200);
     expect(mocks.supportTicket.updateMany.mock.calls[0][0].data).toMatchObject({
       organiserReason: "GOODWILL",
-      refundType: "FULL",
+      refundType: "TICKET",
     });
   });
 

@@ -14,9 +14,13 @@ export interface TeamRefundResult {
  *   member with no frozen quote takes this entry's percentage (or an earlier
  *   member's when resuming); with no percentage on record they get back what
  *   they paid.
+ * - `ticket`: their whole ticket price, booking fee kept (goodwill).
  * - `full`: everything they paid, booking fee included (#492).
  */
-export type TeamRefundMode = { kind: "percent"; percent: number | null } | { kind: "full" };
+export type TeamRefundMode =
+  | { kind: "percent"; percent: number | null }
+  | { kind: "ticket" }
+  | { kind: "full" };
 
 /**
  * Refund every other member of a team whose place is still held. A team is
@@ -31,7 +35,7 @@ export async function refundTeammates(
   mode: TeamRefundMode,
 ): Promise<TeamRefundResult> {
   const teamPercent =
-    mode.kind === "full"
+    mode.kind !== "percent"
       ? 100
       : mode.percent ??
         (
@@ -51,10 +55,11 @@ export async function refundTeammates(
   for (const mate of mates) {
     try {
       let entry = mate;
-      if (mode.kind === "full") {
+      if (mode.kind === "full" || mode.kind === "ticket") {
+        const cents = mode.kind === "full" ? entryPaidCents(mate) : Math.min(mate.amountCents, entryPaidCents(mate));
         entry = await prisma.registration.update({
           where: { id: mate.id },
-          data: { refundAmountCents: entryPaidCents(mate), refundPercent: 100 },
+          data: { refundAmountCents: cents, refundPercent: 100 },
           select: refundEntrySelect,
         });
       } else if (mate.refundAmountCents == null && teamPercent != null) {

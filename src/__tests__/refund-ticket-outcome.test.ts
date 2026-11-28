@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   supportTicket: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
   registration: { updateMany: vi.fn(), aggregate: vi.fn() },
+  paymentAdjustment: { aggregate: vi.fn(async () => ({ _sum: { unallocatedCents: null as number | null } })) },
   userNotification: { create: vi.fn() },
   issueEntryRefund: vi.fn(),
   refundTeammates: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock("@/lib/prisma", () => ({
   default: {
     supportTicket: mocks.supportTicket,
     registration: mocks.registration,
+    paymentAdjustment: mocks.paymentAdjustment,
     userNotification: mocks.userNotification,
   },
 }));
@@ -132,8 +134,24 @@ describe("issueTicketRefund", () => {
     );
   });
 
+  it("refunds the ticket price only on TICKET (goodwill): the booking fee is kept", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(ticket({ refundType: "TICKET", organiserReason: "GOODWILL" }));
+    const result = await issueTicketRefund("ticket-1", { firstAttempt: true });
+
+    expect(result).toEqual({ ok: true, refundCents: 5000 });
+    expect(mocks.registration.updateMany.mock.calls[0][0].data).toEqual({
+      refundAmountCents: 5000,
+      refundPercent: 100,
+      refundOutsidePolicy: true,
+    });
+    expect(mocks.sendRefundDecisionEmail).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ outcome: "refunded", full: false }),
+    );
+  });
+
   it("refunds everything paid on FULL, marked as outside the policy", async () => {
-    mocks.supportTicket.findUnique.mockResolvedValue(ticket({ refundType: "FULL", organiserReason: "GOODWILL" }));
+    mocks.supportTicket.findUnique.mockResolvedValue(ticket({ refundType: "FULL", organiserReason: "EVENT_CHANGED" }));
     const result = await issueTicketRefund("ticket-1", { firstAttempt: true });
 
     expect(result).toEqual({ ok: true, refundCents: 5300 });
@@ -144,8 +162,20 @@ describe("issueTicketRefund", () => {
     });
     expect(mocks.sendRefundDecisionEmail).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ outcome: "refunded", full: true, reasonLabel: "Goodwill, outside our policy" }),
+      expect.objectContaining({ outcome: "refunded", full: true, reasonLabel: "We changed the event" }),
     );
+  });
+
+  it("refuses to refund again while a Stripe dashboard refund on the payment is unmatched", async () => {
+    mocks.supportTicket.findUnique.mockResolvedValue(ticket());
+    mocks.paymentAdjustment.aggregate.mockResolvedValueOnce({ _sum: { unallocatedCents: 2500 } });
+    const result = await issueTicketRefund("ticket-1", { firstAttempt: false });
+    expect(result.ok).toBe(false);
+    expect(mocks.issueEntryRefund).not.toHaveBeenCalled();
+    expect(mocks.supportTicket.update).toHaveBeenCalledWith({
+      where: { id: "ticket-1" },
+      data: { refundError: expect.stringMatching(/not matched/) },
+    });
   });
 
   it("keeps the ticket approved with the error when Stripe fails, and tells the athlete once", async () => {

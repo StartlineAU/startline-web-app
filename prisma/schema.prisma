@@ -1030,17 +1030,21 @@ model SupportTicket {
 
   // Why the organiser decided as they did. The reason sets the refund type.
   organiserReason RefundDecisionReason?
-  // POLICY returns the quote above; FULL returns everything the entry paid.
+  // POLICY returns the quote above, TICKET the whole ticket price, FULL
+  // everything the entry paid, booking fee included.
   refundType      RefundType?
   // Set once the money has gone back. refundError holds why it last failed.
   refundCents     Int?
   refundIssuedAt  DateTime?
   refundError     String?
 
-  organiserDecision    SupportTicketStatus?
-  organiserDecidedById String?
-  organiserDecidedAt   DateTime?
-  organiserNote        String?
+  organiserDecision       SupportTicketStatus?
+  // The organisation that decided (an Organiser id), and the person in it who
+  // did, so an owner's decision can be told from a manager's (#610).
+  organiserDecidedById    String?
+  organiserDecidedByEmail String?
+  organiserDecidedAt      DateTime?
+  organiserNote           String?
 
   // "NO_RESPONSE" (the organiser let the window pass) or "OVERRIDE".
   adminDecisionKind String?
@@ -1068,9 +1072,13 @@ enum RefundDecisionReason {
   OTHER
 }
 
+// POLICY: the change-of-mind quote. TICKET: the whole ticket price, booking fee
+// kept (goodwill). FULL: everything paid, booking fee included (the Australian
+// Consumer Law cases).
 enum RefundType {
   POLICY
   FULL
+  TICKET
 }
 
 enum SupportTicketStatus {
