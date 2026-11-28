@@ -83,8 +83,6 @@ export type ExportColumnKey = (typeof EXPORT_COLUMNS)[number]["key"];
 
 export const DEFAULT_EXPORT_COLUMN_KEYS: ExportColumnKey[] = EXPORT_COLUMNS.map((c) => c.key);
 
-export const EXCEL_HEADERS = EXPORT_COLUMNS.map((c) => c.label);
-
 const EXPORT_COLUMN_BY_KEY = Object.fromEntries(
   EXPORT_COLUMNS.map((c) => [c.key, c]),
 ) as Record<ExportColumnKey, (typeof EXPORT_COLUMNS)[number]>;

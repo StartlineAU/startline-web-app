@@ -15,10 +15,6 @@ import { recordSecurityEvent } from "@/lib/security-event";
 import { botCheckAppliesTo } from "@/lib/bot-check-hosts";
 import { NextRequest, NextResponse } from "next/server";
 
-export function turnstileConfigured(): boolean {
-  return Boolean(process.env.TURNSTILE_SECRET_KEY);
-}
-
 // Where the check is enforced: see lib/bot-check-hosts.ts.
 function botCheckApplicable(req?: NextRequest): boolean {
   if (!req) return true;

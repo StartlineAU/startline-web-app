@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, startTransition } from "react";
+import { useState, useEffect, useRef, startTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -21,7 +21,7 @@ const USER_NAV: NavItem[] = [
 export default function NavBar() {
   const router   = useRouter();
   const pathname = usePathname();
-  const { user, role, organiserCount, memberships, status, logout } = useAuthContext();
+  const { user, role, memberships, status, logout } = useAuthContext();
   const { open: openSettings, profileSavedAt } = useSettings();
 
   const [isMenuOpen,   setIsMenuOpen]   = useState(false);

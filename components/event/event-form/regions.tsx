@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
-  ArrowRight, Calendar, Check, ChevronDown, ChevronUp, Clock, ExternalLink, EyeOff, FileText,
+  ArrowRight, Calendar, Check, ChevronDown, ChevronUp, ExternalLink, EyeOff, FileText,
   MapPin, Move, Pencil, Plus, Ticket, Trash2, Upload, X,
 } from "lucide-react";
 import { collapsePanel, keepInView, popIn, revealPanel, settleIn } from "./motion";
@@ -19,7 +19,7 @@ import DatePicker          from "@/components/ui/DatePicker";
 import SelectMenu          from "@/components/ui/SelectMenu";
 import TimePicker          from "@/components/ui/TimePicker";
 import {
-  BANNER_META_CLASS, BANNER_TITLE_CLASS, DISCIPLINE_PILL_CLASS, PRICING_ROW_CLASS,
+  BANNER_META_CLASS, BANNER_TITLE_CLASS, DISCIPLINE_PILL_CLASS,
   DetailLabel, DetailSub, DetailValue, PrizePoolCard, RequiredMark, SectionHeading, SidebarCard,
 } from "@/components/event/EventDetailView";
 import { formatDivisionLabel } from "@/lib/divisions";
@@ -31,7 +31,7 @@ import { describeTiers } from "@/lib/refund-policy";
 import { UPLOAD_LIMITS, TYPE_MIMES, MAX_GALLERY_PHOTOS } from "@/lib/upload-limits";
 import { CENTRED, useDragPosition } from "@/hooks/useDragPosition";
 import {
-  formatCompetitionFormat, formatDiscipline, formatEventDate, formatEventDateRange, formatLevel, formatLongDate,
+  formatDiscipline, formatEventDate, formatEventDateRange, formatLevel,
 } from "@/lib/utils";
 import { STATE_LABELS } from "@/types";
 import OrganiserContactDetails from "@/components/OrganiserContactDetails";
@@ -41,7 +41,7 @@ import {
   type ContactField, type ContactVisibility, type OrganiserContact,
 } from "@/lib/organiser-contact";
 import {
-  DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, FORMATS, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
+  DISCIPLINES, DISCIPLINE_CATS, EMPTY_WAVE, INTENSITY_LEVELS, RichTextEditor, fmt24to12, inputCls, waveQty,
   waveTeamSize, eventCap,
   type AusState, type Discipline, type FormState, type RegionId, type Wave,
 } from "./shared";

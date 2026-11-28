@@ -104,12 +104,6 @@ export function formatFinishMinutes(minutes: number | null | undefined): string 
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-/** One line of a mixed-tier ticket selection: how many tickets of each tier. */
-export interface TicketSelection {
-  waveLabel: string;
-  quantity: number;
-}
-
 export const GENDER_OPTIONS = ["Prefer not to say", "Male", "Female", "Non-binary", "Other"] as const;
 
 export function splitFullName(name: string | null | undefined): { firstName: string; lastName: string } {

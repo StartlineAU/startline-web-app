@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Check, User } from "lucide-react";
@@ -21,7 +21,6 @@ function safeReturnTo(value: string | null): string {
 }
 
 function OnboardingForm() {
-  const router       = useRouter();
   const searchParams = useSearchParams();
   const { refresh }  = useAuthContext();
   const host         = usePortalHost();

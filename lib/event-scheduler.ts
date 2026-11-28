@@ -167,7 +167,3 @@ export async function cancelEventSchedules(eventId: string): Promise<void> {
     removeSchedule(cfg, eventId, "end"),
   ]);
 }
-
-export function eventSchedulerConfigured(): boolean {
-  return config() !== null;
-}
