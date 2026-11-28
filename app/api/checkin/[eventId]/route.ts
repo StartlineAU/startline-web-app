@@ -205,12 +205,10 @@ export async function POST(
     );
   }
 
-  // A team checks in together: any member's scan checks in the whole team.
+  // Each athlete checks in separately, even when they share a team ticket.
   const checkedInAt = new Date();
-  await prisma.registration.updateMany({
-    where: registration.teamId
-      ? { eventId, teamId: registration.teamId, status: "CONFIRMED", checkedInAt: null }
-      : { id: registration.id },
+  await prisma.registration.update({
+    where: { id: registration.id },
     data: { checkedInAt },
   });
 

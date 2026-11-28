@@ -239,8 +239,9 @@ const SECTIONS: LegalSection[] = [
           <p>
             A team ticket’s price is per person, so a team pays the price times the team size. The
             person who buys it names the team and enters every member, and 4.1 applies to each of
-            them. Each member has their own entry, but the team shares a bib number, start wave,
-            check-in and results. A refund for a team entry is made for the whole team.
+            them. Each member has their own entry and checks in separately, but the team shares
+            a bib number, start wave and results. A refund for a team entry is made for the whole
+            team.
           </p>
         </Clause>
       </>
