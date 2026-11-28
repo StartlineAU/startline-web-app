@@ -58,6 +58,7 @@ export interface PublicEvent {
   refundPolicy: string | null;
   refundTiers: unknown;
   coverImageUrl: string | null;
+  coverPosition: string | null;
   photos: string[];
   informationPdfs: InformationPdf[];
   registrationType: string;

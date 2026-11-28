@@ -249,6 +249,9 @@ model Event {
 
   // Step 5 — media & logistics
   coverImageUrl       String?
+  // The cover's CSS object-position ("x% y%"): which part of the photo the
+  // banner and cards keep when they crop it (issue #586).
+  coverPosition       String?  @default("50% 50%")
   // This event's choice of which organiser contact details to show. Null
   // follows the organisation's setting (Organiser.showContact*).
   showContactName  Boolean?

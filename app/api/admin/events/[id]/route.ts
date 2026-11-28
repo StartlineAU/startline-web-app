@@ -29,7 +29,7 @@ const AUDIT_FIELDS = [
   "venue", "address", "city", "state", "latitude", "longitude", "format", "level",
   "categories", "cap", "minAge", "waves", "inclusions", "extras", "activations",
   "refundTiers", "refundPolicy", "registrationType", "feeStructure", "registrationUrl",
-  "accessibilityInfo", "coverImageUrl", "informationPdfs", "photos", "status",
+  "accessibilityInfo", "coverImageUrl", "coverPosition", "informationPdfs", "photos", "status",
   "showContactName", "showContactEmail", "showContactPhone",
 ] as const;
 
@@ -176,6 +176,7 @@ export async function PATCH(
       registrationUrl:   data.registrationUrl   ?? undefined,
       accessibilityInfo: data.accessibilityInfo ?? undefined,
       coverImageUrl:     data.coverImageUrl     ?? undefined,
+      coverPosition:     data.coverPosition     ?? undefined,
       informationPdfs:   data.informationPdfs === undefined ? undefined : data.informationPdfs,
       photos:            Array.isArray(data.photos) ? data.photos : undefined,
       // Undefined leaves the choice alone; null hands it back to the organisation.

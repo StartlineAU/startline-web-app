@@ -5,7 +5,7 @@
  * Uploads used to POST the file through /api/upload, which runs on Amplify's
  * WEB_COMPUTE (Lambda-backed) platform. The multipart body is base64-encoded
  * into the invocation payload, so the 6 MB payload ceiling lands just under
- * 4.5 MB of actual file. Files between that and our own 10 MB cap were killed
+ * 4.5 MB of actual file. Files between that and our own image cap were killed
  * by the platform before any of our code ran, with a 413 carrying no body at
  * all, which is why the wizard could only say "please try again".
  *

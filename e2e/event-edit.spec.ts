@@ -125,6 +125,41 @@ test.describe("editing a published event", () => {
     expect(changes[1].material).toBe(false);
   });
 
+  // #586: the organiser chooses which part of the cover the crop keeps, and
+  // the public banner crops to the same spot.
+  test("repositioning the cover saves and shows on the public page", async ({ page }) => {
+    test.slow();
+    await organiserLogin(page);
+    await openEditor(page);
+
+    await page.getByRole("button", { name: "Reposition" }).click();
+    const surface = page.getByTestId("cover-reposition-surface");
+    await expect(surface).toBeVisible();
+    // Arrow keys are the deterministic path: each press moves 2%, and Up
+    // shows more of the bottom, as dragging the photo up would.
+    await surface.focus();
+    for (let i = 0; i < 5; i++) await surface.press("ArrowUp");
+    await page.getByRole("button", { name: "Done" }).click();
+    await expect(surface).toHaveCount(0);
+    await expect(page.getByAltText("Cover preview")).toHaveCSS("object-position", "50% 60%");
+
+    await saveChanges(page);
+    await expect.poll(async () =>
+      (await prisma.event.findUnique({ where: { id: EVENT_ID }, select: { coverPosition: true } }))?.coverPosition,
+    { timeout: 30000 }).toBe("50.0% 60.0%");
+
+    await page.goto(`/events/${EVENT_ID}`);
+    await expect(page.getByAltText("E2E Edit Refunds 10K").first()).toHaveCSS("object-position", "50% 60%", { timeout: 30000 });
+  });
+
+  test("a cover position that is not a CSS position is refused", async ({ page }) => {
+    await organiserLogin(page);
+    const res = await page.request.patch(`/api/organiser/events/${EVENT_ID}`, {
+      data: { coverPosition: "50% 50%; background: url(x)" },
+    });
+    expect(res.status()).toBe(400);
+  });
+
   test("Edit event warns about entrants before the editor opens", async ({ page }) => {
     await organiserLogin(page);
     await page.goto(`/organiser/events/${EVENT_ID}/dashboard`);

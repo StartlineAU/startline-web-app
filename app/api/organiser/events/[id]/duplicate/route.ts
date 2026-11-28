@@ -73,6 +73,7 @@ export async function POST(
         accessibilityInfo: source.accessibilityInfo,
         additionalNotes: source.additionalNotes,
         coverImageUrl: source.coverImageUrl,
+        coverPosition: source.coverPosition,
         informationPdfs: source.informationPdfs ?? [],
         photos: source.photos ?? [],
         showContactName: source.showContactName,

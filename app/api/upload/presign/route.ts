@@ -11,7 +11,7 @@ import { rateLimit } from "@/lib/rate-limit";
 // Uploads used to stream through /api/upload, which runs on Amplify's
 // WEB_COMPUTE platform. That is Lambda-backed, and the request body is
 // base64-encoded into the invocation payload, so the 6 MB payload ceiling lands
-// just under 4.5 MB of actual file. Our own cap is 10 MB, so every image
+// just under 4.5 MB of actual file. Our own cap was 10 MB, so every image
 // between those two numbers passed the client-side check and was then rejected
 // by the platform before the route ever ran, with a 413 carrying no body at
 // all. That empty body is why the wizard could only say "please try again"

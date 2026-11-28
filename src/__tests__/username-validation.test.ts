@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateUsername } from "@/lib/username-validation";
+import { usernameAsTyped, usernameForSave, validateUsername } from "@/lib/username-validation";
 import { containsProfanity } from "@/lib/profanity";
 
 /**
@@ -99,5 +99,28 @@ describe("containsProfanity", () => {
     expect(containsProfanity("")).toBe(false);
     expect(containsProfanity("Emily Dickinson")).toBe(false);
     expect(containsProfanity("Sarah Cummings")).toBe(false);
+  });
+});
+
+// Issue #591: a typed space becomes a hyphen, and that hyphen sat at the end of
+// the field until the next word was typed, so the field warned about a
+// character it had inserted itself.
+describe("username drafts", () => {
+  it("turns a typed space into a hyphen and keeps it for the next word", () => {
+    expect(usernameAsTyped("John ")).toBe("john-");
+    expect(usernameAsTyped("john- smith")).toBe("john-smith");
+  });
+
+  it("saves the draft without edge hyphens", () => {
+    expect(usernameForSave("john-")).toBe("john");
+    expect(usernameForSave(" -john-smith- ")).toBe("john-smith");
+    expect(usernameForSave("---")).toBe("");
+  });
+
+  it("produces a valid username from a typed full name", () => {
+    let draft = "";
+    for (const ch of "John Smith ") draft = usernameAsTyped(draft + ch);
+    expect(validateUsername(usernameForSave(draft))).toEqual({ valid: true });
+    expect(usernameForSave(draft)).toBe("john-smith");
   });
 });

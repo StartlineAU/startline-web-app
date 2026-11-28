@@ -118,7 +118,7 @@ prod precondition list yet, so a missing one does not fail an apply.
 environment.** Amplify runs on `platform = "WEB_COMPUTE"`, which is Lambda
 backed, and a multipart request body is base64-encoded into the invocation
 payload. The 6 MB payload ceiling therefore lands just under **4.5 MB of actual
-file**, well below the 10 MB `lib/upload-limits.ts` allows. Anything in between
+file**, well below the 25 MB `lib/upload-limits.ts` allows for images. Anything in between
 is rejected by the platform before the handler runs, and the reply is a **413
 with a zero-length body**, so the client cannot even read a reason off it.
 

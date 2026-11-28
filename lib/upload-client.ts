@@ -5,7 +5,7 @@ import { UploadType, UPLOAD_LIMITS, uploadSizeError } from "@/lib/upload-limits"
 //
 // The file never passes through Amplify's WEB_COMPUTE runtime, which is where
 // uploads used to die: its Lambda payload ceiling cuts in just under 4.5 MB of
-// file, well under our own 10 MB cap, and rejects the request with an empty-bodied
+// file, well under our own image cap, and rejects the request with an empty-bodied
 // 413 before any of our code runs. See app/api/upload/presign/route.ts.
 
 export class UploadError extends Error {

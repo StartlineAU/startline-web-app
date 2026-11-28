@@ -33,7 +33,7 @@ test.describe("account menu", () => {
     await page.goto("/events");
 
     const trigger = page.getByTestId("user-menu");
-    await expect(trigger).toContainText("Marcus Stirling", { timeout: 30000 });
+    await expect(trigger).toContainText("marcus-stirling", { timeout: 30000 });
     await trigger.click();
     const menu = page.getByTestId("user-menu-panel");
     await expect(menu.locator('a[href="/admin/dashboard"]')).toBeVisible({ timeout: 30000 });
@@ -43,7 +43,7 @@ test.describe("account menu", () => {
     await loginAs(page, "profile");
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 
-    await expect(trigger).not.toContainText("Marcus Stirling", { timeout: 30000 });
+    await expect(trigger).not.toContainText("marcus-stirling", { timeout: 30000 });
     await trigger.click();
     await expect(menu.locator('a[href="/admin/dashboard"]')).toHaveCount(0, { timeout: 30000 });
   });
