@@ -32,7 +32,7 @@ interface CheckinRegistration {
   waveLabel: string | null;
   bibNumber: string | null;
   checkedInAt: string | null;
-  /** Set for a team entry; checking in checks in the whole team. */
+  /** Set for a team entry; each member still checks in separately. */
   teamName?: string | null;
 }
 
@@ -212,7 +212,7 @@ export default function CheckInScreen({
               <div className="font-headline text-[14px] font-bold text-white">{data.registration!.athleteName}</div>
               {data.registration!.teamName && (
                 <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary mt-1">
-                  Team {data.registration!.teamName} · checks in together
+                  Team {data.registration!.teamName} · each member checks in separately
                 </div>
               )}
               <div className="flex flex-col gap-1 mt-3 text-[13px] text-muted">
@@ -261,7 +261,7 @@ export default function CheckInScreen({
                   )}
                 </Button>
                 <p className="text-center text-[11px] text-muted-dark">
-                  Tap once to confirm you&apos;re here. You can&apos;t be checked in for this event by anyone else.
+                  Tap once to confirm you&apos;re here. The organiser can also check you in by scanning your ticket.
                 </p>
               </>
             ) : (

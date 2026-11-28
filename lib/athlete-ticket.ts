@@ -7,6 +7,7 @@ import {
 } from "@/lib/organiser-contact";
 import { RACE_FEATURES_SELECT, athleteSeesBibs, athleteSeesWaves, type RaceFeatures } from "@/lib/race-features";
 import { entryBib } from "@/lib/team-entries";
+import { ticketQrPayload } from "@/lib/ticket-qr";
 
 /** How many of the organiser's announcements the ticket shows, newest first. */
 export const TICKET_ANNOUNCEMENT_LIMIT = 3;
@@ -29,6 +30,10 @@ export type TicketEntry = {
   /** The entry's bib, or its team's. Null unless bibs are shared. */
   bibNumber: string | null;
   checkedInAt: Date | null;
+  /** A team place bought before the athlete's details were supplied. */
+  detailsPending: boolean;
+  /** The QR the organiser scans at the gate. Null once the entry is withdrawn. */
+  qrPayload: string | null;
 };
 
 export type TicketAnnouncement = {
@@ -84,6 +89,8 @@ type EntryRow = {
   startWaveLabel: string | null;
   bibNumber: string | null;
   checkedInAt: Date | null;
+  ticketToken: string;
+  detailsPending: boolean;
   startWave: { label: string; startTime: string | null } | null;
   team: { name: string; bibNumber: string | null } | null;
 };
@@ -107,6 +114,11 @@ export function toTicketEntry(row: EntryRow, eventStartTime: string, features: R
     waveStartTime: waveLabel ? row.startWave?.startTime ?? eventStartTime : null,
     bibNumber: athleteSeesBibs(features) ? entryBib(row) : null,
     checkedInAt: row.checkedInAt,
+    detailsPending: row.detailsPending,
+    qrPayload:
+      row.status === "CONFIRMED" && !row.detailsPending
+        ? ticketQrPayload(row.ticketToken)
+        : null,
   };
 }
 
@@ -160,6 +172,8 @@ export async function loadAthleteTicket(
           startWaveLabel: true,
           bibNumber: true,
           checkedInAt: true,
+          ticketToken: true,
+          detailsPending: true,
           startWave: { select: { label: true, startTime: true } },
           team: { select: { name: true, bibNumber: true } },
         },

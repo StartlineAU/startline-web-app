@@ -21,6 +21,8 @@ const row = {
   startWaveLabel: null,
   bibNumber: "104",
   checkedInAt: null,
+  ticketToken: "8f14e45f-ceea-4e7a-9f5f-8c1f0f1c3d4b",
+  detailsPending: false,
   startWave: null,
   team: null,
 };
@@ -95,6 +97,12 @@ describe("toTicketEntry", () => {
   it("carries a team member's bib from the team", () => {
     const entry = toTicketEntry({ ...row, bibNumber: null, team: { name: "Relay Rockets", bibNumber: "T-7" } }, "06:00", shared);
     expect(entry.bibNumber).toBe("T-7");
+  });
+
+  it("exposes an opaque QR payload only for a confirmed entry", () => {
+    expect(toTicketEntry(row, "06:00", shared).qrPayload).toBe(`SLT1:${row.ticketToken}`);
+    expect(toTicketEntry({ ...row, status: "REFUND_REQUESTED" }, "06:00", shared).qrPayload).toBeNull();
+    expect(toTicketEntry({ ...row, detailsPending: true }, "06:00", shared).qrPayload).toBeNull();
   });
 });
 

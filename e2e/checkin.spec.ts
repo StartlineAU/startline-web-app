@@ -136,6 +136,33 @@ test.beforeEach(async () => {
   await restoreWindow();
 });
 
+test("organiser checks in the entry by scanning its ticket QR", async ({ page }) => {
+  await organiserLogin(page);
+  const registration = await prisma.registration.findUniqueOrThrow({
+    where: { id: REG_ID },
+    select: { ticketToken: true },
+  });
+
+  const res = await page.request.post(`/api/organiser/events/${EVENT_ID}/scan`, {
+    data: { qr: `SLT1:${registration.ticketToken}` },
+  });
+  expect(res.status()).toBe(200);
+  expect(await res.json()).toMatchObject({ result: "checked_in" });
+
+  const updated = await prisma.registration.findUniqueOrThrow({
+    where: { id: REG_ID },
+    select: { checkedInAt: true },
+  });
+  expect(updated.checkedInAt).not.toBeNull();
+
+  // A second scan is idempotent rather than moving the timestamp.
+  const again = await page.request.post(`/api/organiser/events/${EVENT_ID}/scan`, {
+    data: { qr: `SLT1:${registration.ticketToken}` },
+  });
+  expect(again.status()).toBe(200);
+  expect(await again.json()).toMatchObject({ result: "already_checked_in" });
+});
+
 test("organiser generates a scannable check-in QR for their event", async ({ page }) => {
   const url = await getCheckinUrl(page);
   expect(new URL(url).pathname).toMatch(new RegExp(`^/checkin/${EVENT_ID}/`));

@@ -43,9 +43,9 @@ export function entryBib(row: TeamLink): string | null {
 /**
  * Every registration that shares a team with one of `registrationIds` and
  * still holds a place there, plus the id asked about itself, keyed by that
- * id. An entry with no team maps to just itself. Race-day writes (start wave,
- * check-in, result) go to the whole list so a team moves as one; members who
- * cancelled or were refunded are left as they are.
+ * id. An entry with no team maps to just itself. Start waves and results go to
+ * the whole list so a team moves as one; members who cancelled or were refunded
+ * are left as they are. Attendance is per member.
  */
 export async function teammatesOf(
   eventId: string,

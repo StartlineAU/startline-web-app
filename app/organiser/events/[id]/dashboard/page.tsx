@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
   ArrowLeft, Megaphone, Plus, Pencil,
   MapPin, Calendar, ChevronRight, AlertCircle, Trash2, Users, QrCode, CheckCheck, Loader2, Trophy,
-  Download, ImageDown, AlertTriangle,
+  Download, ImageDown, AlertTriangle, ScanLine,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -425,9 +425,16 @@ function EventDashboardInner({
                   )}
                   {/* Check-in closes with the event. */}
                   {!finished && (
-                    <Button variant="outline" type="button" onClick={openCheckInQr}>
-                      <QrCode className="w-4 h-4" /> Check-in QR
-                    </Button>
+                    <>
+                      <Button variant="outline" type="button" onClick={openCheckInQr}>
+                        <QrCode className="w-4 h-4" /> Check-in QR
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <Link href={`/organiser/events/${id}/scan`}>
+                          <ScanLine className="w-4 h-4" /> Scan tickets
+                        </Link>
+                      </Button>
+                    </>
                   )}
                   {canEdit && (entered > 0 ? (
                     <Button variant="outline" type="button" className={editSpan} onClick={() => setEditWarnOpen(true)}>

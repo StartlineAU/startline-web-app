@@ -116,6 +116,7 @@ test("a registered card in Activity opens the athlete's ticket over the page", a
   await expect(entry).toHaveCount(1);
   await expect(entry.getByTestId("ticket-wave")).toHaveText("Wave 3");
   await expect(entry.getByTestId("ticket-bib")).toHaveText(`#${BIB}`);
+  await expect(entry.getByTestId("ticket-qr")).toBeVisible();
 
   const announcement = dialog.getByTestId("ticket-announcement").filter({ hasText: ANNOUNCEMENT_TITLE });
   await expect(announcement).toContainText("Racks are numbered by bib.");

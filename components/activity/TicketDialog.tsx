@@ -15,6 +15,7 @@ import OrganiserIdentity from "@/components/OrganiserIdentity";
 import OrganiserContactDetails from "@/components/OrganiserContactDetails";
 import { useApiResource } from "@/hooks/useApiResource";
 import { CheckInAction, withdrawnCopy, type RegMeta } from "@/components/activity/registration-meta";
+import { TicketQr } from "@/components/activity/TicketQr";
 
 // Dates arrive as ISO strings over JSON.
 type Json<T> = { [K in keyof T]: T[K] extends Date ? string : T[K] extends Date | null ? string | null : T[K] };
@@ -223,24 +224,26 @@ function EntryRow({
 
   // Nobody is named on this place yet, so there is no wave, bib or check-in
   // to show: only the step that names them.
-  if (meta?.detailsPending) {
+  if (meta?.detailsPending || entry.detailsPending) {
     return (
       <li data-testid="ticket-entry-pending" className="flex items-center justify-between gap-3 px-5 py-4">
         <div className="min-w-0">
           <p className="truncate font-headline text-[13px] font-bold text-light">
-            {meta.teamName ? `Team ${meta.teamName}` : "Team place"}
+            {meta?.teamName ? `Team ${meta.teamName}` : "Team place"}
           </p>
           <p className="mt-1 font-headline text-[11px] font-bold uppercase tracking-widest text-amber-300">
             Details needed
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => onAddDetails(meta)}
-          className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/40 text-primary font-headline text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-colors"
-        >
-          <UserPlus className="w-3.5 h-3.5" /> Add details
-        </button>
+        {meta ? (
+          <button
+            type="button"
+            onClick={() => onAddDetails(meta)}
+            className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/40 text-primary font-headline text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Add details
+          </button>
+        ) : null}
       </li>
     );
   }
@@ -259,6 +262,16 @@ function EntryRow({
           </span>
         )}
       </p>
+
+      {entry.qrPayload && (
+        <div className="mt-4 flex items-start gap-4">
+          <TicketQr payload={entry.qrPayload} name={entry.athleteName} />
+          <p className="pt-1 text-[12px] leading-relaxed text-muted">
+            Show this QR at the gate. Each athlete has their own ticket, so team
+            members check in separately.
+          </p>
+        </div>
+      )}
 
       {/* Only what the organiser shares (#566): no placeholder for a wave or
           bib this event will never hand out. */}

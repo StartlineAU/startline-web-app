@@ -673,7 +673,12 @@ model Registration {
   // minutes rather than on every one-minute sweep.
   cancelRefundAttemptAt DateTime?
 
-  // Set when the athlete confirms attendance via the check-in QR.
+  // Opaque credential carried by this entry's ticket QR. The organiser scan
+  // route resolves it back to this row, so the QR never contains a name, email
+  // or raw registration id.
+  ticketToken String @unique @default(uuid())
+  // Set when the athlete confirms attendance via the check-in QR, or when an
+  // organiser scans this entry at the gate.
   checkedInAt DateTime?
 
   // Race results — organiser-entered (race management) + legacy profile fields
