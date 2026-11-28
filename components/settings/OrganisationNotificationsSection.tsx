@@ -4,17 +4,18 @@ import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorNote, SaveFooter, SectionShell, Switch } from "@/components/settings/primitives";
 
-type Key = "notifyEventApproved" | "notifyEventRejected" | "notifyNewRegistration" | "notifyManagers";
+type Key = "notifyEventApproved" | "notifyEventRejected" | "notifyNewRegistration" | "notifyEventFinished" | "notifyManagers";
 
 const KINDS: { key: Key; id: string; label: string; desc: string }[] = [
   { key: "notifyEventApproved",   id: "notify-approved-label",     label: "Event approved",   desc: "When your event is approved by admin"      },
   { key: "notifyEventRejected",   id: "notify-rejected-label",     label: "Event rejected",   desc: "When your event is rejected with feedback" },
   { key: "notifyNewRegistration", id: "notify-registration-label", label: "New registration", desc: "When an athlete registers for your event"  },
+  { key: "notifyEventFinished",   id: "notify-finished-label",     label: "Event finished",   desc: "When your event ends, with turnout and a prompt to post results" },
 ];
 
 const TITLE = "Notifications";
 const DESCRIPTION =
-  "Choose what your organisation is told about. A notification that is off is not shown in the portal and is not emailed. Approval and rejection emails also go to your contact email.";
+  "Choose what your organisation is told about. A notification that is off is not shown in the portal and is not emailed. Approval, rejection and event finished emails also go to your contact email.";
 
 // Every switch here is a real control. Like the other sections, nothing is
 // sent until Save is pressed. They belong to the organisation, so only an
@@ -43,6 +44,7 @@ export default function OrganisationNotificationsSection() {
           notifyEventApproved:   data.notifyEventApproved   !== false,
           notifyEventRejected:   data.notifyEventRejected   !== false,
           notifyNewRegistration: data.notifyNewRegistration !== false,
+          notifyEventFinished:   data.notifyEventFinished   !== false,
           notifyManagers:        data.notifyManagers        !== false,
         };
         setPrefs(loaded);

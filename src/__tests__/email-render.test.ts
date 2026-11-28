@@ -20,6 +20,7 @@ import {
   buildRemovedFromEventEmail,
   buildRefundOverrideEmail,
   buildEventCancelledEmail,
+  buildEventFinishedEmail,
 } from "@/lib/email";
 import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -151,6 +152,10 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
   ["refund", () => buildRefundRequestEmail({ ticketId: "t1", athleteName: "Harper", athleteEmail: "h@x.test", eventTitle: "Harbour 10K", eventDate: "2027-03-21", reason: "Clash", eventUrl: "https://x.test/r", audience: "organiser", respondBy: new Date("2027-03-04T00:00:00Z") })],
   ["removed", () => buildRemovedFromEventEmail(
     { athleteName: "Harper", eventTitle: "Harbour 10K", organiserName: "Apex", reasonLabel: "Code of conduct", note: null, refundCents: 10540, noRefund: false, blocked: true },
+    opts,
+  )],
+  ["finished", () => buildEventFinishedEmail(
+    { eventId: "evt-1", eventTitle: "Harbour 10K", entries: 120, checkedIn: 104, withResults: 0 },
     opts,
   )],
   ["refund override", () => buildRefundOverrideEmail({ athleteName: "Harper", eventTitle: "Harbour 10K", organiserDecision: "declined", decision: "approved", note: "Date <moved>" })],
@@ -287,5 +292,28 @@ describe("event cancelled", () => {
     expect(email.html).toContain("/events/evt%201");
     expect(email.html).not.toContain("/activity");
     expect(email.text).toMatch(/view cancelled event/i);
+  });
+});
+
+describe("event finished email (#561)", () => {
+  it("links the organiser to the event's dashboard and asks for results", async () => {
+    const { html, text, subject } = await buildEventFinishedEmail(
+      { eventId: "evt-1", eventTitle: "Harbour 10K", entries: 120, checkedIn: 104, withResults: 30 },
+      opts,
+    );
+    expect(subject).toBe('"Harbour 10K" has finished');
+    expect(html).toContain("/organiser/events/evt-1/dashboard");
+    expect(text).toContain("Enter results");
+    expect(text).toContain("30 of 120");
+    expect(text).toContain("104");
+  });
+
+  it("does not ask for results once they are all posted", async () => {
+    const { text } = await buildEventFinishedEmail(
+      { eventId: "evt-1", eventTitle: "Harbour 10K", entries: 2, checkedIn: 0, withResults: 2 },
+      opts,
+    );
+    expect(text).not.toContain("Enter results");
+    expect(text).not.toContain("Checked in");
   });
 });

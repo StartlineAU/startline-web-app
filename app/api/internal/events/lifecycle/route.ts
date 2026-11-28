@@ -11,6 +11,7 @@ import {
   eventsOwingCancellationRefunds,
   processCancellationRefunds,
 } from "@/lib/event-cancellation";
+import { notifyEventFinished, notifyFinishedEvents } from "@/lib/notify-event-finished";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ async function run(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get("eventId")?.trim() || null;
   const sweep = req.nextUrl.searchParams.get("sweep") === "1" || !eventId;
 
-  if (eventId) await refreshEventLifecycle(eventId, now);
+  const refreshed = eventId ? await refreshEventLifecycle(eventId, now) : null;
 
   const transitions = sweep
     ? await transitionDueEvents(now)
@@ -85,6 +86,19 @@ async function run(req: NextRequest) {
     }
   }
 
+  // Tell each organisation its event has finished (#561). Runs after the
+  // transitions above so an event archived on this tick is announced on it.
+  let finishedNotices = 0;
+  try {
+    if (sweep) {
+      finishedNotices = await notifyFinishedEvents(now);
+    } else if (eventId && refreshed === "ARCHIVED") {
+      finishedNotices = (await notifyEventFinished(eventId, now)) ? 1 : 0;
+    }
+  } catch (err) {
+    console.error("Event finished notices failed:", err);
+  }
+
   return NextResponse.json({
     ok: true,
     checked: events.length,
@@ -92,6 +106,7 @@ async function run(req: NextRequest) {
     started: transitions.started,
     scheduleFailures: failures.length,
     cancellationRefunds,
+    finishedNotices,
   });
 }
 
