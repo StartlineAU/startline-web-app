@@ -133,6 +133,8 @@ test.describe("athlete race history", () => {
         eventId: id,
         organiserId: event.organiserId,
         userId: harper.id,
+        // Her own ticket: race history reads the athlete, not the buyer (#592).
+        athleteUserId: harper.id,
         athleteName: "Harper Jones",
         athleteEmail: harper.email,
         waveLabel: "General",
