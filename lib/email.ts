@@ -549,6 +549,7 @@ export async function sendRefundOverrideEmails(to: string[], data: RefundOverrid
 // The event is off. Says how much is coming back so the athlete can check it
 // against what they paid: everything, booking fee included.
 export interface EventCancelledEmailData {
+  eventId: string;
   eventTitle: string;
   eventDate: string | null;
   /** Cents being returned to this athlete. 0 for a free entry. */
@@ -563,7 +564,9 @@ export async function buildEventCancelledEmail(data: EventCancelledEmailData): P
       eventDate: formatEmailDate(data.eventDate),
       refundAmount: data.refundCents > 0 ? `$${(data.refundCents / 100).toFixed(2)}` : null,
       reason: data.reason,
-      activityUrl: `${SITE}/activity`,
+      // The event page, not Activity: it says the event is cancelled and that
+      // everyone is refunded in full, and it reads the same signed out (#596).
+      eventUrl: `${SITE}/events/${encodeURIComponent(data.eventId)}`,
     }),
   );
   return { subject: `Cancelled: ${data.eventTitle}`, ...rendered };

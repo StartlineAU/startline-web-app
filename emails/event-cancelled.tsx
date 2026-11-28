@@ -9,7 +9,8 @@ export interface EventCancelledEmailProps {
   /** Formatted dollars, e.g. "$54.95". Null for a free entry. */
   refundAmount: string | null
   reason: string | null
-  activityUrl: string
+  /** The cancelled event's own page, which carries the cancellation notice. */
+  eventUrl: string
 }
 
 /** To an athlete: the event is off, and anything they paid is coming back. A free entry is told only that it is released. */
@@ -18,7 +19,7 @@ export function EventCancelledEmail({
   eventDate,
   refundAmount,
   reason,
-  activityUrl,
+  eventUrl,
 }: EventCancelledEmailProps) {
   const items: DetailItem[] = []
   if (eventDate) items.push({ label: 'Event date', value: eventDate })
@@ -33,7 +34,7 @@ export function EventCancelledEmail({
     <Shell preview={`Cancelled: ${eventTitle}`} label="Event update">
       <Hero eyebrow="Event cancelled" tone="warning" title="Event cancelled." sub={sub} />
       <DetailCard eyebrow="Event" title={eventTitle} items={items} preWrap />
-      <CtaButton href={activityUrl} label="View your entries" />
+      <CtaButton href={eventUrl} label="View cancelled event" />
     </Shell>
   )
 }

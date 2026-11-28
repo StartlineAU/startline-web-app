@@ -101,7 +101,7 @@ const emails: Record<string, () => Promise<{ html: string }>> = {
   "refund-override": () =>
     buildRefundOverrideEmail({ athleteName: "Harper Jones", eventTitle: "Harbour 10K", organiserDecision: "declined", decision: "approved", note: "The date moved by a week, so the athlete is owed a remedy under the Australian Consumer Law." }),
   "event-cancelled": () =>
-    buildEventCancelledEmail({ eventTitle: "Harbour 10K", eventDate: "2027-03-21", refundCents: 5495, reason: "The council withdrew the road closure permit." }),
+    buildEventCancelledEmail({ eventId: "evt-preview", eventTitle: "Harbour 10K", eventDate: "2027-03-21", refundCents: 5495, reason: "The council withdrew the road closure permit." }),
   waitlist: () => renderEmail(WaitlistConfirmationEmail()),
   "contact-message": () =>
     renderEmail(ContactMessageEmail({ name: "Harper Jones", email: "harper.jones@startline.test", subject: "Group discount?", message: "Hi team,\n\nDo you offer group entries for clubs?\n\nThanks" })),
