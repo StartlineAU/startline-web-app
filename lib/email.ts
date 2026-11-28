@@ -8,6 +8,7 @@ import { ReviewReportedEmail } from "@/emails/review-reported";
 import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
 import { FollowedOrganiserEventEmail } from "@/emails/followed-organiser-event";
 import { EventChangedEmail } from "@/emails/event-changed";
+import { RemovedFromEventEmail } from "@/emails/removed-from-event";
 import { EventEditPendingReviewEmail } from "@/emails/event-edit-pending-review";
 import { EventEditDecisionEmail } from "@/emails/event-edit-decision";
 import { RefundRequestEmail } from "@/emails/refund-request";
@@ -411,6 +412,47 @@ export async function sendEventChangedEmails(items: { to: string; data: EventCha
     items.map(async ({ to, data }) => ({ to, email: await buildEventChangedEmail(data) })),
   );
   return sendEmailBatch(messages, "event changed emails");
+}
+
+// ── Organiser removed an athlete's entry (#571) ───────────────────────────────
+export interface RemovedFromEventEmailData {
+  athleteName?: string | null;
+  eventTitle: string;
+  organiserName: string;
+  reasonLabel: string;
+  note?: string | null;
+  refundCents: number;
+  noRefund: boolean;
+  blocked: boolean;
+  /** Set when the place on this team was given to someone else. */
+  teamName?: string | null;
+}
+
+export async function buildRemovedFromEventEmail(
+  data: RemovedFromEventEmailData,
+  { siteUrl = SITE }: { siteUrl?: string } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    RemovedFromEventEmail({
+      greeting: firstNameGreeting(data.athleteName),
+      eventTitle: data.eventTitle,
+      organiserName: data.organiserName,
+      reasonLabel: data.reasonLabel,
+      note: data.note,
+      refundAmount: data.refundCents > 0 ? `$${(data.refundCents / 100).toFixed(2)}` : null,
+      noRefund: data.noRefund,
+      blocked: data.blocked,
+      replacedOnTeam: data.teamName ?? null,
+      activityUrl: `${siteUrl}/activity`,
+      supportUrl: `${siteUrl}/support`,
+    }),
+  );
+  return { subject: `You've been removed from ${data.eventTitle}`, ...rendered };
+}
+
+export async function sendRemovedFromEventEmail(to: string, data: RemovedFromEventEmailData) {
+  if (!to || !getResend()) return;
+  await sendOne(to, await buildRemovedFromEventEmail(data));
 }
 
 // ── Edit of a published event waiting for review (admins) ─────────────────────

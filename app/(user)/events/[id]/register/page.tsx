@@ -451,6 +451,20 @@ function RegisterContent() {
     enabled: status === "authenticated" && freeRsvp,
   });
 
+  // Whether this organisation has blocked the signed-in athlete (#571). A
+  // failed check lets the form through: the server refuses a blocked entry
+  // whatever the page shows.
+  const fetchEntryBlock = useCallback(async (signal: AbortSignal) => {
+    const response = await fetch(`/api/events/${eventId}/entry-block`, { signal });
+    if (!response.ok) return { blocked: false };
+    return await response.json() as { blocked: boolean; message?: string };
+  }, [eventId]);
+  const { data: entryBlock, loading: entryBlockLoading } = useApiResource<{ blocked: boolean; message?: string }>(
+    fetchEntryBlock,
+    { key: `${eventId}:${status}`, enabled: status === "authenticated" },
+  );
+  const entryBlockPending = status === "authenticated" && !confirmed && (entryBlockLoading || !entryBlock);
+
   const rsvpBlocked = Boolean(rsvpStatus?.alreadyRegistered || rsvpBlockedAfterSubmit);
   // Fail closed while the answer is still pending. The extra !rsvpStatus
   // covers the render before useApiResource flips loading on for a newly
@@ -924,7 +938,7 @@ function RegisterContent() {
   }, [participants, tierLines, ticketWaves, ticketTeams, teamNames, detailsLater, sharedContactActive, sharedEmergencyContact]);
 
   // ── Loading / not-found ──
-  if (loading || status === "loading" || rsvpCheckPending) {
+  if (loading || status === "loading" || rsvpCheckPending || entryBlockPending) {
     return (
       <PageShellSkeleton maxWidth="max-w-[1100px]">
         <Skeleton className="h-3 w-28 mb-6" />
@@ -968,6 +982,30 @@ function RegisterContent() {
             {phase === "in_progress"
               ? "This event has started, so new entries are closed. Follow the organiser for future events."
               : "This event has finished, so it is no longer taking entries."}
+          </p>
+          <Link
+            href={`/events/${event.id}`}
+            className="inline-flex items-center gap-2 h-11 px-5 rounded-xl border border-dark-lighter text-light font-headline text-[12px] font-bold uppercase tracking-[0.12em] hover:border-primary hover:bg-dark-light transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to event
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (entryBlock?.blocked && !confirmed) {
+    return (
+      <div className="min-h-screen bg-dark-darker flex items-center justify-center px-6">
+        <div className="text-center max-w-md" data-testid="entry-blocked">
+          <div className="font-headline text-[10px] font-bold uppercase tracking-[0.25em] text-primary mb-3">
+            Entry unavailable
+          </div>
+          <h1 className="font-headline text-3xl font-black italic tracking-tighter text-light mb-3">
+            {event.title}
+          </h1>
+          <p className="text-muted text-[14px] mb-6">
+            {entryBlock.message ?? "You can't enter this event. Contact the organiser."}
           </p>
           <Link
             href={`/events/${event.id}`}

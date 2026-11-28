@@ -38,18 +38,18 @@ test.describe("reduced disciplines", () => {
     }
   });
 
-  test("the listing wizard offers Running, Run Club and Other", async ({ page }) => {
+  test("the listing wizard offers Running, Run Club, Functional Fitness and Other", async ({ page }) => {
     await organiserLogin(page);
     await page.goto("/organiser/new-listing");
 
-    // The disciplines live in the Category dialog behind the banner pill.
+    // The disciplines live in the Category dropdown behind the banner pill (#579).
     await page.getByRole("button", { name: "Choose category" }).click();
-    const dialog = page.getByRole("dialog", { name: "Category" });
-    for (const name of ["Running", "Run Club", "Other"]) {
-      await expect(dialog.getByRole("button", { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 15000 });
+    const list = page.getByRole("listbox", { name: "Category" });
+    for (const name of ["Running", "Run Club", "Functional Fitness", "Other"]) {
+      await expect(list.getByRole("option", { name: new RegExp(`^${name}`) })).toBeVisible({ timeout: 15000 });
     }
     for (const name of REMOVED) {
-      await expect(dialog.getByRole("button", { name: new RegExp(`^${name}`) })).toHaveCount(0);
+      await expect(list.getByRole("option", { name: new RegExp(`^${name}`) })).toHaveCount(0);
     }
   });
 });

@@ -11,6 +11,7 @@ const LINK_GROUPS: { heading: string; links: FooterLink[] }[] = [
       { href: "/events", label: "All Events" },
       { href: "/events?type=running", label: "Running" },
       { href: "/events?type=run_club", label: "Run Clubs" },
+      { href: "/events?type=functional_fitness", label: "Functional Fitness" },
       { href: "/events?type=other", label: "Other" },
     ],
   },

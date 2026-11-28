@@ -35,7 +35,7 @@ export type ImportableRegistration = {
   category: string | null;
   wave: string | null;
   bibNumber: string | null;
-  status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED";
+  status: "CONFIRMED" | "REFUND_REQUESTED" | "REFUNDED" | "CANCELLED" | "REMOVED";
   resultDistance: string | null;
   resultTime: string | null;
   resultPlacement: string | null;

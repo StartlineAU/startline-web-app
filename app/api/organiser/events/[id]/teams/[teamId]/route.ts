@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { lockEventEntries } from "@/lib/event-entry-lock";
 import { MAX_TEAM_NAME_LENGTH, normaliseTeamName } from "@/lib/team-tickets";
-import { findTakenTeamNames, holdsTeamPlace, TEAM_HELD_STATUSES } from "@/lib/team-entries";
+import { findTakenTeamNames } from "@/lib/team-entries";
+import type { RegistrationFormData } from "@/lib/registration-form";
+import { sendEntryConfirmation } from "@/lib/registration-confirm";
 import {
-  createEmptyParticipant,
-  compactParticipant,
-  type RegistrationFormData,
-} from "@/lib/registration-form";
-import {
-  ensureParticipantUsers,
-  entryIdentityKey,
-  sendEntryConfirmation,
-} from "@/lib/registration-confirm";
-import { findHeldEntryFor, memberDetailsData, memberDetailsError } from "@/lib/team-members";
+  applySwap,
+  prepareSwap,
+  provisionReplacement,
+  replacementSchema,
+  SwapError,
+  type AppliedSwap,
+} from "@/lib/team-swap";
 
 const paramsSchema = z.object({
   id: z.string().min(1).max(255),
@@ -25,18 +23,10 @@ const paramsSchema = z.object({
 
 /**
  * A swap replaces who holds a team place. The entry, its payment and its
- * race-day state stay put; only the person's details change.
+ * race-day state stay put; only the person's details change (lib/team-swap.ts).
  */
-const memberSchema = z.object({
+const memberSchema = replacementSchema.extend({
   registrationId: z.string().min(1).max(255),
-  firstName: z.string().max(100),
-  lastName: z.string().max(100),
-  email: z.string().max(255),
-  dateOfBirth: z.string().max(20),
-  gender: z.string().max(50).optional(),
-  mobile: z.string().max(50),
-  emergencyContactName: z.string().max(200),
-  emergencyContactPhone: z.string().max(50),
 });
 
 const bodySchema = z
@@ -45,30 +35,6 @@ const bodySchema = z
     member: memberSchema.optional(),
   })
   .refine((b) => b.name !== undefined || b.member !== undefined, { message: "Nothing to change." });
-
-/** The holder's details a swap replaces, kept in the change log. */
-const holderSelect = {
-  id: true,
-  status: true,
-  athleteName: true,
-  athleteEmail: true,
-  firstName: true,
-  lastName: true,
-  dateOfBirth: true,
-  gender: true,
-  mobile: true,
-  emergencyContactName: true,
-  emergencyContactPhone: true,
-  userId: true,
-  detailsPending: true,
-  waveLabel: true,
-  amountCents: true,
-  platformFeeCents: true,
-} as const;
-
-const PLACE_GONE = "This place was cancelled or refunded, so there is nothing to hand over.";
-
-class Conflict extends Error {}
 
 /**
  * PATCH: rename a team, swap one of its members for someone else, or both.
@@ -124,55 +90,23 @@ export async function PATCH(
     if (next !== team.name) nextName = next;
   }
 
-  // ── Swap: validate ──
-  let incoming: RegistrationFormData | null = null;
-  if (member) {
-    const entry = await prisma.registration.findFirst({
-      where: { id: member.registrationId, eventId: id, teamId },
-      select: holderSelect,
-    });
-    if (!entry) return NextResponse.json({ error: "That person is not on this team." }, { status: 404 });
-    if (!holdsTeamPlace(entry.status)) return NextResponse.json({ error: PLACE_GONE }, { status: 409 });
+  const target = member
+    ? { eventId: id, teamId, registrationId: member.registrationId, organiserId: auth.session.sub }
+    : null;
 
-    // The same checks checkout applies to a new member, minus the waiver and
-    // finish estimate the organiser is not asked for.
-    incoming = {
-      ...createEmptyParticipant(),
-      ...member,
-      gender: member.gender ?? "",
-      waiverAccepted: true,
-    };
-    const firstError = memberDetailsError(incoming, team.event.minAge);
-    if (firstError) return NextResponse.json({ error: firstError }, { status: 400 });
-
-    const incomingKey = entryIdentityKey(incoming.email, incoming.firstName, incoming.lastName, incoming.dateOfBirth);
-    const holderKey = entryIdentityKey(entry.athleteEmail, entry.firstName ?? "", entry.lastName ?? "", entry.dateOfBirth ?? "");
-    if (incomingKey === holderKey) {
-      return NextResponse.json({ error: "That is already who holds this place." }, { status: 400 });
-    }
-    // Checkout refuses a second entry for the same person; so does a swap.
-    const clash = await findHeldEntryFor(id, entry.id, incoming);
-    if (clash) {
-      return NextResponse.json(
-        { error: `${clash.athleteName} already holds an entry for this event${clash.teamName ? ` (team ${clash.teamName})` : ""}.` },
-        { status: 409 },
-      );
-    }
-  }
-
-  if (!nextName && !incoming) return NextResponse.json({ ok: true });
-
-  // The new member gets an account like any guest entrant, so the entry
-  // shows on their Activity. Done before the transaction: it calls Cognito.
-  const userIdByEmail = incoming
-    ? await ensureParticipantUsers([
-        { participant: compactParticipant(incoming), waveLabel: null, priceCents: 0, platformFeeCents: 0 },
-      ])
-    : {};
-
-  let swapped: { email: string; waveLabel: string | null; amountCents: number; platformFeeCents: number } | null;
   try {
-    swapped = await prisma.$transaction(async (tx) => {
+    // ── Swap: validate ──
+    let incoming: RegistrationFormData | null = null;
+    if (member && target) {
+      const { registrationId: _ignored, ...details } = member;
+      incoming = await prepareSwap(target, details, team.event.minAge);
+    }
+
+    if (!nextName && !incoming) return NextResponse.json({ ok: true });
+
+    const userIdByEmail = incoming ? await provisionReplacement(incoming) : {};
+
+    const swapped: AppliedSwap | null = await prisma.$transaction(async (tx) => {
       // The confirm transaction takes the same lock, so a checkout cannot take
       // this name, or enter this person, between the checks and the writes.
       await lockEventEntries(tx, id);
@@ -180,7 +114,7 @@ export async function PATCH(
       if (nextName) {
         if (nextName.toLowerCase() !== team.name.toLowerCase()) {
           const taken = await findTakenTeamNames(id, [nextName], tx, teamId);
-          if (taken) throw new Conflict(`A team called "${taken}" is already entered in this event.`);
+          if (taken) throw new SwapError(`A team called "${taken}" is already entered in this event.`, 409);
         }
         await tx.team.update({ where: { id: teamId }, data: { name: nextName } });
         await tx.teamMemberChange.create({
@@ -195,80 +129,24 @@ export async function PATCH(
         });
       }
 
-      if (!member || !incoming) return null;
-
-      // Re-read under the lock: the place may have been refunded meanwhile.
-      const entry = await tx.registration.findFirst({
-        where: { id: member.registrationId, eventId: id, teamId, status: { in: TEAM_HELD_STATUSES } },
-        select: holderSelect,
-      });
-      if (!entry) throw new Conflict(PLACE_GONE);
-      if (await findHeldEntryFor(id, entry.id, incoming, tx)) {
-        throw new Conflict("That person already holds an entry for this event.");
-      }
-
-      const after = memberDetailsData(incoming);
-      const email = after.athleteEmail;
-      await tx.registration.update({
-        where: { id: entry.id },
-        data: {
-          ...after,
-          // A place bought "details later" is named now.
-          detailsPending: false,
-          // The entry now belongs to the new member's account.
-          userId: userIdByEmail[email] ?? null,
-          // The previous holder's details and estimate no longer apply.
-          medicalNotes: null,
-          estimatedFinishMinutes: null,
-        },
-      });
-      const before = {
-        athleteName: entry.athleteName,
-        athleteEmail: entry.athleteEmail,
-        firstName: entry.firstName,
-        lastName: entry.lastName,
-        dateOfBirth: entry.dateOfBirth,
-        gender: entry.gender,
-        mobile: entry.mobile,
-        emergencyContactName: entry.emergencyContactName,
-        emergencyContactPhone: entry.emergencyContactPhone,
-        userId: entry.userId,
-      };
-      await tx.teamMemberChange.create({
-        data: {
-          teamId,
-          registrationId: entry.id,
-          // Naming a place left for later is not a swap: nobody was in it.
-          kind: entry.detailsPending ? "DETAILS_ADDED" : "SWAP",
-          before: before as Prisma.InputJsonValue,
-          after: after as Prisma.InputJsonValue,
-          changedByEmail: auth.actorEmail ?? null,
-          organiserId: auth.session.sub,
-        },
-      });
-      return {
-        email,
-        waveLabel: entry.waveLabel,
-        amountCents: entry.amountCents,
-        platformFeeCents: entry.platformFeeCents,
-      };
+      if (!target || !incoming) return null;
+      return applySwap(tx, target, incoming, userIdByEmail, auth.actorEmail ?? null);
     });
+
+    // The new member is told they hold the place, as they would be at checkout.
+    if (swapped) {
+      await sendEntryConfirmation(team.event, {
+        email: swapped.email,
+        waveLabel: swapped.waveLabel,
+        priceCents: swapped.amountCents,
+        platformFeeCents: swapped.platformFeeCents,
+        team: { name: nextName ?? team.name, size: team.size },
+      });
+    }
   } catch (err) {
-    if (err instanceof Conflict) return NextResponse.json({ error: err.message }, { status: 409 });
+    if (err instanceof SwapError) return NextResponse.json({ error: err.message }, { status: err.status });
     throw err;
-  }
-
-  // The new member is told they hold the place, as they would be at checkout.
-  if (swapped) {
-    await sendEntryConfirmation(team.event, {
-      email: swapped.email,
-      waveLabel: swapped.waveLabel,
-      priceCents: swapped.amountCents,
-      platformFeeCents: swapped.platformFeeCents,
-      team: { name: nextName ?? team.name, size: team.size },
-    });
   }
 
   return NextResponse.json({ ok: true });
 }
-

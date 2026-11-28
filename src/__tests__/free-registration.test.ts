@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
+  organiserBlockFindFirst: vi.fn(),
   executeRaw: vi.fn(async () => 0),
   session: vi.fn(),
   eventFindUnique: vi.fn(),
@@ -27,7 +28,9 @@ const prismaMock = vi.hoisted(() => {
       findMany: mocks.registrationFindMany,
       createMany: mocks.registrationCreateMany,
     },
-    user: { upsert: mocks.userUpsert, findUnique: mocks.userFindUnique, create: mocks.userCreate },
+    user: { upsert: mocks.userUpsert, findUnique: mocks.userFindUnique, create: mocks.userCreate, findMany: async () => [] },
+    // Nobody is on a block list unless a test says so.
+    organiserBlock: { findFirst: mocks.organiserBlockFindFirst },
     notification: { create: mocks.notificationCreate },
     // The capacity check and the insert share one transaction; the mock hands
     // the callback the same client so both are observed by the spies above.
@@ -119,6 +122,7 @@ beforeEach(() => {
   mocks.userCreate.mockResolvedValue({ id: "user-1" });
   mocks.notificationCreate.mockResolvedValue({});
   mocks.paymentIntentCreate.mockResolvedValue({ id: "pi_1", client_secret: "cs_1" });
+  mocks.organiserBlockFindFirst.mockResolvedValue(null);
 });
 
 // Issue #308: a free event could be published but never registered for, because
@@ -531,6 +535,69 @@ describe("POST /api/registrations/free/rsvp", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).error).toContain("closed");
     expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+});
+
+// #571: an organisation's block list covers every way of entering its events.
+describe("organisation block list", () => {
+  const BLOCKED = "You can't enter this event. Contact the organiser.";
+
+  it("refuses a free order for a blocked email before writing anything", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+    mocks.organiserBlockFindFirst.mockResolvedValue({ id: "blk-1", email: "jordan@example.com" });
+
+    const res = await postFree({ eventId: "evt-free", participants: [participant({ email: "Jordan@Example.com" })] });
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(BLOCKED);
+    expect(mocks.organiserBlockFindFirst.mock.calls[0][0].where).toMatchObject({
+      organiserId: "org-1",
+      OR: [{ email: { in: ["jordan@example.com"] } }],
+    });
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("still refuses when the block lands between the check and the insert", async () => {
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+    mocks.organiserBlockFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "blk-1", email: "jordan@example.com" });
+
+    const res = await postFree({ eventId: "evt-free", participants: [participant()] });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe(BLOCKED);
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses an RSVP from a blocked account", async () => {
+    mocks.session.mockReturnValue({ sub: "user-1", email: "jordan@example.com", name: "Jordan Clarke" });
+    mocks.eventFindUnique.mockResolvedValue(freeEvent());
+    mocks.organiserBlockFindFirst.mockResolvedValue({ id: "blk-1", email: "jordan@example.com" });
+
+    const res = await postRsvp({ eventId: "evt-free", waveLabel: "General", acceptedTerms: true });
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body).toEqual({ error: BLOCKED, reason: "blocked" });
+    expect(mocks.organiserBlockFindFirst.mock.calls[0][0].where.OR[0]).toEqual({ userId: { in: ["user-1"] } });
+    expect(mocks.registrationCreateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a paid checkout before any card is charged", async () => {
+    mocks.eventFindUnique.mockResolvedValue(
+      freeEvent({
+        waves: [{ label: "Timed", price: "20" }],
+        organiser: { id: "org-1", stripeAccountId: "acct_1", stripeOnboardingComplete: true },
+      }),
+    );
+    mocks.organiserBlockFindFirst.mockResolvedValue({ id: "blk-1", email: "jordan@example.com" });
+
+    const res = await postCheckout({ eventId: "evt-free", participants: [participant({ waveLabel: "Timed" })] });
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(BLOCKED);
+    expect(mocks.paymentIntentCreate).not.toHaveBeenCalled();
   });
 });
 

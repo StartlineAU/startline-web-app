@@ -69,6 +69,22 @@ describe("issueEntryRefund — the reviewed policy refund", () => {
     expect(result).toEqual({ method: "stripe", refundId: "re_1", refundCents: 10540 });
   });
 
+  it("writes the caller's final status and extra columns with the refund, without its own notice (#571)", async () => {
+    mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: charge(true) });
+
+    await issueEntryRefund(entry, {
+      finalStatus: "REMOVED",
+      extraData: { bibNumber: null, startWaveId: null, startWaveLabel: null },
+      notify: false,
+    });
+
+    expect(mocks.registrationUpdate.mock.calls[0][0].data).toEqual({
+      bibNumber: null, startWaveId: null, startWaveLabel: null,
+      status: "REMOVED", stripeRefundId: "re_1", refundAmountCents: 10540,
+    });
+    expect(mocks.notificationCreate).not.toHaveBeenCalled();
+  });
+
   it("omits both transfer flags on a direct charge", async () => {
     mocks.retrievePaymentIntent.mockResolvedValue({ latest_charge: charge(false) });
 

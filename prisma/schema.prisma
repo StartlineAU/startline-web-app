@@ -105,6 +105,8 @@ model Organiser {
   follows       OrganiserFollow[]
   members       OrganiserMember[]
   invites       OrganiserInvite[]
+  blocks        OrganiserBlock[]
+  removals      RegistrationRemoval[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -641,6 +643,7 @@ model Registration {
   refundOutsidePolicy Boolean @default(false)
   // Refunds are decided by the organiser from a support ticket and issued by Startline.
   stripeRefundId String?
+  removals       RegistrationRemoval[]
   // Full refund owed because the event was cancelled. PENDING until Stripe
   // confirms, FAILED (with the reason) until a retry succeeds, DONE once the
   // athlete has everything back. The lifecycle worker retries anything not DONE.
@@ -682,6 +685,88 @@ enum RegistrationStatus {
   REFUND_REQUESTED
   REFUNDED
   CANCELLED
+  // Taken out of the event by the organiser (#571), as opposed to CANCELLED,
+  // which is the athlete or the payment falling through. Holds no place; the
+  // why and who live on RegistrationRemoval.
+  REMOVED
+}
+
+// ─── Organiser removals and blocks (#571) ─────────────────────────────────────
+
+enum RemovalReason {
+  NO_SHOW_BRIEFING
+  CODE_OF_CONDUCT
+  INELIGIBLE
+  DUPLICATE
+  OTHER
+}
+
+enum RemovalRefund {
+  // Full amount the athlete paid, issued through Stripe on removal.
+  FULL
+  // Organiser kept the money. Only allowed for CODE_OF_CONDUCT.
+  NONE
+  // Free entry, or nothing was ever charged.
+  NOT_PAID
+  // A team place handed to a replacement member. The place is still in use,
+  // so the money stays with the team's booking.
+  REPLACED
+}
+
+// Append-only record of an organiser removing an entry from an event. Nothing
+// updates or deletes these rows (lib/remove-registration.ts writes them).
+model RegistrationRemoval {
+  id             String       @id @default(uuid())
+  registrationId String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  organiserId    String
+  organiser      Organiser    @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  eventId        String
+  // Who was removed, as they were. A team place handed to a replacement keeps
+  // its registration row, so the row alone no longer says who held it.
+  athleteName    String
+  athleteEmail   String
+  // Set when the organiser gave the place to someone else instead.
+  replacedByName  String?
+  replacedByEmail String?
+  // The signed-in person who removed them, kept as an email so the record
+  // outlives the account.
+  removedByEmail String
+  reason         RemovalReason
+  note           String?
+  // Whether the note was passed on to the athlete.
+  noteShared     Boolean       @default(false)
+  refund         RemovalRefund
+  refundCents    Int           @default(0)
+  stripeRefundId String?
+  blocked        Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@index([registrationId])
+  @@index([organiserId, createdAt])
+  @@map("registration_removals")
+}
+
+// A person an organisation will not take entries from, across all its events.
+// Matched on the account when there is one and always on the email, so a guest
+// checkout under the same address is refused too (lib/organiser-blocks.ts).
+model OrganiserBlock {
+  id          String    @id @default(uuid())
+  organiserId String
+  organiser   Organiser @relation(fields: [organiserId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Stored trimmed and lowercased.
+  email       String
+  // Name shown in the block list; the person may have no account.
+  name        String?
+  note        String?
+  createdByEmail String
+  createdAt   DateTime  @default(now())
+
+  @@unique([organiserId, email])
+  @@index([organiserId, userId])
+  @@map("organiser_blocks")
 }
 
 // ─── User → Organiser follows ─────────────────────────────────────────────────
@@ -751,6 +836,7 @@ model User {
   reviewReports     ReviewReport[]
   notifications     UserNotification[]
   recoveryCodeRows  RecoveryCode[]
+  organiserBlocks   OrganiserBlock[]
 
   @@map("users")
 }
@@ -798,6 +884,8 @@ enum UserNotificationType {
   EVENT_CHANGED
   // A team entry was bought with some members' details left to add later.
   TEAM_DETAILS_NEEDED
+  // The organiser removed the athlete's entry (#571).
+  REMOVED_FROM_EVENT
   // The event was cancelled; everything the athlete paid is being refunded.
   EVENT_CANCELLED
 }
