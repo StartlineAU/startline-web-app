@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, Award, Flag, MapPin, Medal, Timer } from "lucide-react";
 import { getUserSession } from "@/lib/amplify-server";
 import { getRaceSummary, type RaceSummary } from "@/lib/race-summary";
-import { formatDiscipline, formatEventDate } from "@/lib/utils";
+import { cn, formatDiscipline, formatEventDate } from "@/lib/utils";
 import { formatEventArea } from "@/lib/event-place";
 import { STATE_LABELS, type AustralianState } from "@/types";
 import OrganiserIdentity from "@/components/OrganiserIdentity";
@@ -110,22 +110,28 @@ function RaceSummaryView({ summary }: { summary: RaceSummary }) {
             </p>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl" data-testid="race-summary-result">
+          <div className="mt-6 grid grid-cols-2 gap-3 max-w-2xl" data-testid="race-summary-result">
             {hasResult ? (
               <>
-                <ResultStat
-                  label="Finish time"
-                  value={summary.resultTime ?? "—"}
-                  icon={<Timer className="w-5 h-5 text-muted shrink-0" />}
-                />
-                <ResultStat
-                  label="Placing"
-                  value={summary.resultPlacement ?? "—"}
-                  icon={<Medal className="w-5 h-5 text-muted shrink-0" />}
-                />
+                {summary.resultTime && (
+                  <ResultStat
+                    label="Finish time"
+                    value={summary.resultTime}
+                    icon={<Timer className="w-5 h-5 text-muted shrink-0" />}
+                    fullWidth={!summary.resultPlacement}
+                  />
+                )}
+                {summary.resultPlacement && (
+                  <ResultStat
+                    label="Placing"
+                    value={summary.resultPlacement}
+                    icon={<Medal className="w-5 h-5 text-muted shrink-0" />}
+                    fullWidth={!summary.resultTime}
+                  />
+                )}
               </>
             ) : (
-              <div className="sm:col-span-2 rounded-2xl border border-dark-lighter bg-dark/80 backdrop-blur-sm px-5 py-4">
+              <div className="col-span-2 rounded-2xl border border-dark-lighter bg-dark/80 backdrop-blur-sm px-5 py-4">
                 <p className="font-headline text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
                   Results
                 </p>
@@ -153,8 +159,16 @@ function RaceSummaryView({ summary }: { summary: RaceSummary }) {
           </h2>
           {details.length > 0 ? (
             <dl className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {details.map((d) => (
-                <div key={d.label} className="rounded-xl border border-dark-lighter bg-dark px-4 py-3 min-w-0">
+              {details.map((d, i) => (
+                <div
+                  key={d.label}
+                  className={cn(
+                    "rounded-xl border border-dark-lighter bg-dark px-4 py-3 min-w-0",
+                    // Two columns on a phone: an odd one out takes the full row
+                    // rather than leaving a hole beside it.
+                    details.length % 2 === 1 && i === details.length - 1 && "col-span-2 sm:col-span-1",
+                  )}
+                >
                   <dt className="font-headline text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
                     {d.label}
                   </dt>
@@ -191,12 +205,29 @@ function RaceSummaryView({ summary }: { summary: RaceSummary }) {
   );
 }
 
-function ResultStat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+function ResultStat({
+  label,
+  value,
+  icon,
+  fullWidth,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  /** The only result posted (a DNF with no time, say) takes the whole row. */
+  fullWidth?: boolean;
+}) {
   return (
-    <div className="rounded-2xl border border-dark-lighter bg-dark/80 backdrop-blur-sm px-5 py-4">
+    <div
+      className={cn(
+        "min-w-0 rounded-2xl border border-dark-lighter bg-dark/80 backdrop-blur-sm px-4 py-3 sm:px-5 sm:py-4",
+        fullWidth && "col-span-2",
+      )}
+    >
       <p className="font-headline text-[11px] font-bold uppercase tracking-[0.18em] text-muted">{label}</p>
-      <p className="mt-1 flex items-center gap-2 font-headline text-3xl sm:text-4xl font-black tracking-tighter text-light leading-none">
-        {icon}
+      <p className="mt-1 flex items-center gap-2 font-headline text-2xl sm:text-4xl font-black tracking-tighter text-light leading-none break-words">
+        {/* Side by side on a phone there is no room for the icon beside the value. */}
+        <span className="hidden sm:inline-flex">{icon}</span>
         {value}
       </p>
     </div>
