@@ -194,7 +194,7 @@ test.describe("editing a published event", () => {
     await expect(first).toContainText("A refund is requested through Support");
   });
 
-  test("a paid entry has no refund button and is sent to Support", async ({ page, context }) => {
+  test("a paid entry has no refund button and opens the refund form for its event", async ({ page, context }) => {
     await organiserLogin(page);
     const res = await page.request.patch(`/api/organiser/events/${EVENT_ID}`, {
       data: { venue: "Princes Park" },
@@ -211,13 +211,18 @@ test.describe("editing a published event", () => {
       .getByTestId("event-card")
       .click();
     const ticket = page.getByTestId("ticket-dialog");
-    await expect(ticket.getByRole("link", { name: "Request a refund" })).toHaveAttribute("href", "/support");
+    await expect(ticket.getByRole("link", { name: "Request a refund" })).toHaveAttribute("href", `/refunds?event=${EVENT_ID}`);
     await expect(ticket.getByRole("button", { name: /Withdraw/ })).toHaveCount(0);
 
     // The old route refuses a paid entry.
     const refused = await page.request.post(`/api/user/registrations/${HARPER_ID}/refund-request`);
     expect(refused.status()).toBe(409);
     expect((await prisma.registration.findUnique({ where: { id: HARPER_ID } }))?.status).toBe("CONFIRMED");
+
+    // The link opens the refund form with this event already chosen.
+    await ticket.getByRole("link", { name: "Request a refund" }).click();
+    await expect(page).toHaveURL(/\/refunds/);
+    await expect(page.getByRole("combobox", { name: "Event" })).toContainText("E2E Edit Refunds 10K");
   });
 
   test("an event that is underway stays locked", async ({ page }) => {

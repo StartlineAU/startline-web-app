@@ -30,6 +30,11 @@ export type RegMeta = {
   /** This entry is on the athlete's public race history. */
   onProfile?: boolean;
   /**
+   * This place is the athlete's own, not one they bought for someone else on
+   * a group or team purchase. Only their own entry can be refunded.
+   */
+  ownEntry?: boolean;
+  /**
    * Someone else entered the athlete under their email. Race history is
    * opt-in (#598), so Activity offers it rather than adding it for them.
    */

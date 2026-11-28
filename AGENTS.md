@@ -536,8 +536,21 @@ A full entitlement from a material change, and a free cancellation, are not
 change-of-mind refunds.
 
 **Paid refunds are a support ticket.** Activity has no refund button for a paid
-entry; it links to `/support`, which opens a `SupportTicket` and emails
-`admin@startlineau.com`. `POST /api/user/registrations/[id]/refund-request`
+entry; it links to `/refunds?event=<id>`, which opens a `SupportTicket` and emails
+`admin@startlineau.com`. `/support` redirects there for links in old emails.
+A refund request needs a signed-in athlete with a confirmed entry of their own
+for the event (`lib/own-entry.ts`): on a group or team purchase the buyer holds
+every entry, but only their own place is theirs to ask about. One open request
+per athlete and event.
+
+A paid entry's confirmation email also carries a "Request a refund" link
+(`/refunds?event=…&t=…`), for an athlete entered under an address they don't
+sign in with. The token is signed like the "Add to my profile" link
+(`ENTRY_CLAIM_SECRET`, `lib/entry-claim-token.ts`) under its own purpose, so
+neither link works as the other. It counts as ownership without signing in,
+stops working once the entry's address changes, and the ticket is recorded
+against the entry's address (`lib/entry-refund-link.ts`). Without the secret
+the email goes out with no link. `POST /api/user/registrations/[id]/refund-request`
 answers 409 for a paid entry and still cancels a free one. Issuing the money
 stays with staff on the admin registrations page.
 
@@ -545,7 +558,7 @@ stays with staff on the admin registrations page.
 discipline or format is material. Material text is compared ignoring case and
 spacing. A material change is recorded in the change log and the athletes
 already confirmed are told in-app and by email. There is no automatic refund:
-anyone affected asks through Support. That happens when the change becomes the
+anyone affected asks on the Refunds page. That happens when the change becomes the
 public offer: immediately for a verified organiser, and only after an admin
 approves a revision for an unverified one.
 

@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import type { Prisma, RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { entryClaimUrl, sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
-import { signEntryClaim } from "@/lib/entry-claim-token";
+import { entryClaimUrl, entryRefundUrl, sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
+import { signEntryClaim, signEntryRefund } from "@/lib/entry-claim-token";
 import { googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
@@ -665,6 +665,11 @@ export async function sendEntryConfirmation(
 ): Promise<void> {
   const token = signEntryClaim({ registrationId: entry.registrationId, athleteEmail: entry.email });
   const claimUrl = token ? entryClaimUrl(token) : null;
+  // A free entry withdraws from Activity; only a paid one has a refund to ask for.
+  const refundToken = entry.priceCents > 0
+    ? signEntryRefund({ registrationId: entry.registrationId, athleteEmail: entry.email })
+    : null;
+  const refundUrl = refundToken ? entryRefundUrl(refundToken, event.id) : null;
   const athletePaysFee = event.feeStructure === "athlete";
   const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
   const location = formatEventPlace(event);
@@ -684,6 +689,7 @@ export async function sendEntryConfirmation(
       location,
       calendarUrl,
       claimUrl,
+      refundUrl,
       ...(entry.team ? { team: `${entry.team.name} (team of ${entry.team.size})` } : {}),
       registrationFee:  formatCents(entry.priceCents),
       serviceFee:       formatCents(feeCents),

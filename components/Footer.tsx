@@ -34,7 +34,7 @@ const LINK_GROUPS: { heading: string; links: FooterLink[] }[] = [
     heading: "Help",
     links: [
       { href: "/faq", label: "FAQ" },
-      { href: "/support", label: "Support" },
+      { href: "/refunds", label: "Refunds" },
       { href: "/feedback", label: "Feedback" },
     ],
   },

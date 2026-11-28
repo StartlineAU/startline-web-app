@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { adminLogin, ensureDatabaseUrl } from "./helpers";
+import { signEntryRefund } from "../lib/entry-claim-token";
 
 // A refund is a support ticket. The organiser decides and Startline issues the
 // refund (#570); Startline decides only after the organiser's window has
@@ -9,6 +10,8 @@ import { adminLogin, ensureDatabaseUrl } from "./helpers";
 // itself, and a change-of-mind request is refused inside 24 hours of the start.
 
 ensureDatabaseUrl();
+// Must match the dev server's (playwright.config.ts), or the link is refused.
+process.env.ENTRY_CLAIM_SECRET ||= "e2e-entry-claim-secret";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -16,15 +19,47 @@ const prisma = new PrismaClient({
 
 // A seeded, published event owned by Coastal Fitness Collective.
 const EVENT_ID = "seed-event-017";
+// Harper's own paid place, and one Harper bought for a teammate.
+const OWN_ENTRY = "e2e-refund-own";
+const TEAMMATE_ENTRY = "e2e-refund-teammate";
+
+async function clearFixture() {
+  await prisma.supportTicket.deleteMany({ where: { eventId: EVENT_ID } });
+  await prisma.registration.deleteMany({ where: { id: { in: [OWN_ENTRY, TEAMMATE_ENTRY] } } });
+  // /api/support allows 3 requests a minute per caller; every test here posts.
+  await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "support:" } } });
+}
 
 test.afterAll(async () => {
-  await prisma.supportTicket.deleteMany({ where: { eventId: EVENT_ID } });
+  await clearFixture();
   await prisma.$disconnect();
 });
 
-test.beforeEach(async () => {
-  await prisma.supportTicket.deleteMany({ where: { eventId: EVENT_ID } });
-});
+test.beforeEach(clearFixture);
+
+/** Harper's entry, bought by Harper, for Harper or for someone else. */
+async function seedEntry(id: string, athlete: { name: string; email: string }) {
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: EVENT_ID }, select: { organiserId: true } });
+  await prisma.registration.create({
+    data: {
+      id,
+      eventId: EVENT_ID,
+      organiserId: event.organiserId,
+      userId: "dev-bypass-harper-jones",
+      athleteName: athlete.name,
+      athleteEmail: athlete.email,
+      status: "CONFIRMED",
+      amountCents: 4500,
+      platformFeeCents: 323,
+      feeStructure: "athlete",
+    },
+  });
+}
+
+const asAthlete = (page: Page) =>
+  page.context().addCookies([
+    { name: "__e2e_bypass", value: "athlete", domain: "localhost", path: "/", sameSite: "Lax" },
+  ]);
 
 /** A ticket written straight to the database, so the Support rate limit is not in play. */
 async function seedTicket(createdAt = new Date()) {
@@ -52,6 +87,8 @@ const asOrganiser = (page: Page) =>
   ]);
 
 test("organiser decides, then Startline issues and marks it refunded", async ({ page }) => {
+  await seedEntry(OWN_ENTRY, { name: "Harper Jones", email: "harper.jones@startline.test" });
+  await asAthlete(page);
   const created = await page.request.post("/api/support", {
     data: {
       name: "Harper Jones",
@@ -187,6 +224,102 @@ test("the admin refunds page shows the organiser's decision and gates the overri
   await expect(card.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   await card.getByRole("button", { name: "Override…" }).click();
   await expect(card.getByRole("button", { name: "Confirm override" })).toBeDisabled();
+});
+
+test("a buyer cannot request a refund for a teammate's place on a group ticket", async ({ page }) => {
+  // Harper paid for the place, but it is Lachlan's entry.
+  await seedEntry(TEAMMATE_ENTRY, { name: "Lachlan Teammate", email: "lachlan.teammate@startline.test" });
+  await asAthlete(page);
+
+  const res = await page.request.post("/api/support", {
+    data: {
+      name: "Harper Jones",
+      email: "harper.jones@startline.test",
+      requestType: "refund",
+      eventId: EVENT_ID,
+      reason: "Lachlan can't make it.",
+    },
+  });
+  expect(res.status()).toBe(403);
+  expect(await prisma.supportTicket.count({ where: { eventId: EVENT_ID } })).toBe(0);
+
+  // The refund form does not offer the event either.
+  await page.goto(`/refunds?event=${EVENT_ID}`);
+  await expect(page.getByText("You can only request a refund for your own entry.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Event" })).toHaveCount(0);
+});
+
+test("a second request for the same event is refused while the first is open", async ({ page }) => {
+  await seedEntry(OWN_ENTRY, { name: "Harper Jones", email: "harper.jones@startline.test" });
+  await seedTicket();
+  await asAthlete(page);
+
+  const res = await page.request.post("/api/support", {
+    data: {
+      name: "Harper Jones",
+      email: "harper.jones@startline.test",
+      requestType: "refund",
+      eventId: EVENT_ID,
+      reason: "Asking again.",
+    },
+  });
+  expect(res.status()).toBe(409);
+  expect((await res.json()).error).toMatch(/already have a refund request open/);
+  expect(await prisma.supportTicket.count({ where: { eventId: EVENT_ID } })).toBe(1);
+});
+
+test("the confirmation email's refund link works for an athlete entered under another address", async ({ page }) => {
+  // Harper bought Lachlan's place. Lachlan signs in elsewhere, or not at all,
+  // but can read the inbox the confirmation was sent to.
+  const lachlan = { name: "Lachlan Teammate", email: "lachlan.teammate@startline.test" };
+  await seedEntry(TEAMMATE_ENTRY, lachlan);
+  const token = signEntryRefund({ registrationId: TEAMMATE_ENTRY, athleteEmail: lachlan.email })!;
+
+  await page.goto(`/refunds?event=${EVENT_ID}&t=${encodeURIComponent(token)}`);
+  await expect(page.getByRole("combobox", { name: "Event" })).toContainText("Noosa Triathlon");
+  await page.getByRole("textbox", { name: "Reason" }).fill("Injured.");
+  await page.getByRole("button", { name: "Request a refund" }).click();
+  await expect(page.getByText("Request sent")).toBeVisible();
+
+  // Recorded against the entry's own address, so staff can find the entry.
+  const ticket = await prisma.supportTicket.findFirstOrThrow({ where: { eventId: EVENT_ID } });
+  expect(ticket).toMatchObject({ email: lachlan.email, userId: null, requestType: "refund" });
+
+  // A link for another event, or a tampered one, proves nothing.
+  const forged = await page.request.post("/api/support", {
+    data: { ...lachlan, requestType: "refund", eventId: EVENT_ID, reason: "x", refundToken: `${token}x` },
+  });
+  expect(forged.status()).toBe(401);
+});
+
+test("a refund link stops working once the entry's address changes", async ({ page }) => {
+  await seedEntry(TEAMMATE_ENTRY, { name: "Lachlan Teammate", email: "lachlan.teammate@startline.test" });
+  const token = signEntryRefund({ registrationId: TEAMMATE_ENTRY, athleteEmail: "lachlan.teammate@startline.test" })!;
+  // A team swap writes someone else into the same row.
+  await prisma.registration.update({ where: { id: TEAMMATE_ENTRY }, data: { athleteEmail: "new.member@startline.test" } });
+
+  const res = await page.request.post("/api/support", {
+    data: {
+      name: "Lachlan Teammate", email: "lachlan.teammate@startline.test",
+      requestType: "refund", eventId: EVENT_ID, reason: "x", refundToken: token,
+    },
+  });
+  expect(res.status()).toBe(401);
+  await page.goto(`/refunds?event=${EVENT_ID}&t=${encodeURIComponent(token)}`);
+  await expect(page.getByText("That refund link no longer matches its entry", { exact: false })).toBeVisible();
+});
+
+test("a refund request needs a signed-in athlete", async ({ page }) => {
+  const res = await page.request.post("/api/support", {
+    data: {
+      name: "Harper Jones",
+      email: "harper.jones@startline.test",
+      requestType: "refund",
+      eventId: EVENT_ID,
+      reason: "Clash with another race that weekend.",
+    },
+  });
+  expect(res.status()).toBe(401);
 });
 
 test("refuses a change-of-mind request inside 24 hours of the start", async ({ page }) => {

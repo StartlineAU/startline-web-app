@@ -303,7 +303,8 @@ function EntryRow({
       {meta && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <CheckInAction meta={meta} now={now} />
-          {/* A free entry withdraws here; a paid one is refunded through Support. */}
+          {/* A free entry withdraws here; a paid one opens the refund form with this event chosen.
+              On a group purchase only the athlete's own place offers a refund. */}
           {meta.paidCents === 0 ? (
             <button
               type="button"
@@ -312,14 +313,14 @@ function EntryRow({
             >
               Withdraw my entry
             </button>
-          ) : (
+          ) : meta.ownEntry ? (
             <Link
-              href="/support"
+              href={`/refunds?event=${encodeURIComponent(meta.eventId)}`}
               className="ml-auto font-headline text-[10px] font-bold uppercase tracking-widest text-muted-dark hover:text-light transition-colors"
             >
               Request a refund
             </Link>
-          )}
+          ) : null}
         </div>
       )}
     </li>

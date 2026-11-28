@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { entryClaimMatches, readEntryClaim, signEntryClaim } from "@/lib/entry-claim-token";
+import {
+  entryClaimMatches,
+  readEntryClaim,
+  readEntryRefund,
+  signEntryClaim,
+  signEntryRefund,
+} from "@/lib/entry-claim-token";
 
 // The "Add to my profile" link in a confirmation email (#598).
 
@@ -38,6 +44,16 @@ describe("entry claim tokens", () => {
     expect(readEntryClaim("not-a-token")).toBeNull();
     expect(readEntryClaim("")).toBeNull();
     expect(readEntryClaim("a".repeat(600))).toBeNull();
+  });
+
+  it("keeps refund links and profile links apart", () => {
+    const refund = signEntryRefund({ registrationId: row.id, athleteEmail: row.athleteEmail });
+    const claim = signEntryClaim({ registrationId: row.id, athleteEmail: row.athleteEmail });
+    const read = readEntryRefund(refund);
+    expect(read && entryClaimMatches(read, row)).toBe(true);
+    // A refund link never adds a race to a profile, and a profile link never opens a refund.
+    expect(readEntryClaim(refund)).toBeNull();
+    expect(readEntryRefund(claim)).toBeNull();
   });
 
   it("rejects a token signed with another key", () => {

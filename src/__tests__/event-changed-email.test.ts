@@ -4,7 +4,7 @@ import { buildEventChangedEmail, buildRefundRequestEmail } from "@/lib/email";
 const changes = [{ label: "Start date", from: "2027-03-14", to: "2027-03-21" }];
 
 describe("event changed email", () => {
-  it("tells the athlete what changed and sends them to Support for a refund", async () => {
+  it("tells the athlete what changed and links to the refund form for that event", async () => {
     const { subject, html } = await buildEventChangedEmail(
       {
         athleteName: "Harper Jones",
@@ -21,7 +21,7 @@ describe("event changed email", () => {
     expect(html).toContain("2027-03-14");
     expect(html).toContain("2027-03-21");
     expect(html).toContain("Your entry still stands");
-    expect(html).toContain("https://startlineau.com/support");
+    expect(html).toContain("https://startlineau.com/refunds?event=evt-1");
     // No promise of an automatic refund.
     expect(html).not.toContain("full refund");
     // Organiser-controlled text is escaped.

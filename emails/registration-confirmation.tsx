@@ -4,6 +4,7 @@ import { DetailCard, type DetailItem } from './components/detail-card'
 import { SummaryTable } from './components/summary-table'
 import { CtaButton } from './components/cta-button'
 import { NoteBox } from './components/note-box'
+import { Prose } from './components/prose'
 import { colors, SITE_URL } from './components/tokens'
 import { Link } from '@react-email/components'
 
@@ -32,6 +33,11 @@ export interface RegistrationConfirmationEmailProps {
    * athlete signs in to Startline with.
    */
   claimUrl?: string | null
+  /**
+   * "Request a refund" link for a paid entry. Signed for this entry's
+   * address, so it works whichever account the athlete signs in with.
+   */
+  refundUrl?: string | null
 }
 
 export function RegistrationConfirmationEmail({
@@ -50,6 +56,7 @@ export function RegistrationConfirmationEmail({
   userEmail,
   calendarUrl,
   claimUrl,
+  refundUrl,
 }: RegistrationConfirmationEmailProps) {
   const details: DetailItem[] = [
     { label: 'Date', value: eventDate },
@@ -104,6 +111,16 @@ export function RegistrationConfirmationEmail({
             </>
           }
         />
+      )}
+
+      {refundUrl && (
+        <Prose spaced muted>
+          Can&apos;t make it?{' '}
+          <Link href={refundUrl} style={{ color: colors.primary, textDecoration: 'underline' }}>
+            Request a refund
+          </Link>
+          . Expect a response within 3 business days.
+        </Prose>
       )}
     </Shell>
   )

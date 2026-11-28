@@ -10,6 +10,8 @@ import { listAdminReviewRecipients } from "@/lib/admin-notification-recipients";
 import { organiserNotificationRecipients } from "@/lib/organiser-notification-recipients";
 import { organiserResponseDue } from "@/lib/refund-ticket-rules";
 import { sendRefundRequestEmail } from "@/lib/email";
+import { ownEntryWhere } from "@/lib/own-entry";
+import { refundLinkEntry, type RefundLinkEntry } from "@/lib/entry-refund-link";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -20,6 +22,8 @@ const schema = z.object({
   eventId: z.string().trim().max(80).optional(),
   reason: z.string().trim().min(1).max(5000),
   turnstileToken: z.string().max(4000).optional(),
+  /** From a confirmation email's "Request a refund" link. */
+  refundToken: z.string().max(600).optional(),
 });
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -35,7 +39,7 @@ export async function POST(request: NextRequest) {
   const botBlocked = await assertTurnstile(request, parsed.data, "support");
   if (botBlocked) return botBlocked;
 
-  const { name, email, requestType, eventName, eventDate, eventId, reason } = parsed.data;
+  const { name, email, requestType, eventName, eventDate, eventId, reason, refundToken } = parsed.data;
   const session = await getUserSession().catch(() => null);
 
   // Resolve the event when the athlete picked one, so the right organisation sees it.
@@ -75,11 +79,65 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let viaLink: RefundLinkEntry | null = null;
+  if (requestType === "refund") {
+    // A refund is for the athlete's own place. On a group purchase the buyer
+    // holds everyone's entries, but each person asks for their own refund.
+    if (!event) {
+      return NextResponse.json({ error: "Choose the event you want refunded." }, { status: 400 });
+    }
+    // A confirmation email's link proves the entry is theirs on its own, for an
+    // athlete whose sign-in address is not the one they were entered under.
+    const linked = refundToken ? await refundLinkEntry(refundToken) : null;
+    viaLink = linked?.event.id === event.id ? linked : null;
+    if (!viaLink) {
+      if (!session) {
+        return NextResponse.json({ error: "Sign in to request a refund." }, { status: 401 });
+      }
+      const own = await prisma.registration.findFirst({
+        where: { eventId: event.id, status: "CONFIRMED", ...ownEntryWhere(session) },
+        select: { id: true },
+      });
+      if (!own) {
+        return NextResponse.json(
+          { error: "You can only request a refund for your own entry to this event." },
+          { status: 403 },
+        );
+      }
+    }
+    // One request at a time: a second would notify the organiser again and
+    // leave two tickets to decide for the same entry.
+    const requester = [
+      ...(session ? [{ userId: session.sub }, { email: { equals: session.email, mode: "insensitive" as const } }] : []),
+      ...(viaLink ? [{ email: { equals: viaLink.athleteEmail, mode: "insensitive" as const } }] : []),
+    ];
+    const pending = await prisma.supportTicket.findFirst({
+      where: {
+        requestType: "refund",
+        eventId: event.id,
+        status: { in: ["OPEN", "APPROVED"] },
+        OR: requester,
+      },
+      select: { id: true },
+    });
+    if (pending) {
+      return NextResponse.json(
+        { error: "You already have a refund request open for this event. Expect a response within 3 business days." },
+        { status: 409 },
+      );
+    }
+  }
+
+  // A request made through an email link is recorded against the entry's own
+  // address, so staff can find the entry and the reply goes to the inbox the
+  // link proved.
+  const ticketEmail = viaLink?.athleteEmail ?? email;
+
   const eventTitle = event?.title ?? eventName ?? "";
   const ticket = await prisma.supportTicket.create({
     data: {
       name,
-      email,
+      email: ticketEmail,
       userId: session?.sub ?? null,
       requestType,
       eventName: eventTitle || null,
@@ -95,7 +153,7 @@ export async function POST(request: NextRequest) {
   const data = {
     ticketId: ticket.id,
     athleteName: name,
-    athleteEmail: email,
+    athleteEmail: ticketEmail,
     eventTitle: eventTitle || "An event",
     eventDate: event?.eventDate ?? eventDate ?? null,
     reason,

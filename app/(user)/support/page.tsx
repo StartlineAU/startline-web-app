@@ -1,22 +1,14 @@
-import type { Metadata } from "next";
-import SupportForm from "@/components/support/SupportForm";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Support",
-  description: "Ask Startline for help with an entry, including a refund.",
-};
-
-export default function SupportPage() {
-  return (
-    <main className="min-h-screen bg-dark-darker pt-24 pb-16">
-      <div className="max-w-[640px] mx-auto px-6">
-        <p className="font-headline text-[11px] font-bold uppercase tracking-[0.25em] text-primary">Support</p>
-        <h1 className="font-headline text-[36px] font-black italic tracking-tighter text-light mt-2">Open a ticket</h1>
-        <p className="text-[14px] text-muted mt-3 mb-8 leading-relaxed">
-          Tell us the event and what you need. On a refund request, the organiser decides, usually within 3 business days, and Startline issues the refund. Nothing is refunded when you submit this form.
-        </p>
-        <SupportForm />
-      </div>
-    </main>
-  );
+/**
+ * The old Support address. Refunds are the only thing it ever handled, so it
+ * now lives at `/refunds`; links in emails already sent still land here.
+ */
+export default async function SupportRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<{ event?: string | string[] }>;
+}) {
+  const { event } = await searchParams;
+  redirect(typeof event === "string" ? `/refunds?event=${encodeURIComponent(event)}` : "/refunds");
 }

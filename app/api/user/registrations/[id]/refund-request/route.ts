@@ -8,7 +8,7 @@ import { entryPaidCents } from "@/lib/stripe-refunds";
 // POST — cancel a FREE entry from the athlete's own account.
 //
 // A paid entry is not refunded from here. Refunds are raised through Support
-// (`/support`), decided by the organiser and issued by Startline.
+// (`/refunds`), decided by the organiser and issued by Startline.
 // Idempotent, so a double click (or a jumpy connection) never errors.
 export async function POST(
   _req: NextRequest,

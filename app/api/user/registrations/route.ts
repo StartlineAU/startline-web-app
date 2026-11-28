@@ -13,6 +13,7 @@ import {
 import { checkInWindow } from "@/lib/check-in-window";
 import { entryPaidCents } from "@/lib/stripe-refunds";
 import { isSuggestedByEmail } from "@/lib/profile-history";
+import { isOwnEntry } from "@/lib/own-entry";
 
 /** GET — confirmed registrations for the signed-in athlete (wave + bib for Activity). */
 export async function GET() {
@@ -114,6 +115,9 @@ export async function GET() {
         // this address is offered, never added for them.
         onProfile: r.status === "CONFIRMED" && r.athleteUserId === session.sub,
         canAddToProfile: isSuggestedByEmail(r, { id: session.sub, email: session.email }),
+        // A group purchase lists every place the buyer paid for; only their
+        // own can be refunded at their request.
+        ownEntry: isOwnEntry(r, session),
         checkedInAt: r.checkedInAt?.toISOString() ?? null,
         checkInState: window.state,
         checkInOpensAt: window.opensAt?.toISOString() ?? null,

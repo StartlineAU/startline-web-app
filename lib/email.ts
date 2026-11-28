@@ -115,6 +115,8 @@ export interface RegistrationEmailData {
   calendarUrl?: string | null;
   /** The entry's "Add to my profile" link, when one could be signed. */
   claimUrl?: string | null;
+  /** The entry's "Request a refund" link, for a paid entry when one could be signed. */
+  refundUrl?: string | null;
 }
 
 export async function buildRegistrationConfirmationEmail(data: RegistrationEmailData): Promise<BuiltEmail> {
@@ -126,6 +128,11 @@ export async function buildRegistrationConfirmationEmail(data: RegistrationEmail
     }),
   );
   return { subject: `You're registered for ${data.eventName}`, ...rendered };
+}
+
+/** Where an entry's "Request a refund" link lands: the refund form, with that entry chosen. */
+export function entryRefundUrl(token: string, eventId: string, { siteUrl = SITE } = {}): string {
+  return `${siteUrl}/refunds?event=${encodeURIComponent(eventId)}&t=${encodeURIComponent(token)}`;
 }
 
 /** Where an entry's "Add to my profile" link lands (#598). */
@@ -408,7 +415,7 @@ export async function buildEventChangedEmail(
       eventTitle: data.eventTitle,
       organiserName: data.organiserName,
       changes: data.changes,
-      supportUrl: `${siteUrl}/support`,
+      supportUrl: `${siteUrl}/refunds?event=${encodeURIComponent(data.eventId)}`,
     }),
   );
   return { subject: `${data.eventTitle} has changed`, ...rendered };
@@ -452,7 +459,7 @@ export async function buildRemovedFromEventEmail(
       blocked: data.blocked,
       replacedOnTeam: data.teamName ?? null,
       activityUrl: `${siteUrl}/activity`,
-      supportUrl: `${siteUrl}/support`,
+      supportUrl: `${siteUrl}/contact`,
     }),
   );
   return { subject: `You've been removed from ${data.eventTitle}`, ...rendered };
