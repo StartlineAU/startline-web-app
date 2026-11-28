@@ -5,6 +5,8 @@ import { getOrganiserRatings, type OrganiserRating } from "@/lib/reviews";
 import {
   eventContactSelect, organiserContactSelect, resolveOrganiserContact, type OrganiserContact,
 } from "@/lib/organiser-contact";
+import { RACE_FEATURES_SELECT, athleteSeesBibs, athleteSeesWaves, type RaceFeatures } from "@/lib/race-features";
+import { entryBib } from "@/lib/team-entries";
 
 /** How many of the organiser's announcements the ticket shows, newest first. */
 export const TICKET_ANNOUNCEMENT_LIMIT = 3;
@@ -17,10 +19,14 @@ export type TicketEntry = {
   status: TicketEntryStatus;
   /** Ticket tier bought at checkout, e.g. "Sprint". */
   ticketLabel: string | null;
-  /** Organiser-assigned start wave. Null until the organiser assigns one. */
+  /**
+   * Organiser-assigned start wave. Null until the organiser assigns one, and
+   * always null unless they have shared waves with athletes (#566).
+   */
   waveLabel: string | null;
   /** "HH:mm" in the event's own timezone. */
   waveStartTime: string | null;
+  /** The entry's bib, or its team's. Null unless bibs are shared. */
   bibNumber: string | null;
   checkedInAt: Date | null;
 };
@@ -49,6 +55,13 @@ export type AthleteTicket = {
     city: string;
     state: string;
     coverImageUrl: string | null;
+    /**
+     * Whether the organiser shares start waves / bibs with athletes. Off or
+     * private means the ticket has no wave or bib section at all, rather than
+     * a placeholder for something that will never arrive.
+     */
+    showsWaves: boolean;
+    showsBibs: boolean;
     organiser: {
       id: string;
       orgName: string | null;
@@ -72,15 +85,19 @@ type EntryRow = {
   bibNumber: string | null;
   checkedInAt: Date | null;
   startWave: { label: string; startTime: string | null } | null;
+  team: { name: string; bibNumber: string | null } | null;
 };
 
 /**
  * Shape one registration for the ticket. The StartWave row is the source of
  * truth for the wave; the denormalised label covers entries written before the
  * table existed. A wave without its own start time starts with the event.
+ * A wave or bib the organiser has not shared never leaves the server.
  */
-export function toTicketEntry(row: EntryRow, eventStartTime: string): TicketEntry {
-  const waveLabel = row.startWave?.label ?? row.startWaveLabel ?? null;
+export function toTicketEntry(row: EntryRow, eventStartTime: string, features: RaceFeatures): TicketEntry {
+  const waveLabel = athleteSeesWaves(features)
+    ? row.startWave?.label ?? row.startWaveLabel ?? null
+    : null;
   return {
     id: row.id,
     athleteName: row.athleteName,
@@ -88,7 +105,7 @@ export function toTicketEntry(row: EntryRow, eventStartTime: string): TicketEntr
     ticketLabel: row.waveLabel,
     waveLabel,
     waveStartTime: waveLabel ? row.startWave?.startTime ?? eventStartTime : null,
-    bibNumber: row.bibNumber,
+    bibNumber: athleteSeesBibs(features) ? entryBib(row) : null,
     checkedInAt: row.checkedInAt,
   };
 }
@@ -123,6 +140,7 @@ export async function loadAthleteTicket(
       city: true,
       state: true,
       coverImageUrl: true,
+      ...RACE_FEATURES_SELECT,
       ...eventContactSelect,
       organiser: { select: { id: true, orgName: true, logoUrl: true, ...organiserContactSelect } },
       registrations: {
@@ -143,6 +161,7 @@ export async function loadAthleteTicket(
           bibNumber: true,
           checkedInAt: true,
           startWave: { select: { label: true, startTime: true } },
+          team: { select: { name: true, bibNumber: true } },
         },
       },
       announcements: {
@@ -157,13 +176,16 @@ export async function loadAthleteTicket(
 
   // The raw contact columns stop here: the ticket carries only what resolves.
   const {
-    registrations, announcements, organiser,
+    registrations, announcements, organiser, waveMode, bibMode,
     showContactName, showContactEmail, showContactPhone, ...rest
   } = event;
+  const features: RaceFeatures = { waveMode, bibMode };
   const ratings = await getOrganiserRatings([organiser.id]);
   return {
     event: {
       ...rest,
+      showsWaves: athleteSeesWaves(features),
+      showsBibs: athleteSeesBibs(features),
       organiser: {
         id: organiser.id,
         orgName: organiser.orgName,
@@ -172,7 +194,7 @@ export async function loadAthleteTicket(
         contact: resolveOrganiserContact(organiser, { showContactName, showContactEmail, showContactPhone }),
       },
     },
-    entries: registrations.map((row) => toTicketEntry(row, event.startTime)),
+    entries: registrations.map((row) => toTicketEntry(row, event.startTime, features)),
     // Bodies are sanitised on write; sanitising again on read means a row
     // written before that rule, or by hand, still cannot inject markup.
     announcements: announcements.map((a) => ({
