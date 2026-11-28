@@ -3,6 +3,7 @@ import { GeoPlacesClient, AutocompleteCommand } from "@aws-sdk/client-geo-places
 import { z } from "zod";
 import { getServerSession } from "@/lib/amplify-server";
 import { rateLimitPaid } from "@/lib/rate-limit";
+import { tidyPlaceLabel } from "@/lib/place-label";
 
 const client = new GeoPlacesClient({ region: "ap-southeast-2" });
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
     const res = await client.send(cmd);
     const results = (res.ResultItems ?? []).map(item => ({
       placeId: item.PlaceId,
-      label: item.Address?.Label ?? item.Title ?? "",
+      label: tidyPlaceLabel(item.Address?.Label ?? item.Title ?? ""),
       title: item.Title ?? "",
       placeType: item.PlaceType,
     }));
