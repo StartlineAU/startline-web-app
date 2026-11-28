@@ -8,7 +8,7 @@ import { customerHref } from "@/lib/portal-domains";
 import { usePortalHost } from "@/lib/use-portal-host";
 import TotpQrCode from "@/components/TotpQrCode";
 import { X, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, User, Check, AtSign, ShieldAlert } from "lucide-react";
-import { signIn, signUp, signOut, resetPassword, confirmResetPassword, confirmSignIn } from "aws-amplify/auth";
+import { signIn, signUp, signOut, confirmSignIn } from "aws-amplify/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { validateUsername } from "@/lib/username-validation";
 import { isPasswordValid, PASSWORD_POLICY_SUMMARY } from "@/lib/password-policy";
@@ -80,11 +80,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
   // Cognito's username for a password sign-in. Usually the email; a Google or
   // Apple profile keeps its provider-generated username after a password is set.
   const [signInUsername,  setSignInUsername]  = useState("");
-  const [resetCode,       setResetCode]       = useState("");
   const [newPassword,     setNewPassword]     = useState("");
   const [newPwConfirm,    setNewPwConfirm]    = useState("");
-  const [resetSent,       setResetSent]       = useState(false);
-  const [newPwStep,       setNewPwStep]       = useState<"initial" | "sent" | "done">("initial");
   // When signIn returned CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED
   const [challengeFlow,   setChallengeFlow]   = useState(false);
   const [mfaStep,         setMfaStep]         = useState<"none" | "select" | "setup" | "challenge">("none");
@@ -116,8 +113,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
       setError(""); setShowPw(false); setPwFocused(false);
       setUsername(""); setUsernameStatus("idle"); setUsernameError("");
       setCheckingEmail(false); setUserExists(null); setUserStatus(null); setSignInUsername("");
-      setResetCode(""); setNewPassword(""); setNewPwConfirm("");
-      setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
+      setNewPassword(""); setNewPwConfirm("");
+      setChallengeFlow(false);
       setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -350,72 +347,6 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
     }
   };
 
-  // ── Handle in‑modal password reset (FORCE_CHANGE_PASSWORD) ──────────────────
-  const handleStartReset = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      await resetPassword({ username: signInUsername || email });
-      setResetSent(true);
-      setNewPwStep("sent");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to send reset code.";
-      if (msg.includes("LimitExceededException")) {
-        setError("Too many attempts. Please try again later.");
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCompleteReset = async () => {
-    setError("");
-    if (resetCode.length < 6) { setError("Please enter the full verification code."); return; }
-    if (!isPasswordValid(newPassword)) { setError("Password must be " + PASSWORD_POLICY_SUMMARY); return; }
-    if (newPassword !== newPwConfirm) { setError("Passwords do not match."); return; }
-    setLoading(true);
-    try {
-      await confirmResetPassword({
-        username: signInUsername || email,
-        confirmationCode: resetCode,
-        newPassword,
-      });
-      // Sign in immediately with the new password
-      setPassword(newPassword);
-      setError("");
-      try {
-        await signOut({ global: false }).catch(() => {});
-        const result = await signIn({ username: signInUsername || email, password: newPassword });
-        if (result.nextStep.signInStep === "DONE") {
-          await fetch("/api/user/auth/session", { method: "POST" });
-          await refresh();
-          onSuccess?.();
-          onClose();
-          return;
-        }
-      } catch {}
-      // Fallback: show the password field
-      setUserExists(true);
-      setUserStatus("CONFIRMED");
-      setNewPwStep("done");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to reset password.";
-      if (msg.includes("CodeMismatchException")) {
-        setError("That code is incorrect.");
-      } else if (msg.includes("ExpiredCodeException")) {
-        setError("That code has expired. Please request a new one.");
-      } else if (msg.includes("InvalidPasswordException")) {
-        setError("Password must be " + PASSWORD_POLICY_SUMMARY);
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // ── Sign up step 1 ─────────────────────────────────────────────────────────
   const handleSignUp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -513,8 +444,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
     setView(v); setError(""); setPassword(""); setConfirm("");
     setPwFocused(false);
     setCheckingEmail(false); setUserExists(null); setUserStatus(null);
-    setResetCode(""); setNewPassword(""); setNewPwConfirm("");
-    setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
+    setNewPassword(""); setNewPwConfirm("");
+    setChallengeFlow(false);
     setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
   };
 
@@ -525,8 +456,8 @@ export default function SignInModal({ isOpen, onClose, onSuccess, initialView = 
     setPassword("");
     setError("");
     setPwFocused(false);
-    setResetCode(""); setNewPassword(""); setNewPwConfirm("");
-    setResetSent(false); setNewPwStep("initial"); setChallengeFlow(false);
+    setNewPassword(""); setNewPwConfirm("");
+    setChallengeFlow(false);
     setMfaStep("none"); setTotpCode(""); setTotpSetupUri(null);
   };
 

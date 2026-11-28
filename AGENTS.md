@@ -49,7 +49,7 @@ the console, and was still undefined at runtime (#363).
 
 So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
-`TURNSTILE_SECRET_KEY`, `ABR_GUID`, `ENTRY_CLAIM_SECRET`,
+`TURNSTILE_SECRET_KEY`, `ABR_GUID`, `ENTRY_CLAIM_SECRET`, `EDGE_SHARED_SECRET`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
 `startline-infra/startline-web-app/modules/environment/main.tf`; add a new one there.
@@ -79,6 +79,20 @@ deleted on the next apply: Terraform owns the branch variable map.
 To check an environment without credentials, POST an empty body to
 `/api/stripe/webhook`: `400` means the server has `STRIPE_SECRET_KEY`, `500`
 means it does not.
+
+### Cloudflare edge secret
+
+Behind Cloudflare and CloudFront, the nearest `X-Forwarded-For` hop is a
+Cloudflare edge shared by a whole region, so rate limits need the visitor's
+own address instead. A Cloudflare Transform Rule sends `x-startline-edge:
+<EDGE_SHARED_SECRET>` on every forwarded request (`lib/edge-proof.ts`). With the
+secret set, `getClientIp` believes `CF-Connecting-IP` only on requests carrying
+it, and middleware answers 403 to anything without it (bar `/api/internal/*`),
+so the app is served only through Cloudflare. Without
+the secret nothing is trusted and nothing is refused, which is local dev.
+
+**Order matters:** deploy the Transform Rule first, then set the secret on the
+app secret and rebuild. The other way round refuses every request.
 
 ## Stripe Connect (Accounts v2)
 
@@ -323,9 +337,18 @@ is on. The same flag decides whether a MANAGER sees the in-app feed. Only an
 OWNER can change it (`PATCH /api/organiser/profile`).
 
 Each kind of notification also has its own switch on the organisation
-(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`), owner
-only as well. Off means no feed entry and no email: anything that sends one must
+(`notifyEventApproved`, `notifyEventRejected`, `notifyNewRegistration`,
+`notifyEventFinished`), owner only as well. Off means no feed entry and no email: anything that sends one must
 check `wantsNotification` from `lib/organiser-notification-preferences.ts`.
+
+The "event finished" notice (`lib/notify-event-finished.ts`) is sent by the
+lifecycle worker, not by the bulk archive itself: each sweep claims archived
+events whose `Event.finishedNotifiedAt` is still null, so it goes out once.
+Events archived before it existed were backfilled as already told.
+
+A finished race opens the athlete's summary at `/races/[registrationId]`
+(`lib/race-summary.ts`). It is visible exactly where the race is listed on a
+profile: to its owner always, to anyone while that profile is public.
 
 The seed creates these users in Cognito, and sets one shared password for them,
 only in a pool listed in `SEED_COGNITO_WRITE_POOLS` (your own development pool,

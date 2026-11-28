@@ -20,6 +20,7 @@ import {
   buildRemovedFromEventEmail,
   buildRefundOverrideEmail,
   buildEventCancelledEmail,
+  buildEventFinishedEmail,
 } from "@/lib/email";
 import { formatEmailDate, formatEmailTime, googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
@@ -81,7 +82,7 @@ describe("registration confirmation email", () => {
     expect(text).toContain("Sat, 21 Nov 2026");
   });
 
-  it("links to the event itself, and to a calendar when there is a start time", async () => {
+  it("opens the ticket in Activity, and links to a calendar when there is a start time", async () => {
     const calendarUrl = googleCalendarUrl({
       title: data.eventName,
       startsAtUtc: new Date("2026-11-20T20:00:00Z"),
@@ -89,7 +90,8 @@ describe("registration confirmation email", () => {
     });
     const html = await render(RegistrationConfirmationEmail({ ...data, calendarUrl }));
 
-    expect(html).toContain("/events/evt-42");
+    expect(html).toContain("/activity?eventId=evt-42");
+    expect(html).not.toContain("/events/evt-42");
     expect(html).toContain("Add to calendar");
     expect(html).toContain("calendar.google.com");
 
@@ -153,6 +155,10 @@ const allEmails: [string, () => Promise<{ html: string; text: string }>][] = [
     { athleteName: "Harper", eventTitle: "Harbour 10K", organiserName: "Apex", reasonLabel: "Code of conduct", note: null, refundCents: 10540, noRefund: false, blocked: true },
     opts,
   )],
+  ["finished", () => buildEventFinishedEmail(
+    { eventId: "evt-1", eventTitle: "Harbour 10K", entries: 120, checkedIn: 104, withResults: 0 },
+    opts,
+  )],
   ["refund override", () => buildRefundOverrideEmail({ athleteName: "Harper", eventTitle: "Harbour 10K", organiserDecision: "declined", decision: "approved", note: "Date <moved>" })],
   ["waitlist", () => renderEmail(WaitlistConfirmationEmail())],
   ["contact", () => renderEmail(ContactMessageEmail({ name: "Harper", email: "h@x.test", subject: "Hi", message: "Line one\nLine <two>" }))],
@@ -168,6 +174,7 @@ describe.each(allEmails)("%s email", (_name, build) => {
     expect(html).not.toMatch(/<img[^>]+\.svg/);
     expect(html).not.toContain("linear-gradient");
     expect(html).not.toContain("<script");
+    expect(html).not.toContain("strava.com");
     expect(text.length).toBeGreaterThan(0);
     expect(text).not.toContain("<td");
   });
@@ -287,5 +294,28 @@ describe("event cancelled", () => {
     expect(email.html).toContain("/events/evt%201");
     expect(email.html).not.toContain("/activity");
     expect(email.text).toMatch(/view cancelled event/i);
+  });
+});
+
+describe("event finished email (#561)", () => {
+  it("links the organiser to the event's dashboard and asks for results", async () => {
+    const { html, text, subject } = await buildEventFinishedEmail(
+      { eventId: "evt-1", eventTitle: "Harbour 10K", entries: 120, checkedIn: 104, withResults: 30 },
+      opts,
+    );
+    expect(subject).toBe('"Harbour 10K" has finished');
+    expect(html).toContain("/organiser/events/evt-1/dashboard");
+    expect(text).toContain("Enter results");
+    expect(text).toContain("30 of 120");
+    expect(text).toContain("104");
+  });
+
+  it("does not ask for results once they are all posted", async () => {
+    const { text } = await buildEventFinishedEmail(
+      { eventId: "evt-1", eventTitle: "Harbour 10K", entries: 2, checkedIn: 0, withResults: 2 },
+      opts,
+    );
+    expect(text).not.toContain("Enter results");
+    expect(text).not.toContain("Checked in");
   });
 });

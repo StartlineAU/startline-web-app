@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 import { argosScreenshot } from "@argos-ci/playwright";
-import { goToHomepage } from "./helpers";
 
 test.describe("events page", () => {
   test("renders events page with content", async ({ page }) => {

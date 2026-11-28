@@ -18,7 +18,6 @@ function snapshot(userStatus: string, identities: unknown[] = []): CognitoUserSn
 }
 
 const google = { providerName: "Google", userId: "google-1" };
-const apple = { providerName: "SignInWithApple", userId: "apple-1" };
 
 describe("login security rules", () => {
   it("allows an email change only with a password and no linked providers", () => {

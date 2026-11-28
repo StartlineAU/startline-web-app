@@ -53,7 +53,7 @@ export async function POST(
           select: {
             id: true, email: true, orgName: true, stripeOnboardingComplete: true, abn: true,
             contactEmail: true, notifyManagers: true, pendingClaim: true,
-            notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
+            notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true, notifyEventFinished: true,
             members: { select: { role: true, user: { select: { email: true } } } },
           },
         },
@@ -165,7 +165,7 @@ export async function POST(
       );
     }
 
-    writeAuditLog({
+    await writeAuditLog({
       adminId: session.sub,
       action: action === "approve" ? "APPROVE_EVENT" : "REJECT_EVENT",
       targetType: "event",

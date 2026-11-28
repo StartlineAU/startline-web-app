@@ -3,18 +3,22 @@ import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import { getStripe } from "@/lib/stripe";
 import { assertTurnstile } from "@/lib/turnstile";
 import { rateLimit } from "@/lib/rate-limit";
-import { assertMetadataBudget, SELF_FLAGS_METADATA_KEY, STRIPE_METADATA_MAX_VALUE_CHARS } from "@/lib/stripe-webhook";
+import { assertMetadataBudget, SELF_FLAGS_METADATA_KEY } from "@/lib/stripe-webhook";
+import { createPendingOrder, splitOrderMetadata } from "@/lib/pending-order";
 import {
   checkoutSchema,
   compactOrderParticipant,
   isOrderFailure,
   resolveCheckoutOrder,
 } from "@/lib/checkout-order";
+import { reportCaught } from "@/lib/error-reporting";
 
 export async function POST(req: NextRequest) {
   // Every accepted request creates a Stripe PaymentIntent and holds capacity
   // checks against the database. Turnstile stops bots; this caps one source.
-  const limited = await rateLimit(req, { prefix: "checkout", limit: 20, windowSeconds: 60 });
+  // Each limiter needs its own prefix: they share the key otherwise, so every
+  // attempt counted twice in one window and the longer one never applied.
+  const limited = await rateLimit(req, { prefix: "checkout-1m", limit: 20, windowSeconds: 60 });
   if (limited) return limited;
 
   try {
@@ -31,7 +35,7 @@ export async function POST(req: NextRequest) {
     if (botBlocked) return botBlocked;
 
     // Each call creates a PaymentIntent carrying the order's personal details.
-    const blocked = await rateLimit(req, { prefix: "checkout", limit: 20, windowSeconds: 600 });
+    const blocked = await rateLimit(req, { prefix: "checkout-10m", limit: 20, windowSeconds: 600 });
     if (blocked) return blocked;
 
     const order = await resolveCheckoutOrder(body);
@@ -73,16 +77,6 @@ export async function POST(req: NextRequest) {
     // grouping against the event's tiers before writing anything.
     if (teams.length > 0) {
       participantMetadata.teams = JSON.stringify(teams.map((t) => t.name));
-      // All the names share one metadata value. Each is within the length
-      // limit, but several long ones (more so with quotes or backslashes,
-      // which JSON escapes) can outgrow Stripe's cap together. Say so plainly
-      // instead of failing the payment setup with a 500.
-      if (participantMetadata.teams.length > STRIPE_METADATA_MAX_VALUE_CHARS) {
-        return NextResponse.json(
-          { error: "Your team names are too long to fit on one order. Shorten one or more of them and try again." },
-          { status: 400 },
-        );
-      }
     }
 
     const primaryWave = wavePricing[waveLabels[0]];
@@ -113,7 +107,12 @@ export async function POST(req: NextRequest) {
       groupRegistration: groupRegistration ? "true" : "false",
       ...participantMetadata,
     };
-    assertMetadataBudget(metadata);
+    // Personal details stay in our database; Stripe gets an opaque order id.
+    // See lib/pending-order.ts.
+    const split = splitOrderMetadata(metadata);
+    const orderId = await createPendingOrder(event.id, split.private);
+    const stripeMetadata = { ...split.stripe, orderId };
+    assertMetadataBudget(stripeMetadata);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
@@ -131,7 +130,7 @@ export async function POST(req: NextRequest) {
             transfer_data: { destination: event.organiser.stripeAccountId as string },
           }
         : {}),
-      metadata,
+      metadata: stripeMetadata,
     });
 
     return NextResponse.json({
@@ -145,6 +144,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("Checkout error:", err);
+    reportCaught(err, "checkout");
     return NextResponse.json({ error: "Failed to create payment." }, { status: 503 });
   }
 }

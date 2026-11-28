@@ -5,12 +5,14 @@ export interface OrganiserNotificationPreferences {
   notifyEventApproved: boolean;
   notifyEventRejected: boolean;
   notifyNewRegistration: boolean;
+  notifyEventFinished: boolean;
 }
 
 export const NOTIFICATION_PREFERENCE_FIELD = {
   EVENT_APPROVED:   "notifyEventApproved",
   EVENT_REJECTED:   "notifyEventRejected",
   NEW_REGISTRATION: "notifyNewRegistration",
+  EVENT_FINISHED:   "notifyEventFinished",
 } as const satisfies Partial<Record<NotificationType, keyof OrganiserNotificationPreferences>>;
 
 /**

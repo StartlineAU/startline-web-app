@@ -4,12 +4,11 @@ import {
   type OrganiserRating,
 } from "@/lib/review-helpers";
 
-export type { OrganiserRating, TopRatedEvent } from "@/lib/review-helpers";
+export type { OrganiserRating } from "@/lib/review-helpers";
 export {
   averageOverallRating,
   displayNameFromUser,
   toOrganiserRating,
-  topRatedEventsFromReviews,
 } from "@/lib/review-helpers";
 
 export type PublicReview = {

@@ -14,7 +14,7 @@ describe("CITY_COORDS", () => {
   });
 
   it("each city has lat/lng coordinates", () => {
-    for (const [key, coords] of Object.entries(CITY_COORDS)) {
+    for (const coords of Object.values(CITY_COORDS)) {
       expect(coords).toHaveLength(2);
       expect(coords[0]).toBeGreaterThanOrEqual(-44); // lat range
       expect(coords[0]).toBeLessThanOrEqual(-10);

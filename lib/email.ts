@@ -3,6 +3,7 @@ import { renderEmail, type RenderedEmail } from "@/emails/render";
 import { RegistrationConfirmationEmail } from "@/emails/registration-confirmation";
 import { EventApprovedEmail } from "@/emails/event-approved";
 import { EventRejectedEmail } from "@/emails/event-rejected";
+import { EventFinishedEmail } from "@/emails/event-finished";
 import { EventSubmittedForReviewEmail } from "@/emails/event-submitted-for-review";
 import { ReviewReportedEmail } from "@/emails/review-reported";
 import { TeamDetailsNeededEmail } from "@/emails/team-details-needed";
@@ -22,6 +23,7 @@ import { SUPPORT_EMAIL } from "@/lib/contact";
 import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { adminUrl, organiserUrl } from "@/lib/portal-domains";
+import { reportCaught } from "@/lib/error-reporting";
 
 // Every email is a React Email template under emails/, rendered to HTML plus
 // a plain-text part. Templates escape whatever they are given, so nothing here
@@ -48,10 +50,20 @@ const firstNameGreeting = (name?: string | null) => {
   return first ? `Hi ${first},` : "Hi,";
 };
 
+/**
+ * Send one email, and throw if Resend did not accept it.
+ *
+ * The Resend SDK never throws: a 429, an outage or a refused address comes
+ * back as `{ error }`. Checking it here means every caller's existing catch
+ * sees the failure and reports it.
+ */
 async function sendOne(to: string | string[], { subject, html, text }: BuiltEmail) {
   const resend = getResend();
   if (!resend) return;
-  await resend.emails.send({ from: getEmailFrom(), to, subject, html, text });
+  const { error } = await resend.emails.send({ from: getEmailFrom(), to, subject, html, text });
+  if (error) {
+    throw new Error(`Resend refused "${subject}": ${error.name ?? "error"}: ${error.message}`);
+  }
 }
 
 /** Resend's batch endpoint takes at most this many messages per call. */
@@ -88,6 +100,7 @@ export async function sendEmailBatch(
       sent += chunk.length;
     } catch (err) {
       console.error(`Resend batch failed for ${what}:`, err);
+      reportCaught(err, "email:batch");
     }
   }
   return sent;
@@ -151,6 +164,34 @@ export async function buildEventApprovedEmail(eventTitle: string, { siteUrl = SI
 export async function sendEventApprovedEmail(email: string | string[], eventTitle: string) {
   if (!getResend()) return;
   await sendOne(email, await buildEventApprovedEmail(eventTitle));
+}
+
+// ── Event finished (organisers, #561) ─────────────────────────────────────────
+export interface EventFinishedEmailData {
+  eventId: string;
+  eventTitle: string;
+  entries: number;
+  checkedIn: number;
+  withResults: number;
+}
+
+export async function buildEventFinishedEmail(
+  { eventId, ...data }: EventFinishedEmailData,
+  { siteUrl = SITE } = {},
+): Promise<BuiltEmail> {
+  const rendered = await renderEmail(
+    EventFinishedEmail({
+      ...data,
+      // A finished event's dashboard opens on results.
+      dashboardUrl: organiserUrl(`/organiser/events/${encodeURIComponent(eventId)}/dashboard`, siteUrl),
+    }),
+  );
+  return { subject: `"${data.eventTitle}" has finished`, ...rendered };
+}
+
+export async function sendEventFinishedEmail(email: string | string[], data: EventFinishedEmailData) {
+  if (!getResend()) return;
+  await sendOne(email, await buildEventFinishedEmail(data));
 }
 
 export async function buildEventRejectedEmail(
@@ -636,6 +677,7 @@ export async function sendAccountSecurityNotice(to: string | null | undefined, c
     await sendOne(to, await buildAccountSecurityNoticeEmail(change));
   } catch (err) {
     console.error("Account security notice failed:", err);
+    reportCaught(err, "email:security-notice");
   }
 }
 

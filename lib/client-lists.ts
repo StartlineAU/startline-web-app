@@ -10,28 +10,9 @@ function parseIds(raw: string | null): string[] {
   }
 }
 
-function notifyListsChanged(): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("startline-lists-changed"));
-}
-
-function setRegisteredEventIds(ids: string[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(REGISTERED_KEY, JSON.stringify(ids));
-  notifyListsChanged();
-}
-
 export function getRegisteredEventIds(): string[] {
   if (typeof window === "undefined") return [];
   return parseIds(localStorage.getItem(REGISTERED_KEY));
-}
-
-export function addRegisteredInterest(eventId: string): boolean {
-  const ids = getRegisteredEventIds();
-  if (ids.includes(eventId)) return false;
-  ids.push(eventId);
-  setRegisteredEventIds(ids);
-  return true;
 }
 
 // Saved events are DB-backed (per-user). These helpers call the API so the
