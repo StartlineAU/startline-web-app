@@ -45,8 +45,6 @@ export function EmailFooter({ sentTo, sentToNote }: EmailFooterProps) {
         <Link href="https://www.instagram.com/startlineau" style={social}>Instagram</Link>
         <span style={{ color: colors.border, margin: '0 8px' }}>/</span>
         <Link href="https://www.facebook.com/startlineau" style={social}>Facebook</Link>
-        <span style={{ color: colors.border, margin: '0 8px' }}>/</span>
-        <Link href="https://www.strava.com/clubs/startlineau" style={social}>Strava</Link>
       </Text>
       <Text style={{ ...prose, margin: '12px 0 0', fontSize: size.meta, color: colors.faint }}>
         This is a transactional email about your Startline account or entry.
