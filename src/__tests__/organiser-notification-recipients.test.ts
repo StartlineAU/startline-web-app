@@ -5,6 +5,7 @@ const base = {
   email: "owner@example.com",
   contactEmail: "events@example.com",
   notifyManagers: true,
+  pendingClaim: false,
   members: [
     { role: "OWNER" as const, user: { email: "owner@example.com" } },
     { role: "MANAGER" as const, user: { email: "manager@example.com" } },
@@ -40,6 +41,10 @@ describe("organiserNotificationRecipients", () => {
   it("sends one email when the contact email is the owner's own, whatever the case", () => {
     expect(organiserNotificationRecipients({ ...base, contactEmail: " Owner@Example.com ", members: [] }))
       .toEqual(["owner@example.com"]);
+  });
+
+  it("sends nothing for an admin-created organisation nobody has claimed yet", () => {
+    expect(organiserNotificationRecipients({ ...base, pendingClaim: true, members: [] })).toEqual([]);
   });
 
   it("skips a missing or malformed contact email", () => {

@@ -5,6 +5,7 @@ import {
   type AutocompleteResultItem,
   type GeocodeResultItem,
 } from "@aws-sdk/client-geo-places";
+import { tidyPlaceLabel } from "@/lib/place-label";
 
 const client = new GeoPlacesClient({ region: "ap-southeast-2" });
 
@@ -66,20 +67,20 @@ function stateCodeFor(item: GeocodeItem): string {
 function toGeocodeResult(item: GeocodeItem): GeocodeResult {
   const stateCode = stateCodeFor(item);
   return {
-    label: item.Address?.Label ?? "",
+    label: tidyPlaceLabel(item.Address?.Label ?? ""),
     city: item.Address?.Locality ?? item.Address?.District ?? "",
     district: item.Address?.District ?? "",
     stateCode,
     stateName: item.Address?.Region?.Name ?? STATE_NAMES[stateCode] ?? "",
     postalCode: item.Address?.PostalCode ?? "",
-    country: item.Address?.Country?.Name ?? "",
+    country: tidyPlaceLabel(item.Address?.Country?.Name ?? ""),
     latitude: item.Position?.[1] ?? null,
     longitude: item.Position?.[0] ?? null,
   };
 }
 
 function toPlaceChoice(item: GeocodeItem): PlaceChoice | null {
-  const label = item.Address?.Label ?? "";
+  const label = tidyPlaceLabel(item.Address?.Label ?? "");
   const stateCode = stateCodeFor(item);
   if (!label || !stateCode) return null;
   return {

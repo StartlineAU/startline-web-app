@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, Users, UserPlus, UserX, Ban } from "lucide-react";
+import { Bell, UserCheck, Flag, Megaphone, Undo2, Banknote, Users, UserPlus, UserX, Ban, Medal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UserEvent } from "@/types";
 import type { PublicEvent } from "@/lib/event-types";
@@ -138,13 +138,16 @@ function RegisteredCard({
   metas,
   onOpenTicket,
   onAddDetails,
+  onAddedToProfile,
 }: {
   event: UserEvent;
   metas: RegMeta[];
   onOpenTicket: () => void;
   onAddDetails?: (meta: RegMeta) => void;
+  onAddedToProfile?: (meta: RegMeta) => void;
 }) {
   const pending = metas.filter((m) => m.detailsPending && m.status === "CONFIRMED");
+  const offered = metas.filter((m) => m.canAddToProfile && m.status === "CONFIRMED");
   const cardStatus = metas.length === 0
     ? "CONFIRMED"
     : metas.length === 1
@@ -206,6 +209,67 @@ function RegisteredCard({
           </ul>
         </div>
       )}
+      {onAddedToProfile && offered.map((meta) => (
+        <ProfileOffer key={meta.id} meta={meta} onAdded={() => onAddedToProfile(meta)} />
+      ))}
+    </div>
+  );
+}
+
+/* An entry someone else bought under this athlete's email. Race history is
+   opt-in (#598): it reaches the public profile only once the athlete says it
+   is theirs. */
+function ProfileOffer({ meta, onAdded }: { meta: RegMeta; onAdded: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const add = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/user/registrations/${meta.id}/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(json.error ?? "Couldn't add this race. Try again.");
+        return;
+      }
+      onAdded();
+    } catch {
+      setError("Couldn't add this race. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="mt-2 rounded-xl border border-dark-lighter bg-dark-light px-3 py-2.5"
+      data-testid="profile-offer"
+      data-registration-id={meta.id}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-light">
+            Entered by someone else
+          </p>
+          <p className="text-[12px] text-muted leading-relaxed mt-0.5 truncate">
+            {meta.athleteName} · add it to show this race on your profile.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={add}
+          disabled={busy}
+          className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/40 text-primary font-headline text-[10px] font-bold uppercase tracking-widest hover:bg-primary/10 transition-colors disabled:opacity-50"
+        >
+          <Medal className="w-3.5 h-3.5" /> {busy ? "Adding" : "Add to my profile"}
+        </button>
+      </div>
+      {error && <p className="text-[12px] text-red-400 mt-1.5" role="alert">{error}</p>}
     </div>
   );
 }
@@ -454,6 +518,8 @@ export default function ActivityPage() {
               teamName: r.teamName ?? null,
               detailsPending: r.detailsPending === true,
               eventCancelled: r.eventCancelled === true,
+              onProfile: r.onProfile === true,
+              canAddToProfile: r.canAddToProfile === true,
             };
             (meta[r.eventId] ??= []).push(entry);
             regIds.push(r.eventId);
@@ -603,6 +669,14 @@ export default function ActivityPage() {
                         teamName: meta.teamName,
                         eventTitle: event.title,
                       })
+                    }
+                    onAddedToProfile={(added) =>
+                      setRegMeta((prev) => ({
+                        ...prev,
+                        [added.eventId]: (prev[added.eventId] ?? []).map((m) =>
+                          m.id === added.id ? { ...m, onProfile: true, canAddToProfile: false } : m,
+                        ),
+                      }))
                     }
                   />
                 ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function RegisterField({
@@ -8,6 +9,8 @@ export function RegisterField({
   error,
   fieldKey,
   htmlFor,
+  hint,
+  hintId,
   children,
 }: {
   label: string;
@@ -15,6 +18,10 @@ export function RegisterField({
   error?: string;
   fieldKey?: string;
   htmlFor?: string;
+  /** Guidance under the input. Gives way to the error while one shows. */
+  hint?: React.ReactNode;
+  /** Id for the hint, so the input can point at it with aria-describedby. */
+  hintId?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -30,9 +37,14 @@ export function RegisterField({
         {required && <span className="text-primary">*</span>}
       </label>
       {children}
-      {error && (
+      {error ? (
         <p className="mt-1.5 font-headline text-[11px] font-medium text-red-400">{error}</p>
-      )}
+      ) : hint ? (
+        <p id={hintId} className="mt-1.5 flex items-start gap-1.5 text-[12px] leading-snug text-muted-dark">
+          <Info className="mt-px h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <span>{hint}</span>
+        </p>
+      ) : null}
     </div>
   );
 }

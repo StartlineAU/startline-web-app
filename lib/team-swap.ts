@@ -127,6 +127,8 @@ export function provisionReplacement(incoming: RegistrationFormData): Promise<Re
 }
 
 export interface AppliedSwap {
+  /** The place, now the incoming member's. */
+  registrationId: string;
   /** Who held the place before. */
   previous: Holder;
   email: string;
@@ -175,6 +177,9 @@ export async function applySwap(
       detailsPending: false,
       // The entry now belongs to the new member's account.
       userId: userIdByEmail[email] ?? null,
+      // And it is their race, not the previous holder's (#592). An account
+      // that already existed finds it by email, as with any guest entry.
+      athleteUserId: userIdByEmail[email] ?? null,
       // The previous holder's details and estimate no longer apply.
       medicalNotes: null,
       estimatedFinishMinutes: null,
@@ -205,6 +210,7 @@ export async function applySwap(
     },
   });
   return {
+    registrationId: entry.id,
     previous: entry,
     email,
     athleteName: after.athleteName,

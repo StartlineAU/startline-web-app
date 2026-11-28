@@ -22,7 +22,10 @@ const row = {
   bibNumber: "104",
   checkedInAt: null,
   startWave: null,
+  team: null,
 };
+
+const shared = { waveMode: "SHARED", bibMode: "SHARED" } as const;
 
 function eventWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -40,6 +43,7 @@ function eventWith(overrides: Record<string, unknown> = {}) {
     city: "Noosa",
     state: "qld",
     coverImageUrl: null,
+    ...shared,
     showContactName: null,
     showContactEmail: null,
     showContactPhone: null,
@@ -59,18 +63,38 @@ describe("toTicketEntry", () => {
     const entry = toTicketEntry(
       { ...row, startWaveLabel: "Old label", startWave: { label: "Wave A", startTime: "06:20" } },
       "06:00",
+      shared,
     );
     expect(entry).toMatchObject({ waveLabel: "Wave A", waveStartTime: "06:20", ticketLabel: "Sprint" });
   });
 
   it("falls back to the denormalised label and the event start", () => {
-    const entry = toTicketEntry({ ...row, startWaveLabel: "Wave B" }, "06:00");
+    const entry = toTicketEntry({ ...row, startWaveLabel: "Wave B" }, "06:00", shared);
     expect(entry).toMatchObject({ waveLabel: "Wave B", waveStartTime: "06:00" });
   });
 
   it("has no start time while no wave is assigned", () => {
-    const entry = toTicketEntry(row, "06:00");
+    const entry = toTicketEntry(row, "06:00", shared);
     expect(entry).toMatchObject({ waveLabel: null, waveStartTime: null });
+  });
+
+  it.each(["OFF", "PRIVATE"] as const)("withholds a %s wave and bib", (mode) => {
+    const entry = toTicketEntry(
+      { ...row, startWave: { label: "Wave A", startTime: "06:20" } },
+      "06:00",
+      { waveMode: mode, bibMode: mode },
+    );
+    expect(entry).toMatchObject({ waveLabel: null, waveStartTime: null, bibNumber: null });
+  });
+
+  it("shares one feature without the other", () => {
+    const entry = toTicketEntry({ ...row, startWaveLabel: "Wave B" }, "06:00", { waveMode: "SHARED", bibMode: "OFF" });
+    expect(entry).toMatchObject({ waveLabel: "Wave B", bibNumber: null });
+  });
+
+  it("carries a team member's bib from the team", () => {
+    const entry = toTicketEntry({ ...row, bibNumber: null, team: { name: "Relay Rockets", bibNumber: "T-7" } }, "06:00", shared);
+    expect(entry.bibNumber).toBe("T-7");
   });
 });
 
@@ -116,6 +140,17 @@ describe("loadAthleteTicket", () => {
       { athleteEmail: { equals: "Harper@Example.com", mode: "insensitive" } },
     ]);
     expect(where.status.in).not.toContain("CANCELLED");
+  });
+
+  it("says whether the event shares waves and bibs, without the raw modes", async () => {
+    mocks.eventFindUnique.mockResolvedValue(eventWith({ waveMode: "SHARED", bibMode: "PRIVATE" }));
+    const ticket = await loadAthleteTicket(session, "evt-1");
+
+    expect(ticket?.event).toMatchObject({ showsWaves: true, showsBibs: false });
+    expect(ticket?.entries[0].bibNumber).toBeNull();
+    const json = JSON.stringify(ticket);
+    expect(json).not.toContain("104");
+    expect(json).not.toContain("bibMode");
   });
 
   it("returns null when the athlete holds no entry for the event", async () => {

@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { getOrganiserRatings } from "@/lib/reviews";
 import {
-  PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, withRacePhase,
+  PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, profileHistoryWhere, withRacePhase,
 } from "@/lib/profile-history";
 import ProfilePageClient from "@/components/profile/ProfilePageClient";
 
@@ -63,7 +63,7 @@ export default async function ProfileServerView({
   isOwner: boolean;
 }) {
   const registrations = await prisma.registration.findMany({
-    where: { userId: user.id, status: "CONFIRMED" },
+    where: profileHistoryWhere(user),
     orderBy: { event: { eventDate: "asc" } },
     select: {
       id: true,

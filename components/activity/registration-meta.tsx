@@ -27,6 +27,13 @@ export type RegMeta = {
   detailsPending: boolean;
   /** The event was cancelled: the entry is refunded in full, booking fee included. */
   eventCancelled?: boolean;
+  /** This entry is on the athlete's public race history. */
+  onProfile?: boolean;
+  /**
+   * Someone else entered the athlete under their email. Race history is
+   * opt-in (#598), so Activity offers it rather than adding it for them.
+   */
+  canAddToProfile?: boolean;
 };
 
 export function currentCheckInState(meta: RegMeta, now: Date): CheckInState {

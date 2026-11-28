@@ -11,6 +11,8 @@ interface OrganiserOption {
   email: string;
   status: string;
   verified: boolean;
+  pendingClaim: boolean;
+  stripeOnboardingComplete: boolean;
 }
 
 export default function AdminCreateEventPage() {
@@ -23,6 +25,8 @@ export default function AdminCreateEventPage() {
   }, []);
 
   const { data: organisers } = useApiResource<OrganiserOption[]>(fetchOrganisers);
+
+  const selected = (organisers ?? []).find((o) => o.id === organiserId);
 
   const label = (o: OrganiserOption) =>
     o.orgName || o.contactName || o.email;
@@ -59,12 +63,20 @@ export default function AdminCreateEventPage() {
               <option key={o.id} value={o.id} disabled={o.status === "SUSPENDED"} className="bg-dark text-light">
                 {label(o)}
                 {o.status === "SUSPENDED" ? " (suspended)" : o.verified ? " · verified" : ""}
+                {o.pendingClaim ? " · unclaimed" : ""}
               </option>
             ))}
           </select>
           {organisers && organisers.length === 0 && (
             <p className="font-headline text-[11px] uppercase tracking-widest text-muted-dark mt-2">
-              No organiser accounts exist yet.
+              No organiser accounts exist yet. Add one on the Organisers page.
+            </p>
+          )}
+          {selected && !selected.stripeOnboardingComplete && (
+            <p className="text-[13px] text-amber-300 mt-2">
+              {selected.pendingClaim
+                ? "Paid Startline events stay pending until the organiser claims this profile and finishes Stripe. Free and external-link events can go live now."
+                : "Paid Startline events stay pending until this organiser finishes Stripe. Free and external-link events can go live now."}
             </p>
           )}
         </div>

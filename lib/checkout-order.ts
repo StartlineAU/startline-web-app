@@ -41,6 +41,11 @@ export type CheckoutParticipant = RegistrationFormData & {
    * carries a placeholder for them: blank details and the buyer's email.
    */
   detailsLater?: boolean;
+  /**
+   * The signed-in buyer's own ticket. The resolved order keeps it on at most
+   * one named participant, and only when the buyer is signed in.
+   */
+  isSelf?: boolean;
 };
 
 export type CheckoutWave = {
@@ -76,6 +81,7 @@ const participantSchema = z.object({
   waveLabel: z.string().max(255).optional(),
   team: z.number().int().min(0).max(MAX_REGISTRATION_PARTICIPANTS).optional(),
   detailsLater: z.boolean().optional(),
+  isSelf: z.boolean().optional(),
 });
 
 export const checkoutSchema = z.object({
@@ -393,11 +399,12 @@ export async function resolveCheckoutOrder(
   // A member left for later becomes a placeholder: no details of their own,
   // and the buyer's email, so the place sits with the buyer (and shows in
   // their Activity) until someone adds the member's details.
+  const selfIndex = buyersOwnTicket(participants, Boolean(userSession));
   const resolvedParticipants: CheckoutParticipant[] = withContact.map((p, i) => {
     const { waveLabel: label, team, detailsLater } = participants[i];
     return detailsLater
       ? { ...createEmptyParticipant(), email: buyerEmail, waiverAccepted: true, waveLabel: label, team, detailsLater: true }
-      : { ...p, waveLabel: label, team };
+      : { ...p, waveLabel: label, team, isSelf: i === selfIndex || undefined };
   });
 
   return {
@@ -427,5 +434,20 @@ export function compactOrderParticipant(participant: CheckoutParticipant): Compa
   return {
     ...compactParticipant(participant),
     ...(participant.detailsLater ? { pnd: 1 as const } : {}),
+    ...(participant.isSelf && !participant.detailsLater ? { me: 1 as const } : {}),
   };
+}
+
+/**
+ * Which ticket is the buyer's own, or null. Only a signed-in buyer has one,
+ * a place left for later names nobody, and a request marking several keeps
+ * the first: one person races once per event.
+ */
+export function buyersOwnTicket(
+  participants: Pick<CheckoutParticipant, "isSelf" | "detailsLater">[],
+  signedIn: boolean,
+): number | null {
+  if (!signedIn) return null;
+  const index = participants.findIndex((p) => p.isSelf === true && !p.detailsLater);
+  return index >= 0 ? index : null;
 }

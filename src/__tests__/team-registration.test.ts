@@ -62,7 +62,7 @@ import { POST as checkout } from "@/app/api/checkout/route";
 import { sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
 
 const person = (n: number, over: Record<string, unknown> = {}) => ({
-  firstName: `Member${n}`,
+  firstName: `Member${"ABCDEFGHIJ"[n - 1] ?? "Z"}`,
   lastName: "Smith",
   dateOfBirth: "1990-01-01",
   gender: "female",
@@ -258,7 +258,7 @@ describe("team members added later (#541)", () => {
     expect(res.status).toBe(200);
 
     const rows = mocks.registrationCreateMany.mock.calls[0][0].data;
-    expect(rows[0]).toMatchObject({ athleteName: "Member1 Smith", athleteEmail: "member1@example.com" });
+    expect(rows[0]).toMatchObject({ athleteName: "MemberA Smith", athleteEmail: "member1@example.com" });
     expect(rows[1]).toMatchObject({
       athleteName: "Team member 2",
       athleteEmail: "member1@example.com",

@@ -49,14 +49,17 @@ the console, and was still undefined at runtime (#363).
 
 So anything the server reads at runtime (`STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `STRIPE_ACCOUNT_EVENTS_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
-`TURNSTILE_SECRET_KEY`, `ABR_GUID`,
+`TURNSTILE_SECRET_KEY`, `ABR_GUID`, `ENTRY_CLAIM_SECRET`,
 `DATABASE_URL`) has to be in the app secret. Terraform puts the runtime
 secrets in both places from one list, `runtime_secrets` in
 `startline-infra/startline-web-app/modules/environment/main.tf`; add a new one there.
 
 Terraform owns only the *generated* half of the app secret (Cognito ids, Neon
 URL, bucket, CDN, site URL, `GUEST_EMAIL_VERIFICATION_SECRET`,
-`TURNSTILE_SECRET_KEY`) plus the whole branch variable map. The third-party
+`TURNSTILE_SECRET_KEY`, `ENTRY_CLAIM_SECRET`) plus the whole branch variable map.
+`ENTRY_CLAIM_SECRET` signs the "Add to my profile" link in entry confirmation
+emails (`lib/entry-claim-token.ts`). Without it the emails go out with no link;
+rotating it voids every link already sent. The third-party
 credentials are owned by the app secret itself: Terraform reads the secret and
 merges the generated keys over the top, so `startline/automation` is no longer
 their source. A prod apply fails its precondition rather than silently clearing
@@ -349,6 +352,25 @@ gates server-side: `AuthContext` only learns about memberships after a fetch, so
 a client-side check flashes the wrong page first. The athlete header dropdown
 lists each organisation the visitor belongs to. It does not offer to set one
 up: that door is the footer and the organiser landing page.
+
+### Admin-created organisations
+
+Startline lists events for organisers who are not on the platform yet. An admin
+creates the organisation in Organisers → Add organisation
+(`POST /api/admin/organisers`), posts its events through `/admin/events/create`
+as usual, then sends a claim invite. All of it lives in `lib/organiser-claim.ts`.
+
+| Piece | How |
+|---|---|
+| Unclaimed | `Organiser.pendingClaim`, no members. Verified by default, so admin-posted events publish at once |
+| Claim invite | An `OrganiserInvite` with `role: OWNER`, 14 days, sent from the card or at creation. Same token hashing, accept page (`/organiser/invite`) and verified-email check as an Owner's manager invite |
+| Accepting | `/api/organiser/invites/accept` clears `pendingClaim` in the same transaction that adds the OWNER, so only one acceptance wins and none once it is owned |
+| Emails | `organiserNotificationRecipients` returns nobody while `pendingClaim` is set: the addresses were typed by Startline. Any new caller must select `pendingClaim` (it is required in the type) |
+| `/organiser-setup` | The organiser email is unique. Signing up with an address an unclaimed organisation uses answers 409 `CLAIM_AVAILABLE` and emails that account the claim link |
+
+Paid Startline events for an unclaimed organisation stay Pending: approval
+still needs the organiser's own ABN and Stripe onboarding, which they do after
+claiming. Free and external-link events need neither.
 
 ### Google and Apple sign-in
 

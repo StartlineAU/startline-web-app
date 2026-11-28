@@ -46,6 +46,8 @@ export type UserProfileViewProps = {
   history: ProfileRaceHistory | null;
   /** Optional actions rendered beside stats (e.g. Edit Profile). */
   headerActions?: ReactNode;
+  /** Owner-only controls under one race card. The card is a link, so they sit outside it. */
+  cardFooter?: (reg: HistoryRegistration) => ReactNode;
   loading?: boolean;
 };
 
@@ -220,8 +222,15 @@ export default function UserProfileView({
   profilePicUrl,
   history,
   headerActions,
+  cardFooter,
   loading = false,
 }: UserProfileViewProps) {
+  const card = (reg: HistoryRegistration) => (
+    <div key={reg.id}>
+      <RaceHistoryCard reg={reg} />
+      {cardFooter?.(reg)}
+    </div>
+  );
   const initial = displayName[0]?.toUpperCase() ?? "A";
   // Race history is races that have happened. Entries still to come (or
   // underway today) sit above it, soonest first, so they are never shown as
@@ -298,9 +307,7 @@ export default function UserProfileView({
               </h2>
             </div>
             <div className="space-y-4">
-              {upcoming.map((reg) => (
-                <RaceHistoryCard key={reg.id} reg={reg} />
-              ))}
+              {upcoming.map(card)}
             </div>
           </div>
         )}
@@ -329,9 +336,7 @@ export default function UserProfileView({
                     {year}
                   </p>
                   <div className="space-y-4">
-                    {registrations.map((reg) => (
-                      <RaceHistoryCard key={reg.id} reg={reg} />
-                    ))}
+                    {registrations.map(card)}
                   </div>
                 </div>
               ))}

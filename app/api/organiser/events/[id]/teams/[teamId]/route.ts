@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireOrganiser } from "@/lib/organiser-api-auth";
 import prisma from "@/lib/prisma";
 import { lockEventEntries } from "@/lib/event-entry-lock";
-import { MAX_TEAM_NAME_LENGTH, normaliseTeamName } from "@/lib/team-tickets";
+import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamNameError } from "@/lib/team-tickets";
 import { findTakenTeamNames } from "@/lib/team-entries";
 import type { RegistrationFormData } from "@/lib/registration-form";
 import { sendEntryConfirmation } from "@/lib/registration-confirm";
@@ -83,10 +83,8 @@ export async function PATCH(
   let nextName: string | null = null;
   if (name !== undefined) {
     const next = normaliseTeamName(name);
-    if (!next) return NextResponse.json({ error: "Give the team a name." }, { status: 400 });
-    if (next.length > MAX_TEAM_NAME_LENGTH) {
-      return NextResponse.json({ error: `Team names can be at most ${MAX_TEAM_NAME_LENGTH} characters.` }, { status: 400 });
-    }
+    const nameError = teamNameError(next);
+    if (nameError) return NextResponse.json({ error: nameError }, { status: 400 });
     if (next !== team.name) nextName = next;
   }
 
@@ -136,6 +134,7 @@ export async function PATCH(
     // The new member is told they hold the place, as they would be at checkout.
     if (swapped) {
       await sendEntryConfirmation(team.event, {
+        registrationId: swapped.registrationId,
         email: swapped.email,
         waveLabel: swapped.waveLabel,
         priceCents: swapped.amountCents,

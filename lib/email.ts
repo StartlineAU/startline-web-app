@@ -17,6 +17,7 @@ import { RefundDecisionEmail, type RefundDecisionOutcome } from "@/emails/refund
 import { EventCancelledEmail } from "@/emails/event-cancelled";
 import { AccountSecurityNoticeEmail } from "@/emails/account-security-notice";
 import { OrganiserInviteEmail } from "@/emails/organiser-invite";
+import { OrganiserClaimEmail } from "@/emails/organiser-claim";
 import { PaymentAdjustmentEmail } from "@/emails/payment-adjustment";
 import { SUPPORT_EMAIL } from "@/lib/contact";
 import { formatEmailDate, formatEmailTime } from "@/lib/email-format";
@@ -113,6 +114,8 @@ export interface RegistrationEmailData {
   total: string;
   userEmail: string;
   calendarUrl?: string | null;
+  /** The entry's "Add to my profile" link, when one could be signed. */
+  claimUrl?: string | null;
 }
 
 export async function buildRegistrationConfirmationEmail(data: RegistrationEmailData): Promise<BuiltEmail> {
@@ -124,6 +127,11 @@ export async function buildRegistrationConfirmationEmail(data: RegistrationEmail
     }),
   );
   return { subject: `You're registered for ${data.eventName}`, ...rendered };
+}
+
+/** Where an entry's "Add to my profile" link lands (#598). */
+export function entryClaimUrl(token: string, { siteUrl = SITE } = {}): string {
+  return `${siteUrl}/race/claim?t=${encodeURIComponent(token)}`;
 }
 
 export async function sendRegistrationConfirmationEmail(to: string, data: RegistrationEmailData) {
@@ -702,4 +710,16 @@ export async function buildOrganiserInviteEmail(data: OrganiserInviteEmailData):
 export async function sendOrganiserInviteEmail(to: string, data: OrganiserInviteEmailData): Promise<void> {
   if (!getResend()) return;
   await sendOne(to, await buildOrganiserInviteEmail(data));
+}
+
+// ── Organiser claim invitation ───────────────────────────────────────────────
+// An admin set the organisation up; this invites the organiser to own it.
+export async function buildOrganiserClaimEmail(data: OrganiserInviteEmailData): Promise<BuiltEmail> {
+  const rendered = await renderEmail(OrganiserClaimEmail(data));
+  return { subject: `Claim ${data.organisationName} on Startline`, ...rendered };
+}
+
+export async function sendOrganiserClaimEmail(to: string, data: OrganiserInviteEmailData): Promise<void> {
+  if (!getResend()) return;
+  await sendOne(to, await buildOrganiserClaimEmail(data));
 }

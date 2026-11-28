@@ -52,7 +52,7 @@ export async function POST(
         organiser: {
           select: {
             id: true, email: true, orgName: true, stripeOnboardingComplete: true, abn: true,
-            contactEmail: true, notifyManagers: true,
+            contactEmail: true, notifyManagers: true, pendingClaim: true,
             notifyEventApproved: true, notifyEventRejected: true, notifyNewRegistration: true,
             members: { select: { role: true, user: { select: { email: true } } } },
           },

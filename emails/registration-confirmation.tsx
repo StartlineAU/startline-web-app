@@ -3,7 +3,9 @@ import { Hero } from './components/hero'
 import { DetailCard, type DetailItem } from './components/detail-card'
 import { SummaryTable } from './components/summary-table'
 import { CtaButton } from './components/cta-button'
-import { SITE_URL } from './components/tokens'
+import { NoteBox } from './components/note-box'
+import { colors, SITE_URL } from './components/tokens'
+import { Link } from '@react-email/components'
 
 export interface RegistrationConfirmationEmailProps {
   eventId: string
@@ -25,6 +27,11 @@ export interface RegistrationConfirmationEmailProps {
   userEmail: string
   /** "Add to calendar" link, when the event has a start instant. */
   calendarUrl?: string | null
+  /**
+   * "Add to my profile" link (#598): this address may not be the one the
+   * athlete signs in to Startline with.
+   */
+  claimUrl?: string | null
 }
 
 export function RegistrationConfirmationEmail({
@@ -42,6 +49,7 @@ export function RegistrationConfirmationEmail({
   total,
   userEmail,
   calendarUrl,
+  claimUrl,
 }: RegistrationConfirmationEmailProps) {
   const details: DetailItem[] = [
     { label: 'Date', value: eventDate },
@@ -81,6 +89,22 @@ export function RegistrationConfirmationEmail({
         label="View event details"
         secondary={calendarUrl ? { href: calendarUrl, label: 'Add to calendar' } : undefined}
       />
+
+      {claimUrl && (
+        <NoteBox
+          tone="info"
+          title="Show it on your profile"
+          body={
+            <>
+              Sign in to Startline with a different email?{' '}
+              <Link href={claimUrl} style={{ color: colors.primary, textDecoration: 'underline' }}>
+                Add this race to your profile
+              </Link>{' '}
+              so it and your results show there.
+            </>
+          }
+        />
+      )}
     </Shell>
   )
 }

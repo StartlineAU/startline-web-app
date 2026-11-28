@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import type { Prisma, RegistrationStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
+import { entryClaimUrl, sendRegistrationConfirmationEmail, sendTeamDetailsNeededEmail } from "@/lib/email";
+import { signEntryClaim } from "@/lib/entry-claim-token";
 import { googleCalendarUrl } from "@/lib/email-format";
 import { formatEventPlace } from "@/lib/event-place";
 import { getCapacityError, hasCappedWave } from "@/lib/registration-capacity";
@@ -396,6 +397,7 @@ export async function insertConfirmedRegistrations(opts: {
 
     // "Team member N" for each place left for later.
     const memberNumbers = pendingMemberNumbers(teams, (i) => entries[i]?.participant.pnd === 1);
+    const athleteUserIds = athleteUserIdsFor(entries, buyerUserId, userIdByEmail);
 
     await tx.registration.createMany({
       data: entries.map(({ participant, waveLabel, priceCents, platformFeeCents, stripeFeeCents, team }, index) => {
@@ -428,6 +430,7 @@ export async function insertConfirmedRegistrations(opts: {
           eventId: event.id,
           organiserId,
           userId: buyerUserId || userIdByEmail[email] || null,
+          athleteUserId: athleteUserIds[index],
           athleteName: athleteNameFromParticipant(participant),
           athleteEmail: participant.em,
           firstName: expanded.firstName,
@@ -453,6 +456,66 @@ export async function insertConfirmedRegistrations(opts: {
     });
 
     return { ok: true as const, registrationIds };
+  });
+}
+
+/**
+ * Which ticket was the signed-in buyer's own on an order created before the
+ * "Me" flag existed. Mirrors the #592 backfill: a named entry on the
+ * account's email, the one whose name matches the account's if there are
+ * several (a parent entering their children on one address), else the first.
+ * Null when no entry is on the buyer's address.
+ */
+export function legacySelfIndex(
+  participants: CompactParticipant[],
+  buyer: { email: string; name: string | null },
+): number | null {
+  const email = normalizeEmail(buyer.email);
+  if (!email) return null;
+  const candidates = participants
+    .map((participant, index) => ({ participant, index }))
+    .filter(({ participant }) => !participant.pnd && normalizeEmail(participant.em) === email);
+  if (candidates.length === 0) return null;
+  const name = buyer.name?.trim().toLowerCase();
+  const byName = name
+    ? candidates.find(({ participant }) => athleteNameFromParticipant(participant).trim().toLowerCase() === name)
+    : undefined;
+  return (byName ?? candidates[0]).index;
+}
+
+/**
+ * The account racing in each entry, aligned with `entries` (#592). Every
+ * entry's userId is the buyer's, so this is what a profile's race history
+ * reads.
+ *
+ * - A signed-in buyer's own ticket (`me`) is theirs.
+ * - A guest checkout's accounts were created here for that address, so the
+ *   first named entry on each address is that account's. Later ones on the
+ *   same address (a parent's children) are not.
+ * - Everyone else is null: a guest's address is not verified, so it is never
+ *   linked to an account here. Their account finds the entry by its verified
+ *   email instead, the way Activity does.
+ */
+export function athleteUserIdsFor(
+  entries: Pick<PricedEntry, "participant">[],
+  buyerUserId: string,
+  userIdByEmail: Record<string, string>,
+): (string | null)[] {
+  if (buyerUserId) {
+    let claimed = false;
+    return entries.map(({ participant }) => {
+      if (claimed || participant.me !== 1 || participant.pnd) return null;
+      claimed = true;
+      return buyerUserId;
+    });
+  }
+  const seen = new Set<string>();
+  return entries.map(({ participant }) => {
+    if (participant.pnd) return null;
+    const email = normalizeEmail(participant.em);
+    if (!email || seen.has(email)) return null;
+    seen.add(email);
+    return userIdByEmail[email] ?? null;
   });
 }
 
@@ -507,12 +570,13 @@ export async function announceRegistrations(
     }).catch((err: unknown) => console.error("Failed to create notification:", err));
   }
 
-  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }) => {
+  entries.forEach(({ participant, waveLabel, priceCents, platformFeeCents, team }, index) => {
     const entryTeam = team != null ? teamByIndex.get(team) : undefined;
     // A place left for later has nobody to confirm to yet: its member gets
     // this email when their details are added.
     if (!participant.em || participant.pnd) return;
     void sendEntryConfirmation(event, {
+      registrationId: registrationIds[index],
       email: participant.em,
       waveLabel,
       priceCents,
@@ -591,6 +655,8 @@ async function askBuyerForTeamDetails(
 export async function sendEntryConfirmation(
   event: ConfirmEvent,
   entry: {
+    /** The written entry, for its "Add to my profile" link. */
+    registrationId: string;
     email: string;
     waveLabel: string | null;
     priceCents: number;
@@ -598,6 +664,8 @@ export async function sendEntryConfirmation(
     team?: { name: string; size: number } | null;
   },
 ): Promise<void> {
+  const token = signEntryClaim({ registrationId: entry.registrationId, athleteEmail: entry.email });
+  const claimUrl = token ? entryClaimUrl(token) : null;
   const athletePaysFee = event.feeStructure === "athlete";
   const feeCents = athletePaysFee ? entry.platformFeeCents : 0;
   const location = formatEventPlace(event);
@@ -616,6 +684,7 @@ export async function sendEntryConfirmation(
       category:         entry.waveLabel || "General",
       location,
       calendarUrl,
+      claimUrl,
       ...(entry.team ? { team: `${entry.team.name} (team of ${entry.team.size})` } : {}),
       registrationFee:  formatCents(entry.priceCents),
       serviceFee:       formatCents(feeCents),

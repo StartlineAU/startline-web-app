@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const invite = await prisma.organiserInvite.findUnique({
     where: { tokenHash: hashInviteToken(token) },
     select: {
-      email: true, acceptedAt: true, expiresAt: true,
+      email: true, role: true, acceptedAt: true, expiresAt: true,
       organiser: { select: { orgName: true } },
     },
   });
@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     organisationName: invite.organiser.orgName ?? "An organisation",
     email: invite.email,
+    // OWNER: an admin's invitation to claim the organisation (lib/organiser-claim.ts).
+    role: invite.role,
     state: inviteState(invite),
     signedIn: Boolean(session),
     signedInAsInvitee: session ? inviteIsFor(invite, session.email) : false,

@@ -3,7 +3,7 @@ import { isDevDirectCharge } from "@/lib/stripe-direct-charge";
 import { getStripe } from "@/lib/stripe";
 import { assertTurnstile } from "@/lib/turnstile";
 import { rateLimit } from "@/lib/rate-limit";
-import { assertMetadataBudget, STRIPE_METADATA_MAX_VALUE_CHARS } from "@/lib/stripe-webhook";
+import { assertMetadataBudget, SELF_FLAGS_METADATA_KEY, STRIPE_METADATA_MAX_VALUE_CHARS } from "@/lib/stripe-webhook";
 import {
   checkoutSchema,
   compactOrderParticipant,
@@ -58,6 +58,9 @@ export async function POST(req: NextRequest) {
 
     const participantMetadata: Record<string, string> = {
       participantCount: String(participants.length),
+      // Tells the webhook this order carries the "Me" ticket flag, even when
+      // the buyer marked none, so it never guesses one (#598).
+      [SELF_FLAGS_METADATA_KEY]: "1",
     };
     participants.forEach((participant, index) => {
       participantMetadata[`participant${index}`] = JSON.stringify({

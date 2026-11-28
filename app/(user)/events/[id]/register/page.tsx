@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Plus, Minus, LogIn, Check, ChevronDown } from "lucide-react";
 import SignInModal from "@/components/SignInModal";
-import ParticipantFormSection from "@/components/registration/ParticipantFormSection";
+import ParticipantFormSection, { GUEST_EMAIL_HINT } from "@/components/registration/ParticipantFormSection";
 import SharedEmergencyContactSection from "@/components/registration/SharedEmergencyContactSection";
 import StepRail from "@/components/registration/StepRail";
 import OrderSummary from "@/components/registration/OrderSummary";
@@ -18,7 +18,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
-import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
+import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamNameError, teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
 import { getLifecyclePhase } from "@/lib/event-status";
 import { useApiResource } from "@/hooks/useApiResource";
 
@@ -653,11 +653,14 @@ function RegisterContent() {
               ...p,
               waveLabel: ticketWaves[i],
               ...(ticketTeams[i] != null ? { team: ticketTeams[i] } : {}),
+              // The buyer's own ticket, so their profile lists this race once
+              // rather than once per ticket they paid for (#592).
+              ...(i === selfIndex ? { isSelf: true } : {}),
             }),
       ...(teamNames.length > 0 && { teams: teamNames.map((name) => ({ name: normaliseTeamName(name) })) }),
       ...(sharedContactActive && { groupRegistration: true, emergencyContact: sharedEmergencyContact }),
     }),
-    [eventId, ticketWaves, ticketTeams, teamNames, detailsLater, participants, sharedContactActive, sharedEmergencyContact, turnstileToken]
+    [eventId, ticketWaves, ticketTeams, teamNames, detailsLater, participants, sharedContactActive, sharedEmergencyContact, turnstileToken, selfIndex]
   );
 
   // ── Checkout (create PaymentIntent) ──
@@ -818,8 +821,8 @@ function RegisterContent() {
     const seenNames = new Set<string>();
     teamNames.forEach((raw, i) => {
       const name = normaliseTeamName(raw);
-      if (!name) nameErrors[i] = "Give this team a name";
-      else if (name.length > MAX_TEAM_NAME_LENGTH) nameErrors[i] = `Keep it to ${MAX_TEAM_NAME_LENGTH} characters`;
+      const nameError = teamNameError(name);
+      if (nameError) nameErrors[i] = nameError;
       else if (seenNames.has(name.toLowerCase())) nameErrors[i] = "Another team in this order has this name";
       seenNames.add(name.toLowerCase());
     });
@@ -889,6 +892,14 @@ function RegisterContent() {
       later: freeRsvp ? 0 : laterCount,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Someone else's ticket says which email reaches their profile (#592). A
+  // signed-in buyer's own ticket is "Me"; on a guest checkout the first ticket
+  // is the buyer's.
+  const guestEmailHint = (index: number) => {
+    const isBuyers = status === "authenticated" && profile ? index === selfIndex : index === 0;
+    return isBuyers ? undefined : GUEST_EMAIL_HINT;
   };
 
   // ── Signed-in: whose ticket this is ──
@@ -1527,6 +1538,7 @@ function RegisterContent() {
                         index={0}
                         title={ticketWaves[0]}
                         intro={renderTicketHolder(0)}
+                        emailHint={guestEmailHint(0)}
                         participant={participants[0]}
                         errors={fieldErrors[0]}
                         onChange={(field, value) => updateParticipant(0, field, value)}
@@ -1630,6 +1642,7 @@ function RegisterContent() {
                                   frameless
                                   index={index}
                                   intro={renderTicketHolder(index)}
+                                  emailHint={guestEmailHint(index)}
                                   participant={participant}
                                   errors={fieldErrors[index]}
                                   hideEmergencyContact={sharedContactActive}

@@ -1008,6 +1008,8 @@ async function main() {
       create: {
         id: h.id,
         userId: h.userId,
+        // The account's own race, so it shows on their profile (#592).
+        athleteUserId: h.userId,
         eventId: h.eventId,
         organiserId: owner,
         athleteName: "Seed Athlete",
@@ -1060,6 +1062,7 @@ async function main() {
       create: {
         id: `seed-athlete-history-${i}`,
         userId: athleteUserId,
+        athleteUserId,
         eventId: ah.eventId,
         organiserId: owner,
         athleteName: ah.email.split("@")[0],
@@ -1154,12 +1157,14 @@ async function main() {
           isTopResult: r.top,
           bibNumber: r.bib,
           userId: athleteUserId,
+          athleteUserId,
         },
         create: {
           id: r.id,
           eventId: r.eventId,
           organiserId: org.id,
           userId: athleteUserId,
+          athleteUserId,
           athleteName: "Test User",
           athleteEmail: "user@startline.test",
           waveLabel: r.wave,

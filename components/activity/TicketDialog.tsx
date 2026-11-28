@@ -113,6 +113,8 @@ export default function TicketDialog({
                   <EntryRow
                     key={entry.id}
                     entry={entry}
+                    showsWaves={ticket.event.showsWaves}
+                    showsBibs={ticket.event.showsBibs}
                     meta={metas.find((m) => m.id === entry.id) ?? null}
                     now={now}
                     onWithdraw={onWithdraw}
@@ -182,12 +184,17 @@ function EventLine({ ticket }: { ticket: TicketJson }) {
 
 function EntryRow({
   entry,
+  showsWaves,
+  showsBibs,
   meta,
   now,
   onWithdraw,
   onAddDetails,
 }: {
   entry: Json<TicketEntry>;
+  /** The organiser shares start waves / bibs with athletes (#566). */
+  showsWaves: boolean;
+  showsBibs: boolean;
   meta: RegMeta | null;
   now: Date;
   onWithdraw: (meta: RegMeta) => void;
@@ -238,41 +245,60 @@ function EntryRow({
     );
   }
 
+  // The tier bought and what it cost, e.g. "General · $45.00" or "General · Free".
+  const price = meta ? (meta.paidCents === 0 ? "Free" : `$${(meta.paidCents / 100).toFixed(2)}`) : null;
+  const tier = [entry.ticketLabel, price].filter(Boolean).join(" · ");
+
   return (
     <li data-testid="ticket-entry" className="px-5 py-4">
       <p className="truncate font-headline text-[15px] font-bold text-light">
         {entry.athleteName}
-        {entry.ticketLabel && (
-          <span className="ml-2 font-headline text-[10px] font-bold uppercase tracking-widest text-muted">
-            {entry.ticketLabel}
+        {tier && (
+          <span data-testid="ticket-tier" className="ml-2 font-headline text-[10px] font-bold uppercase tracking-widest text-muted">
+            {tier}
           </span>
         )}
       </p>
 
-      <div className="mt-3 flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className={label}>Wave</p>
-          <p data-testid="ticket-wave" className="mt-1 truncate font-headline text-[15px] font-bold uppercase tracking-widest text-light">
-            {entry.waveLabel ?? "Not assigned yet"}
-          </p>
-          {entry.waveStartTime && (
-            <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
-              Starts {formatTime(entry.waveStartTime)}
-            </p>
+      {/* Only what the organiser shares (#566): no placeholder for a wave or
+          bib this event will never hand out. */}
+      {(showsWaves || showsBibs) && (
+        <div className="mt-3 flex items-end justify-between gap-4">
+          {showsWaves ? (
+            <div className="min-w-0">
+              <p className={label}>Wave</p>
+              {entry.waveLabel ? (
+                <>
+                  <p data-testid="ticket-wave" className="mt-1 truncate font-headline text-[15px] font-bold uppercase tracking-widest text-light">
+                    {entry.waveLabel}
+                  </p>
+                  {entry.waveStartTime && (
+                    <p className="font-headline text-[11px] font-bold uppercase tracking-widest text-muted">
+                      Starts {formatTime(entry.waveStartTime)}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p data-testid="ticket-wave" className="mt-1 text-[12.5px] text-muted">Not assigned yet</p>
+              )}
+            </div>
+          ) : (
+            <span />
+          )}
+          {showsBibs && (
+            <div className="shrink-0 text-right">
+              <p className={label}>Bib</p>
+              {entry.bibNumber ? (
+                <p data-testid="ticket-bib" className="mt-1 font-headline text-4xl font-black leading-none text-primary">
+                  #{entry.bibNumber}
+                </p>
+              ) : (
+                <p data-testid="ticket-bib" className="mt-1 text-[12.5px] text-muted">TBC</p>
+              )}
+            </div>
           )}
         </div>
-        <div className="shrink-0 text-right">
-          <p className={label}>Bib</p>
-          <p
-            data-testid="ticket-bib"
-            className={`mt-1 font-headline font-black leading-none ${
-              entry.bibNumber ? "text-4xl text-primary" : "text-[15px] text-muted-dark"
-            }`}
-          >
-            {entry.bibNumber ? `#${entry.bibNumber}` : "TBC"}
-          </p>
-        </div>
-      </div>
+      )}
 
       {meta && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

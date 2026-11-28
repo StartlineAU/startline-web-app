@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getOrganiserRatings } from "@/lib/reviews";
-import { PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, withRacePhase } from "@/lib/profile-history";
+import {
+  PROFILE_HISTORY_EVENT_SELECT, countCompletedRaces, profileHistoryWhere, withRacePhase,
+} from "@/lib/profile-history";
 import { usernameParams } from "@/lib/schemas";
 
 export async function GET(
@@ -28,6 +30,8 @@ export async function GET(
       city: true,
       state: true,
       createdAt: true,
+      // Finds entries others bought for this person. Never returned.
+      email: true,
     },
   });
 
@@ -40,7 +44,7 @@ export async function GET(
   }
 
   const registrations = await prisma.registration.findMany({
-    where: { userId: user.id, status: "CONFIRMED" },
+    where: profileHistoryWhere(user),
     orderBy: { event: { eventDate: "asc" } },
     select: {
       id: true,
@@ -65,8 +69,9 @@ export async function GET(
     },
   }));
 
+  const { email: _email, ...publicUser } = user;
   return NextResponse.json({
-    ...user,
+    ...publicUser,
     history: {
       completed: countCompletedRaces(history),
       registrations: historyRegistrations,

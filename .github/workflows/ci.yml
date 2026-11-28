@@ -128,6 +128,9 @@ jobs:
       # step below.
       NEXT_PUBLIC_COGNITO_DOMAIN: sl-e2e.auth.ap-southeast-2.amazoncognito.com
       NEXT_PUBLIC_SOCIAL_SIGN_IN: google,apple
+      # Signs the "Add to my profile" link; profile-race-history.spec.ts signs
+      # one with the same value. A test value, not a credential.
+      ENTRY_CLAIM_SECRET: e2e-entry-claim-secret
     services:
       postgres:
         image: postgres:15-alpine
