@@ -44,6 +44,7 @@ async function organiserRecipients(eventId: string) {
           email: true,
           contactEmail: true,
           notifyManagers: true,
+          pendingClaim: true,
           notifyEventApproved: true,
           notifyEventRejected: true,
           notifyNewRegistration: true,

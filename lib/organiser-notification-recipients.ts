@@ -6,6 +6,8 @@ export interface OrganiserNotificationSource {
   /** The contact address given during onboarding. Often a shared inbox. */
   contactEmail: string | null;
   notifyManagers: boolean;
+  /** Set up by an admin and not claimed yet (lib/organiser-claim.ts). */
+  pendingClaim: boolean;
   members: { role: OrganiserRole; user: { email: string } }[];
 }
 
@@ -14,6 +16,7 @@ export const ORGANISER_RECIPIENTS_SELECT = {
   email: true,
   contactEmail: true,
   notifyManagers: true,
+  pendingClaim: true,
   members: { select: { role: true, user: { select: { email: true } } } },
 } as const;
 
@@ -25,8 +28,14 @@ export const ORGANISER_RECIPIENTS_SELECT = {
  * to it (issue #348). Managers are included only while the owner has the
  * setting on. One person can sit behind several of these, so the list is
  * deduplicated case-insensitively and nobody is sent the same email twice.
+ *
+ * An organisation an admin set up and nobody has claimed gets none: its
+ * addresses were typed in by Startline, and nobody there has agreed to hear
+ * from us. Admins are copied on what matters through their own recipients.
  */
 export function organiserNotificationRecipients(organiser: OrganiserNotificationSource): string[] {
+  if (organiser.pendingClaim) return [];
+
   const candidates = [
     organiser.email,
     organiser.contactEmail,

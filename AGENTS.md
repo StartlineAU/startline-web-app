@@ -350,6 +350,25 @@ a client-side check flashes the wrong page first. The athlete header dropdown
 lists each organisation the visitor belongs to. It does not offer to set one
 up: that door is the footer and the organiser landing page.
 
+### Admin-created organisations
+
+Startline lists events for organisers who are not on the platform yet. An admin
+creates the organisation in Organisers → Add organisation
+(`POST /api/admin/organisers`), posts its events through `/admin/events/create`
+as usual, then sends a claim invite. All of it lives in `lib/organiser-claim.ts`.
+
+| Piece | How |
+|---|---|
+| Unclaimed | `Organiser.pendingClaim`, no members. Verified by default, so admin-posted events publish at once |
+| Claim invite | An `OrganiserInvite` with `role: OWNER`, 14 days, sent from the card or at creation. Same token hashing, accept page (`/organiser/invite`) and verified-email check as an Owner's manager invite |
+| Accepting | `/api/organiser/invites/accept` clears `pendingClaim` in the same transaction that adds the OWNER, so only one acceptance wins and none once it is owned |
+| Emails | `organiserNotificationRecipients` returns nobody while `pendingClaim` is set: the addresses were typed by Startline. Any new caller must select `pendingClaim` (it is required in the type) |
+| `/organiser-setup` | The organiser email is unique. Signing up with an address an unclaimed organisation uses answers 409 `CLAIM_AVAILABLE` and emails that account the claim link |
+
+Paid Startline events for an unclaimed organisation stay Pending: approval
+still needs the organiser's own ABN and Stripe onboarding, which they do after
+claiming. Free and external-link events need neither.
+
 ### Google and Apple sign-in
 
 Both go through Cognito's hosted endpoint, never straight to the provider:

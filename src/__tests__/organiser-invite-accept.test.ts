@@ -8,14 +8,17 @@ const mocks = vi.hoisted(() => ({
   findMember: vi.fn(),
   countMembers: vi.fn(),
   createMember: vi.fn(),
+  handOver: vi.fn(),
+  dropOtherInvites: vi.fn(),
 }));
 
 vi.mock("@/lib/amplify-server", () => ({ getUserSession: mocks.session }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimit: async () => null }));
 vi.mock("@/lib/prisma", () => {
   const tx = {
-    organiserInvite: { updateMany: mocks.claim },
+    organiserInvite: { updateMany: mocks.claim, deleteMany: mocks.dropOtherInvites },
     organiserMember: { create: mocks.createMember },
+    organiser: { updateMany: mocks.handOver },
   };
   return {
     default: {
@@ -33,6 +36,7 @@ const INVITE = {
   id: "inv-1",
   organiserId: "org-1",
   email: "jade@example.com",
+  role: "MANAGER" as const,
   acceptedAt: null,
   expiresAt: new Date(Date.now() + 86_400_000),
 };
@@ -53,6 +57,8 @@ beforeEach(() => {
   mocks.countMembers.mockResolvedValue(0);
   mocks.claim.mockResolvedValue({ count: 1 });
   mocks.createMember.mockResolvedValue({});
+  mocks.handOver.mockResolvedValue({ count: 1 });
+  mocks.dropOtherInvites.mockResolvedValue({ count: 0 });
 });
 
 describe("POST /api/organiser/invites/accept", () => {
@@ -92,6 +98,43 @@ describe("POST /api/organiser/invites/accept", () => {
   it("respects the organisation limit per person", async () => {
     mocks.countMembers.mockResolvedValue(5);
     expect((await accept()).status).toBe(409);
+  });
+
+  it("leaves the organisation's claim alone for a manager invitation", async () => {
+    await accept();
+    expect(mocks.handOver).not.toHaveBeenCalled();
+  });
+
+  describe("an admin's invitation to claim an organisation", () => {
+    beforeEach(() => {
+      mocks.findInvite.mockResolvedValue({ ...INVITE, role: "OWNER" });
+    });
+
+    it("makes the invited account the Owner and clears the pending claim", async () => {
+      const res = await accept();
+      expect(res.status).toBe(200);
+      expect(mocks.handOver).toHaveBeenCalledWith({
+        where: { id: "org-1", pendingClaim: true, members: { none: { role: "OWNER" } } },
+        data: { pendingClaim: false },
+      });
+      expect(mocks.createMember).toHaveBeenCalledWith({ data: { organiserId: "org-1", userId: "user-1", role: "OWNER" } });
+      expect(mocks.dropOtherInvites).toHaveBeenCalledWith({
+        where: { organiserId: "org-1", role: "OWNER", acceptedAt: null, id: { not: "inv-1" } },
+      });
+    });
+
+    it("refuses once the organisation has been claimed", async () => {
+      mocks.handOver.mockResolvedValue({ count: 0 });
+      const res = await accept();
+      expect(res.status).toBe(409);
+      expect(mocks.createMember).not.toHaveBeenCalled();
+    });
+
+    it("still needs the invited address", async () => {
+      mocks.session.mockResolvedValue({ sub: "user-2", email: "someone@else.com", name: null });
+      expect((await accept()).status).toBe(403);
+      expect(mocks.handOver).not.toHaveBeenCalled();
+    });
   });
 
   it("does not exist for an unknown token", async () => {

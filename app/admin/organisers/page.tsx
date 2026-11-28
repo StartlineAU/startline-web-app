@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon, ShieldCheck, ShieldX, Ban, CircleCheck, Building2, X, Crown, UserCog } from "lucide-react";
+import { CheckCircle2, AlertCircle, RefreshCw, CalendarDays, Star, Users as UsersIcon, ShieldCheck, ShieldX, Ban, CircleCheck, Building2, X, Crown, UserCog, Plus, Mail, Copy } from "lucide-react";
 import { useApiResource } from "@/hooks/useApiResource";
 import { Card } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeleton";
+import AddOrganisationModal from "@/components/admin/AddOrganisationModal";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,9 @@ interface OrganiserRow {
   abn: string | null;
   status: string;
   verified: boolean;
+  // Set up by an admin, nobody has claimed it as Owner yet (lib/organiser-claim.ts).
+  pendingClaim: boolean;
+  claimInvite: { email: string; sentAt: string; expiresAt: string; state: "pending" | "accepted" | "expired" } | null;
   stripeOnboardingComplete: boolean;
   createdAt: string;
   eventCount: number;
@@ -47,11 +51,15 @@ function OrganiserCard({
   onToggleVerify,
   onToggleSuspend,
   onViewMembers,
+  onSendClaim,
+  claimBusy,
 }: {
   o: OrganiserRow;
   onToggleVerify: (id: string) => void;
   onToggleSuspend: (id: string) => void;
   onViewMembers: (o: OrganiserRow) => void;
+  onSendClaim: (o: OrganiserRow) => void;
+  claimBusy: boolean;
 }) {
   const name    = o.orgName || o.contactName || o.email;
   const initial = name.charAt(0).toUpperCase();
@@ -76,6 +84,12 @@ function OrganiserCard({
             ) : (
               <span className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Active
+              </span>
+            )}
+
+            {o.pendingClaim && (
+              <span className="inline-flex items-center gap-1.5 font-headline text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-300/10 text-amber-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-300" /> Unclaimed
               </span>
             )}
 
@@ -141,6 +155,26 @@ function OrganiserCard({
               {o.memberCount} member{o.memberCount !== 1 ? "s" : ""}
             </button>
           </div>
+
+          {o.pendingClaim && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 font-headline text-[11px] uppercase tracking-widest">
+              <span className="text-muted-dark">
+                {o.claimInvite
+                  ? o.claimInvite.state === "expired"
+                    ? `Claim invite to ${o.claimInvite.email} expired ${formatDate(o.claimInvite.expiresAt)}`
+                    : `Claim invite sent to ${o.claimInvite.email} ${formatDate(o.claimInvite.sentAt)} · expires ${formatDate(o.claimInvite.expiresAt)}`
+                  : "No claim invite sent"}
+              </span>
+              <button
+                onClick={() => onSendClaim(o)}
+                disabled={claimBusy}
+                className="inline-flex items-center gap-1 font-bold text-primary hover:underline disabled:opacity-50"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                {claimBusy ? "Sending…" : o.claimInvite ? "Resend claim invite" : "Send claim invite"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -151,6 +185,12 @@ export default function AdminOrganisersPage() {
   const [viewOrg,    setViewOrg]    = useState<OrganiserRow | null>(null);
   const [members,    setMembers]    = useState<Member[] | null>(null);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [addOpen,    setAddOpen]    = useState(false);
+  const [claimBusyId, setClaimBusyId] = useState<string | null>(null);
+  // The link from the last invite sent, so it can be passed on by hand if the
+  // email does not arrive.
+  const [sentLink,   setSentLink]   = useState<{ email: string; url: string } | null>(null);
+  const [notice,     setNotice]     = useState("");
 
   const fetchOrganisers = useCallback(async (signal: AbortSignal) => {
     const response = await fetch("/api/admin/organisers", { signal });
@@ -201,6 +241,26 @@ export default function AdminOrganisersPage() {
     } catch { /* silent */ }
   }, [setOrganisers]);
 
+  const sendClaim = useCallback(async (o: OrganiserRow) => {
+    setClaimBusyId(o.id);
+    setNotice("");
+    try {
+      const res = await fetch(`/api/admin/organisers/${o.id}/claim-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setNotice(data.error ?? "Could not send the claim invite."); return; }
+      setSentLink({ email: data.invite.email, url: data.inviteUrl });
+      await reloadOrganisers();
+    } catch {
+      setNotice("Could not send the claim invite.");
+    } finally {
+      setClaimBusyId(null);
+    }
+  }, [reloadOrganisers]);
+
   return (
     <div className="min-h-screen bg-dark-darker">
 
@@ -217,13 +277,47 @@ export default function AdminOrganisersPage() {
                 Organisers.
               </h1>
             </div>
-            <button
-              onClick={() => void reloadOrganisers()}
-              className="self-start sm:self-end flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
-            </button>
+            <div className="self-start sm:self-end flex items-center gap-5">
+              <button
+                onClick={() => void reloadOrganisers()}
+                className="flex items-center gap-2 font-headline text-[12px] font-bold uppercase tracking-widest text-muted hover:text-light transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+              <button
+                onClick={() => setAddOpen(true)}
+                className="flex items-center gap-2 bg-primary text-dark shadow-machined font-headline text-[12px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-md"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add organisation
+              </button>
+            </div>
           </div>
+
+          {notice && (
+            <div role="alert" className="mb-4 font-headline text-[12px] uppercase tracking-widest text-red-300">{notice}</div>
+          )}
+
+          {sentLink && (
+            <Card className="mb-4 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-headline text-[11px] font-bold uppercase tracking-widest text-primary mb-1">
+                  Claim invite sent to {sentLink.email}
+                </div>
+                <div className="text-[13px] text-muted break-all">{sentLink.url}</div>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                <button
+                  onClick={() => void navigator.clipboard?.writeText(sentLink.url)}
+                  className="inline-flex items-center gap-1.5 font-headline text-[11px] font-bold uppercase tracking-widest text-light hover:text-primary"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy link
+                </button>
+                <button onClick={() => setSentLink(null)} aria-label="Dismiss" className="text-muted hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </Card>
+          )}
 
           <Card className="overflow-hidden">
             {loading && <TableSkeleton rows={6} cols={4} className="p-6" />}
@@ -231,12 +325,20 @@ export default function AdminOrganisersPage() {
             {!loading && organisers.length === 0 && (
               <div className="p-12 text-center">
                 <div className="font-headline text-lg font-black italic text-light mb-1">No organisers yet</div>
-                <div className="text-muted text-sm">Organiser accounts will appear here once they sign up.</div>
+                <div className="text-muted text-sm">Organisers appear here once they sign up, or when you add one.</div>
               </div>
             )}
 
             {!loading && organisers.map((o) => (
-              <OrganiserCard key={o.id} o={o} onToggleVerify={toggleVerify} onToggleSuspend={toggleSuspend} onViewMembers={viewMembers} />
+              <OrganiserCard
+                key={o.id}
+                o={o}
+                onToggleVerify={toggleVerify}
+                onToggleSuspend={toggleSuspend}
+                onViewMembers={viewMembers}
+                onSendClaim={sendClaim}
+                claimBusy={claimBusyId === o.id}
+              />
             ))}
           </Card>
 
@@ -247,6 +349,17 @@ export default function AdminOrganisersPage() {
           )}
         </div>
       </main>
+
+      {addOpen && (
+        <AddOrganisationModal
+          onClose={() => setAddOpen(false)}
+          onCreated={async (created) => {
+            setAddOpen(false);
+            if (created.inviteUrl) setSentLink({ email: created.email, url: created.inviteUrl });
+            await reloadOrganisers();
+          }}
+        />
+      )}
 
       {/* Members viewer modal */}
       {viewOrg && (
