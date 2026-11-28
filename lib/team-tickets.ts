@@ -10,6 +10,8 @@
  * and the confirm transaction all read team tiers through here.
  */
 
+import { isValidTeamName, TEAM_NAME_HINT } from "@/lib/text-input-rules";
+
 export const MIN_TEAM_SIZE = 2;
 export const MAX_TEAM_SIZE = 10;
 export const MAX_TEAM_NAME_LENGTH = 60;
@@ -79,6 +81,17 @@ export function normaliseTeamName(name: unknown): string {
 }
 
 /**
+ * Why a normalised team name cannot be used, or null when it can. The one
+ * rule for the register page, checkout and the organiser's rename.
+ */
+export function teamNameError(name: string): string | null {
+  if (!name) return "Give the team a name.";
+  if (name.length > MAX_TEAM_NAME_LENGTH) return `Team names can be at most ${MAX_TEAM_NAME_LENGTH} characters.`;
+  if (!isValidTeamName(name)) return TEAM_NAME_HINT;
+  return null;
+}
+
+/**
  * Check an order's team structure against the event's tiers and group the
  * members. Every member of a team-ticket tier must name a team; every team
  * has exactly the tier's team size, one tier, and a unique, non-blank name;
@@ -132,9 +145,8 @@ export function groupOrderTeams(
   const ordered = [...teams.values()].sort((a, b) => a.index - b.index);
   for (const team of ordered) {
     if (!team.name) return { error: "Every team needs a name." };
-    if (team.name.length > MAX_TEAM_NAME_LENGTH) {
-      return { error: `Team names can be at most ${MAX_TEAM_NAME_LENGTH} characters.` };
-    }
+    const nameError = teamNameError(team.name);
+    if (nameError) return { error: nameError };
     const key = team.name.toLowerCase();
     if (seen.has(key)) return { error: `Two teams in this order are called "${team.name}".` };
     seen.add(key);

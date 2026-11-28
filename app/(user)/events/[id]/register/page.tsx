@@ -18,7 +18,7 @@ import { useAuthContext } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { daysUntil, describeTiers, parseTiers, refundAmountCents } from "@/lib/refund-policy";
 import { isFreeEvent } from "@/lib/event-types";
-import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
+import { MAX_TEAM_NAME_LENGTH, normaliseTeamName, teamNameError, teamSizeLabel, teamSizeOf } from "@/lib/team-tickets";
 import { getLifecyclePhase } from "@/lib/event-status";
 import { useApiResource } from "@/hooks/useApiResource";
 
@@ -818,8 +818,8 @@ function RegisterContent() {
     const seenNames = new Set<string>();
     teamNames.forEach((raw, i) => {
       const name = normaliseTeamName(raw);
-      if (!name) nameErrors[i] = "Give this team a name";
-      else if (name.length > MAX_TEAM_NAME_LENGTH) nameErrors[i] = `Keep it to ${MAX_TEAM_NAME_LENGTH} characters`;
+      const nameError = teamNameError(name);
+      if (nameError) nameErrors[i] = nameError;
       else if (seenNames.has(name.toLowerCase())) nameErrors[i] = "Another team in this order has this name";
       seenNames.add(name.toLowerCase());
     });

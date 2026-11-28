@@ -1,3 +1,12 @@
+import {
+  CONTACT_NAME_HINT,
+  PERSON_NAME_HINT,
+  PHONE_HINT,
+  isValidContactName,
+  isValidPersonName,
+  isValidPhone,
+} from "@/lib/text-input-rules";
+
 export interface RegistrationFormData {
   firstName: string;
   lastName: string;
@@ -159,7 +168,9 @@ export function getRegistrationFormErrors(
   const includeWaiver = options?.includeWaiver !== false;
 
   if (!data.firstName.trim()) errors.firstName = "First name is required.";
+  else if (!isValidPersonName(data.firstName)) errors.firstName = `First name: ${PERSON_NAME_HINT}`;
   if (!data.lastName.trim()) errors.lastName = "Last name is required.";
+  else if (!isValidPersonName(data.lastName)) errors.lastName = `Last name: ${PERSON_NAME_HINT}`;
 
   if (!data.dateOfBirth) {
     errors.dateOfBirth = "Date of birth is required.";
@@ -175,7 +186,9 @@ export function getRegistrationFormErrors(
     errors.email = "Enter a valid email address.";
   }
 
-  // Phone is optional per the registration form design.
+  // Phone is optional per the registration form design, but must be a phone
+  // number when given.
+  if (data.mobile.trim() && !isValidPhone(data.mobile)) errors.mobile = PHONE_HINT;
 
   if (includeEmergencyContact) {
     if (!data.emergencyContactName.trim()) {
@@ -224,9 +237,13 @@ export function getEmergencyContactErrors(
 
   if (!emergency.name.trim()) {
     errors.emergencyContactName = "Emergency contact name is required.";
+  } else if (!isValidContactName(emergency.name)) {
+    errors.emergencyContactName = `Emergency contact name: ${CONTACT_NAME_HINT}`;
   }
   if (!emergency.phone.trim()) {
     errors.emergencyContactPhone = "Emergency contact number is required.";
+  } else if (!isValidPhone(emergency.phone)) {
+    errors.emergencyContactPhone = PHONE_HINT;
   }
   if (Object.keys(errors).length > 0) return errors;
 

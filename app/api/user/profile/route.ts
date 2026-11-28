@@ -9,24 +9,40 @@ import { GENDER_OPTIONS } from "@/lib/registration-form";
 import { isAtLeastYearsOld, MIN_AGE } from "@/lib/age";
 import { z } from "zod";
 import { assetUrl } from "@/lib/asset-url";
+import {
+  CONTACT_NAME_HINT,
+  PERSON_NAME_HINT,
+  PHONE_HINT,
+  isValidContactName,
+  isValidPersonName,
+  isValidPhone,
+} from "@/lib/text-input-rules";
 
 function badRequest(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
+// Optional fields: blank clears them, anything else must pass the rule.
+const blankOr = (rule: (v: string) => boolean) => (v: string) => !v.trim() || rule(v);
+
 const profileUpdateSchema = z.object({
-  name: z.string().max(200).nullable().optional(),
+  name: z.string().max(200).refine(blankOr(isValidPersonName), `Name: ${PERSON_NAME_HINT}`).nullable().optional(),
   username: z.string().max(50).optional(),
   bio: z.string().max(2000).nullable().optional(),
   profilePicUrl: assetUrl().nullable().optional(),
   isPublic: z.boolean().optional(),
   city: z.string().max(100).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
-  mobile: z.string().max(50).nullable().optional(),
+  mobile: z.string().max(50).refine(blankOr(isValidPhone), PHONE_HINT).nullable().optional(),
   dateOfBirth: z.string().max(20).nullable().optional(),
   gender: z.string().max(50).nullable().optional(),
-  emergencyContactName: z.string().max(200).nullable().optional(),
-  emergencyContactPhone: z.string().max(50).nullable().optional(),
+  emergencyContactName: z
+    .string()
+    .max(200)
+    .refine(blankOr(isValidContactName), `Emergency contact name: ${CONTACT_NAME_HINT}`)
+    .nullable()
+    .optional(),
+  emergencyContactPhone: z.string().max(50).refine(blankOr(isValidPhone), PHONE_HINT).nullable().optional(),
   notifyFollowedOrganiserEvents: z.boolean().optional(),
 });
 
