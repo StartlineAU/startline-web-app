@@ -54,7 +54,7 @@ describe("single email sends", () => {
   it("reports a refused entry confirmation to the error alarm without throwing", async () => {
     emailSend.mockResolvedValue({ data: null, error: { name: "validation_error", message: "bad address" } });
     await expect(
-      sendEntryConfirmation(event, { email: "a@example.com", waveLabel: null, priceCents: 5000, platformFeeCents: 200 }),
+      sendEntryConfirmation(event, { registrationId: "reg-1", email: "a@example.com", waveLabel: null, priceCents: 5000, platformFeeCents: 200 }),
     ).resolves.toBeUndefined();
     const marked = errorSpy.mock.calls
       .map((args: unknown[]) => String(args[0]))

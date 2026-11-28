@@ -258,6 +258,8 @@ describe("POST /api/stripe/webhook", () => {
         waveLabel: "General",
         feeStructure: "athlete",
         participantCount: "1",
+        // Checkout always sends the "Me" flag marker (#598).
+        selfFlags: "1",
         orderId: "order-1",
       },
     });
