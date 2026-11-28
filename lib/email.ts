@@ -112,6 +112,8 @@ export interface RegistrationEmailData {
   total: string;
   userEmail: string;
   calendarUrl?: string | null;
+  /** The entry's "Add to my profile" link, when one could be signed. */
+  claimUrl?: string | null;
 }
 
 export async function buildRegistrationConfirmationEmail(data: RegistrationEmailData): Promise<BuiltEmail> {
@@ -123,6 +125,11 @@ export async function buildRegistrationConfirmationEmail(data: RegistrationEmail
     }),
   );
   return { subject: `You're registered for ${data.eventName}`, ...rendered };
+}
+
+/** Where an entry's "Add to my profile" link lands (#598). */
+export function entryClaimUrl(token: string, { siteUrl = SITE } = {}): string {
+  return `${siteUrl}/race/claim?t=${encodeURIComponent(token)}`;
 }
 
 export async function sendRegistrationConfirmationEmail(to: string, data: RegistrationEmailData) {

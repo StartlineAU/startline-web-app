@@ -136,6 +136,7 @@ export async function PATCH(
     // The new member is told they hold the place, as they would be at checkout.
     if (swapped) {
       await sendEntryConfirmation(team.event, {
+        registrationId: swapped.registrationId,
         email: swapped.email,
         waveLabel: swapped.waveLabel,
         priceCents: swapped.amountCents,

@@ -293,6 +293,7 @@ async function removeAndReplace(
   // The new member is told they hold the place, as they would be at checkout.
   try {
     await sendEntryConfirmation(entry.event, {
+      registrationId: swapped.registrationId,
       email: swapped.email,
       waveLabel: swapped.waveLabel,
       priceCents: swapped.amountCents,
